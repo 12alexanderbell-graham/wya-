@@ -1,0 +1,15 @@
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcscmblueprint
+# macOS
+.DS_Store
+# Python
+__pycache__/
+*.pyc
+# local-only folders (built data, state, secrets) and backups
+*.nosync
+*.bak*
+# outputs of the data scripts when run in this folder
+data/pipeline/*.pkl
