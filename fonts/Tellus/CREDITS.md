@@ -1,0 +1,847 @@
+# Tellus: where every letter comes from
+
+Every letter is traced from one real place seen from above, then smoothed. Letters may be turned to stand upright; nothing is mirrored. Where two strokes of a letter do not quite touch in reality, a short link joins them (noted below where it matters).
+
+Sources: NASA/USGS Landsat via NASA's *Your Name in Landsat* (public domain); Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community); OpenStreetMap (© OpenStreetMap contributors, ODbL).
+
+
+- **a**: the wya?! logo
+- **b**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **c**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat)
+- **d**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W); the same oxbow as p, turned upside down, NASA/USGS Landsat (Your Name in Landsat)
+- **e**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery)
+- **f**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat)
+- **g**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **h**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **i**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); dot: Weinfelder Maar (50.176°N 6.849°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **j**: Lot around Cahors, France (44.4862°N 1.3043°E), OpenStreetMap river line (checked on Esri World Imagery); dot: Gemündener Maar (50.178°N 6.835°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **k**: Biesbosch creeks, Netherlands (51.7690°N 4.7833°E), Esri World Imagery
+- **l**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery
+- **m**: Paw Paw Bends, Potomac River (39°35'37.9" N 78°25'24.0" W), NASA/USGS Landsat (Your Name in Landsat)
+- **n**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery
+- **o**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery
+- **p**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W), NASA/USGS Landsat (Your Name in Landsat)
+- **q**: Laitaure delta, Sarek, Sweden (67.0717°N 18.1170°E), Esri World Imagery
+- **r**: Lago Menendez, Argentina (42°41'14.9 S 71°52'21.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **s**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **t**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W); the crossing of its two fjords, turned upright, NASA/USGS Landsat (Your Name in Landsat)
+- **u**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **v**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat)
+- **w**: the wya?! logo
+- **x**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **y**: the wya?! logo
+- **z**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery
+- **A**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **B**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat)
+- **C**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat)
+- **D**: Akimiski Island, Canada (53°00'58.5 N 81°18'24.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **E**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat)
+- **F**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat)
+- **G**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **H**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat)
+- **I**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **J**: Karakaya Dam, Turkey (38°29'37.7 N 38°26'39.5 E), NASA/USGS Landsat (Your Name in Landsat)
+- **K**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **L**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat)
+- **M**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **N**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **O**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **P**: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Q**: Lonar Crater, India (19°58'36.8 N 76°30'30.6 E), NASA/USGS Landsat (Your Name in Landsat)
+- **R**: Canyonlands National Park, Utah, United States (38°26'27.8 N 109°45'03.3 W), NASA/USGS Landsat (Your Name in Landsat)
+- **S**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **T**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery
+- **U**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **V**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat)
+- **W**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat)
+- **X**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Y**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Z**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery
+- **0**: Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **1**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **2**: Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **3**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **4**: Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **5**: Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **6**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **7**: Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **8**: Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat)
+- **9**: Hickman, Kentucky, United States (36°35'20.8 N 89°20'26.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **.**: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **,**: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **:**: dots: Schalkenmehrener Maar (50.169°N 6.857°E) and Weinfelder Maar (50.176°N 6.849°E), crater lakes in the Eifel, Germany, OpenStreetMap shoreline
+- **;**: Purus River near Lábrea, Brazil (7.0590°S 64.6126°W), OpenStreetMap river line (checked on Esri World Imagery); dot: Gemündener Maar (50.178°N 6.835°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **-**: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **'**: Purus River near Lábrea, Brazil (7.2174°S 64.7263°W), OpenStreetMap river line (checked on Esri World Imagery)
+- **"**: Owasco Lake and Skaneateles Lake, New York, USA (42.85°N 76.45°W), Esri World Imagery
+- **’**: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **(**: Saar loop at Mettlach (Saarschleife), Germany (49.50°N 6.57°E), Esri World Imagery
+- **)**: Horseshoe Bend, Colorado River, Arizona, USA (36.88°N 111.51°W), Esri World Imagery
+- **/**: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **?**: the wya?! logo
+- **!**: the wya?! logo
+- **İ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); dot: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **ª**: the wya?! logo's a (unchanged), small; bar: Canadice Lake, turned level
+- **µ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **º**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery, small; bar: Canadice Lake, turned level
+- **ß**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **À**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **à**: the wya?! logo (unchanged); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Á**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **á**: the wya?! logo (unchanged); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Â**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **â**: the wya?! logo (unchanged); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ã**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ã**: the wya?! logo (unchanged); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ä**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ä**: the wya?! logo (unchanged); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Å**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **å**: the wya?! logo (unchanged); accent: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **Æ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat)
+- **æ**: the wya?! logo (unchanged); Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery)
+- **Ç**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **ç**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **È**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **è**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **É**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **é**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ê**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ê**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ë**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ë**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ì**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ì**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Í**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **í**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Î**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **î**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ï**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ï**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ð**: Akimiski Island, Canada (53°00'58.5 N 81°18'24.6 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ð**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W); the same oxbow as p, turned upside down, NASA/USGS Landsat (Your Name in Landsat), leaning; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ñ**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ñ**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ò**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ò**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ó**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ó**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ô**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ô**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Õ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **õ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ö**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ö**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ø**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); stroke: Walensee, Switzerland (47.12°N 9.21°E), Esri World Imagery
+- **ø**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Walensee, Switzerland (47.12°N 9.21°E), Esri World Imagery
+- **Ù**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ù**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ú**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ú**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Û**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **û**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ü**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ü**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ý**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ý**: the wya?! logo (unchanged); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Þ**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **þ**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ÿ**: the wya?! logo (unchanged); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ÿ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ā**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **ā**: the wya?! logo (unchanged); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **Ă**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ă**: the wya?! logo (unchanged); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ą**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **ą**: the wya?! logo (unchanged); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **Ć**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ć**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ĉ**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ĉ**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ċ**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **ċ**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **Č**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **č**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **Ď**: Akimiski Island, Canada (53°00'58.5 N 81°18'24.6 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ď**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W); the same oxbow as p, turned upside down, NASA/USGS Landsat (Your Name in Landsat); accent: the ’ mark: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Đ**: Akimiski Island, Canada (53°00'58.5 N 81°18'24.6 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **đ**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W); the same oxbow as p, turned upside down, NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ē**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **ē**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **Ĕ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ĕ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ė**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **ė**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **Ę**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **ę**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **Ě**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ě**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **Ĝ**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ĝ**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ğ**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ğ**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ġ**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **ġ**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **Ģ**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ģ**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ĥ**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ĥ**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ħ**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ħ**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ĩ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ĩ**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ī**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **ī**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **Ĭ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ĭ**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Į**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **į**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **ı**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ĳ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); Karakaya Dam, Turkey (38°29'37.7 N 38°26'39.5 E), NASA/USGS Landsat (Your Name in Landsat)
+- **ĳ**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); Lot around Cahors, France (44.4862°N 1.3043°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ĵ**: Karakaya Dam, Turkey (38°29'37.7 N 38°26'39.5 E), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ĵ**: Lot around Cahors, France (44.4862°N 1.3043°E), OpenStreetMap river line (checked on Esri World Imagery); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ķ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ķ**: Biesbosch creeks, Netherlands (51.7690°N 4.7833°E), Esri World Imagery; accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ĸ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat), at small size
+- **Ĺ**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ĺ**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ļ**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ļ**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery; accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ľ**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); accent: the ’ mark: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ľ**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery; accent: the ’ mark: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ŀ**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); dot: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **ŀ**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery; dot: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **Ł**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); stroke: Walensee, Switzerland (47.12°N 9.21°E), Esri World Imagery
+- **ł**: Seneca Lake, New York, USA (42.63°N 76.91°W), Esri World Imagery; stroke: Walensee, Switzerland (47.12°N 9.21°E), Esri World Imagery
+- **Ń**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ń**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ņ**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ņ**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ň**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ň**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ŉ**: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery); Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery
+- **Ŋ**: Uvac River meanders, Serbia (43.35°N 19.97°E), OpenStreetMap river line on Esri World Imagery
+- **ŋ**: Uvac River meanders, Serbia (43.35°N 19.97°E), OpenStreetMap river line on Esri World Imagery
+- **Ō**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **ō**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **Ŏ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ŏ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ő**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), twice, Esri World Imagery
+- **ő**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), twice, Esri World Imagery
+- **Œ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat)
+- **œ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery)
+- **Ŕ**: Canyonlands National Park, Utah, United States (38°26'27.8 N 109°45'03.3 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ŕ**: Lago Menendez, Argentina (42°41'14.9 S 71°52'21.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ŗ**: Canyonlands National Park, Utah, United States (38°26'27.8 N 109°45'03.3 W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ŗ**: Lago Menendez, Argentina (42°41'14.9 S 71°52'21.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ř**: Canyonlands National Park, Utah, United States (38°26'27.8 N 109°45'03.3 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ř**: Lago Menendez, Argentina (42°41'14.9 S 71°52'21.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **Ś**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ś**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ŝ**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ŝ**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ş**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **ş**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **Š**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **š**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **Ţ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **ţ**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W); the crossing of its two fjords, turned upright, NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **Ť**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ť**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W); the crossing of its two fjords, turned upright, NASA/USGS Landsat (Your Name in Landsat); accent: the ’ mark: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ŧ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ŧ**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W); the crossing of its two fjords, turned upright, NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ũ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ũ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ū**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **ū**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **Ŭ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ŭ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ů**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **ů**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **Ű**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), twice, Esri World Imagery
+- **ű**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), twice, Esri World Imagery
+- **Ų**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **ų**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); accent: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **Ŵ**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ŵ**: the wya?! logo (unchanged); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ŷ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ŷ**: the wya?! logo (unchanged); accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ź**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ź**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ż**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **ż**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **Ž**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ž**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery; accent: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **ſ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its crossbar
+- **Ơ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery
+- **ơ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery
+- **Ư**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery
+- **ư**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery
+- **Ș**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ș**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **Ț**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ț**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W); the crossing of its two fjords, turned upright, NASA/USGS Landsat (Your Name in Landsat); accent: the comma: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ȷ**: Lot around Cahors, France (44.4862°N 1.3043°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **ˆ**: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ˇ**: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **Ά**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ά**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Έ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **έ**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery), upside down; tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ή**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ή**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; descender: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ί**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ί**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Α**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **α**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Β**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat)
+- **β**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **Γ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar
+- **γ**: the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.93°S 25.85°E), OpenStreetMap river line on Esri World Imagery
+- **Δ**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down; base: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **δ**: Semois meanders near Bouillon, Belgium (49.82°N 5.01°E), OpenStreetMap river line on Esri World Imagery
+- **Ε**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat)
+- **ε**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery), upside down
+- **Ζ**: Lot around Cahors, France (44.4876°N 1.2967°E), Esri World Imagery
+- **ζ**: the Saar near Mettlach, Germany (49.56°N 6.61°E), OpenStreetMap river line on Esri World Imagery; top: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Η**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat)
+- **η**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; descender: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Θ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **θ**: Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ι**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ι**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery)
+- **Κ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **κ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat), at small size
+- **Λ**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down
+- **λ**: the Lot near Cahors, France (44.47°N 1.42°E), OpenStreetMap river line on Esri World Imagery; short leg: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Μ**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **μ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ν**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ν**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Ξ**: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; middle: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery; bottom: Loch Lochy, Scotland, UK (56.97°N 4.93°W), Esri World Imagery
+- **ξ**: Semois meanders near Bouillon, Belgium (49.85°N 4.96°E), OpenStreetMap river line on Esri World Imagery
+- **Ο**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ο**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery
+- **Π**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery; stems: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, twice
+- **π**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery; stems: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, twice
+- **Ρ**: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ρ**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ς**: the Lot near Cahors, France (44.49°N 1.39°E), OpenStreetMap river line on Esri World Imagery
+- **Σ**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), on its side; bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **σ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Τ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery
+- **τ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery
+- **Υ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **υ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Φ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **φ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Χ**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **χ**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Ψ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ψ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ω**: the Semois near Bohan, Belgium (49.86°N 4.88°E), OpenStreetMap river line on Esri World Imagery
+- **ω**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat)
+- **Ω**: the Semois near Bohan, Belgium (49.86°N 4.88°E), OpenStreetMap river line on Esri World Imagery
+- **Ϊ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); dialytika: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ϊ**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); dialytika: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ϋ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); dialytika: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ϋ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); dialytika: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ό**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ό**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ύ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ύ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ώ**: the Semois near Bohan, Belgium (49.86°N 4.88°E), OpenStreetMap river line on Esri World Imagery; tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ώ**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); tonos: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **А**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **а**: the wya?! logo (unchanged)
+- **Б**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **б**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **В**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat)
+- **в**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat), small
+- **Г**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar
+- **г**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar, small
+- **Д**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down; base: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; feet: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **д**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down, small; base: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; feet: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Е**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat)
+- **е**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery)
+- **Ж**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ж**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat), small; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **З**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **з**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery), small
+- **И**: Victoria Falls, the Zambezi, Zambia/Zimbabwe (17.92°S 25.86°E), OpenStreetMap river line on Esri World Imagery
+- **и**: Victoria Falls, the Zambezi, Zambia/Zimbabwe (17.92°S 25.86°E), OpenStreetMap river line on Esri World Imagery, small
+- **Й**: Victoria Falls, the Zambezi, Zambia/Zimbabwe (17.92°S 25.86°E), OpenStreetMap river line on Esri World Imagery; breve: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **й**: Victoria Falls, the Zambezi, Zambia/Zimbabwe (17.92°S 25.86°E), OpenStreetMap river line on Esri World Imagery, small; breve: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **К**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **к**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **Л**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down
+- **л**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down, small
+- **М**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **м**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **Н**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat)
+- **н**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat), small
+- **О**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **о**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery
+- **П**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery; stems: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, twice
+- **п**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery, small; stems: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, twice
+- **Р**: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat)
+- **р**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W), NASA/USGS Landsat (Your Name in Landsat)
+- **С**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat)
+- **с**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat)
+- **Т**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery
+- **т**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery, small
+- **У**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **у**: the wya?! logo (unchanged)
+- **Ф**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ф**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Х**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **х**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Ц**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery, upside down; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ц**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery, upside down, small; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ч**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat), upside down
+- **ч**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat), upside down, small
+- **Ш**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); middle stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ш**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat), small; middle stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Щ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); middle stem and tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **щ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat), small; middle stem and tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ъ**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ъ**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat), small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ы**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat); second stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ы**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat), small; second stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ь**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ь**: Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **Э**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat), upside down; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **э**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat), upside down, small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ю**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ю**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Я**: bowl: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat), turned round; leg and stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **я**: bowl: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat), turned round, small; leg and stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ё**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); dots: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ё**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ђ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; shoulder: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; hook: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ђ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery, small; shoulder: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; hook: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ѓ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ѓ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar, small; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Є**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **є**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat), small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ѕ**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **ѕ**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **І**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **і**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); dot: Weinfelder Maar (50.176°N 6.849°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **Ї**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); dots: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ї**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); dots: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ј**: Karakaya Dam, Turkey (38°29'37.7 N 38°26'39.5 E), NASA/USGS Landsat (Your Name in Landsat)
+- **ј**: Lot around Cahors, France (44.4862°N 1.3043°E), OpenStreetMap river line (checked on Esri World Imagery); dot: Gemündener Maar (50.178°N 6.835°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **Љ**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down; Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **љ**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down, small; Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Њ**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat); Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **њ**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat), small; Holla Bend, Arkansas, United States (35°08'41.1 N 93°03'16.5 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Ћ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; shoulder: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery
+- **ћ**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery, small; shoulder: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery
+- **Ќ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ќ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat), small; accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ў**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); breve: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ў**: the wya?! logo's y (unchanged); breve: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Џ**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery, upside down; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **џ**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery, upside down, small; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ґ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar; upturn: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ґ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar, small; upturn: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ғ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ғ**: Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat), without its middle bar, small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Қ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat); tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **қ**: Sirmilik National Park, Canada (72°05'01.1 N 76°48'42.9 W), NASA/USGS Landsat (Your Name in Landsat), small; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ң**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat); tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **ң**: Brunswick, Maryland, United States (39°19'00.0" N 77°36'31.2" W), NASA/USGS Landsat (Your Name in Landsat), small; tail: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **Ү**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ү**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **Ұ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ұ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat), small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Һ**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **һ**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **Ә**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery), upside down
+- **ә**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery), upside down, small
+- **Ө**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **ө**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **Ա**: Purus River, Amazonas, Brazil (7.26°S 64.89°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.30°S 64.97°W), OpenStreetMap river line on Esri World Imagery
+- **ա**: Danube, Austria (48.44°N 13.86°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.07°S 140.78°E), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (66.37°N 153.33°W), OpenStreetMap river line on Esri World Imagery
+- **Բ**: Ucayali River, Peru (9.29°S 74.39°W), OpenStreetMap river line on Esri World Imagery; Ucayali River, Peru (8.84°S 74.55°W), OpenStreetMap river line on Esri World Imagery
+- **բ**: Murray River, South Australia (34.18°S 140.22°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.18°S 140.34°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.04°S 139.79°E), OpenStreetMap river line on Esri World Imagery
+- **Գ**: Murray River, South Australia (34.90°S 139.59°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.474°N 159.488°W), OpenStreetMap shoreline on Esri World Imagery; a side channel of the Murray, South Australia (34.88°S 139.50°E), OpenStreetMap river line on Esri World Imagery
+- **գ**: Juruá River, Amazonas, Brazil (6.73°S 70.12°W), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.38°S 139.62°E), OpenStreetMap river line on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.51°S 65.29°W), OpenStreetMap river line on Esri World Imagery
+- **Դ**: Murray River, South Australia (34.34°S 140.56°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.16°S 140.32°E), OpenStreetMap river line on Esri World Imagery
+- **դ**: Murray River, South Australia (34.73°S 139.55°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.87°S 139.48°E), OpenStreetMap river line on Esri World Imagery; Paraná River, Argentina/Paraguay (27.37°S 58.75°W), OpenStreetMap river line on Esri World Imagery
+- **Ե**: Koyukuk River, Alaska, USA (65.55°N 156.35°W), OpenStreetMap river line on Esri World Imagery; Richards Slough, Alaska, USA (65.65°N 156.50°W), OpenStreetMap river line on Esri World Imagery
+- **ե**: Murray River, South Australia (34.06°S 139.84°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.53°S 139.59°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.23°S 139.64°E), OpenStreetMap river line on Esri World Imagery
+- **Զ**: Murray River, South Australia (34.29°S 140.62°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.468°N 159.625°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (35.12°S 139.29°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.88°S 139.37°E), OpenStreetMap river line on Esri World Imagery
+- **զ**: Koyukuk River, Alaska, USA (65.68°N 156.42°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.90°N 155.21°W), OpenStreetMap river line on Esri World Imagery
+- **Է**: Pacaás Novos River, Bolivia/Brazil (11.02°S 65.19°W), OpenStreetMap river line on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.29°S 65.35°W), OpenStreetMap river line on Esri World Imagery
+- **է**: Zambezi, Zambia/Zimbabwe (17.93°S 25.86°E), OpenStreetMap river line on Esri World Imagery; Zambezi, Zambia/Zimbabwe (17.99°S 25.93°E), OpenStreetMap river line on Esri World Imagery
+- **Ը**: Tarauacá River, Amazonas, Brazil (6.94°S 69.76°W), OpenStreetMap river line on Esri World Imagery
+- **ը**: Murray River, South Australia (34.14°S 139.93°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.45°S 140.55°E), OpenStreetMap river line on Esri World Imagery
+- **Թ**: Murray River, South Australia (34.62°S 139.61°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.454°N 159.517°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (34.27°S 140.71°E), OpenStreetMap river line on Esri World Imagery
+- **թ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.472°N 159.853°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (34.33°S 140.57°E), OpenStreetMap river line on Esri World Imagery; San Juan River, Utah, USA (37.24°N 110.06°W), OpenStreetMap river line on Esri World Imagery; Danube, Austria (48.45°N 13.82°E), OpenStreetMap river line on Esri World Imagery
+- **Ժ**: Paraná River, Argentina/Paraguay (27.36°S 58.69°W), OpenStreetMap river line on Esri World Imagery; Drahoslavické rybníky Vltava at Český Krumlov, Czechia (48.794°N 14.342°E), OpenStreetMap shoreline on Esri World Imagery; Paraná River, Argentina/Paraguay (27.41°S 58.80°W), OpenStreetMap river line on Esri World Imagery
+- **ժ**: a lake in the Biesbosch, Netherlands (51.749°N 4.779°E), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (34.38°S 140.42°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.54°S 139.60°E), OpenStreetMap river line on Esri World Imagery
+- **Ի**: Murray River, South Australia (35.27°S 139.45°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.86°S 139.43°E), OpenStreetMap river line on Esri World Imagery
+- **ի**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **Լ**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat)
+- **լ**: Paraná River, Argentina/Paraguay (27.49°S 58.87°W), OpenStreetMap river line on Esri World Imagery
+- **Խ**: Murray River, South Australia (34.06°S 139.68°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.86°S 139.63°E), OpenStreetMap river line on Esri World Imagery
+- **խ**: Murray River, South Australia (34.40°S 140.49°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (35.00°S 139.34°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.86°S 139.41°E), OpenStreetMap river line on Esri World Imagery
+- **Ծ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.471°N 159.733°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (35.19°S 139.35°E), OpenStreetMap river line on Esri World Imagery; Bookmark Creek, South Australia (34.21°S 140.73°E), OpenStreetMap river line on Esri World Imagery
+- **ծ**: Koyukuk River, Alaska, USA (65.87°N 155.20°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.79°N 155.01°W), OpenStreetMap river line on Esri World Imagery
+- **Կ**: Ucayali River, Peru (8.42°S 74.51°W), OpenStreetMap river line on Esri World Imagery; Ucayali River, Peru (8.86°S 74.52°W), OpenStreetMap river line on Esri World Imagery
+- **կ**: Murray River, South Australia (34.07°S 140.81°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.84°S 139.59°E), OpenStreetMap river line on Esri World Imagery
+- **Հ**: Lot, France (44.49°N 1.39°E), OpenStreetMap river line on Esri World Imagery
+- **հ**: Murray River, South Australia (35.04°S 139.36°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.20°S 140.76°E), OpenStreetMap river line on Esri World Imagery
+- **Ձ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.473°N 159.466°W), OpenStreetMap shoreline on Esri World Imagery; Koyukuk River, Alaska, USA (65.77°N 156.47°W), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.544°N 159.830°W), OpenStreetMap shoreline on Esri World Imagery; Koyukuk River, Alaska, USA (65.98°N 155.60°W), OpenStreetMap river line on Esri World Imagery
+- **ձ**: Vltava, Czechia (48.73°N 14.34°E), OpenStreetMap river line on Esri World Imagery; Vltava, Czechia (48.82°N 14.35°E), OpenStreetMap river line on Esri World Imagery
+- **Ղ**: Semois, Belgium (49.86°N 4.94°E), OpenStreetMap river line on Esri World Imagery
+- **ղ**: Murray River, South Australia (34.57°S 139.60°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (35.30°S 139.41°E), OpenStreetMap river line on Esri World Imagery
+- **Ճ**: Drahoslavické rybníky Vltava at Český Krumlov, Czechia (48.796°N 14.342°E), OpenStreetMap shoreline on Esri World Imagery; Semois, Belgium (49.79°N 5.11°E), OpenStreetMap river line on Esri World Imagery
+- **ճ**: Koyukuk River, Alaska, USA (65.92°N 156.24°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.56°N 156.41°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.82°N 155.02°W), OpenStreetMap river line on Esri World Imagery
+- **Մ**: Semois, Belgium (49.79°N 5.23°E), OpenStreetMap river line on Esri World Imagery
+- **մ**: Nowitna River, Alaska, USA (64.81°N 154.23°W), OpenStreetMap river line on Esri World Imagery; Nowitna River, Alaska, USA (64.59°N 154.44°W), OpenStreetMap river line on Esri World Imagery
+- **Յ**: Koyukuk River, Alaska, USA (65.99°N 155.75°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (66.00°N 155.99°W), OpenStreetMap river line on Esri World Imagery
+- **յ**: Koyukuk River, Alaska, USA (66.00°N 155.42°W), OpenStreetMap river line on Esri World Imagery
+- **Ն**: Murray River, South Australia (34.02°S 140.87°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.50°S 139.58°E), OpenStreetMap river line on Esri World Imagery
+- **ն**: Murray River, South Australia (34.23°S 140.74°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.43°S 140.50°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.41°S 140.57°E), OpenStreetMap river line on Esri World Imagery
+- **Շ**: Semois, Belgium (49.84°N 5.00°E), OpenStreetMap river line on Esri World Imagery; Semois, Belgium (49.81°N 5.04°E), OpenStreetMap river line on Esri World Imagery
+- **շ**: Lot, France (44.47°N 1.59°E), OpenStreetMap river line on Esri World Imagery
+- **Ո**: Nowitna River, Alaska, USA (64.88°N 154.18°W), OpenStreetMap river line on Esri World Imagery
+- **ո**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery
+- **Չ**: Murray River, South Australia (34.25°S 140.72°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.03°S 139.68°E), OpenStreetMap river line on Esri World Imagery
+- **չ**: Rio Grande, Texas, USA / Chihuahua, Mexico (29.08°N 103.47°W), OpenStreetMap river line on Esri World Imagery
+- **Պ**: Murray River, South Australia (34.36°S 140.57°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.37°S 140.41°E), OpenStreetMap river line on Esri World Imagery
+- **պ**: Juruá River, Amazonas, Brazil (6.71°S 69.90°W), OpenStreetMap river line on Esri World Imagery; Rhine, Germany (50.53°N 7.29°E), OpenStreetMap river line on Esri World Imagery; Riacho Chouí, Argentina/Paraguay (27.49°S 58.90°W), OpenStreetMap river line on Esri World Imagery
+- **Ջ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.478°N 159.450°W), OpenStreetMap shoreline on Esri World Imagery; Moselle, Germany (50.34°N 7.55°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.90°S 139.33°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.41°S 139.62°E), OpenStreetMap river line on Esri World Imagery
+- **ջ**: Laguna Ríos by the Paraná near Corrientes, Argentina (27.480°S 58.733°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (34.08°S 139.90°E), OpenStreetMap river line on Esri World Imagery
+- **Ռ**: Koyukuk River, Alaska, USA (65.98°N 155.84°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (66.16°N 154.16°W), OpenStreetMap river line on Esri World Imagery
+- **ռ**: Murray River, South Australia (34.11°S 140.76°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.87°S 139.38°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.82°S 139.56°E), OpenStreetMap river line on Esri World Imagery
+- **Ս**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **ս**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Վ**: Murray River, South Australia (34.30°S 139.64°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.09°S 139.95°E), OpenStreetMap river line on Esri World Imagery
+- **վ**: Koyukuk River, Alaska, USA (65.90°N 154.50°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.91°N 155.38°W), OpenStreetMap river line on Esri World Imagery
+- **Տ**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **տ**: Purus River, Amazonas, Brazil (7.07°S 64.61°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.36°S 65.04°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.20°S 64.72°W), OpenStreetMap river line on Esri World Imagery
+- **Ր**: River Wye, England/Wales (51.83°N 2.65°W), OpenStreetMap river line on Esri World Imagery
+- **ր**: Juruá River, Amazonas, Brazil (6.75°S 70.02°W), OpenStreetMap river line on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.43°S 65.32°W), OpenStreetMap river line on Esri World Imagery
+- **Ց**: Juruá River, Amazonas, Brazil (6.68°S 69.89°W), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.453°N 159.505°W), OpenStreetMap shoreline on Esri World Imagery; Juruá River, Amazonas, Brazil (6.61°S 69.79°W), OpenStreetMap river line on Esri World Imagery
+- **ց**: Nowitna River, Alaska, USA (64.44°N 154.08°W), OpenStreetMap river line on Esri World Imagery; Nowitna River, Alaska, USA (64.54°N 154.26°W), OpenStreetMap river line on Esri World Imagery
+- **Ւ**: Rhine, Germany (50.44°N 7.41°E), OpenStreetMap river line on Esri World Imagery; Rhine, Germany (50.43°N 7.46°E), OpenStreetMap river line on Esri World Imagery
+- **ւ**: Riacho Guaycurú, Argentina/Paraguay (27.30°S 58.74°W), OpenStreetMap river line on Esri World Imagery
+- **Փ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.465°N 159.792°W), OpenStreetMap shoreline on Esri World Imagery; Lot, France (44.49°N 1.31°E), OpenStreetMap river line on Esri World Imagery
+- **փ**: Paraná River, Argentina/Paraguay (27.51°S 58.85°W), OpenStreetMap river line on Esri World Imagery; San Juan River, Utah, USA (37.17°N 109.90°W), OpenStreetMap river line on Esri World Imagery; Lot, France (44.49°N 1.29°E), OpenStreetMap river line on Esri World Imagery
+- **Ք**: Rhine, Germany (50.63°N 7.21°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.452°N 159.514°W), OpenStreetMap shoreline on Esri World Imagery; Rhine, Germany (50.54°N 7.29°E), OpenStreetMap river line on Esri World Imagery
+- **ք**: Nowitna River, Alaska, USA (64.44°N 153.75°W), OpenStreetMap river line on Esri World Imagery; Mamoré River, Bolivia/Brazil (10.85°S 65.29°W), OpenStreetMap river line on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.10°S 65.30°W), OpenStreetMap river line on Esri World Imagery
+- **Օ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat)
+- **օ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery
+- **Ֆ**: Rio Grande, Texas, USA / Chihuahua, Mexico (29.02°N 103.31°W), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.449°N 159.504°W), OpenStreetMap shoreline on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.31°S 65.32°W), OpenStreetMap river line on Esri World Imagery
+- **ֆ**: Juruá River, Amazonas, Brazil (6.73°S 69.92°W), OpenStreetMap river line on Esri World Imagery; a lake in the Danube Delta, Romania (45.221°N 29.360°E), OpenStreetMap shoreline on Esri World Imagery; Rhine, Germany (50.48°N 7.34°E), OpenStreetMap river line on Esri World Imagery
+- **և**: Juruá River, Amazonas, Brazil (6.54°S 69.66°W), OpenStreetMap river line on Esri World Imagery; Tarauacá River, Amazonas, Brazil (6.80°S 69.76°W), OpenStreetMap river line on Esri World Imagery
+- **ა**: Purus River, Amazonas, Brazil (7.29°S 64.91°W), OpenStreetMap river line on Esri World Imagery
+- **ბ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.469°N 159.667°W), OpenStreetMap shoreline on Esri World Imagery; Juruá River, Amazonas, Brazil (6.73°S 70.14°W), OpenStreetMap river line on Esri World Imagery
+- **გ**: Koyukuk River, Alaska, USA (65.99°N 156.11°W), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.464°N 159.807°W), OpenStreetMap shoreline on Esri World Imagery
+- **დ**: a lake in the Danube Delta, Romania (45.137°N 29.411°E), OpenStreetMap shoreline on Esri World Imagery; Lot, France (44.48°N 1.56°E), OpenStreetMap river line on Esri World Imagery; Lot, France (44.46°N 1.49°E), OpenStreetMap river line on Esri World Imagery
+- **ე**: Semois, Belgium (49.88°N 4.89°E), OpenStreetMap river line on Esri World Imagery; Semois, Belgium (49.78°N 5.13°E), OpenStreetMap river line on Esri World Imagery
+- **ვ**: Semois, Belgium (49.83°N 5.02°E), OpenStreetMap river line on Esri World Imagery; Semois, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ზ**: Jezioro Łuknajno in Masuria, Poland (53.812°N 21.625°E), OpenStreetMap shoreline on Esri World Imagery; Nowitna River, Alaska, USA (64.76°N 154.30°W), OpenStreetMap river line on Esri World Imagery
+- **თ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.460°N 159.832°W), OpenStreetMap shoreline on Esri World Imagery; Semois, Belgium (49.83°N 4.99°E), OpenStreetMap river line on Esri World Imagery
+- **ი**: Murray River, South Australia (34.11°S 140.79°E), OpenStreetMap river line on Esri World Imagery
+- **კ**: San Juan River, Utah, USA (37.20°N 110.01°W), OpenStreetMap river line on Esri World Imagery; San Juan River, Utah, USA (37.21°N 109.99°W), OpenStreetMap river line on Esri World Imagery
+- **ლ**: Purus River, Amazonas, Brazil (7.30°S 64.84°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (6.99°S 64.63°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.09°S 64.66°W), OpenStreetMap river line on Esri World Imagery; a side channel of the Purus, Amazonas, Brazil (7.19°S 64.96°W), OpenStreetMap river line on Esri World Imagery
+- **მ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.450°N 159.707°W), OpenStreetMap shoreline on Esri World Imagery; Dordogne, France (44.86°N 0.84°E), OpenStreetMap river line on Esri World Imagery
+- **ნ**: Laguna Quilotoa in Ecuador (0.859°S 78.906°W), OpenStreetMap shoreline on Esri World Imagery; Lot, France (44.48°N 1.35°E), OpenStreetMap river line on Esri World Imagery
+- **ო**: Koyukuk River, Alaska, USA (65.99°N 156.25°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.61°N 156.29°W), OpenStreetMap river line on Esri World Imagery
+- **პ**: Koyukuk River, Alaska, USA (65.90°N 156.35°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.87°N 156.26°W), OpenStreetMap river line on Esri World Imagery
+- **ჟ**: Murray River, South Australia (34.96°S 139.29°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (33.98°S 140.90°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.44°S 139.61°E), OpenStreetMap river line on Esri World Imagery
+- **რ**: Moselle, Germany (50.11°N 7.20°E), OpenStreetMap river line on Esri World Imagery; Moselle, Germany (50.10°N 7.13°E), OpenStreetMap river line on Esri World Imagery; Moselle, Germany (50.11°N 7.24°E), OpenStreetMap river line on Esri World Imagery
+- **ს**: Sioule, France (45.99°N 2.83°E), OpenStreetMap river line on Esri World Imagery
+- **ტ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.473°N 159.840°W), OpenStreetMap shoreline on Esri World Imagery; Mamoré River, Bolivia/Brazil (11.38°S 65.33°W), OpenStreetMap river line on Esri World Imagery
+- **უ**: Nowitna River, Alaska, USA (64.59°N 154.40°W), OpenStreetMap river line on Esri World Imagery; Nowitna River, Alaska, USA (64.65°N 154.54°W), OpenStreetMap river line on Esri World Imagery; Nowitna River, Alaska, USA (64.36°N 153.65°W), OpenStreetMap river line on Esri World Imagery
+- **ფ**: a lake by the Paraná near Corrientes, Argentina (27.445°S 58.710°W), OpenStreetMap shoreline on Esri World Imagery; Murray River, South Australia (34.37°S 140.59°E), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.63°S 139.66°E), OpenStreetMap river line on Esri World Imagery
+- **ქ**: Koyukuk River, Alaska, USA (65.74°N 156.54°W), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (66.22°N 154.05°W), OpenStreetMap river line on Esri World Imagery
+- **ღ**: San Juan River, Utah, USA (37.18°N 109.89°W), OpenStreetMap river line on Esri World Imagery; San Juan River, Utah, USA (37.17°N 109.93°W), OpenStreetMap river line on Esri World Imagery; San Juan River, Utah, USA (37.22°N 110.02°W), OpenStreetMap river line on Esri World Imagery
+- **ყ**: Juruá River, Amazonas, Brazil (6.74°S 69.91°W), OpenStreetMap river line on Esri World Imagery; Juruá River, Amazonas, Brazil (6.58°S 69.76°W), OpenStreetMap river line on Esri World Imagery
+- **შ**: Lot, France (44.45°N 1.44°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.464°N 159.520°W), OpenStreetMap shoreline on Esri World Imagery; Lot, France (44.46°N 1.43°E), OpenStreetMap river line on Esri World Imagery
+- **ჩ**: Vltava, Czechia (48.69°N 14.36°E), OpenStreetMap river line on Esri World Imagery; Vltava, Czechia (48.81°N 14.32°E), OpenStreetMap river line on Esri World Imagery
+- **ც**: Purus River, Amazonas, Brazil (7.05°S 64.65°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.23°S 64.74°W), OpenStreetMap river line on Esri World Imagery
+- **ძ**: Paraná River, Argentina/Paraguay (27.33°S 58.64°W), OpenStreetMap river line on Esri World Imagery; a lake River Wye at Symonds Yat, England/Wales (51.828°N 2.619°W), OpenStreetMap shoreline on Esri World Imagery
+- **წ**: a lake by the Kuskokwim River near Aniak, Alaska, USA (61.473°N 159.774°W), OpenStreetMap shoreline on Esri World Imagery; Purus River, Amazonas, Brazil (7.12°S 64.64°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (6.90°S 64.64°W), OpenStreetMap river line on Esri World Imagery
+- **ჭ**: Saar, Germany (49.50°N 6.55°E), OpenStreetMap river line on Esri World Imagery; Semois, Belgium (49.87°N 4.88°E), OpenStreetMap river line on Esri World Imagery
+- **ხ**: Murray River, South Australia (34.34°S 139.62°E), OpenStreetMap river line on Esri World Imagery; a lake by the Kuskokwim River near Aniak, Alaska, USA (61.470°N 159.654°W), OpenStreetMap shoreline on Esri World Imagery
+- **ჯ**: Vltava, Czechia (48.65°N 14.36°E), OpenStreetMap river line on Esri World Imagery; Koyukuk River, Alaska, USA (65.79°N 154.72°W), OpenStreetMap river line on Esri World Imagery; Murray River, South Australia (34.14°S 139.67°E), OpenStreetMap river line on Esri World Imagery
+- **ჰ**: Nowitna River, Alaska, USA (64.71°N 154.48°W), OpenStreetMap river line on Esri World Imagery; a side channel of the Purus, Amazonas, Brazil (7.42°S 64.90°W), OpenStreetMap river line on Esri World Imagery; Purus River, Amazonas, Brazil (7.20°S 64.78°W), OpenStreetMap river line on Esri World Imagery
+- **Ẁ**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ẁ**: the wya?! logo (unchanged); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ẃ**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ẃ**: the wya?! logo (unchanged); accent: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ẅ**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **ẅ**: the wya?! logo (unchanged); accent: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **Ạ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ạ**: the wya?! logo (unchanged); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ả**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ả**: the wya?! logo (unchanged); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ấ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ấ**: the wya?! logo (unchanged); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ầ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ầ**: the wya?! logo (unchanged); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ẩ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ẩ**: the wya?! logo (unchanged); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ẫ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ẫ**: the wya?! logo (unchanged); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ậ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ậ**: the wya?! logo (unchanged); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ắ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ắ**: the wya?! logo (unchanged); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ằ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ằ**: the wya?! logo (unchanged); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ẳ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ẳ**: the wya?! logo (unchanged); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ẵ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ẵ**: the wya?! logo (unchanged); mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ặ**: Amazon River, Peru (4°36'00.9"S 74°27'33.3"W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **ặ**: the wya?! logo (unchanged); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **Ẹ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ẹ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ẻ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ẻ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ẽ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ẽ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ế**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ế**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ề**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ề**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ể**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ể**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ễ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ễ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ệ**: Firn-filled Fjords, Tibet (29°15'46.9 N 96°19'03.8 E), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ệ**: Uvac River meanders, Serbia (43.35°N 19.96°E); the eye is closed with a short link across the bank, OpenStreetMap river line (checked on Esri World Imagery); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ỉ**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ỉ**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ị**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ị**: Yukon Flats, Alaska, USA (66.1153°N 144.4514°W), OpenStreetMap river line (checked on Esri World Imagery); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ọ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ọ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ỏ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ỏ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ố**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ố**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ồ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ồ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ổ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ổ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ỗ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ỗ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ộ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **ộ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline; mark: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **Ớ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ớ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ờ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ờ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ở**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ở**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ỡ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ỡ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ợ**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ợ**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery; mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ụ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ụ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ủ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ủ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ứ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **ứ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **Ừ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ừ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ử**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ử**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ữ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ữ**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **Ự**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ự**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Danube at the Schlögen loop, Austria (48.45°N 13.86°E), OpenStreetMap river line on Esri World Imagery; mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ỳ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **ỳ**: the wya?! logo (unchanged); accent: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **Ỵ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **ỵ**: the wya?! logo (unchanged); mark: Pulvermaar, Eifel, Germany (50.132°N 6.932°E), OpenStreetMap shoreline
+- **Ỷ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **ỷ**: the wya?! logo (unchanged); mark: a bend of the Lot near Cahors, France (44.49°N 1.32°E), OpenStreetMap river line on Esri World Imagery
+- **Ỹ**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **ỹ**: the wya?! logo (unchanged); mark: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **#**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), turned level, Esri World Imagery; Owasco Lake and Skaneateles Lake, New York, USA (42.85°N 76.45°W), Esri World Imagery
+- **$**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); stroke: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **%**: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery); dots: Gemündener Maar and Weinfelder Maar, Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **&**: the Semois at Bouillon, Belgium (49.79°N 5.07°E), OpenStreetMap river line on Esri World Imagery; leg: Lake Chelan, Washington, USA (48.14°N 120.50°W), Esri World Imagery
+- *****: Hemlock Lake, Canadice Lake and Honeoye Lake, New York, USA (42.75°N 77.58°W), crossed, Esri World Imagery
+- **+**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), laid across each other, Esri World Imagery
+- **<**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **=**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), turned level, Esri World Imagery
+- **>**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **@**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); the wya?! logo's a (unchanged)
+- **[**: the Lot around Cahors, France (44.46°N 1.46°E), OpenStreetMap river line on Esri World Imagery
+- **\**: Cayuga Lake, New York, USA (42.70°N 76.70°W), Esri World Imagery
+- **]**: the Lot around Cahors, France (44.46°N 1.46°E), OpenStreetMap river line on Esri World Imagery, turned upside down
+- **^**: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.90°S 25.84°E), OpenStreetMap river line on Esri World Imagery
+- **_**: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **`**: Lake Brienz, Switzerland (46.72°N 7.96°E), Esri World Imagery
+- **{**: the Uvac reservoir, Serbia (43.41°N 19.94°E), OpenStreetMap river line on Esri World Imagery
+- **|**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **}**: the Uvac reservoir, Serbia (43.41°N 19.94°E), OpenStreetMap river line on Esri World Imagery, turned upside down
+- **~**: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **¡**: the wya?! logo's !, turned upside down
+- **¢**: False River, Louisiana, United States (30°39'N 91°27'W; NASA's page lists Hickman's coordinates for it by mistake), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **£**: Murray River, South Australia (34.24°S 140.39°E), OpenStreetMap river line on Esri World Imagery; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **¤**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; ticks: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **¥**: Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **¦**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, twice
+- **§**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat), twice
+- **¨**: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **©**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **«**: the same bend as ˇ, on its side, twice: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **¬**: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **­**: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **®**: Manicouagan Reservoir, Canada (51°22'42.4 N 68°40'27.2 W), NASA/USGS Landsat (Your Name in Landsat); Canyonlands National Park, Utah, United States (38°26'27.8 N 109°45'03.3 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **¯**: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery
+- **°**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **±**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), laid across each other, Esri World Imagery; bar: Honeoye Lake, New York, USA, turned level
+- **²**: Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery), small and raised
+- **³**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery), small and raised
+- **´**: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **¶**: Laitaure delta, Sarek, Sweden (67.0717°N 18.1170°E), Esri World Imagery; second stem: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **·**: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **¸**: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), the breve's bend turned on its side, OpenStreetMap river line on Esri World Imagery
+- **¹**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **»**: the same bend as ˇ, on its side, twice: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **¼**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery); Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **½**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery); Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **¾**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery); Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **¿**: the wya?! logo's ?, turned upside down
+- **×**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), laid across each other, Esri World Imagery
+- **÷**: Canadice Lake, New York, USA (42.74°N 77.57°W), turned level, Esri World Imagery; dots: Gemündener Maar and Weinfelder Maar, side by side in the Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines
+- **˘**: a bend of the Semois near Bouillon, Belgium (49.80°N 5.07°E), OpenStreetMap river line on Esri World Imagery
+- **˙**: Weinfelder Maar, Eifel, Germany (50.176°N 6.849°E), OpenStreetMap shoreline
+- **˚**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery
+- **˛**: the Moselle at Bremm, Germany (50.10°N 7.12°E), OpenStreetMap river line on Esri World Imagery
+- **˜**: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery
+- **;**: Purus River near Lábrea, Brazil (7.0590°S 64.6126°W), OpenStreetMap river line (checked on Esri World Imagery); dot: Gemündener Maar (50.178°N 6.835°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **·**: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **฿**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **–**: Loch Lochy, Scotland, UK (56.97°N 4.93°W), Esri World Imagery
+- **—**: Gulf of Aqaba (28.75°N 34.75°E), Esri World Imagery
+- **‘**: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery), turned upside down
+- **‚**: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **“**: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery), turned upside down, twice
+- **”**: Murray River, South Australia (34.7447°S 139.5474°E), OpenStreetMap river line (checked on Esri World Imagery), twice
+- **„**: Murray River, South Australia (34.9603°S 139.3189°E), OpenStreetMap river line (checked on Esri World Imagery), twice
+- **†**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; bar: Honeoye Lake, New York, USA, turned level
+- **‡**: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; bars: Honeoye Lake and Canadice Lake, New York, USA, turned level
+- **•**: Pulvermaar (50.132°N 6.932°E), crater lake in the Eifel, Germany, OpenStreetMap shoreline
+- **…**: the three Dauner Maare as they lie in a row: Gemündener, Weinfelder and Schalkenmehrener Maar, Eifel, Germany (50.17°N 6.85°E), OpenStreetMap shorelines
+- **‰**: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery); dots: Gemündener Maar and Weinfelder Maar, Eifel, Germany (50.18°N 6.84°E), OpenStreetMap shorelines; third dot: Schalkenmehrener Maar, Eifel, Germany (50.169°N 6.857°E), OpenStreetMap shoreline
+- **′**: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery
+- **″**: Lac de Joux, Switzerland (46.64°N 6.28°E), Esri World Imagery, twice
+- **‹**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **›**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **⁄**: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⁰**: Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **⁴**: Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **⁵**: Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery), small and raised
+- **⁶**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **⁷**: Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery), small and raised
+- **⁸**: Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **⁹**: Hickman, Kentucky, United States (36°35'20.8 N 89°20'26.9 W), NASA/USGS Landsat (Your Name in Landsat), small and raised
+- **₀**: Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₁**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₂**: Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery), small and lowered
+- **₃**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery), small and lowered
+- **₄**: Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₅**: Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery), small and lowered
+- **₆**: Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₇**: Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery), small and lowered
+- **₈**: Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₉**: Hickman, Kentucky, United States (36°35'20.8 N 89°20'26.9 W), NASA/USGS Landsat (Your Name in Landsat), small and lowered
+- **₡**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); strokes: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₦**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₩**: Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₪**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat)
+- **₫**: Riberalta, Bolivia (10°52'44.0 S 66°02'52.0 W); the same oxbow as p, turned upside down, NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; underline: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **€**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₱**: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₲**: Amazon River, Brazil (2°38'48.2"S 67°08'42.3"W), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₴**: Araguaia River, Brazil (13°01'27.8"S 50°35'00.9"W), NASA/USGS Landsat (Your Name in Landsat); bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₵**: Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₸**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery; top bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₹**: bowl: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat); leg: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright; bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₺**: Xinjiang, China (40°04'02.8 N 77°40'00.7 E), NASA/USGS Landsat (Your Name in Landsat); strokes: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₼**: Dordogne at the Cingle de Trémolat, France (44.8668°N 0.8439°E), Esri World Imagery; stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₽**: Mackenzie River Delta, Canada (68°12'54.4 N 134°23'15.3 W), NASA/USGS Landsat (Your Name in Landsat); bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **₾**: Canyonlands National Park, Utah, United States (38°16'09.1 N 109°55'32.7 W), NASA/USGS Landsat (Your Name in Landsat), upside down; base and strokes: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **₿**: Madeira River, Brazil (7°37'00.1"S 62°55'17.0"W); the oxbow lake (top bowl) is joined to the river with two short links, NASA/USGS Landsat (Your Name in Landsat); stroke: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **℃**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Deception Island, Antarctica (62°57'22.3 S 60°38'32.8 W), NASA/USGS Landsat (Your Name in Landsat)
+- **℉**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Woodstock Dam, South Africa (28°44'01.3 S 29°12'30.1 E), NASA/USGS Landsat (Your Name in Landsat)
+- **№**: Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat); Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), Esri World Imagery, small; bar: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **™**: Biesbosch creeks, Netherlands (51.7367°N 4.8100°E), Esri World Imagery, small; Shenandoah River, Virginia, United States (38°46'32.2 N 78°24'07.1 W), NASA/USGS Landsat (Your Name in Landsat), small
+- **⅐**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅑**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Hickman, Kentucky, United States (36°35'20.8 N 89°20'26.9 W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅒**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅓**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅔**: Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery) / Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅕**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅖**: Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery) / Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅗**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery) / Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅘**: Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat) / Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅙**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅚**: Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery) / Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅛**: Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅜**: Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery) / Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅝**: Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery) / Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⅞**: Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery) / Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **↉**: Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat) / Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery); fraction bar: Murray River, South Australia (34.8578°S 139.6213°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **←**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↑**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **→**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↓**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↔**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; heads: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↕**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; heads: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↖**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↗**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↘**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **↙**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **⇄**: shaft: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery; head: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery
+- **∆**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), upside down; base: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **∏**: top: Lake Neuchâtel, Switzerland (46.90°N 6.85°E), turned level, Esri World Imagery; stems: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright, twice
+- **∑**: Mapleton, Maine (46°32'40.5 N 68°15'06.4 W), NASA/USGS Landsat (Your Name in Landsat), on its side; bars: Loch Ness, Scotland, UK (57.27°N 4.50°W), Esri World Imagery
+- **−**: Canadice Lake, New York, USA (42.74°N 77.57°W), turned level, Esri World Imagery
+- **∞**: Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat), on its side
+- **≈**: the Tagus at Toledo, Spain (39.87°N 3.99°W), OpenStreetMap river line on Esri World Imagery, twice
+- **≠**: Canadice Lake and Honeoye Lake, New York, USA (42.74°N 77.54°W), turned level, Esri World Imagery; slash: Gulf of Suez, Egypt (28.9°N 32.9°E), Esri World Imagery, turned upright
+- **≤**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery; bar: Honeoye Lake, New York, USA, turned level
+- **≥**: the same bend as ˇ, on its side: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery; bar: Honeoye Lake, New York, USA, turned level
+- **①**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat)
+- **②**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Uvac River meanders, Serbia (43.3552°N 19.9639°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **③**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Murray River, South Australia (34.2358°S 140.7345°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **④**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Lac Assinica, Quebec, Canada (50°24'34.1"N 74°57'48.0"W), NASA/USGS Landsat (Your Name in Landsat)
+- **⑤**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Chowilla anabranches of the Murray, South Australia (34.2481°S 140.7189°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⑥**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Amazon River, Peru (4°11'25.7"S 73°19'36.9"W), NASA/USGS Landsat (Your Name in Landsat)
+- **⑦**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Okavango Panhandle, Botswana (18.8146°S 22.2933°E), OpenStreetMap river line (checked on Esri World Imagery)
+- **⑧**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Hudson Bay, Ontario, Canada (55°52'34.3"N 87°52'27.5"W), NASA/USGS Landsat (Your Name in Landsat)
+- **⑨**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Hickman, Kentucky, United States (36°35'20.8 N 89°20'26.9 W), NASA/USGS Landsat (Your Name in Landsat)
+- **⑩**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Conesus Lake, New York, United States (42°47'11.0 N 77°42'58.1 W), NASA/USGS Landsat (Your Name in Landsat) / Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **⓪**: Pingualuit crater lake, Nunavik, Canada (61.28°N 73.66°W), the whole shore, Esri World Imagery; Lake Waccamaw, North Carolina, USA (34°17'16.7"N 78°30'44.3"W), NASA/USGS Landsat (Your Name in Landsat)
+- **★**: Hemlock, Seneca, Honeoye, Canadice and Owasco lakes, five of the Finger Lakes, New York, USA (42.6°N 77.0°W), the outline where they cross, filled in; each turned and laid on one line of the star, Esri World Imagery
+- **☆**: Hemlock, Seneca, Honeoye, Canadice and Owasco lakes, five of the Finger Lakes, New York, USA (42.6°N 77.0°W), the outline where they cross; each turned and laid on one line of the star, Esri World Imagery
+- **♥**: Galešnjak, the heart-shaped island, Croatia (43.98°N 15.38°E), its whole shore, Esri World Imagery
+- **⛤**: Hemlock, Seneca, Honeoye, Canadice and Owasco lakes, five of the Finger Lakes, New York, USA (42.6°N 77.0°W), each turned and laid on one line of the star, Esri World Imagery
+- **✓**: a bend of the Zambezi in the Batoka Gorge, Zambia/Zimbabwe (17.99°S 25.91°E), OpenStreetMap river line on Esri World Imagery, the bend with a short left arm
+- **✗**: Davis Strait, Greenland (62°14'14.8 N 49°34'49.9 W), NASA/USGS Landsat (Your Name in Landsat)
+
+## Hidden extras (reached through OpenType features, not typed directly)
+- **Small capitals** (smcp, c2sc): every Latin capital above, scaled to x-height with the stroke kept the same; same places as the capitals.
+- **Single-storey a** (ss01 / salt): Laitaure delta, Sarek, Sweden (67.0717°N 18.1170°E), Esri World Imagery, its descender cut just below the bowl
+- **Alternate y** (ss01 / salt): Estuario de Virrila, Peru (5°51'53.4 S 80°43'51.6 W), NASA/USGS Landsat (Your Name in Landsat)
+- **Alternate w** (ss01 / salt): Ponoy River, Russia (67°02'10.9 N 40°20'19.3 E), NASA/USGS Landsat (Your Name in Landsat), at x-height
+- **Fraction, numerator and denominator figures** (frac, numr, dnom): the figures above, small.
+- **Combining accents** (U+0300 to U+0331, placed by the mark and mkmk features): copies of the accents above, no new shapes. Grave, acute, circumflex, tilde, macron, breve, dot, diaeresis, ring, caron and cedilla from their own places; the hook above and dot below from the Vietnamese ả and ạ; the comma below from ș; the double acute is the acute twice at 85%; tilde, macron and diaeresis below are the same marks set under the letter.
+
+## Scripts this font does not draw
+wya-nature-fallbacks.css sets them in other fonts chosen to sit next to Tellus (rounded where one exists, weight and size matched by measurement). All are from Google Fonts under the SIL Open Font License 1.1, unmodified; licences in web/fallback/OFL.
