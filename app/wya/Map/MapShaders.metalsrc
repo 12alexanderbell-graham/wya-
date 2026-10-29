@@ -1,0 +1,286 @@
+#include <metal_stdlib>
+using namespace metal;
+
+// The camera: a centre in map units, a scale in points per map unit, the view in points.
+struct Cam {
+    float2 c;
+    float k;
+    float time;
+    float2 view;
+    float2 pad;
+};
+
+inline float2 toScreen(float2 p, constant Cam& cam) { return (p - cam.c) * cam.k + cam.view * 0.5; }
+inline float4 toClip(float2 s, constant Cam& cam) {
+    return float4(s.x / cam.view.x * 2.0 - 1.0, 1.0 - s.y / cam.view.y * 2.0, 0.0, 1.0);
+}
+
+// MARK: the fans that mark land in the stencil (even-odd), no colour
+vertex float4 fanVertex(uint vid [[vertex_id]],
+                        const device float2* pts [[buffer(0)]],
+                        constant Cam& cam [[buffer(1)]]) {
+    return toClip(toScreen(pts[vid], cam), cam);
+}
+fragment float4 fanFragment() { return float4(0.0); }
+
+// MARK: the relief: sea by depth, land by height, drawn on a one-degree grid laid in Equal Earth
+struct GridV {
+    float4 position [[position]];
+    float2 uv;
+};
+vertex GridV reliefVertex(uint vid [[vertex_id]],
+                          const device float4* g [[buffer(0)]],
+                          constant Cam& cam [[buffer(1)]]) {
+    float4 q = g[vid];
+    GridV o;
+    o.position = toClip(toScreen(q.xy, cam), cam);
+    o.uv = q.zw;
+    return o;
+}
+
+struct Look {
+    float4 tint;     // the colour a kind multiplies or lays flat
+    float kind;      // 0 sea (and lakes), 1 plain land, 2 land multiplied by tint, 3 flat tint, 5 land round a continent
+    float texelU;
+    float texelV;
+    float pad;
+};
+
+constant float3 WHITE = float3(1.0);
+constant float3 BLUE = float3(0.4706, 0.6824, 0.9725);       // 78AEF8
+constant float3 BEIGE_DARK = float3(0.7373, 0.7216, 0.7137); // BCB8B6
+
+inline float3 seaColour(float d) {
+    // our blue down to near-white in the shallows, never washed out
+    float3 shallow = mix(WHITE, BLUE, 0.20);
+    float t = pow(clamp(d / 0.78, 0.0, 1.0), 0.85);
+    return mix(shallow, BLUE, t);
+}
+
+fragment float4 reliefFragment(GridV in [[stage_in]],
+                               texture2d<float> rel [[texture(0)]],
+                               sampler s [[sampler(0)]],
+                               constant Look& look [[buffer(0)]]) {
+    int kind = int(look.kind + 0.5);
+    float2 dh = rel.sample(s, in.uv).rg;
+    if (kind == 0) {
+        // outside the real world (past ±180°) the depth deepens into open ocean over 25°, so no ghost of the other side
+        float out = max(-in.uv.x, in.uv.x - 1.0);
+        float d = out > 0.0 ? mix(dh.r, 0.9, smoothstep(0.0, 0.07, out)) : dh.r;
+        // on a continent's map the sea goes into the flat blue (tint.rgb, by tint.a)
+        return float4(mix(seaColour(d), look.tint.rgb, look.tint.a), 1.0);
+    }
+    if (kind == 3) return float4(look.tint.rgb, 1.0);
+    // land: white to grey by height, with a soft light from the north-west so the mountains read the way Apple Maps' do
+    float h = dh.g;
+    float hl = rel.sample(s, in.uv - float2(look.texelU, 0)).g;
+    float hr = rel.sample(s, in.uv + float2(look.texelU, 0)).g;
+    float hu = rel.sample(s, in.uv - float2(0, look.texelV)).g;
+    float hd = rel.sample(s, in.uv + float2(0, look.texelV)).g;
+    float3 n = normalize(float3((hl - hr) * 7.0, (hu - hd) * 7.0, 1.0));
+    float3 L = normalize(float3(-1.0, -1.0, 1.6));
+    float shade = dot(n, L) / L.z;
+    // zoomed in past the relief's own detail (a texel bigger than a few pixels) the hills would turn into soft grey
+    // blobs, so the relief eases out and the land goes calm and flat instead
+    // measured along the meridian too: near the poles the texture's rows are stretched sideways on the map, so across
+    // alone it overstated the detail and Chukotka's coarse heights came out as grey patches
+    float texelsPerPixel = min(fwidth(in.uv.x) / look.texelU, fwidth(in.uv.y) / look.texelV);
+    float detail = smoothstep(0.15, 0.5, texelsPerPixel);
+    // zoomed in, the heights go almost all the way to calm land: a third of the height colour left there drew the
+    // coarse heights as grey blotches
+    float3 land = mix(WHITE, BEIGE_DARK, clamp(pow(h, 1.15) * 1.05, 0.0, 1.0) * mix(0.10, 1.0, detail));
+    land *= mix(1.0, clamp(shade, 0.6, 1.25), 0.55 * detail);
+    land = clamp(land, 0.0, 1.0);
+    if (kind == 2) land *= look.tint.rgb;   // stamped lime soaks into the land; the Alps still show
+    // THE LAND ROUND A CONTINENT (the old fadedLand, Slice 127l): away from the continent you're on the land stays
+    // land, its own relief, mixed halfway toward our blue, and the colours on it go (tint.a: how far it has gone)
+    if (kind == 5) land = mix(land * look.tint.rgb, mix(land, BLUE, 0.5), look.tint.a);
+    // pad > 0: laid over what is there at that strength (premultiplied), so the borders under it go with it
+    if (look.pad > 0.0) return float4(land * look.pad, look.pad);
+    return float4(land, 1.0);
+}
+
+// MARK: borders and coasts: one thickness at every zoom, disputed lines one dashed line
+struct LineStyle {
+    float4 colour;
+    float width;    // points
+    float feather;  // points
+    float dash;
+    float gap;
+};
+struct LineV {
+    float4 position [[position]];
+    float across;
+    float along;
+    float dashed;
+};
+vertex LineV lineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                        const device float* segs [[buffer(0)]],
+                        constant Cam& cam [[buffer(1)]],
+                        constant LineStyle& ls [[buffer(2)]]) {
+    const device float* g = segs + iid * 6;
+    float2 a = toScreen(float2(g[0], g[1]), cam);
+    float2 b = toScreen(float2(g[2], g[3]), cam);
+    float2 d = b - a;
+    float len = length(d);
+    float2 dir = len > 1e-5 ? d / len : float2(1.0, 0.0);
+    float2 nrm = float2(-dir.y, dir.x);
+    float hw = ls.width * 0.5 + ls.feather;
+    float t = (vid == 1 || vid == 3 || vid == 4) ? 1.0 : 0.0;
+    float side = (vid == 2 || vid == 4 || vid == 5) ? 1.0 : -1.0;
+    float2 p = mix(a, b, t) + nrm * side * hw + dir * (t * 2.0 - 1.0) * ls.feather;
+    LineV o;
+    o.position = toClip(p, cam);
+    o.across = side * hw;
+    float segLen = length(float2(g[2] - g[0], g[3] - g[1]));
+    o.along = (g[4] + t * segLen) * cam.k;
+    o.dashed = fmod(g[5], 2.0);
+    return o;
+}
+struct FullV { float4 position [[position]]; float2 s; };
+// ONE LINE, ONE STRENGTH: every segment was its own quad, laid over the last, so where a detailed coast has many short
+// segments their ends piled up into a darker, thicker line than a border of a few long ones. Now the lines' coverage is
+// drawn first into a texture of its own, taking the most of any segment at each pixel (max, never added), and laid over
+// the map once, in 50% black.
+fragment float4 lineCoverage(LineV in [[stage_in]], constant LineStyle& ls [[buffer(0)]]) {
+    float d = abs(in.across);
+    float a = clamp((ls.width * 0.5 + ls.feather * 0.5 - d) / ls.feather, 0.0, 1.0);
+    if (in.dashed > 0.5 && fmod(in.along, ls.dash + ls.gap) > ls.dash) discard_fragment();
+    // colour.a here is the set's strength: 1, or while the detail changes level the old set going and the new coming
+    return float4(a * ls.colour.a);
+}
+fragment float4 lineComposite(FullV in [[stage_in]], texture2d<float> cov [[texture(0)]],
+                              constant LineStyle& ls [[buffer(0)]]) {
+    float c = cov.read(uint2(in.position.xy)).r * ls.colour.a;
+    if (c <= 0.002) discard_fragment();
+    return float4(ls.colour.rgb * c, c);
+}
+fragment float4 lineFragment(LineV in [[stage_in]], constant LineStyle& ls [[buffer(0)]]) {
+    float d = abs(in.across);
+    float a = clamp((ls.width * 0.5 + ls.feather * 0.5 - d) / ls.feather, 0.0, 1.0);
+    if (in.dashed > 0.5 && fmod(in.along, ls.dash + ls.gap) > ls.dash) discard_fragment();
+    return float4(ls.colour.rgb * a, a);
+}
+
+// MARK: the lights: two big bands of the living field, one glowing in from the top edge down to the Arctic Circle, one
+// from the bottom edge up to 60°S, under the land, always moving, in teal, lime and blue.
+struct AuroraU {
+    float yNorth;    // map y of 66.5°N, where the top band ends
+    float ySouth;    // map y of 60°S, where the bottom band ends
+    float bottom;    // the map's bottom edge
+    float strength;
+};
+vertex FullV fullVertex(uint vid [[vertex_id]], constant Cam& cam [[buffer(1)]]) {
+    float2 p = float2((vid << 1) & 2, vid & 2);
+    FullV o;
+    o.position = float4(p * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    o.s = p * cam.view;
+    return o;
+}
+
+inline float hash21(float2 p) { p = fract(p * float2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+inline float vnoise(float2 p) {
+    float2 i = floor(p), f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + float2(1, 0)), u.x), mix(hash21(i + float2(0, 1)), hash21(i + float2(1, 1)), u.x), u.y);
+}
+inline float fbm(float2 p) {
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * vnoise(p); p = p * 2.03 + float2(17.1, 9.2); a *= 0.5; }
+    return v;
+}
+// OKLab, so lime and blue never pass through olive mud (study 2.4)
+inline float3 toLin(float3 c) { return pow(c, 2.2); }
+inline float3 toSRGB(float3 c) { return pow(max(c, 0.0), 1.0 / 2.2); }
+inline float3 oklab(float3 c) {
+    float l = 0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b;
+    float m = 0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b;
+    float s = 0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b;
+    l = pow(l, 1.0 / 3.0); m = pow(m, 1.0 / 3.0); s = pow(s, 1.0 / 3.0);
+    return float3(0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+                  1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+                  0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s);
+}
+inline float3 fromOklab(float3 c) {
+    float l = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+    float m = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+    float s = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+    l = l * l * l; m = m * m * m; s = s * s * s;
+    return float3(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                  -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                  -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+
+fragment float4 auroraFragment(FullV in [[stage_in]], constant Cam& cam [[buffer(1)]], constant AuroraU& au [[buffer(2)]]) {
+    float2 m = cam.c + (in.s - cam.view * 0.5) / cam.k;    // the map point under this pixel
+    float t = cam.time * 0.32;
+    // the screen's own top and bottom in map units: a band reaches to the screen's edge when that edge is in view
+    float screenTop = cam.c.y - cam.view.y * 0.5 / cam.k;
+    float screenBottom = cam.c.y + cam.view.y * 0.5 / cam.k;
+    float3 teal = oklab(toLin(float3(0.6902, 0.8784, 0.8039)));
+    float3 lime = oklab(toLin(float3(0.8314, 0.8863, 0.2863)));
+    float3 blue = oklab(toLin(float3(0.4706, 0.6824, 0.9725)));
+    float3 total = float3(0.0);
+    float alpha = 0.0;
+    for (int band = 0; band < 2; band++) {
+        // how far in from the band's outer edge (0, the edge of the world or of the screen) to its inner end (1)
+        float outer = band == 0 ? min(0.0, screenTop) : max(au.bottom, screenBottom);
+        float inner = band == 0 ? au.yNorth : au.ySouth;
+        float s = (m.y - outer) / (inner - outer);
+        if (s >= 1.0) continue;
+        s = max(s, 0.0);
+        // strongest at the edge, easing away to nothing at its end: a gradient coming out of the edge
+        float body = pow(1.0 - smoothstep(0.0, 1.0, s), 0.85);
+        // the living field: twice-warped noise, drifting slowly, in map space
+        float2 p = m * float2(0.006, 0.012) + float2(float(band) * 7.3, 0.0);
+        float2 w1 = float2(fbm(p * 2.0 + float2(t * 0.6, -t * 0.4)), fbm(p * 2.0 + float2(5.2, 1.3) - t * 0.5));
+        float2 w2 = float2(fbm(p * 2.6 + w1 * 1.6 + float2(1.7, 9.2) + t * 0.3), fbm(p * 2.6 + w1 * 1.6 + float2(8.3, 2.8) - t * 0.35));
+        float n1 = fbm(p * 3.0 + w2 * 1.8);
+        float n2 = fbm(p * 2.2 - w1 * 1.2 + 3.1);
+        // never one colour: teal and blue flowing through each other, lime coming through in places
+        float3 col = mix(teal, blue, smoothstep(0.30, 0.72, n1));
+        col = mix(col, lime, smoothstep(0.52, 0.80, n2) * 0.75);
+        col = mix(col, teal, smoothstep(0.65, 0.9, n1) * 0.4);
+        // the field's own light and shade, so it moves like lights and not like a flat sheet
+        float glow = 0.62 + 0.55 * smoothstep(0.25, 0.85, n1 * 0.6 + n2 * 0.5);
+        // the lights go on over the sea past the date line, the way the sea does (no fade at the world's sides)
+        float a = body * glow * au.strength;
+        total += toSRGB(fromOklab(col)) * a;
+        alpha += a;
+    }
+    alpha = clamp(alpha, 0.0, 0.9);
+    float3 rgb = alpha > 0.0001 ? total / max(alpha, 0.0001) : float3(0.0);
+    // fine grain, so it never bands
+    float grain = (hash21(in.s * 1.7 + fract(cam.time)) - 0.5) * 0.04;
+    return float4((rgb + grain) * alpha, alpha);
+}
+
+// MARK: small places as diamonds, so they can be seen and tapped; all of them turn into their real shape at the same
+// zoom
+struct Diamond { float2 p; float2 pad; float4 colour; };
+struct DiamondV { float4 position [[position]]; float2 local; float4 colour; };
+vertex DiamondV diamondVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                              const device Diamond* ds [[buffer(0)]],
+                              constant Cam& cam [[buffer(1)]]) {
+    Diamond d = ds[iid];
+    float2 corner = float2((vid == 1 || vid == 3 || vid == 4) ? 1.0 : -1.0, (vid == 2 || vid == 4 || vid == 5) ? 1.0 : -1.0);
+    float extent = 7.0;
+    float2 s = toScreen(d.p, cam) + corner * extent;
+    DiamondV o;
+    o.position = toClip(s, cam);
+    o.local = corner * extent;
+    o.colour = d.colour;
+    return o;
+}
+fragment float4 diamondFragment(DiamondV in [[stage_in]]) {
+    float r = abs(in.local.x) + abs(in.local.y);     // points from the centre, diamond-wise
+    // the rim is a full point, so a white diamond still reads on white land (Singapore beside Johor)
+    float size = 5.8, edge = 1.1;
+    // colour.a: how much of it is there (a diamond off the continent you're on goes with its borders)
+    float a = clamp((size - r) / 0.7 + 0.5, 0.0, 1.0) * in.colour.a;
+    if (a <= 0.0) discard_fragment();
+    // the rim is 50% black, the inside the place's colour
+    float inside = clamp((size - edge - r) / 0.7 + 0.5, 0.0, 1.0);
+    float cover = inside + (1.0 - inside) * 0.5;
+    return float4(in.colour.rgb * inside * a, cover * a);
+}
