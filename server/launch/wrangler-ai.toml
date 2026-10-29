@@ -1,0 +1,16 @@
+# npx wrangler deploy -c wrangler-ai.toml   (after: npx wrangler kv namespace create LIMITS, and the two secrets)
+name = "wya-ai"
+main = "ai-worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"
+MODEL_FREE = "claude-sonnet-5-5"      # the everyday AI (platform.claude.com/docs/en/models/overview, 2 Oct 2026)
+MODEL_PREMIUM = "claude-opus-5-5"     # the better AI, for premium
+CAP_FREE = "20"        # questions a day
+CAP_PREMIUM = "200"
+ALLOW_ORIGIN = "*"
+
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "PASTE-THE-ID-FROM-kv-namespace-create"
