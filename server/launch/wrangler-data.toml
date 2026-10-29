@@ -1,0 +1,11 @@
+# npx wrangler deploy -c wrangler-data.toml   (after: npx wrangler r2 bucket create wya-data, and upload-data.sh)
+name = "wya-data"
+main = "data-worker.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+ALLOW_ORIGIN = "*"
+
+[[r2_buckets]]
+binding = "DATA"
+bucket_name = "wya-data"
