@@ -30,6 +30,7 @@ from shapely.ops import unary_union
 from shapely import make_valid
 from shapely.affinity import affine_transform
 import shapely
+import numpy as np
 
 regdir, detail, dfile, tfile, nfile, out = sys.argv[1:7]
 os.makedirs(out, exist_ok=True)
@@ -129,6 +130,45 @@ def rings_of(g):
             if len(dd) >= 4 and dd[0] == dd[-1]: out_.append(dd)
     return out_
 
+def faces_to_rings(pg, pu, crumb):
+    lines = shapely.union_all([g.boundary for g in pg if not g.is_empty], grid_size=1)
+    faces = [f for f in shapely.get_parts(shapely.polygonize(shapely.get_parts(lines))) if f.area > 0]
+    tree = shapely.STRtree(pg)
+    owner = []
+    for f in faces:
+        rp = f.representative_point()
+        c = [int(k) for k in tree.query(rp, predicate='intersects')]
+        if len(c) > 1: c = [max(c, key=lambda k: pg[k].intersection(f).area)]
+        if not c and f.area < crumb:
+            # a crumb between two parts (no one's): to the neighbour it borders longest
+            nb = [int(k) for k in tree.query(f.buffer(1), predicate='intersects')]
+            if nb: c = [max(nb, key=lambda k: f.boundary.intersection(pg[k].buffer(1)).length)]
+        owner.append(c[0] if c else None)
+    segs = collections.defaultdict(collections.Counter)
+    for f, o in zip(faces, owner):
+        if o is None: continue
+        for r in [f.exterior] + list(f.interiors):
+            cs = [(int(round(x)), int(round(y))) for x, y in r.coords]
+            for a, b in zip(cs, cs[1:]):
+                if a != b: segs[o][(a, b) if a < b else (b, a)] += 1
+    out_u, out_r = [], []
+    for k, u in enumerate(pu):
+        edges = [e for e, n in segs[k].items() if n % 2 == 1]
+        if not edges: continue
+        adj = collections.defaultdict(list)
+        for a, b in edges: adj[a].append(b); adj[b].append(a)
+        used = set(); rings = []
+        for a, b in edges:
+            if (a, b) in used: continue
+            ring = [a, b]; used.add((a, b) if a < b else (b, a)); prev, cur = a, b
+            while cur != a:
+                nxt = next((n for n in adj[cur] if ((cur, n) if cur < n else (n, cur)) not in used), None)
+                if nxt is None: break
+                used.add((cur, nxt) if cur < nxt else (nxt, cur)); ring.append(nxt); prev, cur = cur, nxt
+            if ring[0] == ring[-1] and len(ring) >= 4: rings.append(ring)
+        if rings: out_u.append(u); out_r.append(rings)
+    return out_u, out_r
+
 def build_arcs(units_rings):
     """topology from point rings: rings cut at every point where their neighbours differ, equal arcs shared"""
     nb = collections.defaultdict(set)
@@ -213,7 +253,7 @@ for cc in sorted(files):
                 # a slip, not a cut: the unit whole, to the larger side
                 uu = dict(u)
                 if big[0]: uu['q'] = big[0]; changed += 1
-                new_u.append(uu); new_rings.append(pr); geoms.append((g, area, True) if big[0] else None); continue
+                new_u.append(uu); new_rings.append(pr); geoms.append((g, area, True, None) if big[0] else None); continue
             # a leftover outside every piece under 3% of the unit is a gap between two pieces' sources, not land of
             # the country's own: it joins the largest part too
             # the rest that goes to the whole place is a leftover too when it lies mostly outside the place's shape
@@ -228,7 +268,7 @@ for cc in sorted(files):
             for k, p in kept:
                 uu = dict(u)
                 if k: uu['q'] = k
-                if p.area > 0: new_u.append(uu); new_rings.append(None); geoms.append((p, area, p is big[1]))
+                if p.area > 0: new_u.append(uu); new_rings.append(None); geoms.append((p, area, p is big[1], pr))
             changed += 1; cut.append([u.get('id'), [k or cc for k, _ in kept]])
         if not changed: continue
         # a sliver inside a piece (under 3% of its unit, where the region data's line and the piece's differ) joins the
@@ -245,12 +285,17 @@ for cc in sorted(files):
                 if l > bl: best_, bl = j, l
             if best_ is not None:
                 gj = geoms[best_]
-                geoms[best_] = (area_only(make_valid(shapely.union_all([gj[0], gi[0]], grid_size=1))), gj[1], gj[2])
+                geoms[best_] = (area_only(make_valid(shapely.union_all([gj[0], gi[0]], grid_size=1))), gj[1], gj[2],
+                                (gj[3] or []) + (gi[3] or []))
                 alive[i] = False; merged += 1
         keep_i = [i for i in range(len(new_u)) if alive[i]]
-        new_rings = [new_rings[i] if new_rings[i] is not None else rings_of(geoms[i][0]) for i in keep_i]
-        new_u = [new_u[i] for i in keep_i]
-        new_u = [u for u, r in zip(new_u, new_rings) if r]; new_rings = [r for r in new_rings if r]
+        # ONE SET OF LINES FOR THE WHOLE FILE: the cuts' snap rounding can drop a vertex an uncut neighbour still has,
+        # and a unit left whole by the slip rule keeps its own line while its neighbour is cut on the piece's; so every
+        # part's outline is noded together, the faces between the lines are given to the part holding them, and each
+        # part's rings are its faces' outer edges: neighbours then share exactly the same points
+        pg = [geoms[i][0] if geoms[i] and new_rings[i] is None else area_only(unit_geom(new_rings[i])) for i in keep_i]
+        pu = [new_u[i] for i in keep_i]
+        new_u, new_rings = faces_to_rings(pg, pu, crumb)
         out_arcs, out_r = build_arcs(new_rings)
         h2 = dict(h); h2['u'] = new_u; h2['o'] = out_r
         write(os.path.join(out, f), h2, out_arcs)
