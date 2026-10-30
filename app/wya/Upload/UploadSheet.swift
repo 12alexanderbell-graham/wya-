@@ -19,7 +19,9 @@ import UniformTypeIdentifiers
 /// THE REVIEW (9.5) is the go circle: a tap on a found country drops it (its darkening goes, the number rolls down)
 /// or keeps it again; the go circle stamps every kept find with its found trips as dated visits, in one write and one
 /// undo step (the colours change in one frame; the undo drop says what came in).
-/// Not here yet (logged): the review's rows at 50%, waiting finds (9.6: a pull down leaves the review and lets the finds
+/// Pulled to 50% (or full) the review shows its finds as rows under the caption (flag, name, found dates), newest trip
+/// first, dropped ones at the end in black 50%; a tap on a row drops or keeps it as a tap on its country does.
+/// Not here yet (logged): a row's swipe and hold, waiting finds (9.6: a pull down leaves the review and lets the finds
 /// go, as × does), the mode
 /// wheel turning to Countries, the file's progress line, Add more, the second round, videos picked with Pick.
 @MainActor
@@ -301,6 +303,41 @@ final class UploadState {
         }
     }
 
+    /// THE REVIEW'S ROWS (9.5 at 50%): newest trip first, the dropped ones at the end
+    struct Row: Identifiable, Equatable {
+        var id: String
+        var place: Int
+        var name: String
+        var line: String
+        var dropped: Bool
+    }
+    var rows: [Row] {
+        guard let w = map?.world else { return [] }
+        let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
+        let all: [Row] = order.compactMap { i in
+            let p = w.places[i]
+            guard let f = byPlace[p.id] else { return nil }
+            let stamped = MarkStore.shared.state(.country(p.id)).stamped
+            return Row(id: p.id, place: i, name: p.n, line: Self.line(f, stamped: stamped), dropped: dropped.contains(i))
+        }
+        func last(_ r: Row) -> LocalDay { byPlace[r.id]?.visits.last?.to ?? LocalDay(y: 0, m: 1, d: 1) }
+        return all.filter { !$0.dropped }.sorted { last($0) > last($1) } + all.filter(\.dropped).sorted { last($0) > last($1) }
+    }
+    /// a find's second line: its trip's dates ("12–18 Aug 2024"), "3 trips", "+2 trips" for a place already stamped,
+    /// "Home" for your home base
+    static func line(_ f: Finds.Find, stamped: Bool) -> String {
+        if f.home { return "Home" }
+        let n = f.visits.count
+        if stamped { return "+\(n) \(n == 1 ? "trip" : "trips")" }
+        if n != 1 { return "\(n) trips" }
+        let a = f.visits[0].from, b = f.visits[0].to
+        let mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        if a == b { return "\(a.d) \(mon[a.m - 1]) \(a.y)" }
+        if a.y == b.y && a.m == b.m { return "\(a.d)–\(b.d) \(mon[a.m - 1]) \(a.y)" }
+        if a.y == b.y { return "\(a.d) \(mon[a.m - 1]) – \(b.d) \(mon[b.m - 1]) \(a.y)" }
+        return "\(a.d) \(mon[a.m - 1]) \(a.y) – \(b.d) \(mon[b.m - 1]) \(b.y)"
+    }
+
     /// THE REVIEW: a found country tapped is dropped (its darkening goes in one frame, the number rolls down) or kept
     /// again; true when the tap was the review's
     func tap(_ i: Int) -> Bool {
@@ -331,6 +368,8 @@ final class UploadState {
         let src = source
         let n = rows.count
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        // above 25% the water comes down first (the rows roll out as it passes 50%)
+        if w.stop != .quarter { w.go(.quarter) }
         Task {
             await MarkStore.shared.importFinds(rows, source: src, words: "\(n) \(n == 1 ? "place" : "places") from your \(src == .photos ? "photos" : "history")")
             m.found = []
@@ -412,6 +451,7 @@ struct UploadSheet: View {
                 }
             } else {
                 finding(L)
+                if u.phase == .review { reviewRows(L) }
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
@@ -483,6 +523,60 @@ struct UploadSheet: View {
         .accessibilityLabel(u.phase == .review ? "Stamp \(u.count) \(u.count == 1 ? "place" : "places")" : "Stop")
         .accessibilityAddTraits(.isButton)
     }
+
+    /// THE REVIEW'S ROWS: under the caption once the water is at 50% or above (their words roll in as the water passes
+    /// 50% and out as it comes back down); 56 pt rows, the flag 28 pt at 16 pt from the water's side
+    @ViewBuilder
+    private func reviewRows(_ L: Layout) -> some View {
+        let y0 = max(L.headBottom + 12 + 52, form.top + 72) + 56
+        let h = max(0, L.capsule.minY - 24 - y0)
+        let shown = rowsShown
+        ScrollView(.vertical) {
+            VStack(spacing: 0) {
+                ForEach(u.rows) { r in
+                    HStack(spacing: 12) {
+                        Group {
+                            if let f = Flags.square(r.id) { f.resizable().interpolation(.high) } else { Color.clear }
+                        }
+                        .frame(width: 28, height: 28)
+                        .scaleEffect(shown ? 1 : 0)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
+                                .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
+                                .contentTransition(.numericText(value: shown ? 1 : 0))
+                            Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
+                                .foregroundStyle(Palette.ink.opacity(0.5))
+                                .contentTransition(.numericText(value: shown ? 1 : 0))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56)
+                    .contentShape(Rectangle())
+                    .onTapGesture { _ = u.tap(r.place) }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(r.name), \(r.line)\(r.dropped ? ", dropped" : "")")
+                    .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { _ = u.tap(r.place) }
+                }
+            }
+            .animation(Motion.chrome, value: u.rows.map(\.id))
+        }
+        .scrollIndicators(.hidden)
+        // the soft bottom edge (no word cut sharply), as Details' and the Stamped list's
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 20)
+            }
+        }
+        .frame(width: L.W - 2 * L.sheetInset, height: h)
+        .position(x: L.W / 2, y: y0 + h / 2)
+        .allowsHitTesting(shown)
+        .onChange(of: form.top <= L.top(.half) + 12, initial: true) { _, v in
+            withAnimation(v ? Motion.quick : .smooth(duration: 0.15)) { rowsShown = v }
+        }
+    }
+    @State private var rowsShown = false
 
     private func choice(_ side: Int, width w: CGFloat) -> some View {
         let name = u.note[u.step * 2 + side] ?? UploadState.names[u.step][side]
