@@ -420,8 +420,7 @@ struct HeadView: View {
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
         let names = ["Quick stamping", "Your passport", "Your history", "Upload"]
         let on = (i == 0 && head.quickStamp) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
-        return Button {
-            Feel.tap(); Sound.tap()
+        let act = {
             switch i {
             case 0: head.quickStamp.toggle()
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
@@ -433,6 +432,14 @@ struct HeadView: View {
                 head.toolsOpen = false
                 UploadState.shared.open(water: water, map: map)
             }
+        }
+        // the one row of its hold menu (11.4: the tool's name over a row that does what a tap does, named by it)
+        let row = [head.quickStamp ? "Quick stamping off" : "Quick stamping on",
+                   BookState.shared.isOpen ? "Put the passport away" : "Passport",
+                   head.history ? "History off" : "History on", "Upload"][i]
+        return Button {
+            Feel.tap(); Sound.tap()
+            act()
         } label: {
             // bare circles until their icons are picked, filled when on: the ring thickens into the disc (and thins
             // back), as the first tool on the dot does, never a one-frame swap
@@ -444,6 +451,12 @@ struct HeadView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Section(names[i]) {
+                // once Apple's menu has closed, so the two never cross
+                Button(row) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { act() } }
+            }
+        }
         .accessibilityLabel(names[i])
         .accessibilityAddTraits(on ? .isSelected : [])
     }
