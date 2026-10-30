@@ -64,6 +64,9 @@ struct ContentView: View {
                 if side.on { SidewaysMarks(map: map, L: water.layout) }
                 // the sheet's top read in a view of its own, so its every frame re-runs only this, not the whole screen
                 SheetWatch(water: water, map: map)
+                // the open region map's country and level written into the session as they change
+                Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
+                    .onChange(of: regionKey) { _, _ in saveSession(after: 0) }
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
             }
@@ -112,6 +115,7 @@ struct ContentView: View {
         .onAppear {
             water.head = head
             RegionsMenuModel.shared.onPick = { r in openRegion(r.place) }
+            RegionsMenuModel.shared.openDirect = { i in closeCard(); openRegion(i) }
             TestDriver.shared.start(map: map, water: water, head: head)
             #if DEBUG
             TestDriver.shared.restoreSession = { restoreSession() }
@@ -276,6 +280,12 @@ struct ContentView: View {
             water.closeList(back: false)
             map.closeRegions()
             map.regionsMenu = true
+            // A6.14: straight into a country (a country's "Open its region map"), never through the list or the world
+            if let i = Self.directRegion {
+                Self.directRegion = nil
+                openRegion(i)
+                return
+            }
             water.openMenu()
             map.goHome()
         } else if old == .regions {
@@ -287,11 +297,11 @@ struct ContentView: View {
     }
     /// A6.7 A COUNTRY PICKED FROM THE LIST: the list goes down with the water to 25% while the camera flies into the
     /// country and its regions draw in
-    private func openRegion(_ i: Int) {
+    private func openRegion(_ i: Int, row: Int? = nil) {
         head.searching = false
         head.toolsOpen = false
         water.closeMenu(to: .quarter)
-        map.openRegions(i)
+        map.openRegions(i, row: row)
     }
     /// THE MAP TAB IN REGIONS (20 Oct answer 15): back to the list, the regions folding away, the world under it
     private func backToRegionsList() {
@@ -321,6 +331,19 @@ struct ContentView: View {
         }
     }
 
+    private var regionKey: Int { (map.regionScene?.place ?? -1) * 64 + (map.regionScene?.row ?? 0) }
+
+    /// a country to open in Regions without the list (A6.14), set just before the wheel turns there
+    @MainActor static var directRegion: Int?
+    /// A6.14 from anywhere: the wheel turns to Regions and the country opens; already in Regions, it opens from there
+    @MainActor static func openRegionMap(_ i: Int, head: HeadState) {
+        if head.mode == .regions { RegionsMenuModel.shared.openDirect?(i); return }
+        directRegion = i
+        head.quickStamp = false
+        head.mode = .regions
+        Feel.notch()
+    }
+
     /// a link closes everything transient as a tab change does (the AI in use stays)
     private func putAwayForLink() {
         Sideways.shared.leave(feel: false)
@@ -347,6 +370,8 @@ struct ContentView: View {
 
     private struct Session: Codable {
         var tab: Int; var mode: Int; var cont: String?; var x: Double; var y: Double; var k: Double; var stop: Int; var lock: Bool
+        /// Regions: the open country (its id) and its level's row (6.1.1 rule 5: a cold launch opens it again)
+        var rp: String? = nil; var rr: Int? = nil
     }
     private func saveSession(after d: Double) {
         sessionWrite?.cancel()
@@ -354,8 +379,9 @@ struct ContentView: View {
             if d > 0 { try? await Task.sleep(for: .seconds(d)) }
             guard !Task.isCancelled, map.ready, !side.on else { return }
             // a stop the sheet only passes through for a moment (the upload, a list) is kept as where it rests
-            let s = Session(tab: tab, mode: head.mode.rawValue, cont: map.continent, x: map.c.x, y: map.c.y, k: map.k,
+            var s = Session(tab: tab, mode: head.mode.rawValue, cont: map.continent, x: map.c.x, y: map.c.y, k: map.k,
                             stop: water.stop.rawValue, lock: map.locked)
+            if let sc = map.regionScene, let w = map.world { s.rp = w.places[sc.place].id; s.rr = sc.row }
             if let d = try? JSONEncoder().encode(s), let t = String(data: d, encoding: .utf8) { session = t }
         }
     }
@@ -366,6 +392,10 @@ struct ContentView: View {
         map.locked = s.lock
         if let c = s.cont { map.show(continent: c) } else { map.restore(c: SIMD2(s.x, s.y), k: s.k) }
         if let st = SheetStop(rawValue: s.stop), st != water.stop { water.go(st) }
+        // Regions with a country open: the country at its level again, once the mode has set up its list (6.1.1)
+        if head.mode == .regions, let rp = s.rp, let i = map.world?.placeIndex[rp] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { openRegion(i, row: s.rr) }
+        }
         #if DEBUG
         NSLog("wya session restored: tab %d mode %d continent %@ k %.2f stop %d lock %d", s.tab, s.mode, s.cont ?? "none", s.k, s.stop, s.lock ? 1 : 0)
         #endif
@@ -462,6 +492,11 @@ struct ContentView: View {
                 }
             }
         }
+        // OPEN ITS REGION MAP (11.5, A6.14): unavailable where the place has no regions
+        let regionMap = UIAction(title: "Open its region map",
+                                 attributes: RegionCatalog.shared.first(pl.id.lowercased()) == nil ? .disabled : []) { _ in
+            after { Self.openRegionMap(i, head: head) }
+        }
         let passport = UIAction(title: "Show in passport", attributes: st.stamped ? [] : .disabled) { _ in
             after { BookState.shared.open(showing: pl.id) }
         }
@@ -487,6 +522,7 @@ struct ContentView: View {
         sections += [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
+            UIMenu(options: .displayInline, children: [regionMap]),
             UIMenu(options: .displayInline, children: [passport, share]),
         ]
         // A DISPUTED PIECE (Crimea, the Kashmir pieces) or a disputed place (Taiwan, Kosovo): Whose borders here? opens Map settings at 50% on the Disputes
