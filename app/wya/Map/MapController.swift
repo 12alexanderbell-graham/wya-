@@ -223,15 +223,30 @@ final class MapController {
     private func takeMarks(_ m: MarkStore) {
         guard let w = world else { return }
         var s = Set<Int>(), wi = Set<Int>()
+        var sp: [Int: Int] = [:], wp: [Int: Int] = [:]
         for (k, st) in m.marks where k.kind == .country {
             guard let i = w.placeIndex[k.id] else { continue }
-            if st.stamped { s.insert(i) } else if st.wished { wi.insert(i) }
+            if st.stamped {
+                s.insert(i)
+                // Stamped+ (1.14): lived is ink (0); a transit-only stamp one pass; a first real visit two, one more per
+                // visit, at most five
+                sp[i] = st.lived ? 0 : st.transitOnly ? 1 : min(5, 1 + max(1, st.visits))
+            } else if st.wished {
+                wi.insert(i)
+                // Wishlist+: one pass per want level
+                wp[i] = min(5, max(1, st.want))
+            }
         }
+        if sp != stampPasses { stampPasses = sp; needsFrame = true }
+        if wp != wantPasses { wantPasses = wp; needsFrame = true }
         if s != stamped { stamped = s }
         if wi != wished { wished = wi }
         if !streakHeld { streakWeeks = Streak.weeks(acts: m.markDates) }
     }
     @ObservationIgnored private var marksListener: UUID?
+    /// the filter's passes per place (1.14): stamped places for Stamped+ (0 = lived, ink), wished ones for Wishlist+
+    @ObservationIgnored private(set) var stampPasses: [Int: Int] = [:]
+    @ObservationIgnored private(set) var wantPasses: [Int: Int] = [:]
     /// the test driver holding the streak at a number (simulator only)
     @ObservationIgnored var streakHeld = false
 

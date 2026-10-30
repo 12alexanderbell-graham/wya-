@@ -386,6 +386,8 @@ final class TestDriver {
                     }
                 case "planet": map?.testPlanet = Int(a)
                 case "moon": map?.testMoon = a == "off" ? nil : Double(a)
+                // filter 0..4: the moon's five looks (1.14)
+                case "filter": map?.filter = Int(a) ?? 0
                 default: NSLog("wya test driver: unknown %@", l)
                 }
             }
