@@ -199,7 +199,8 @@ struct SheetContent: View {
             if !Perf.shared.off.contains("caption") { Caption(name: region.map { $0.name } ?? (map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                     count: region != nil ? map.regionCount : map.sunPicked ? map.streakWeeks : count,
                     tail: region.map { $0.tail } ?? (map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                    night: FullView.night(form.page), visible: captionShown, flag: region?.flag)
+                    night: FullView.night(form.page), visible: captionShown, flag: region?.flag,
+                    line: levelLine(width: L.W - 2 * 24))
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -267,6 +268,19 @@ struct SheetContent: View {
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
             if captionShown != fits { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
         }
+    }
+
+    /// THE LEVEL LINE (6.6) under the Regions caption's number, when the country has more than one level
+    private func levelLine(width: CGFloat) -> AnyView? {
+        guard let sc = map.regionScene else { return nil }
+        let used = RegionCatalog.shared.used(sc.id)
+        guard used.count > 1 else { return nil }
+        let n = sc.unitIDs.count
+        let levels = used.map { r in
+            LevelLine.Level(row: r.row, word: RegionsMenuModel.word(r.row == sc.row && n == 1 ? r.level.one : r.level.many))
+        }
+        return AnyView(LevelLine(levels: levels, current: sc.row, total: n, notReady: map.regionNotReady, width: width,
+                                 visible: captionShown) { row in map.openRegions(sc.place, row: row) })
     }
 
     /// THE REGIONS CAPTION (6.5): the country's flag and name, your number at the level, "of 101 departments"
@@ -458,6 +472,8 @@ struct Caption: View {
     var visible = true
     /// the Regions caption's country flag, 22 pt square, 8 pt before the name (6.5)
     var flag: Image? = nil
+    /// the Regions caption's level line in the tail's place (6.6)
+    var line: AnyView? = nil
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
 
     var body: some View {
@@ -485,11 +501,15 @@ struct Caption: View {
                 .contentTransition(.numericText(value: visible ? Double(count) : -1))
                 .animation(Motion.quick, value: count)
                 .padding(.top, -6)
-            Text(visible ? tail : Self.blank(tail, "\u{2002}"))
-                .font(.headline)
-                .foregroundStyle(ink.opacity(0.5))
-                .contentTransition(.numericText(value: way))
-                .padding(.top, -8)
+            if let line {
+                line.padding(.top, -8)
+            } else {
+                Text(visible ? tail : Self.blank(tail, "\u{2002}"))
+                    .font(.headline)
+                    .foregroundStyle(ink.opacity(0.5))
+                    .contentTransition(.numericText(value: way))
+                    .padding(.top, -8)
+            }
         }
         .multilineTextAlignment(.center)
         .fixedSize()

@@ -281,6 +281,9 @@ final class TestDriver {
                         RegionsMenuModel.shared.load(r.flag)
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
+                // regionlevel 2: the open country's level from that row of its table (the level line's pick)
+                case "regionlevel":
+                    if let m = map, let sc = m.regionScene, let r = Int(a) { m.openRegions(sc.place, row: r) }
                 case "regiontap":
                     if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
                         let pt = CGPoint(x: x, y: y)

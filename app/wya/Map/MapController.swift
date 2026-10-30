@@ -353,29 +353,37 @@ final class MapController {
     private(set) var regionWished: Set<Int> = []
     /// your number at the open level (the Regions caption)
     var regionCount: Int { regionStamped.count }
+    /// the level asked for (the level line's centre), and a level that could not be had (offline, 6.6)
+    private(set) var regionRow = 0
+    private(set) var regionNotReady: Int?
     @ObservationIgnored private var regionJob = 0
 
     /// INTO A COUNTRY'S REGIONS (A6.7): the camera flies to the country framed in the room between the head and the
     /// 25% water, the rest of the world going into the one blue; the regions are read off the main thread (usually
     /// already, from the row's touch) and drawn when ready, the country's own fill staying until then
-    func openRegions(_ i: Int) {
+    func openRegions(_ i: Int, row: Int? = nil) {
         guard let w = world, i >= 0, i < w.places.count else { return }
         regionJob += 1
         let job = regionJob
         let id = w.places[i].id.lowercased()
-        if regionScene?.place != i { regionScene = nil; regionPressed = nil }
-        frameRegion(i)
+        guard let r = row ?? RegionCatalog.shared.first(id)?.row else { return }
+        if regionScene?.place != i { regionScene = nil; regionPressed = nil; frameRegion(i) }
+        regionRow = r
+        regionNotReady = nil
         Task.detached(priority: .userInitiated) { [weak self] in
-            let scene = RegionScene(place: i, id: id)
+            let file = await RegionCatalog.shared.fetch(id, row: r)
+            let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0) }
             await MainActor.run {
                 guard let self, self.regionJob == job, self.focusPlace == i else { return }
+                // a level that can't be had now: the one shown stays, its word says so (6.6)
+                guard let scene else { self.regionNotReady = r; self.regionRow = self.regionScene?.row ?? r; return }
                 self.regionScene = scene
                 self.regionSince = CACurrentMediaTime()
                 self.takeRegionMarks()
                 self.needsFrame = true
                 #if DEBUG
-                NSLog("wya regions %@: %d regions, %d entries, %d border segments", id, scene?.unitIDs.count ?? -1,
-                      scene?.runs.count ?? -1, (scene?.segs.count ?? 0) / 10)
+                NSLog("wya regions %@-%d: %d regions, %d entries, %d border segments", id, r, scene.unitIDs.count,
+                      scene.runs.count, scene.segs.count / 10)
                 #endif
             }
         }
