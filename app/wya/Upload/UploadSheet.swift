@@ -949,7 +949,7 @@ struct UploadSheet: View {
                 ToolRing(width: 2).fill(Palette.ink, style: FillStyle(eoFill: true)).frame(width: 22, height: 22)
                     .transition(.scale)
             } else {
-                Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink)
+                Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 22)
                     .scaleEffect(u.xIn ? 1 : 0)
                     .transition(.scale)
             }
@@ -1071,8 +1071,8 @@ struct UploadSheet: View {
                 .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
                 .contentTransition(.numericText(value: shown ? 1 : 0))
             Spacer(minLength: 0)
-            Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
+            Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 13)
+                .opacity(off ? 0.5 : 1)
                 // grows about its centre with the words, as the flags do
                 .scaleEffect(shown ? 1 : 0)
                 .frame(width: 44, height: 44)
