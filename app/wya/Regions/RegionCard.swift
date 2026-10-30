@@ -66,10 +66,15 @@ struct RegionCard: View {
                 HStack(spacing: 12) {
                     button(details.isOpen ? " " : "Details", w: half, live: s.stamped || s.wished, words: a > 0.95) {
                         guard s.stamped || s.wished else { Feel.refuse(); return }
+                        Feel.tap()
                         details.open(key, name: card.name, water: water)
                     }
-                    // Verify for regions (a region by its shape, 4.5) waits for its test: shown in place, refuses
-                    button("Verify?", w: half, live: false, words: a > 0.95) { Feel.refuse() }
+                    // VERIFY (4.5): a region by its shape; live once it is stamped
+                    button("Verify?", w: half, live: s.stamped, words: a > 0.95) {
+                        guard s.stamped, let place = card.place else { Feel.refuse(); return }
+                        Feel.tap()
+                        VerifyState.shared.open(key, name: card.name, place: place, water: water)
+                    }
                 }
                 .scaleEffect(max(0.001, a), anchor: .bottom)
                 .position(x: L.W / 2, y: base - 22)
@@ -105,7 +110,7 @@ struct RegionCard: View {
     }
 
     private func button(_ word: String, w: CGFloat, live: Bool, words: Bool, act: @escaping () -> Void) -> some View {
-        Button(action: { Feel.tap(); act() }) {
+        Button(action: act) {
             Text(words ? word : " ")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))

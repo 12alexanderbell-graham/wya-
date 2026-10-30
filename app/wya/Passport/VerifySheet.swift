@@ -167,7 +167,23 @@ struct VerifySheet: View {
                 s.hereWord = "Can't find you"
             case .some(let c):
                 guard let w = map.world, let i = s.place else { return }
-                let at = w.place(at: EqualEarth.project(lon: c.longitude, lat: c.latitude))
+                let p = EqualEarth.project(lon: c.longitude, lat: c.latitude)
+                // a region is verified by its own shape (4.5: "a region by its shape"), on the region map it is from
+                if let key = s.key, key.kind == .region, let sc = map.regionScene {
+                    let u = sc.unit(at: p)
+                    if let u, sc.unitIDs[u] == key.id {
+                        s.hereWord = nil
+                        s.consent = "here"
+                        Feel.land(speed: 0)
+                    } else {
+                        Feel.refuse()
+                        s.hereWord = "You're in \(u.map { sc.unitNames[$0] } ?? w.place(at: p).map { w.places[$0].n } ?? "the sea")"
+                        try? await Task.sleep(for: .seconds(2.5))
+                        if s.hereWord?.hasPrefix("You're in") == true { s.hereWord = nil }
+                    }
+                    return
+                }
+                let at = w.place(at: p)
                 if at == i {
                     s.hereWord = nil
                     s.consent = "here"
