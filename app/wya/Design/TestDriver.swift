@@ -245,6 +245,8 @@ final class TestDriver {
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
                 case "session": restoreSession?()
                 case "waterhint": water?.hint()
+                // lock on | off | press: the zoom column's lock, and a press on the locked map (A1.9)
+                case "lock": if a == "press" { Feel.refuse(); map?.lockedPress() } else { map?.locked = a == "on" }
                 // hints: forget that the gestures were used and play the first-time hints (A3.15)
                 case "hints":
                     for k in ["hint.water", "hint.pull", "hint.hold"] { UserDefaults.standard.removeObject(forKey: k) }

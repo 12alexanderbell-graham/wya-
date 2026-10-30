@@ -124,6 +124,12 @@ final class MapController {
     // as an iOS control highlights; drawn by the renderer from `pressed` / the lock: the map still moves, but pressing
     // a place does nothing
     var locked = false
+    /// presses on the map while locked: the padlock presses in once for each (A1.9)
+    private(set) var lockedPresses = 0
+    func lockedPress() {
+        lockedPresses &+= 1
+        UIAccessibility.post(notification: .announcement, argument: "The map is locked")
+    }
     /// the sun picked: the words show your streak instead of the count, and the fire rises
     var sunPicked = false
     /// weeks in a row with an act (Streak, from the store)
