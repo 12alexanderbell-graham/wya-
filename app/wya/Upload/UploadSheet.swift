@@ -485,6 +485,7 @@ final class UploadState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [self] in
             guard me == job else { return }
             phase = .review
+            calendarChanged()
             // Map settings' Found places = Stamp them: no review, the finds land as stamps at once (9.4)
             if stampAtOnce { go(); return }
             withAnimation(Motion.quick) { goIn = true }
@@ -544,6 +545,18 @@ final class UploadState {
     }
 
     // MARK: waiting finds (9.6)
+
+    /// the kept finds' trips as calendar entries (Part 9.9: open finds are on the calendar until their review)
+    var calendarFinds: [CalendarIndex.Entry] {
+        guard let w = map?.world else { return [] }
+        let keptIds = Set(order.filter { !dropped.contains($0) }.map { w.places[$0].id })
+        return finds.filter { keptIds.contains($0.place) }.flatMap { f in
+            let off = droppedTrips[f.place] ?? []
+            return f.visits.indices.filter { !off.contains($0) }.map { i in
+                CalendarIndex.Entry(kind: .find, key: .country(f.place), from: f.visits[i].from, to: f.visits[i].to, source: source.rawValue)
+            }
+        }
+    }
 
     /// a waiting find (not stamped since) at this place
     func waits(_ i: Int) -> Bool { phase == .choosing && order.contains(i) && !dropped.contains(i) }
@@ -615,7 +628,10 @@ final class UploadState {
                           droppedTrips: droppedTrips.mapValues { Array($0).sorted() })
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
+        calendarChanged()
     }
+    /// the open finds are on the calendar (9.9): it is rebuilt when they change
+    private func calendarChanged() { Task { await MarkStore.shared.refreshCalendar() } }
     /// SIGN OUT: another account must never see these finds
     func signedOut() {
         job += 1
@@ -626,6 +642,7 @@ final class UploadState {
     private func forget() {
         order = []; dropped = []; finds = []; droppedTrips = [:]; opened = []; datesIn = []; kept = nil
         if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
+        calendarChanged()
     }
     /// at launch, once the map is loaded: the waiting finds back, darkened (a place stamped since is not drawn darkened;
 /// at the review it reads "+n trips")
@@ -662,6 +679,7 @@ final class UploadState {
                (droppedTrips[f.place]?.count ?? 0) >= f.visits.count { droppedTrips[f.place] = nil }
         } else { dropped.insert(i); m.found.remove(i) }
         withAnimation(Motion.quick) { count = order.count - dropped.count }
+        calendarChanged()
         return true
     }
 
@@ -704,6 +722,7 @@ final class UploadState {
         if keeping && !none && dropped.contains(i) { dropped.remove(i); m.found.insert(i) }
         if !keeping && none && !dropped.contains(i) { dropped.insert(i); m.found.remove(i) }
         withAnimation(Motion.quick) { count = order.count - dropped.count }
+        calendarChanged()
     }
 
     /// SHOW ON THE MAP (the row's hold menu): the water comes down to 25% (the rows roll out as it passes 50%) and the

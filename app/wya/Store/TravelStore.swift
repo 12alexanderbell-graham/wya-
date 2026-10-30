@@ -124,6 +124,23 @@ actor TravelStore {
         return out
     }
 
+    /// THE CALENDAR'S ROWS (Part 9.9): every visit record, and the stays kept in stamps' details (Lived here)
+    func calendarRows(account: String) throws -> [CalendarIndex.Row] {
+        let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))
+        var out: [CalendarIndex.Row] = vs.compactMap { v in
+            PlaceKey(v.key).map { CalendarIndex.Row(key: $0, arrived: v.arrived, left: v.left, rough: v.rough, lived: v.lived, source: v.source) }
+        }
+        let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        for r in rs {
+            guard let k = PlaceKey(r.key), r.details != nil else { continue }
+            let d = StampDetails(json: r.details)
+            for st in d.stays ?? [] where !st.from.isEmpty {
+                out.append(CalendarIndex.Row(key: k, arrived: st.from, left: st.to.isEmpty ? nil : st.to, rough: nil, lived: true, source: r.source))
+            }
+        }
+        return out
+    }
+
     /// A STAMP'S PROOF (Part 4.5): the verification JSON as one write and one undo step (nil: none)
     func setVerification(_ key: PlaceKey, account: String, data: Data?) throws -> Result {
         var res = Result()
