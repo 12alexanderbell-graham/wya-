@@ -288,6 +288,8 @@ final class MapController {
         }.value
         guard let (w, r) = loaded else { return }
         world = w
+        // who borders whom (D19), worked out once in the background for search's suggestions
+        Task.detached(priority: .utility) { _ = w.neighbours }
         relief = r
         // YOUR MARKS, from the store (Part 0.2.3: the map reads MarkState per place and listens to marksChanged)
         let marks = MarkStore.shared
@@ -344,6 +346,8 @@ final class MapController {
         let made: World? = await Task.detached(priority: .userInitiated) { try? World.load() }.value
         guard job == bordersJob, let w = made else { return false }
         world = w
+        // who borders whom (D19), worked out once in the background for search's suggestions
+        Task.detached(priority: .utility) { _ = w.neighbours }
         takeShapes(w)
         takeMarks(MarkStore.shared)
         recount()
@@ -674,6 +678,36 @@ final class MapController {
             fly(to: home, k: worldKMin, dur: Self.flight, then: go)
         } else {
             go()
+        }
+    }
+
+    /// SIDEWAYS (1.11): once the map is at landscape size, the whole world framed in the whole view (no chrome to leave
+    /// room for), or the continent you are on, its land whole; then `then`
+    func frameSideways(then: (() -> Void)? = nil) {
+        let W = Double(view.width), H = Double(view.height)
+        if let k = drawnContinent, k != "Antarctica", let w = world, let f = w.contViews[k] {
+            // the continent's own land, whole, 16 pt in from the screen's edges (its view's frame has wide margins
+            // made for portrait, and a tall continent cropped to the width would lose its ends)
+            var b = SIMD4<Double>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+            for r in w.rings where r.unit >= 0 && r.unit < w.unitConts.count && w.unitConts[r.unit].contains(k) {
+                b = SIMD4(min(b.x, Double(r.box.x)), min(b.y, Double(r.box.y)), max(b.z, Double(r.box.z)), max(b.w, Double(r.box.w)))
+            }
+            // never past its view's frame (Oceania's islands run both ways round the world)
+            b = SIMD4(max(b.x, f.x), max(b.y, f.y), min(b.z, f.z), min(b.w, f.w))
+            if b.x >= b.z || b.y >= b.w { b = f }
+            let nk = min(kMax, max(worldKMin, min((W - 32) / (b.z - b.x), (H - 32) / (b.w - b.y))))
+            let mid = SIMD2((b.x + b.z) / 2, (b.y + b.w) / 2)
+            #if DEBUG
+            NSLog("wya sideways %@ land %.1f %.1f %.1f %.1f k %.3f", k, b.x, b.y, b.z, b.w, nk)
+            #endif
+            continentFrame = f; continentK = nk; followMid = nil
+            continentY = clamped(mid, nk).y
+            updateHome()
+            fly(to: clamped(mid, nk), k: nk, dur: Self.flight, then: then)
+        } else {
+            continent = nil
+            offContinent()
+            fly(to: clamped(SIMD2(homeX, (Self.north + bottom) / 2), worldKMin), k: worldKMin, dur: Self.flight, then: then)
         }
     }
 

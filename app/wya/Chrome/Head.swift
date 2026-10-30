@@ -1053,8 +1053,10 @@ struct SearchResults: View {
         return prev[b.count]
     }
 
-    // MARK: suggestions on the empty field: the places you last opened from search, newest first, then the places
-    // nearest home you haven't stamped, five in all. Real, never filler.
+    // MARK: suggestions on the empty field (BUILD-BOOK 1.10): up to five, all real, never filler: the places you last
+    // opened from search, newest first; then your wishes not yet stamped; then the unstamped neighbours (D19) of your
+    // nationalities' countries (Profile), or of the phone's region before Profile has any. Never the phone's own
+    // country, and never your nationalities' own countries, as a suggestion.
     /// the last 12 searches live in map-settings.json (19.2); the five kept in UserDefaults by older builds are read once
     private static let recentKey = "wya.search.recent"
     static var recent: [String] {
@@ -1068,19 +1070,28 @@ struct SearchResults: View {
         MapSettingsStore.shared.change { $0.recent = Array(r.prefix(12)) }
         UserDefaults.standard.removeObject(forKey: recentKey)
     }
-    static func suggestions(map: MapController) -> [Int] {
+    static func suggestions(map: MapController, recentToo: Bool = true) -> [Int] {
         guard let w = map.world else { return [] }
         let stamped = map.stamped
-        var out = Array(recent.compactMap { w.placeIndex[$0] }.prefix(5))
-        // home: the phone's region (as the map's home is); the nearest unstamped places by distance on the map
-        if let r = Locale.current.region?.identifier.lowercased(), let h = w.placeIndex[r] {
-            let hc = w.places[h].c
-            let near = w.places.indices
-                .filter { $0 != h && !w.places[$0].junk && !stamped.contains($0) && !out.contains($0) }
-                .sorted { hypot(w.places[$0].c[0] - hc[0], w.places[$0].c[1] - hc[1]) < hypot(w.places[$1].c[0] - hc[0], w.places[$1].c[1] - hc[1]) }
-            out += near.prefix(max(0, 5 - out.count))
+        let phone = Locale.current.region.flatMap { w.placeIndex[$0.identifier.lowercased()] }
+        let nats = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).compactMap { w.placeIndex[$0] }
+        let homes = nats.isEmpty ? (phone.map { [$0] } ?? []) : nats
+        var out = recentToo ? Array(recent.compactMap { w.placeIndex[$0] }.prefix(5)) : []
+        func add(_ xs: [Int]) {
+            for x in xs where out.count < 5 && !out.contains(x) && x != phone && !homes.contains(x) && !w.places[x].junk {
+                out.append(x)
+            }
         }
-        return Array(out.prefix(5))
+        // nearest a home first
+        func near(_ h: Int?) -> (Int, Int) -> Bool {
+            guard let h else { return { w.places[$0].n < w.places[$1].n } }
+            let hc = w.places[h].c
+            return { hypot(w.places[$0].c[0] - hc[0], w.places[$0].c[1] - hc[1]) < hypot(w.places[$1].c[0] - hc[0], w.places[$1].c[1] - hc[1]) }
+        }
+        add(map.wished.subtracting(stamped).sorted(by: near(homes.first)))
+        let nb = w.neighbours
+        for h in homes where h < nb.count { add(nb[h].subtracting(stamped).sorted(by: near(h))) }
+        return out
     }
 
     static func kind(_ k: String?) -> String {

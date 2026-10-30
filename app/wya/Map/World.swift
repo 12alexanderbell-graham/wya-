@@ -79,6 +79,35 @@ nonisolated final class World: @unchecked Sendable {
     /// Coral Sea Islands, Ashmore and Cartier): 263.
     var countable: Int { places.reduce(0) { $0 + ($1.junk ? 0 : 1) } }
 
+    /// D19 NEIGHBOURS: who borders whom in this world's borders view (each view is its own World, so Russia's include
+    /// Abkhazia and South Ossetia under De facto and not under the UN view). Worked out from the outlines themselves:
+    /// two places border where their pieces' rings share a point (the topology draws a shared border once, so both
+    /// sides carry the same points). Made once on first use; the map asks for it off the main thread after loading.
+    var neighbours: [Set<Int>] {
+        neighbourLock.lock(); defer { neighbourLock.unlock() }
+        if let n = madeNeighbours { return n }
+        var first: [UInt64: Int] = [:]
+        first.reserveCapacity(points.count)
+        var n = [Set<Int>](repeating: [], count: places.count)
+        for r in rings where r.unit >= 0 && r.unit < unitOwner.count {
+            let o = unitOwner[r.unit]
+            guard o >= 0, o < places.count else { continue }
+            for j in r.start ..< r.start + r.count {
+                let p = points[j]
+                let key = UInt64(p.x.bitPattern) << 32 | UInt64(p.y.bitPattern)
+                if let f = first[key] {
+                    if f != o { n[f].insert(o); n[o].insert(f) }
+                } else {
+                    first[key] = o
+                }
+            }
+        }
+        madeNeighbours = n
+        return n
+    }
+    private let neighbourLock = NSLock()
+    private var madeNeighbours: [Set<Int>]?
+
     /// each place's names folded for search (case and accents gone), made once on first use, not per keystroke:
     /// its own name first, then its official name and other names
     private(set) lazy var searchNames: [[String]] = places.map { p in

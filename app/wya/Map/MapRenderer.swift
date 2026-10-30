@@ -859,7 +859,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 }
             }
         } else if !cancelled, c.locked, downAt != nil {
-            // LOCKED, a hold that didn't move (11.7: "Refuses holds"): refused once, the padlock pressing in
+            // LOCKED, a hold that didn't move (11.7): refused once, the padlock pressing in
             Feel.refuse(); c.lockedPress()
         }
         let recent = t.map { $0.timestamp - lastMoveTime < 0.08 } ?? false
