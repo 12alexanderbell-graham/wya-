@@ -140,6 +140,7 @@ final class TestDriver {
                     if a == "logoturn" { ReviewSheet.logoTurnMovie() }
                     if a == "icons" { ReviewSheet.icons() }
                     if a == "emblems" { ReviewSheet.emblems() }
+                    if a == "flagshapes" { ReviewSheet.flagShapes(world: map?.world) }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
