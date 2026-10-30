@@ -361,8 +361,12 @@ final class MapController {
     /// INTO A COUNTRY'S REGIONS (A6.7): the camera flies to the country framed in the room between the head and the
     /// 25% water, the rest of the world going into the one blue; the regions are read off the main thread (usually
     /// already, from the row's touch) and drawn when ready, the country's own fill staying until then
-    func openRegions(_ i: Int, row: Int? = nil) {
+    func openRegions(_ i: Int, row: Int? = nil, focus: String? = nil) {
         guard let w = world, i >= 0, i < w.places.count else { return }
+        // the level already drawn: only the region asked for is shown
+        if let focus, let sc = regionScene, sc.place == i, row == nil || row == sc.row {
+            showRegion(focus, in: sc); return
+        }
         regionJob += 1
         let job = regionJob
         let id = w.places[i].id.lowercased()
@@ -381,6 +385,7 @@ final class MapController {
                 self.regionSince = CACurrentMediaTime()
                 self.takeRegionMarks()
                 self.needsFrame = true
+                if let focus { self.showRegion(focus, in: scene) }
                 #if DEBUG
                 NSLog("wya regions %@-%d: %d regions, %d entries, %d border segments", id, r, scene.unitIDs.count,
                       scene.runs.count, scene.segs.count / 10)
@@ -428,6 +433,27 @@ final class MapController {
         needsFrame = true
         fly(to: clamped(centre, nk), k: nk, dur: Self.flight)
     }
+    /// A REGION FOUND BY SEARCH (1.10's rule on a region map): the camera frames it in the room above the 25% water (never
+    /// zoomed out past the country's frame) and it stays darkened 1.2 s
+    func showRegion(_ id: String, in sc: RegionScene) {
+        guard let u = sc.unitIDs.firstIndex(of: id), let b = sc.box(of: u) else { return }
+        let W = Double(view.width), H = Double(view.height)
+        let room = layout.room(sheetTop: layout.top(.quarter))
+        let top = Double(room.lowerBound), bottom = Double(room.upperBound)
+        let fw = max(0.02, Double(b.z - b.x)), fh = max(0.02, Double(b.w - b.y))
+        let nk = min(kMax, max(continentK ?? worldKMin, min((W - 32) / fw, max(80, bottom - top) / fh) * 0.6))
+        let mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
+        let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
+        regionPressed = u
+        pressed = sc.place
+        fly(to: clamped(centre, nk), k: nk, dur: 0.8)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(800 + 1200))
+            guard let self, self.pressed == sc.place, !self.touching else { return }
+            self.pressed = nil
+        }
+    }
+
     /// the region under a screen point, if the region map is up
     func regionUnit(at p: CGPoint) -> Int? {
         guard let s = regionScene else { return nil }

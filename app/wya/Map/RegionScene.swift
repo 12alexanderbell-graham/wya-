@@ -102,6 +102,17 @@ nonisolated final class RegionScene: @unchecked Sendable {
         return best?.0
     }
 
+    /// a region's box in map units (all its parts)
+    func box(of unit: Int) -> SIMD4<Float>? {
+        var b: SIMD4<Float>?
+        for e in entryUnit.indices where entryUnit[e] == unit {
+            let x = boxes[e]
+            guard x.x <= x.z else { continue }
+            b = b.map { SIMD4(min($0.x, x.x), min($0.y, x.y), max($0.z, x.z), max($0.w, x.w)) } ?? x
+        }
+        return b
+    }
+
     /// the entries of a set of regions (what the renderer fills for them)
     func entries(of units: Set<Int>) -> [Int] { entryUnit.indices.filter { units.contains(entryUnit[$0]) } }
 }

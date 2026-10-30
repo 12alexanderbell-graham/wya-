@@ -355,6 +355,13 @@ struct HeadView: View {
                     .onSubmit {
                         // over Regions' menu the search key opens the first country the list still shows
                         if head.filtersMenu { RegionsMenuModel.shared.pickFirst(query: head.query, map: map); return }
+                        // on a region map: the first region found
+                        if let sc = map.regionScene {
+                            if let h = RegionSearch.hits(head.query, place: sc.id).first {
+                                Feel.tap(); closeSearch(); map.openRegions(sc.place, row: h.row, focus: h.id)
+                            } else { Feel.refuse() }
+                            return
+                        }
                         if let first = SearchResults.matches(map: map, query: head.query).first { pick(first) }
                     }
                     .padding(.leading, 44)
@@ -810,7 +817,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -854,8 +861,13 @@ struct SearchResults: View {
         // to "Frnace" keeps the France row and only its note rolls to
         // with Map settings open, the field searches the settings (Part 3.4, 5.11)
         let settingHits = head.settingsOpen ? SettingsSearch.hits(head.query, map: map) : []
+        // on a region map the field finds the country's regions at every level (6.5)
+        let regionHits = map.regionScene != nil && !head.settingsOpen && typed
+            ? RegionSearch.hits(head.query, place: map.regionScene!.id) : []
         // over Regions' menu the field filters the menu's own rows instead (6.3, A6.6)
-        let keys: [ResultKey] = head.filtersMenu && !head.settingsOpen ? [] : head.settingsOpen
+        let keys: [ResultKey] = map.regionScene != nil && !head.settingsOpen
+            ? (typed ? (regionHits.isEmpty ? [.miss] : regionHits.map { .region($0.key) }) : [])
+            : head.filtersMenu && !head.settingsOpen ? [] : head.settingsOpen
             ? (typed ? (settingHits.isEmpty ? [.miss] : settingHits.map { .setting($0.id) }) : [])
             : hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
         let w = width > 0 ? width : fullWidth
@@ -879,6 +891,7 @@ struct SearchResults: View {
                                 case .place(let i): row(i, note: i == guess ? "Did you mean?" : nil)
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
+                                case .region(let k): regionRow(regionHits.first { $0.key == k })
                                 }
                             }
                             .frame(height: 44 * open[n], alignment: .top)
@@ -1021,6 +1034,26 @@ struct SearchResults: View {
             .contentShape(Rectangle())
             // Apple's text styles up to the largest standard size: the rows are 44 pt; the AX sizes need growing rows
             // and a scrolling box (Part 1.10's AX note), not built yet
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// a region found on a region map: its name and what it is ("department"); a tap closes search and shows it there
+    private func regionRow(_ h: RegionSearch.Hit?) -> some View {
+        Button {
+            Feel.tap()
+            head.searching = false
+            if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
+        } label: {
+            HStack(spacing: 12) {
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
         .buttonStyle(.plain)
