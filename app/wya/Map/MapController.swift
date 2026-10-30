@@ -498,6 +498,15 @@ final class MapController {
         return (s.have, s.total)
     }
 
+    /// THE CAMERA PUT BACK (19.2: the system ended the app in the background): where it was, at once, inside the limits
+    func restore(c p: SIMD2<Double>, k nk: Double) {
+        flight = nil
+        k = min(kMax, max(kMin, nk))
+        c = clamped(p, k)
+        updateHome()
+        needsFrame = true
+    }
+
     func goHome(animated: Bool = true) {
         continent = nil
         offContinent()

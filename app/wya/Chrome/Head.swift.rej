@@ -1,0 +1,29 @@
+--- Chrome/Head.swift	2026-10-30 16:54:02.116826814 +0100
++++ Chrome/Head.swift	2026-10-30 16:54:02.122488427 +0100
+@@ -1013,17 +1013,23 @@
+     // MARK: suggestions on the empty field (BUILD-BOOK 1.10; his 23 Oct 15:22 "I do think suggested search is a thing
+     // we should have"; 2 Oct: "make sure the suggested ones are actually suggested"): the places you last opened from
+     // search, newest first, then the places nearest home you haven't stamped, five in all. Real, never filler.
++    /// the last 12 searches live in map-settings.json (19.2); the five kept in UserDefaults by older builds are read once
+     private static let recentKey = "wya.search.recent"
++    static var recent: [String] {
++        let r = MapSettingsStore.shared.value.recent
++        return r.isEmpty ? ((UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? []) : r
++    }
+     static func remember(_ id: String) {
+-        var r = (UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? []
++        var r = recent
+         r.removeAll { $0 == id }
+         r.insert(id, at: 0)
+-        UserDefaults.standard.set(Array(r.prefix(5)), forKey: recentKey)
++        MapSettingsStore.shared.change { $0.recent = Array(r.prefix(12)) }
++        UserDefaults.standard.removeObject(forKey: recentKey)
+     }
+     static func suggestions(map: MapController) -> [Int] {
+         guard let w = map.world else { return [] }
+         let stamped = map.stamped
+-        var out = ((UserDefaults.standard.array(forKey: recentKey) as? [String]) ?? []).compactMap { w.placeIndex[$0] }
++        var out = Array(recent.compactMap { w.placeIndex[$0] }.prefix(5))
+         // home: the phone's region (as the map's home is); the nearest unstamped places by distance on the map
+         if let r = Locale.current.region?.identifier.lowercased(), let h = w.placeIndex[r] {
+             let hc = w.places[h].c
