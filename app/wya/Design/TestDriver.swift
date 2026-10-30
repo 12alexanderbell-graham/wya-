@@ -388,6 +388,8 @@ final class TestDriver {
                 case "moon": map?.testMoon = a == "off" ? nil : Double(a)
                 // filter 0..4: the moon's five looks (1.14)
                 case "filter": map?.filter = Int(a) ?? 0
+                // nocolour on | off | system: Differentiate Without Colour's patterns (1.14)
+                case "nocolour": map?.testWithoutColour = a == "system" ? nil : a == "on"
                 default: NSLog("wya test driver: unknown %@", l)
                 }
             }

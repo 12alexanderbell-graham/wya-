@@ -48,8 +48,25 @@ struct Look {
     float texelV;
     float pad;
     float4 clip;     // a fill front (Part 1.5): its origin (map units), its radius (map units), 1 when on
-    float4 clip2;    // pixels per point
+    float4 clip2;    // x pixels per point, y Style Simple, z the pattern for Differentiate Without Colour (1 hatch, 2 dots)
 };
+
+// DIFFERENTIATE WITHOUT COLOUR (Part 1.14): stamped land hatched (0.5 pt lines of 50% ink at 45 degrees, 4 pt apart),
+// wished land dotted (1 pt dots of 50% ink, 5 pt apart), in screen points so they keep their size at every zoom
+static float3 pattern(float3 c, float kind, float2 px, float ppp) {
+    float2 p = px / max(ppp, 1.0);
+    if (kind > 0.5 && kind < 1.5) {
+        float d = fmod(abs(p.x + p.y) * 0.70710678, 4.0);
+        float a = clamp(0.5 - min(d, 4.0 - d) + 0.25, 0.0, 1.0);
+        return mix(c, c * 0.5, a);
+    }
+    if (kind > 1.5) {
+        float2 q = fmod(p, 5.0) - 2.5;
+        float a = clamp(0.5 - length(q) + 0.5, 0.0, 1.0);
+        return mix(c, c * 0.5, a);
+    }
+    return c;
+}
 
 constant float3 WHITE = float3(1.0);
 constant float3 BLUE = float3(0.4706, 0.6824, 0.9725);       // 78AEF8
@@ -83,7 +100,7 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     if (look.clip2.y > 0.5) {
         if (kind == 0) return float4(mix(mix(CREAM, BLUE, 0.25), look.tint.rgb, look.tint.a), 1.0);
         if (kind == 3) return float4(look.tint.rgb, 1.0);
-        float3 flat = kind == 2 ? WHITE * look.tint.rgb : CREAM;
+        float3 flat = kind == 2 ? pattern(WHITE * look.tint.rgb, look.clip2.z, in.position.xy, look.clip2.x) : CREAM;
         if (kind == 5) flat = mix(CREAM * look.tint.rgb, mix(CREAM, BLUE, 0.5), look.tint.a);
         if (look.pad > 0.0 || look.clip.w > 0.5) {
             float a = (look.pad > 0.0 ? look.pad : 1.0) * front;
@@ -119,7 +136,7 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     float3 land = mix(WHITE, BEIGE_DARK, clamp(pow(h, 1.15) * 1.05, 0.0, 1.0) * mix(0.10, 1.0, detail));
     land *= mix(1.0, clamp(shade, 0.6, 1.25), 0.55 * detail);
     land = clamp(land, 0.0, 1.0);
-    if (kind == 2) land *= look.tint.rgb;   // stamped lime soaks into the land; the Alps still show
+    if (kind == 2) land = pattern(land * look.tint.rgb, look.clip2.z, in.position.xy, look.clip2.x);   // stamped lime soaks into the land; the Alps still show
     // THE LAND ROUND A CONTINENT (the old fadedLand, Slice 127l): away from the continent you're on the land stays
     // land, its own relief, mixed halfway toward our blue, and the colours on it go (tint.a: how far it has gone)
     if (kind == 5) land = mix(land * look.tint.rgb, mix(land, BLUE, 0.5), look.tint.a);
