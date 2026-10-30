@@ -45,7 +45,9 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { $0.diamonds }, set: { s, v in s.diamonds = v }),
         .init(id: "townDots", name: "Town dots", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
               shows: { _ in true }, get: { flag($0.townDots) }, set: { s, v in s.townDots = v == "on" }),
-        // no Labels row: country names are never drawn on the map
+        // Labels: off by default (no names on the map unless turned on here)
+        .init(id: "labels", name: "Labels", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
+              shows: { $0.map == "native" }, get: { flag($0.labels) }, set: { s, v in s.labels = v == "on" }),
         // group 2: borders
         .init(id: "borders", name: "Borders", group: 1, choices: nil, page: "borders", defaultValue: nil,
               shows: { _ in true }, get: { $0.borders ?? "deFacto" }, set: { s, v in s.borders = v }),

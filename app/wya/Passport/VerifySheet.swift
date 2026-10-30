@@ -91,15 +91,15 @@ struct VerifySheet: View {
     @ViewBuilder
     private func wayRow(_ id: String, _ name: String) -> some View {
         if s.consent == id {
-            // THE CONSENT LINE (4.5.2): before anything leaves the phone; the lime go circle sends, anything else
-            // rolls it back
+            // THE CONSENT LINE (4.5.2): before anything leaves the phone; the send glyph sends (bare, no coloured
+            // circle behind it), anything else rolls it back
             HStack(spacing: 12) {
                 Text("Send to verify \(s.name)").font(.body).foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
                 Button { send(id) } label: {
-                    Icon5Still(key: "forward", progress: 0, ink: Palette.ink, size: 17)
-                        .frame(width: 36, height: 36).background(Palette.lime, in: .circle)
+                    Icon5Still(key: "send", progress: 0, ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Send")

@@ -943,10 +943,9 @@ struct UploadSheet: View {
             .scaleEffect(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
         ZStack {
-            Circle().fill(Palette.lime).frame(width: 44, height: 44).scaleEffect(u.goIn ? 1 : 0)
-            // the stamp's glyph is a bare ring until its icon is picked (as every unpicked icon); the × until the review
+            // the stamp glyph (the app's own set) once the review is up, bare (no coloured circle behind it); the × until then
             if u.goIn {
-                ToolRing(width: 2).fill(Palette.ink, style: FillStyle(eoFill: true)).frame(width: 22, height: 22)
+                Icon5Still(key: "stamp", progress: 0, ink: Palette.ink, size: 22)
                     .transition(.scale)
             } else {
                 Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 22)

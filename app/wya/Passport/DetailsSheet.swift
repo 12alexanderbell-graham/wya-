@@ -275,7 +275,7 @@ struct DetailsSheet: View {
             if v.count > max { Feel.refuse() }
             let c = String(v.prefix(max))
             s.wd[keyPath: k] = c.isEmpty ? nil : c
-        }), axis: lines ? .vertical : .horizontal)
+        }), prompt: Text(empty).foregroundStyle(Palette.ink.opacity(0.5)), axis: lines ? .vertical : .horizontal)
         .font(.body)
         .foregroundStyle(Palette.ink)
         .lineLimit(lines ? 1 ... 12 : 1 ... 1)
@@ -318,14 +318,15 @@ struct DetailsSheet: View {
                 Spacer(minLength: 8)
                 if plain {
                     let v = s.d[keyPath: rough] ?? ""
-                    let w = v.isEmpty ? "Summer 2019" : v
+                    let w = v.isEmpty ? "Add" : v
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
-                        .foregroundStyle(v.isEmpty ? Color(uiColor: .placeholderText) : Palette.ink)
+                        .foregroundStyle(v.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
                         .contentTransition(.numericText(value: gone ? 0 : 1))
                         .frame(minHeight: 44).edgeRow()
                 } else {
-                    // a visit's time in words until our own calendar exists ("Summer 2019", 40 characters)
-                    field("Summer 2019", id: "rough\(i)", max: 40, trailing: true, rough)
+                    // a visit's time in words until our own calendar exists (40 characters); the empty field says only
+                    // "Add", never a made-up example
+                    field("Add", id: "rough\(i)", max: 40, trailing: true, rough)
                 }
                 if n > 1 {
                     xCircle { removeTrip(k) }
@@ -371,7 +372,7 @@ struct DetailsSheet: View {
     private func fieldWords(_ empty: String, _ v: String?, gone: Bool, trailing: Bool = false) -> some View {
         let t = (v ?? "").isEmpty ? empty : v!
         return Text(gone ? Caption.blank(t, "\u{2002}") : t).font(.body)
-            .foregroundStyle((v ?? "").isEmpty ? Color(uiColor: .placeholderText) : Palette.ink)
+            .foregroundStyle((v ?? "").isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
             .contentTransition(.numericText(value: gone ? 0 : 1))
             .frame(maxWidth: .infinity, minHeight: 44, alignment: trailing ? .trailing : .leading).edgeRow()
     }
@@ -501,10 +502,10 @@ struct DetailsSheet: View {
             }
             HStack(spacing: 12) {
                 if out { fieldWords("Add a place", placeName, gone: true) } else {
-                TextField("Add a place", text: Binding(get: { placeName }, set: { v in
+                TextField("", text: Binding(get: { placeName }, set: { v in
                     if v.count > 60 { Feel.refuse() }
                     placeName = String(v.prefix(60))
-                }))
+                }), prompt: Text("Add a place").foregroundStyle(Palette.ink.opacity(0.5)))
                 .font(.body).foregroundStyle(Palette.ink)
                 .focused($typing, equals: "place").id("place")
                 .submitLabel(.done)
@@ -610,7 +611,7 @@ struct DetailsSheet: View {
         let shown: String? = p.count >= 2 ? "\(p[1]) / \(p[0])" : (p.count == 1 && p[0].count == 4 ? "00 / \(p[0])" : nil)
         let w = shown ?? empty
         return Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
-            .foregroundStyle(shown == nil ? Color(uiColor: .placeholderText) : Palette.ink)
+            .foregroundStyle(shown == nil ? Palette.ink.opacity(0.5) : Palette.ink)
             .contentTransition(.numericText(value: gone ? 0 : 1))
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
     }
@@ -780,11 +781,11 @@ struct DetailsSheet: View {
     /// past the limit the text stops and refuse plays
     private func field(_ empty: String, id: String, max: Int, lines: Bool = false, trailing: Bool = false,
                        _ k: WritableKeyPath<StampDetails, String?>) -> some View {
-        TextField(empty, text: Binding(get: { s.d[keyPath: k] ?? "" }, set: { v in
+        TextField("", text: Binding(get: { s.d[keyPath: k] ?? "" }, set: { v in
             if v.count > max { Feel.refuse() }
             let c = String(v.prefix(max))
             s.d[keyPath: k] = c.isEmpty ? nil : c
-        }), axis: lines ? .vertical : .horizontal)
+        }), prompt: Text(empty).foregroundStyle(Palette.ink.opacity(0.5)), axis: lines ? .vertical : .horizontal)
         .font(.body)
         .foregroundStyle(Palette.ink)
         .multilineTextAlignment(trailing ? .trailing : .leading)

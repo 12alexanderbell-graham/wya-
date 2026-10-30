@@ -341,7 +341,8 @@ struct HeadView: View {
     private func searchCapsule(ink: Color, p: CGFloat, fieldW: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             if p > 0.001 || head.searching {
-                TextField("Search", text: $head.query)
+                // the empty field's word in the ink at 50%, as every empty field in the app (not the system grey)
+                TextField("", text: $head.query, prompt: Text("Search").foregroundStyle(ink.opacity(0.5)))
                     .font(.body)
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .foregroundStyle(ink)
