@@ -45,6 +45,7 @@ final class HeadState {
     }
     func openSettings() {
         guard !settingsOpen else { return }
+        Hints.shared.usedHold()
         settingsSince = Date()
         settingsOpen = true
         // the hold that opened them is done: a later hold starts fresh, whatever happened to the finger
@@ -66,6 +67,7 @@ final class HeadState {
     @ObservationIgnored private var pullStart: CGFloat = 0
     @ObservationIgnored private var pullGearStart: CGFloat = 0
     func pullBegan() {
+        Hints.shared.touched()
         pullStart = pull
         // from the gear (settings open): its first part turns the gear back into the dot, following the finger, then
         // the AI comes out of the dot
@@ -89,7 +91,9 @@ final class HeadState {
     }
     func pullEnded(velocity: CGFloat) {
         let projected = pull + Flow.project(velocity) * 0.5
-        settlePull(to: projected > HeadState.aiStop / 2 ? 1 : 0, speed: abs(velocity))
+        let out = projected > HeadState.aiStop / 2
+        if out { Hints.shared.usedPull() } else if pullStop == 0 { Hints.shared.shortPull() }
+        settlePull(to: out ? 1 : 0, speed: abs(velocity))
     }
     /// `speed`: the release's, for the landing (3.7: the `land` haptic by it, the thud above 15%); 900 for a settle
     /// that no finger let go of
