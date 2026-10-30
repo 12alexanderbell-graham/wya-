@@ -59,3 +59,12 @@ A towns file is one place's towns: raw DEFLATE of JSON rows `[name, region, popu
     python3 pipeline/d12_country_names.py <GeoNames folder> world-meta.json place-names.json   # countryInfo.txt, alternateNamesV2.txt
 
 Search finds a country by any of these names starting with what was typed, after every match on its own names.
+
+## Finer region levels (`<cc>-<level>.wyar`)
+
+A region level is one file: "WYAR", a JSON head (the quantization, the units with their ids, names and codes, each unit's rings as arc indices) and the shared arcs as absolute quantized integers, raw DEFLATE. From geoBoundaries' TopoJSON:
+
+    python3 pipeline/d2_level.py geoBoundaries-FRA-ADM5.topojson fr 5 fr-5.wyar 0.002 -5.5 41 10 51.5   # the box: metropolitan France
+    python3 pipeline/d2_parents.py fr-5.wyar fr-4.wyar                                                    # each unit's parent, by the larger share of its area
+
+Each shared arc is simplified once, so neighbouring units keep one border.
