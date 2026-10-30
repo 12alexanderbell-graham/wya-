@@ -273,6 +273,8 @@ final class TestDriver {
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
                 // book [n]: the passport tool pressed (the book out or back); with n, open on page n (1-based)
+                // row labels on: a Map settings row set as a tap on it would (id, value id)
+                case "row": if let m = map, p.count > 2 { _ = await MapSettingsRows.set(p[1], p[2], map: m) }
                 // pageturn 45: the passport's leaf held at that angle (> 0 forward, < 0 the previous page coming back)
                 case "pageturn": BookState.shared.turn = Double(a) ?? 0
                 case "book":
