@@ -109,6 +109,10 @@ with open(os.path.join(outd, 'de-3-moves.tsv'), 'w', encoding='utf-8') as f:
         if len(named) > 1 and share:
             near = [j for j in named if gn3[j].distance(g) < 0.5]
             named = near[:1] if near else []
+        # a shared name is only trusted where that district holds most of the earlier one (Leipzig the rural
+        # district is not Leipzig the city)
+        if len(named) == 1 and share and (gn3[named[0]].intersection(g).area / g.area) < 0.5:
+            named = []
         if len(named) == 1:
             j = named[0]
             f.write(f"{u['id']}\t{h3['u'][j]['id']}\t{u['n']}\t{h3['u'][j]['n']}\tname\n"); continue
