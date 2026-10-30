@@ -95,7 +95,6 @@ final class CardState {
                 water.go(to)
                 // laid out for where the water is going, so it never grows as the water goes down
                 goingTop = water.y(to)
-                delay = 0.1
             }
         }
         place = i
@@ -109,9 +108,12 @@ final class CardState {
             // NOTHING CLASHES: when the water has to
             // go down first, the card only starts growing once the water's edge is below where the card will end, so
             // the growing card and the falling water never cross (the book's 0.1 s overlap did exactly that)
-            if delay > 0, let water, let to = goingTop {
+            // (the same when the water is still on its way to its stop for any other reason, e.g. the Stamped list
+            // closing into 25%: the card waits for it)
+            if let water {
+                let to = goingTop ?? water.y(water.stop)
                 let start = CACurrentMediaTime()
-                while water.form().top < to - 1, CACurrentMediaTime() - start < 1.0 {
+                while abs(water.form().top - to) > 1, CACurrentMediaTime() - start < 1.0 {
                     try? await Task.sleep(for: .milliseconds(16))
                 }
             }

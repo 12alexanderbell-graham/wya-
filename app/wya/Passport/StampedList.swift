@@ -90,10 +90,12 @@ struct StampedList: View {
         Feel.tap()
         water.closeList(to: .quarter)
         map.show(place: r.place, sheetTop: water.y(.quarter))
-        DispatchQueue.main.asyncAfter(deadline: .now() + MapController.flight + 0.1) {
+        // the card from the place once the camera has landed (show's flight is 0.8 s) and the water is at 25%, so
+        // nothing moves into the card's way while it grows
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + 0.1) {
             guard let w = map.world else { return }
             let p = w.places[r.place]
-            CardState.shared.open(r.place, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map)
+            CardState.shared.open(r.place, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map, water: water)
         }
     }
 
