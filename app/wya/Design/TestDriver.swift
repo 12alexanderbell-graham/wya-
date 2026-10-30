@@ -250,6 +250,12 @@ final class TestDriver {
                     let demo = Set(MarkStore.demoStamped.map { "c:" + $0 })
                     let line = "stamped \(st.count): \(st.joined(separator: " "))\nwished \(wi.count): \(wi.joined(separator: " "))\nnot demo: \(st.filter { !demo.contains($0) }.joined(separator: " "))"
                     try? line.write(toFile: Snap.dir + "/marks.log", atomically: true, encoding: .utf8)
+                // historycheck: the history reader's fixtures (shapes A to D, the offsets) against the map's shapes
+                case "historycheck":
+                    if let m = map {
+                        let lines = HistoryCheck.run(map: m)
+                        try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/historycheck.log", atomically: true, encoding: .utf8)
+                    }
                 case "storecheck":
                     let lines = await StoreCheck.run()
                     try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)
