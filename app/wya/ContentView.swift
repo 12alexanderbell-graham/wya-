@@ -196,6 +196,8 @@ struct ContentView: View {
         .onChange(of: head.searching) { _, v in if v { closeCard() } }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
+        // a continent follows the sheet (A1.16)
+        .onChange(of: water.form().top) { _, t in if !side.on { map.sheetMoved(top: t) } }
         // the session written as it changes; the camera 0.5 s after it last moved (19.2)
         .onChange(of: map.restVersion) { _, _ in saveSession(after: 0.5) }
         .onChange(of: water.stop) { _, _ in saveSession(after: 0) }

@@ -507,6 +507,27 @@ final class MapController {
         needsFrame = true
     }
 
+    // MARK: A1.16, the continent following the sheet
+    /// the sheet's top as it is now (the water tells the map every frame it moves)
+    @ObservationIgnored private(set) var sheetTop: CGFloat = 0
+    /// the room's middle the camera is placed for (nil off a continent)
+    @ObservationIgnored private var followMid: Double?
+    /// THE SHEET MOVED (the one exception to "a sheet never moves the content above it", only on a continent's map):
+    /// below 50% the continent slides down with it into the middle of the bigger room, same zoom;
+    /// after a pan or pinch the camera still moves only as much as the room's middle moves
+    func sheetMoved(top: CGFloat) {
+        sheetTop = top
+        guard continentFrame != nil, let was = followMid, flight == nil else { return }
+        let r = layout.room(sheetTop: max(top, layout.top(.half)))
+        let mid = (Double(r.lowerBound) + 14 + Double(r.upperBound) - 2) / 2
+        guard abs(mid - was) > 0.01 else { return }
+        followMid = mid
+        let y = c.y - (mid - was) / k
+        continentY = y
+        c = clamped(SIMD2(c.x, y), k)
+        needsFrame = true
+    }
+
     func goHome(animated: Bool = true) {
         continent = nil
         offContinent()
@@ -514,7 +535,7 @@ final class MapController {
         if animated { fly(to: target, k: worldKMin, dur: Self.flight) } else { k = worldKMin; c = target; updateHome() }
     }
     private func offContinent() {
-        drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil
+        drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil; followMid = nil
         updateHome()
         needsFrame = true
     }
@@ -596,8 +617,14 @@ final class MapController {
         let go = { [weak self] in
             guard let self else { return }
             self.drawnContinent = k; self.continentFrame = f; self.continentK = nk
+            // framed for the room at 50%: from here the camera follows the room's middle as the sheet moves (A1.16)
+            self.followMid = roomMid
+            self.continentY = self.clamped(centre, nk).y
             self.updateHome()
-            self.fly(to: self.clamped(centre, nk), k: nk, dur: Self.flight)
+            self.fly(to: self.clamped(centre, nk), k: nk, dur: Self.flight) { [weak self] in
+                guard let self else { return }
+                self.sheetMoved(top: self.sheetTop)
+            }
         }
         if let was = drawnContinent, was != k, was != "Antarctica" {
             // out to the world, the rest coming back, then in
