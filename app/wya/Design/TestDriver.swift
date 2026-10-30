@@ -289,6 +289,7 @@ final class TestDriver {
                 // page ru: a country's page opened from its box (Part 16); page off: closed
                 case "page":
                     if a == "off" { PlacePageState.shared.close() }
+                    else if a == "end" { PlacePageState.shared.toEnd += 1 }
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
