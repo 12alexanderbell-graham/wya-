@@ -545,8 +545,8 @@ struct ContentView: View {
     }
 
     /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish | Details, Verify | Go one level down |
-    /// Share. Stamping stamps its parents too (A6.12). Details: the region card rises, then Details (6.7). Verify waits
-    /// for its region test (shown, unavailable). Its places, its page, Add to a list and Add to a plan wait for their parts.
+    /// Share. Stamping stamps its parents too (A6.12). Details and Verify: the region card rises, then that sheet (6.7).
+    /// Its places, its page, Add to a list and Add to a plan wait for their parts.
     @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water) -> UIMenu {
         let key = PlaceKey(.region, sc.unitIDs[u])
         let name = sc.unitNames[u]
@@ -573,7 +573,14 @@ struct ContentView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }
             }
         }
-        let verify = UIAction(title: "Verify", attributes: .disabled) { _ in }
+        let verify = UIAction(title: "Verify", attributes: st.stamped ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    VerifyState.shared.open(key, name: name, place: sc.place, water: water)
+                }
+            }
+        }
         // the next finer level in use, if there is one
         let used = RegionCatalog.shared.used(sc.id).map(\.row)
         let next = used.firstIndex(of: sc.row).flatMap { $0 + 1 < used.count ? used[$0 + 1] : nil }
