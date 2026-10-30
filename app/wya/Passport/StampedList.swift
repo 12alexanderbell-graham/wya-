@@ -49,6 +49,8 @@ struct StampedList: View {
         for (i, p) in w.places.enumerated() { index[p.id] = i }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
+            // a continent picked: its countries only (20.3.2; the caption's number counts the same)
+            if let c = map.continent ?? map.drawnContinent, !w.inCont(i, c) { return nil }
             // "Lived" / "Once" / "Twice" / "<n> times", " · " the latest visit's year, " · Verified" (no tick)
             var line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
             if let x = info[k.description] {
