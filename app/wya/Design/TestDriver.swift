@@ -204,6 +204,9 @@ final class TestDriver {
                     let line = "borders \(a) picks \(picks) -> \(ok) in \(ms) ms; caption \(map?.count.n ?? -1) of \(map?.count.of ?? -1); dotted \(Borders.dottedPlaces.count)"
                     try? line.write(toFile: Snap.dir + "/borders.log", atomically: true, encoding: .utf8)
                 case "shake": NotificationCenter.default.post(name: .wyaShake, object: nil)
+                case "redo": NotificationCenter.default.post(name: .wyaRedo, object: nil)
+                // stamp <id>: a country stamped as a test would (undoable)
+                case "stamp": await MarkStore.shared.stamp(.country(a))
                 // slowmo N: the stamp's flight N times slower, for frame checks (slowmo 1 = real speed)
                 case "slowmo": CardState.slow = Double(a) ?? 1
                 // unstamp <id>: a test's stamp taken off again (test residue)
