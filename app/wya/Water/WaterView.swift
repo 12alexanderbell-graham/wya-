@@ -238,19 +238,20 @@ struct PlasmaStars: View {
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(false)
-        .task { if sprites.isEmpty { sprites = Self.makeSprites() } }
+        .task { if sprites.isEmpty { sprites = Self.makeSprites(); Self.shared = sprites } }
         // WORKED OUT AHEAD, OFF THE MAIN THREAD (Step 1c found it: done all at once as the sheet headed for full it held
         // the screen 350 ms, 229 stars x 3 lookups; then done a few stars a frame on the main thread it still took a few
         // ms of every frame of the next pan or pinch): once each time the camera comes to rest or the marks change, a
         // quarter second later, every lookup on a background thread; the stars only show past half way to full, by
         // when it is long done
-        .task(id: Key(stars: stars, rest: map.restVersion, marks: map.stamped.count &* 4096 &+ map.wished.count,
+        .task(id: Key(stars: drawn, rest: map.restVersion, marks: map.stamped.count &* 4096 &+ map.wished.count,
                       w: Int(size.width), h: Int(size.height))) {
             try? await Task.sleep(for: .milliseconds(250))
             if Task.isCancelled { return }
             #if DEBUG
             let t0 = CACurrentMediaTime()
             #endif
+            let stars = drawn
             var g = SeededRandom(seed: 987654)
             var pts: [CGPoint] = []
             pts.reserveCapacity(stars * 3)
@@ -262,6 +263,7 @@ struct PlasmaStars: View {
             let d = await map.groundDark(at: pts)
             if Task.isCancelled { return }
             dark = (0 ..< stars).map { (d[3 * $0] + d[3 * $0 + 1] + d[3 * $0 + 2]) / 3 }
+            Self.sharedDark = dark
             #if DEBUG
             NSLog("wya stars grounds %d stars over %.0f ms", stars, (CACurrentMediaTime() - t0) * 1000)
             #endif
@@ -272,25 +274,25 @@ struct PlasmaStars: View {
     /// move to full cost 8 ms and 14 late frames in 120; as 229 separate layers the render server fell to 20 frames a
     /// second). In a drawing group each star is one textured square on the GPU; each picture is resolved once a frame.
     private func canvas(open: CGFloat) -> some View {
-        Canvas { ctx, size in
+        // the stars falling now are drawn by the Cosmos, which knows where their planets are (A2.20)
+        let air = stars ..< stars + map.flying
+        return Canvas { ctx, size in
             var g = SeededRandom(seed: 987654)
             var resolved: [Int: GraphicsContext.ResolvedImage] = [:]
-            for i in 0 ..< stars {
+            for i in 0 ..< drawn {
                 let u = g.next(), v = g.next(), s = g.next(), k = g.next()
+                if air.contains(i) { continue }
                 let x = u * Double(size.width), y = v * Double(size.height)
                 if hypot(x - Double(sun.x), y - Double(sun.y)) < 64 { continue }
                 let grow = Double(open) * min(1, max(0, (y - Double(top)) / 28))
                 guard grow > 0.01 else { continue }
                 // most small, a few bigger, as real brightness goes: seen by being full white light, not by size
-                let scale = (0.3 + 0.4 * pow(s, 2.4)) * grow
+                let scale = Self.scale(s) * grow
                 let w = Double(Self.sprite) * scale
                 // the same plasma, its light darkened as much as the ground under it needs (white over the sea): one of
                 // the pictures already darkened to the nearest level (a filter per star cost a layer per star, every
                 // frame the sheet moved; Step 1c)
-                let d = i < dark.count ? dark[i] : 0
-                let level = Self.levels.indices.min { abs(Self.levels[$0] - d) < abs(Self.levels[$1] - d) } ?? 0
-                let set = sprites.count / Self.levels.count
-                let n = level * set + Int(k * Double(set)) % set
+                let n = Self.picture(i, k: k, dark: dark, count: sprites.count)
                 let r = resolved[n] ?? ctx.resolve(sprites[n])
                 resolved[n] = r
                 ctx.draw(r, in: CGRect(x: x - w / 2, y: y - w / 2, width: w, height: w))
@@ -300,6 +302,32 @@ struct PlasmaStars: View {
     }
 
     private struct Key: Hashable { let stars: Int; let rest: Int; let marks: Int; let w: Int; let h: Int }
+
+    /// the places left, and the stamped ones whose star has not fallen yet (they stay where they were until then)
+    private var drawn: Int { stars + map.falls.count }
+    /// a star's size for its third number (most small, a few bigger)
+    static func scale(_ s: Double) -> Double { 0.3 + 0.4 * pow(s, 2.4) }
+    /// which picture star i is drawn with: its darkness level, then one of that level's eight moments
+    static func picture(_ i: Int, k: Double, dark: [Double], count: Int) -> Int {
+        let d = i < dark.count ? dark[i] : 0
+        let level = levels.indices.min { abs(levels[$0] - d) < abs(levels[$1] - d) } ?? 0
+        let set = count / levels.count
+        return level * set + Int(k * Double(set)) % set
+    }
+    /// star i where it sits in a view of this size (nil when it is never drawn: too close to the sun), its size and
+    /// its picture, for the Cosmos to draw it as it falls
+    @MainActor static func star(_ i: Int, size: CGSize, sun: CGPoint) -> (at: CGPoint, scale: Double, picture: Int)? {
+        guard !shared.isEmpty else { return nil }
+        var g = SeededRandom(seed: 987654)
+        for _ in 0 ..< i { _ = g.next(); _ = g.next(); _ = g.next(); _ = g.next() }
+        let u = g.next(), v = g.next(), s = g.next(), k = g.next()
+        let x = u * Double(size.width), y = v * Double(size.height)
+        if hypot(x - Double(sun.x), y - Double(sun.y)) < 64 { return nil }
+        return (CGPoint(x: x, y: y), scale(s), picture(i, k: k, dark: sharedDark, count: shared.count))
+    }
+    /// the pictures and darknesses the stars were last drawn with, for the falling ones
+    @MainActor static var shared: [Image] = []
+    @MainActor static var sharedDark: [Double] = []
 
     /// the darkness levels a star is drawn at (the grounds' values and their means: sea, wished, stamped, land)
     static let levels: [Double] = [0, 0.15, 0.3, 0.45, 0.6, 0.8]

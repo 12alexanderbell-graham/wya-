@@ -152,13 +152,14 @@ struct CosmosView: View {
     var body: some View {
         let L = water.layout
         let r = room()
-        let shares = Self.shares(map)
         let hidden = form.top > L.top(.quarter) - 20
-        let busy = water.held || moonHeld || trail.moving(moonAngle) || heldTween.moving(Date())
+        let busy = water.held || moonHeld || trail.moving(moonAngle) || heldTween.moving(Date()) || map.flying > 0
             || (form.page > 0.001 && form.page < 0.999) || Date().timeIntervalSince(ringStart) < 1
         // full speed while anything moves; at rest the slow things (the spin, the sun's plasma) at 15 a second
         TimelineView(.animation(minimumInterval: busy || fullSince != nil ? 1.0 / 60 : 1.0 / 15, paused: hidden)) { ctx in
             let now = ctx.date
+            // a planet's night grows by a stamp's share only once that stamp's star has landed in it (A2.20)
+            let shares = Self.shares(map, now: now)
             let (th, _) = theta(now)
             let items = (0 ..< 8).map { place($0, th: th, now: now, r: r) }
             let host = items[chosen]
@@ -222,6 +223,8 @@ struct CosmosView: View {
                     moon(host, out: moonOut, held: held, sun: sunC, now: now)
                 }
                 if moonOut > 0.5 { moonHandle(host) }
+                // the stars of new stamps falling into their planets, over everything
+                ForEach(0 ..< map.flying, id: \.self) { j in fallingStar(j, items: items, now: now) }
             }
             .frame(width: L.W, height: L.H, alignment: .topLeading)
             // ONE GPU PASS FOR THE WHOLE SYSTEM (Step 1c): each planet's, ring's and the sun's shader was its own
@@ -249,6 +252,12 @@ struct CosmosView: View {
                 for i in 0 ..< 8 { orbitFrozen[i] += Self.orbitSpeed(i) * now.timeIntervalSince(s) }
                 fullSince = nil
             }
+        }
+        // THE STARS OF NEW STAMPS FALL (A2.20) the first time the full view is seen after them: once the water is 97%
+        // of the way there (the last 3% of its spring takes 1.6 s more, measured 30 Oct; waiting for all of it left
+        // the full view standing still for over a second first)
+        .onChange(of: form.page >= 0.97) { _, there in
+            if there { map.startFalls() }
         }
         .onChange(of: form.page < 0.001) { _, half in
             // back at 50%: the orbits' own turns ease home with the ring, so the chosen planet is at the front again
@@ -438,13 +447,62 @@ struct CosmosView: View {
     /// each continent's share of its places you've stamped; Earth's is the world's
     /// read from the Count service (Store/Count.swift), the same numbers the caption shows; MapController works them
     /// out again only when the stamps or the Count setting change (Step 1c: never per frame)
-    static func shares(_ m: MapController) -> [CGFloat] {
+    /// less the stamps whose star has not landed yet (A2.20)
+    static func shares(_ m: MapController, now: Date = Date()) -> [CGFloat] {
         let sh = m.shares    // observed first, so the planets update once the world has loaded
         guard m.ready else { return Array(repeating: 0, count: 8) }
+        var held: [String: Int] = [:]
+        for (j, f) in m.falls.enumerated() where m.fallProgress(j, at: now) < 1 {
+            for k in f.held { held[k, default: 0] += 1 }
+        }
         return planets.map { pl in
             let s = sh[pl.k] ?? MapCounts.Share()
-            return s.total == 0 ? 0 : CGFloat(s.have) / CGFloat(s.total)
+            return s.total == 0 ? 0 : CGFloat(max(0, s.have - held[pl.k, default: 0])) / CGFloat(s.total)
         }
+    }
+
+    /// A STAMP'S STAR FALLS INTO ITS PLANET (A2.20): from its own spot, along a curve bowed away from the sun, into
+    /// its continent's planet wherever that is now, shrinking as it goes (full size, 90% a quarter of the way, 70%
+    /// half, 40% three quarters, gone as it lands); 0.7 s each, 0.1 s apart. Until its turn it sits where it was.
+    @ViewBuilder
+    private func fallingStar(_ j: Int, items: [Item], now: Date) -> some View {
+        let L = water.layout
+        let t = map.fallProgress(j, at: now)
+        let sun = CGPoint(x: L.W / 2, y: L.H / 2)
+        if t < 1, j < map.falls.count, map.falls[j].into < items.count,
+           let st = PlasmaStars.star(map.placesLeft + j, size: CGSize(width: L.W, height: L.H), sun: sun),
+           !L.capsule.contains(st.at) {
+            // grown as the stars under the edge are (the same rule as PlasmaStars), so it starts exactly as it was
+            let grow = Double(Flow.smooth(0.5, 0.8, form.page)) * min(1, max(0, Double(st.at.y - form.top) / 28))
+            if grow > 0.01 {
+                let from = st.at, to = items[map.falls[j].into].pos
+                let dx = to.x - from.x, dy = to.y - from.y
+                let mid = CGPoint(x: (from.x + to.x) / 2, y: (from.y + to.y) / 2)
+                let a = CGPoint(x: mid.x - dy * 0.25, y: mid.y + dx * 0.25), b = CGPoint(x: mid.x + dy * 0.25, y: mid.y - dx * 0.25)
+                let ctrl = hypot(a.x - sun.x, a.y - sun.y) > hypot(b.x - sun.x, b.y - sun.y) ? a : b
+                let p = Self.curve(from, ctrl, to, CGFloat(t * t * (3 - 2 * t)))
+                let w = PlasmaStars.sprite * CGFloat(st.scale * grow * Self.fallSize(t))
+                PlasmaStars.shared[st.picture]
+                    .resizable()
+                    .frame(width: w, height: w)
+                    .position(p)
+            }
+        }
+    }
+    /// a point u of the way along the curve from a through c to b
+    static func curve(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint, _ u: CGFloat) -> CGPoint {
+        let v = 1 - u
+        let wa = v * v, wc = 2 * v * u, wb = u * u
+        let x: CGFloat = wa * a.x + wc * c.x + wb * b.x
+        let y: CGFloat = wa * a.y + wc * c.y + wb * b.y
+        return CGPoint(x: x, y: y)
+    }
+    /// the falling star's size through its fall, between the book's frames
+    static func fallSize(_ t: Double) -> Double {
+        let f = [1, 0.9, 0.7, 0.4, 0]
+        let x = min(1, max(0, t)) * 4
+        let i = min(3, Int(x))
+        return f[i] + (f[i + 1] - f[i]) * (x - Double(i))
     }
 }
 

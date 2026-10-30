@@ -17,14 +17,65 @@ final class MapController {
     private(set) var ready = false
 
     // MARK: what's on the map (a demo account for now: see DemoAccount)
-    var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter); recount() } }
+    var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter); recount(was: oldValue) } }
     /// YOUR COUNT for the world and each continent (the Count service, Store/Count.swift), worked out again when your
     /// stamps or the Count setting change, never per frame
     private(set) var shares: [String: MapCounts.Share] = [:]
-    func recount() {
+    func recount(was: Set<Int>? = nil) {
         guard let w = world else { return }
         let ids = Set(stamped.map { w.places[$0].id })
+        let old = shares
         shares = MapCounts.shares(stamped: ids, world: w, count: CountKind.current)
+        if let was, ready { noteFall(was: was, old: old, w: w) }
+    }
+
+    // MARK: A STAR FALLS INTO ITS PLANET (A2.20)
+    /// a stamp whose star has not yet fallen: the place, the planet it falls into (CosmosView.planets' index), and the
+    /// counts whose share it holds back until it lands (the planets' night grows only then)
+    struct Fall: Equatable { let place: Int; let into: Int; let held: [String] }
+    /// waiting to fall, oldest first; star `placesLeft + j` is fall j's, so the star stays where it was until it goes
+    private(set) var falls: [Fall] = []
+    /// when the falls began (the full view seen); nil while they wait
+    private(set) var fallStart: Date?
+    /// how many of the first falls are going now (a stamp made meanwhile waits for the next time)
+    private(set) var flying = 0
+    /// (slowed with the test driver's slowmo)
+    static var fallTime: Double { 0.7 * CardState.slow }
+    static var fallGap: Double { 0.1 * CardState.slow }
+    /// one place stamped (and it took a star: the world's count went up), or a waiting one unstamped
+    private func noteFall(was: Set<Int>, old: [String: MapCounts.Share], w: World) {
+        let added = stamped.subtracting(was), removed = was.subtracting(stamped)
+        if added.count == 1, removed.isEmpty, let p = added.first {
+            let up = shares.keys.filter { (shares[$0]?.have ?? 0) > (old[$0]?.have ?? 0) }
+            guard up.contains("World") else { return }
+            let into = w.placeConts[p].lazy.compactMap { k in up.contains(k) ? CosmosView.planets.firstIndex { $0.k == k } : nil }.first ?? 2
+            falls.append(Fall(place: p, into: into, held: up))
+        } else if !removed.isEmpty {
+            // only one still waiting goes back (one in the air lands as it is)
+            let waiting = falls.dropFirst(flying).filter { !removed.contains($0.place) }
+            falls = Array(falls.prefix(flying)) + waiting
+        }
+    }
+    /// the full view is seen: the waiting stars go, 0.1 s apart, and leave the list once the last has landed
+    func startFalls() {
+        guard !falls.isEmpty, flying == 0 else { return }
+        let n = falls.count
+        fallStart = Date()
+        flying = n
+        #if DEBUG
+        NSLog("wya falls %d into %@", n, falls.map { CosmosView.planets[$0.into].n }.joined(separator: ","))
+        #endif
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fallGap * Double(n - 1) + Self.fallTime) { [weak self] in
+            guard let self else { return }
+            self.falls.removeFirst(min(n, self.falls.count))
+            self.flying = 0
+            self.fallStart = nil
+        }
+    }
+    /// how far fall j has gone (0 waiting, 1 landed)
+    func fallProgress(_ j: Int, at now: Date) -> Double {
+        guard j < flying, let s = fallStart else { return 0 }
+        return min(1, max(0, (now.timeIntervalSince(s) - Self.fallGap * Double(j)) / Self.fallTime))
     }
     var wished: Set<Int> = [] { didSet { marksChanged(stamped: stamped, wished: oldValue, filter: filter) } }
     /// the moon's stop: 0 Both, 1 Stamped, 2 Stamped+, 3 Wishlist+, 4 Wishlist (the + views come with counts)
