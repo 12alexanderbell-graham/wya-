@@ -378,7 +378,8 @@ struct CosmosView: View {
         let me = pickJob, start = Date()
         Task { @MainActor in
             while me == pickJob {
-                let t = min(1, Date().timeIntervalSince(start) / 0.38)
+                // Reduce Motion: the same move, shorter (Part 19)
+                let t = min(1, Date().timeIntervalSince(start) / (Motion.reduce ? 0.2 : 0.38))
                 moonAngle = from + (to - from) * Double(Flow.smooth(0, 1, CGFloat(t)))
                 if t >= 1 { break }
                 try? await Task.sleep(for: .milliseconds(8))
