@@ -155,6 +155,9 @@ struct ContentView: View {
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
+            // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
+            map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head,
+                                                                         closeCard: { closeCard() }) }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
@@ -294,6 +297,72 @@ struct ContentView: View {
         DetailsState.shared.close(water: water)
         VerifyState.shared.close(water: water)
         CardState.shared.close(map: map)
+    }
+
+    /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish | Details, Verify | Show in passport, Share. Rows
+    /// that can't be used now are unavailable (Apple greys them in place). With a card, the book, Details or Verify up,
+    /// or Map settings or an upload open, the hold only closes them (one press, one job). Not here yet: Lived here, Open
+    /// its page, Open its region map, Its places, Add to a list, Add to a plan (their parts are not built).
+    @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState,
+                                       closeCard: @escaping () -> Void) -> UIMenu? {
+        guard let w = map.world, i >= 0, i < w.places.count else { return nil }
+        if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen {
+            closeCard(); return nil
+        }
+        if head.settingsOpen { head.closeSettings(); return nil }
+        if water.upload { return nil }
+        let pl = w.places[i]
+        let key = PlaceKey.country(pl.id)
+        let st = MarkStore.shared.state(key)
+        // anything that moves a big thing starts once Apple's menu has closed
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
+            quickStamp(i, map: map)
+        }
+        let wish = UIAction(title: st.wished ? "Unwish" : "Wish", attributes: st.stamped ? .disabled : []) { _ in
+            Feel.tap()
+            Task {
+                if st.wished { await MarkStore.shared.unwish(key, name: pl.n) } else { await MarkStore.shared.wish(key, name: pl.n) }
+            }
+        }
+        let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
+            after {
+                CardState.shared.open(i, at: p, map: map, water: water)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    CardState.shared.heldTop = water.form().top
+                    DetailsState.shared.open(key, name: pl.n, water: water)
+                }
+            }
+        }
+        let verify = UIAction(title: "Verify", attributes: st.stamped ? [] : .disabled) { _ in
+            after {
+                CardState.shared.open(i, at: p, map: map, water: water)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    CardState.shared.heldTop = water.form().top
+                    VerifyState.shared.open(key, name: pl.n, place: i, water: water)
+                }
+            }
+        }
+        let passport = UIAction(title: "Show in passport", attributes: st.stamped ? [] : .disabled) { _ in
+            after { BookState.shared.open(showing: pl.id) }
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                // offline for now (no page links yet): the app's own link and the name (11.7)
+                var items: [Any] = [pl.n]
+                if let u = URL(string: "wya://country/\(pl.id)") { items.append(u) }
+                let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                var top = root
+                while let next = top?.presentedViewController { top = next }
+                top?.present(vc, animated: true)
+            }
+        }
+        return UIMenu(title: pl.n, children: [
+            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [details, verify]),
+            UIMenu(options: .displayInline, children: [passport, share]),
+        ])
     }
 
     /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one

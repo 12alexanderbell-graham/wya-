@@ -458,7 +458,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let hatch: Float = dwc ? 1 : 0, dots: Float = dwc ? 2 : 0
         // the place being pressed: drawn by the press below, not by its group
         // under a finger, or held while its stamping card is up
-        let pressed = controller.pressed ?? controller.kept
+        let pressed = controller.pressed ?? controller.kept ?? controller.menuHeld
         // Style Simple (Part 1.4): an unmarked territory is white with its full lines, every other unmarked land cream
         // (the diamonds' rule, the old MapStyle.fill); Detailed draws all land by its relief
         if controller.simple {
@@ -615,7 +615,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
 /// they are (nothing jumps) - a quick one-finger flick glides on; a pinch never flings - a touch stops anything moving
 /// where it is - a press darkens the place under the finger; locked, it does nothing but a soft knock (the lock stops
 /// stamping, it never stops looking) - a double tap zooms in about the finger
-final class MapMTKView: MTKView {
+final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     weak var controller: MapController?
     private var downAt: CGPoint?
     private var downTime: CFTimeInterval = 0
@@ -638,7 +638,65 @@ final class MapMTKView: MTKView {
     private var zoomStartY: CGFloat = 0
     private var zoomLast: Double = 1
 
-    func installGestures() { isMultipleTouchEnabled = true }
+    func installGestures() {
+        isMultipleTouchEnabled = true
+        // APPLE'S HOLD MENU ON THE MAP (Part 11.3): the one interaction on the map view; our own touches carry on and
+        // stop when the menu begins
+        addInteraction(UIContextMenuInteraction(delegate: self))
+    }
+
+    // MARK: the hold menu (11.3): no lift; the held place darkens in place and Apple's menu opens at the finger
+    private var menuTarget: UIView?
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        guard let c = controller else { return nil }
+        #if DEBUG
+        NSLog("wya hold menu asked at %.0f %.0f", location.x, location.y)
+        #endif
+        // locked: refused, the padlock presses in (11.7)
+        if c.locked { Feel.refuse(); c.lockedPress(); return nil }
+        // the sea, or a place off the continent you're on: no menu and no haptic
+        guard let i = c.hit(at: location) else { return nil }
+        if let k = c.drawnContinent, let w = c.world, !w.inCont(i, k) { return nil }
+        guard let make = c.menuFor, let menu = make(i, location) else { return nil }
+        menuTarget?.removeFromSuperview()
+        let v = UIView(frame: CGRect(x: location.x - 22, y: location.y - 22, width: 44, height: 44))
+        v.backgroundColor = .clear
+        v.isUserInteractionEnabled = false
+        addSubview(v)
+        menuTarget = v
+        c.menuHeld = i
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in menu }
+    }
+    private func clearTarget() -> UITargetedPreview? {
+        guard let v = menuTarget else { return nil }
+        let p = UIPreviewParameters()
+        p.backgroundColor = .clear
+        p.visiblePath = UIBezierPath(ovalIn: v.bounds)
+        return UITargetedPreview(view: v, parameters: p)
+    }
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration,
+                                highlightPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? { clearTarget() }
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration,
+                                dismissalPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? { clearTarget() }
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willDisplayMenuFor configuration: UIContextMenuConfiguration,
+                                animator: (any UIContextMenuInteractionAnimating)?) {
+        // our own press and pan stop: the hold is the menu's now
+        #if DEBUG
+        NSLog("wya hold menu shown for %d", controller?.menuHeld ?? -1)
+        #endif
+        lastTapTime = 0
+        downAt = nil; last = nil; lastMid = nil; lastMoveTime = 0; velocity = .zero
+        controller?.pressed = nil
+    }
+    func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration,
+                                animator: (any UIContextMenuInteractionAnimating)?) {
+        let done = { [weak self] in
+            self?.menuTarget?.removeFromSuperview(); self?.menuTarget = nil
+            self?.controller?.menuHeld = nil
+        }
+        if let animator { animator.addCompletion(done) } else { done() }
+    }
 
     private func active(_ event: UIEvent?) -> [UITouch] {
         (event?.allTouches ?? []).filter { $0.phase != .ended && $0.phase != .cancelled }

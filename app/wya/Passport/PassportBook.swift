@@ -23,13 +23,15 @@ final class BookState {
     var pages: Int { max(1, (order.count + 5) / 6) }
 
     /// THE TOOL TAPPED: the closed book comes out of the tool and opens on the page you last left
-    func open() {
+    func open(showing id: String? = nil) {
         guard !isOpen else { return }
         isOpen = true
         job += 1
         let j = job
         Task {
             order = await MarkStore.shared.passportOrder()
+            // Show in passport (the hold menu, 11.5): open on that stamp's page
+            if let id, let i = order.firstIndex(of: id) { page = i / 6 }
             page = min(page, pages - 1)
             Feel.tap()
             withAnimation(.spring(response: 0.42 * CardState.slow, dampingFraction: 1)) { p = 1 }
