@@ -108,14 +108,17 @@ struct PassportBook: View {
             PassportPage(id: "", order: b.order, hidden: nil, size: size,
                          pageIndex: b.turn > 0 ? min(current + 1, b.pages - 1) : current,
                          menu: b.turn == 0 ? { stampMenu($0) } : nil)
+            // THE LEAF keeps its height the whole way: it narrows toward the spine as it turns (the turn seen straight
+            // on), never growing toward the eye; a flat squeeze keeps the page's glass and its light on every frame
+            // (a 3D turn drops the glass while it moves)
             if b.turn > 0 {
                 // the current page turning away about the spine
                 PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current)
-                    .rotation3DEffect(.degrees(-b.turn), axis: (0, 1, 0), anchor: .leading, perspective: 0.25)
+                    .scaleEffect(x: max(0.001, cos(b.turn * .pi / 180)), y: 1, anchor: .leading)
             } else if b.turn < 0, current > 0 {
-                // the previous page coming back over from edge-on
+                // the previous page coming back from edge-on at the spine to flat: the forward turn backwards
                 PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current - 1)
-                    .rotation3DEffect(.degrees(-(90 + b.turn)), axis: (0, 1, 0), anchor: .leading, perspective: 0.25)
+                    .scaleEffect(x: max(0.001, cos(b.turn * .pi / 180)), y: 1, anchor: .leading)
             }
             // turned leaves stay as a line along the spine, never gone into nothing
             if b.cover > 1 {
