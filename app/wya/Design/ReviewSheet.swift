@@ -116,6 +116,29 @@ enum ReviewSheet {
         #endif
     }
 
+    /// D14's review: every flag in its three shapes as the app draws them from the vectors (square, 4:3, round), by name
+    @MainActor static func flagShapes(world w: World?) {
+        let names: [String: String] = {
+            var m: [String: String] = [:]
+            if let w { for p in w.places { m[p.id] = p.n } }
+            return m
+        }()
+        let items = Flags.ids.sorted { (names[$0] ?? $0) < (names[$1] ?? $1) }.map { id -> ReviewItem in
+            let v = HStack(spacing: 8) {
+                Group { if let f = Flags.square(id) { f.resizable() } else { Color.gray } }.frame(width: 40, height: 40)
+                Group { if let f = Flags.wide(id) { f.resizable() } else { Color.gray } }.frame(width: 53, height: 40)
+                Group { if let f = Flags.round(id) { f.resizable() } else { Color.gray } }.frame(width: 40, height: 40).clipShape(Circle())
+            }
+            return ReviewItem(id: id, name: names[id] ?? "?", view: AnyView(v))
+        }
+        // in two halves (one sheet of all 266 is too tall for the PNG writer)
+        let half = (items.count + 1) / 2
+        save("flag-shapes-1", title: "Flags as vectors: square, 4:3, round (D14), 1 of 2", items: Array(items[..<half]),
+             cell: CGSize(width: 170, height: 96), columns: 8)
+        save("flag-shapes-2", title: "Flags as vectors: square, 4:3, round (D14), 2 of 2", items: Array(items[half...]),
+             cell: CGSize(width: 170, height: 96), columns: 8)
+    }
+
     /// D14: the 12 emblem flags as the circle cuts them, beside the same flag square (the vectors)
     @MainActor static func emblems() {
         let ids = ["om", "mt", "uy", "fj", "bm", "fk", "gs", "ms", "tc", "ky", "ai", "vg"]
