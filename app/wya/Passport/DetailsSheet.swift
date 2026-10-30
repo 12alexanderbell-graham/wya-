@@ -21,7 +21,8 @@ final class DetailsState {
     var isOpen: Bool { key != nil }
 
     func open(_ key: PlaceKey, name: String, water: Water) {
-        guard self.key == nil, !opening else { return }
+        // one thing in the water at a time: not over Verify
+        guard self.key == nil, !opening, !VerifyState.shared.isOpen else { return }
         opening = true
         Task {
             defer { opening = false }

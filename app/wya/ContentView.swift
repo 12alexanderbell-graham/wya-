@@ -35,6 +35,8 @@ struct ContentView: View {
 
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
+                // the passport book from the plus's passport tool (Part 4.3)
+                PassportBook(water: water)
 
                 WaterView(water: water, map: map, tab: $tab)
 
@@ -83,6 +85,8 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 head.putAway(); water.hideCredit()
+                // the passport book goes back into its tool (and that touch does nothing else)
+                if BookState.shared.isOpen { BookState.shared.close(); return }
                 if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) }
                 else if VerifyState.shared.isOpen { VerifyState.shared.close(water: water) }
                 else { CardState.shared.close(map: map) }
@@ -90,11 +94,14 @@ struct ContentView: View {
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
                 head.putAwayAI()
+                BookState.shared.close()
                 if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map) }
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
                 guard !head.quickStamp, !map.locked else { return }
+                // the tap that put the book away opens no card (one press, one job)
+                guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
             // leaving a tab ends quick stamping too (3.6)
@@ -130,12 +137,15 @@ struct ContentView: View {
         .onChange(of: head.searching) { _, v in if v { closeCard() } }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
-        .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } }
+        .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
-            if DetailsState.shared.isOpen, water.stampedList {
-                // Details opened from the list: a pull down closes them, back to the list at full (A4.21 reversed)
-                if s != .full { DetailsState.shared.close(water: water); water.go(.full) }
+            if DetailsState.shared.isOpen || VerifyState.shared.isOpen, water.stampedList {
+                // Details or Verify opened from the list: a pull down closes them, back to the list at full (A4.21
+                // reversed)
+                if s != .full {
+                    DetailsState.shared.close(water: water); VerifyState.shared.close(water: water); water.go(.full)
+                }
             } else if water.stampedList, s != .full {
                 // the list pulled down: it goes, the water stays where the pull left it (4.6.3)
                 water.closeList(back: false)
@@ -150,6 +160,7 @@ struct ContentView: View {
     }
 
     private func closeCard() {
+        BookState.shared.close()
         DetailsState.shared.close(water: water)
         VerifyState.shared.close(water: water)
         CardState.shared.close(map: map)

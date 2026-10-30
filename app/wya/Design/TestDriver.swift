@@ -219,6 +219,10 @@ final class TestDriver {
                         CardState.shared.heldTop = water.form().top
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
+                // book [n]: the passport tool pressed (the book out or back); with n, open on page n (1-based)
+                case "book":
+                    if let n = Int(a) { BookState.shared.page = max(0, n - 1) }
+                    BookState.shared.toggle()
                 case "verify":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top

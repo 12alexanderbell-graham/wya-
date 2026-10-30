@@ -61,6 +61,7 @@ struct StampedList: View {
                     .contextMenu {
                         Button("Show on the map") { open(r) }
                         Button("Details") { details(r) }
+                        Button("Verify") { VerifyState.shared.open(.country(r.id), name: r.name, place: r.place, water: water) }
                         Button("Unstamp", role: .destructive) { unstamp(r) }
                     }
             }

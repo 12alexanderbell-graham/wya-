@@ -458,6 +458,8 @@ struct PassportPage: View {
     /// a stamp not drawn on the page (the one in flight, drawn by the card above the page)
     let hidden: String?
     let size: CGSize
+    /// a page given by number (the passport book's pages, 4.3); nil: the page of `id`
+    var pageIndex: Int? = nil
 
     static let fill: [(col: Int, row: Int)] = [(0, 0), (1, 1), (0, 2), (1, 0), (0, 1), (1, 2)]
 
@@ -484,7 +486,7 @@ struct PassportPage: View {
 
     var body: some View {
         // this place's page: where its stamp is, or the first free slot's
-        let page = Self.page(of: id, order: order)
+        let page = pageIndex ?? Self.page(of: id, order: order)
         let onPage = Array(order.dropFirst(page * 6).prefix(6))
         let corner = size.width * 0.036
         ZStack(alignment: .topLeading) {

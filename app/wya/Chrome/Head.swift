@@ -404,11 +404,13 @@ struct HeadView: View {
 
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
         let names = ["Quick stamping", "Your passport", "Your history", "Upload"]
-        let on = (i == 0 && head.quickStamp) || (i == 2 && head.history)
+        let on = (i == 0 && head.quickStamp) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
         return Button {
             Feel.tap(); Sound.tap()
             switch i {
             case 0: head.quickStamp.toggle()
+            // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
+            case 1: BookState.shared.toggle()
             case 2: head.history.toggle()
             default: head.toolsOpen = false
             }
