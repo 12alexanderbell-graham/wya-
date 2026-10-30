@@ -33,6 +33,9 @@ struct ContentView: View {
                 ShaderPrewarm()
                     .position(x: water.layout.W / 2, y: water.layout.capsule.midY)
 
+                // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
+                StampCard(map: map, water: water)
+
                 WaterView(water: water, map: map, tab: $tab)
 
                 if !Perf.shared.off.contains("head") { HeadView(map: map, water: water, head: head) }
@@ -77,8 +80,13 @@ struct ContentView: View {
             Actions.shared.registerMap(map: map, water: water, head: head)
             MapSettingsRows.registerActions(map: map)
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
-            map.onTouch = { [head, water] in head.putAway(); water.hideCredit() }
-            water.onTouch = { [head] in head.putAwayAI() }
+            map.onTouch = { [head, water, map] in head.putAway(); water.hideCredit(); CardState.shared.close(map: map) }
+            water.onTouch = { [head, map] in head.putAwayAI(); CardState.shared.close(map: map) }
+            // a confirmed tap on a place opens its stamping card (Part 4.2.1)
+            map.onPlaceTap = { [head, map] i, p in
+                guard !head.quickStamp, !map.locked else { return }
+                CardState.shared.open(i, at: p, map: map)
+            }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
@@ -103,8 +111,11 @@ struct ContentView: View {
         // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
-            if open { water.openSettings() } else { water.closeSettings() }
+            if open { CardState.shared.close(map: map); water.openSettings() } else { water.closeSettings() }
         }
+        // any control of the head closes the card first, keeping its changes (Part 4.2.3)
+        .onChange(of: head.searching) { _, v in if v { CardState.shared.close(map: map) } }
+        .onChange(of: head.toolsOpen) { _, v in if v { CardState.shared.close(map: map) } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
         }

@@ -47,6 +47,10 @@ final class MapController {
     /// the place darkened under a finger (or for a moment after a search); the tap is felt only under a finger
     /// a finger has landed on the map (the head puts settings or the AI away then, and the touch goes on as normal)
     @ObservationIgnored var onTouch: (() -> Void)?
+    /// a confirmed tap on a place (after the double-tap window): its index and the screen point (Part 4.2.1)
+    @ObservationIgnored var onPlaceTap: ((Int, CGPoint) -> Void)?
+    /// a place held darkened while its card is up (Part 0.2.3 keepPressed / releasePressed)
+    var kept: Int? { didSet { if kept != oldValue { needsFrame = true } } }
     @ObservationIgnored var pressed: Int? {
         didSet {
             guard pressed != oldValue else { return }

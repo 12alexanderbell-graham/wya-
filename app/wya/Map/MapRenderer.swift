@@ -450,7 +450,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             relief(kind, tint)
         }
         // the place being pressed: drawn by the press below, not by its group
-        let pressed = controller.pressed
+        // under a finger, or held while its stamping card is up
+        let pressed = controller.pressed ?? controller.kept
         if controller.showsStamped { group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV) }
         if controller.showsWished { group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV) }
         // the press darkens the relief under your finger, keeping the country's own colour (A1.1): the whole place at
@@ -728,6 +729,15 @@ final class MapMTKView: MTKView {
             } else {
                 lastTapTime = t.timestamp; lastTapAt = d0
                 if c.locked { Feel.refuse() }
+                else if let hit = c.pressed {
+                    // A CONFIRMED TAP (Part 4.2.1): once the double-tap window has passed with no second tap, the place
+                    // is handed over (the stamping card opens); a double tap within the window never opens anything
+                    let stamp = t.timestamp
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
+                        guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
+                        c.onPlaceTap?(hit, d0)
+                    }
+                }
             }
         }
         let recent = t.map { $0.timestamp - lastMoveTime < 0.08 } ?? false
