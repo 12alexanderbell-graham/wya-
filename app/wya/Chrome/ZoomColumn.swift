@@ -7,6 +7,8 @@ struct ZoomColumn: View {
     let map: MapController
     let water: Water
     let head: HeadState
+    /// the sideways mark's action (1.11)
+    var sideways: () -> Void = {}
 
     var body: some View {
         let f = water.form()
@@ -49,7 +51,7 @@ struct ZoomColumn: View {
             cell("lock", on: map.locked, label: map.locked ? "Unlock the map" : "Lock the map", ink: ink, feel: .notch) { map.locked.toggle() }
                 .offset(x: slide(3))
                 .allowsHitTesting(slide(3) < 30)
-            cell("fullscreen", label: "Full screen", ink: ink) { }
+            cell("fullscreen", label: "Full screen", ink: ink, silent: true) { sideways() }
                 .offset(x: slide(4))
                 .allowsHitTesting(slide(4) < 30)
         }
@@ -76,9 +78,11 @@ struct ZoomColumn: View {
 
     /// a two-state switch landing is a `notch` (the lock); any other mark a `tap` (Part 0.3)
     enum CellFeel { case tap, notch }
-    private func cell(_ key: String, on: Bool = false, label: String, ink: Color, dim: Bool = false, feel: CellFeel = .tap, _ action: @escaping () -> Void) -> some View {
+    private func cell(_ key: String, on: Bool = false, label: String, ink: Color, dim: Bool = false, feel: CellFeel = .tap,
+                      silent: Bool = false, _ action: @escaping () -> Void) -> some View {
         Button {
-            if feel == .notch { Feel.notch() } else { Feel.tap() }
+            // a silent cell plays its own feel (the sideways mark refuses during an upload)
+            if !silent { if feel == .notch { Feel.notch() } else { Feel.tap() } }
             action()
         } label: {
             LimitIcon(key: key, on: on, ink: ink, dim: dim)

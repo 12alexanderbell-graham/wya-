@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var head = HeadState()
     @State private var tab = 0
     @State private var launch = Launch.shared
+    @State private var side = Sideways.shared
 
     var body: some View {
         // THE SCREEN, pinned to its top left: everything inside is sized from the window (Layout), never from the room
@@ -25,9 +26,14 @@ struct ContentView: View {
                 // the very first frame, before the layout is known: just the sea, nothing in a wrong place
                 Palette.blue
             } else {
-                if !Perf.shared.off.contains("map") { MapLayer(controller: map) }
+                if !Perf.shared.off.contains("map") { sidewaysMap }
 
-                if !Perf.shared.off.contains("zoom") { ZoomColumn(map: map, water: water, head: head) }
+                // sideways (1.11) the head goes up past the top edge, the column off the right edge, the water down past
+                // the bottom edge
+                if !Perf.shared.off.contains("zoom") {
+                    ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
+                        .offset(x: side.chromeOut ? 90 : 0)
+                }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)
                 ShaderPrewarm()
@@ -39,8 +45,13 @@ struct ContentView: View {
                 PassportBook(water: water, map: map)
 
                 WaterView(water: water, map: map, tab: $tab)
+                    .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
 
-                if !Perf.shared.off.contains("head") { HeadView(map: map, water: water, head: head) }
+                if !Perf.shared.off.contains("head") {
+                    HeadView(map: map, water: water, head: head)
+                        .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
+                }
+                if side.on { SidewaysMarks(map: map, L: water.layout) }
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
             }
@@ -76,6 +87,9 @@ struct ContentView: View {
         // the keyboard comes up over the map; nothing moves out of its way (the results sit under the head)
         .ignoresSafeArea(.keyboard)
         .defersSystemGestures(on: .top)
+        // sideways: no status bar, no home indicator
+        .statusBarHidden(side.on)
+        .persistentSystemOverlays(side.on ? .hidden : .automatic)
         // LINKS INTO THE MAP (19.6): whatever is out goes back first (keeping its changes), then the flight
         .onOpenURL { url in
             Task { await DeepLink.open(url, map: map) { putAwayForLink() } }
@@ -114,6 +128,11 @@ struct ContentView: View {
                 // at the review a found country's tap drops or keeps it (9.5)
                 if water.upload { _ = UploadState.shared.tap(i); return }
                 guard !map.locked else { return }
+                // sideways (1.11) a tap opens nothing; quick stamping still stamps
+                if Sideways.shared.on {
+                    if head.quickStamp { Self.quickStamp(i, map: map) } else { Feel.refuse() }
+                    return
+                }
                 // a waiting find (9.6), quick stamping off: its review opens instead of the card
                 if !head.quickStamp, UploadState.shared.waits(i) { UploadState.shared.openReview(water: water, map: map); return }
                 // QUICK STAMPING (Part 4.7): the tap toggles the stamp at once, no card
@@ -191,11 +210,30 @@ struct ContentView: View {
 
     /// a link closes everything transient as a tab change does (the AI in use stays)
     private func putAwayForLink() {
+        Sideways.shared.leave(feel: false)
         closeCard()
         head.searching = false
         head.toolsOpen = false
         head.closeSettings()
         water.closeList(back: false)
+    }
+
+    /// THE MAP, turned sideways about the screen's centre (1.11): portrait size at rest, the diagonal's square while it
+    /// turns (no corner ever empty), landscape size at rest sideways; the camera's centre stays the screen's centre,
+    /// so a size change shows the same picture
+    private var sidewaysMap: some View {
+        let L = water.layout
+        let D = (L.W * L.W + L.H * L.H).squareRoot().rounded(.up)
+        let w = side.square ? D : (side.landscape ? L.H : L.W)
+        let h = side.square ? D : (side.landscape ? L.W : L.H)
+        return MapLayer(controller: map)
+            .frame(width: w, height: h)
+            .rotationEffect(.degrees(side.angle))
+            .position(x: L.W / 2, y: L.H / 2)
+    }
+
+    private func enterSideways() {
+        Sideways.shared.enter(water: water, head: head, map: map) { closeCard() }
     }
 
     private func closeCard() {
