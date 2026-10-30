@@ -106,7 +106,16 @@ final class CardState {
         p = 0
         Task {
             order = await MarkStore.shared.passportOrder()
-            if delay > 0 { try? await Task.sleep(for: .milliseconds(Int(delay * 1000))) }
+            // NOTHING CLASHES: when the water has to
+            // go down first, the card only starts growing once the water's edge is below where the card will end, so
+            // the growing card and the falling water never cross (the book's 0.1 s overlap did exactly that)
+            if delay > 0, let water, let to = goingTop {
+                let start = CACurrentMediaTime()
+                while water.form().top < to - 1, CACurrentMediaTime() - start < 1.0 {
+                    try? await Task.sleep(for: .milliseconds(16))
+                }
+            }
+            guard place == i else { return }
             Feel.tap()
             withAnimation(.spring(response: 0.42, dampingFraction: 1)) { p = 1 }
         }
