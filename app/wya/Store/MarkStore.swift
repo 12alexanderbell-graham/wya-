@@ -127,6 +127,14 @@ final class MarkStore {
         return r.changed.count
     }
 
+    /// AN UPLOAD'S FINDS STAMPED with their found trips (Part 9.5's go): one write, one undo step
+    func importFinds(_ finds: [TravelStore.Found], source: MarkSource, words: String) async {
+        guard let store else { return }
+        let acc = account
+        guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return }
+        apply(r, words: words, origin: nil, who: .importer)
+    }
+
     /// DETAILS (Part 4.4): read a stamped place's, and write them back once when Details closes (one undo step;
     /// nothing changed, nothing written and no undo drop)
     func details(_ key: PlaceKey) async -> (details: StampDetails, times: Int, lived: Bool)? {

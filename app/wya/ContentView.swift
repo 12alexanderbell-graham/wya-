@@ -105,8 +105,10 @@ struct ContentView: View {
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
-                // the upload sheet up: finding owns the map's presses, and a tap while choosing has closed it (9.3, 9.4)
-                guard !map.locked, !water.upload else { return }
+                // the upload sheet up: finding owns the map's presses, a tap while choosing has closed it (9.3, 9.4), and
+                // at the review a found country's tap drops or keeps it (9.5)
+                if water.upload { _ = UploadState.shared.tap(i); return }
+                guard !map.locked else { return }
                 // QUICK STAMPING (Part 4.7): the tap toggles the stamp at once, no card
                 if head.quickStamp { Self.quickStamp(i, map: map); return }
                 // the tap that put the book away opens no card (one press, one job)
