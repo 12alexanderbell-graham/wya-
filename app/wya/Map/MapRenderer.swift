@@ -729,9 +729,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
                 relief(2, tint, pattern: pattern)
             }
-            if controller.showsStamped { marked(regionStampedIndex, tint: Palette.limeV, pattern: hatch) }
-            if controller.showsWished { marked(regionWishedIndex, tint: Palette.blueV, pattern: dots) }
-            let rpress = pressed == sc.place ? controller.regionPressed : nil
+            // the towns level (6.6): the finest regions as borders only, no fills, so the towns read
+            let fills = !controller.regionTowns
+            if fills, controller.showsStamped { marked(regionStampedIndex, tint: Palette.limeV, pattern: hatch) }
+            if fills, controller.showsWished { marked(regionWishedIndex, tint: Palette.blueV, pattern: dots) }
+            let rpress = pressed == sc.place && fills ? controller.regionPressed : nil
             if let u = rpress {
                 let st = controller.showsStamped && controller.regionStamped.contains(u)
                 let wi = controller.showsWished && controller.regionWished.contains(u)
@@ -744,7 +746,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // once, solid in our grey so neighbours are one colour; yours lime, wished blue; the one under the finger the
         // darker grey (or its colour darkened). They just appear. No circles (30 Oct 23:38); dots only with Map
         // settings' Town dots on
-        if placesOn, let cc = controller.placeOpenID, let sc = controller.townScenes[cc] {
+        if placesOn || controller.regionTowns, let cc = controller.placeOpenID, let sc = controller.townScenes[cc] {
             if townBuffers[cc]?.scene !== sc, !sc.fans.isEmpty,
                let pb = device.makeBuffer(bytes: sc.points, length: sc.points.count * MemoryLayout<SIMD2<Float>>.stride),
                let fb = device.makeBuffer(bytes: sc.fans, length: sc.fans.count * 4) {

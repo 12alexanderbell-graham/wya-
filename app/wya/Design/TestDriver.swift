@@ -300,7 +300,9 @@ final class TestDriver {
                 case "regionslow": RegionLines.slow = Double(a) ?? 1
                 // regionlevel 2: the open country's level from that row of its table (the level line's pick)
                 case "regionlevel":
-                    if let m = map, let sc = m.regionScene, let r = Int(a) { m.openRegions(sc.place, row: r) }
+                    if let m = map, let sc = m.regionScene, let r = Int(a) {
+                        if r == 99 { m.showRegionTowns() } else { m.leaveRegionTowns(); m.openRegions(sc.place, row: r) }
+                    }
                 case "regiontap":
                     if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
                         let pt = CGPoint(x: x, y: y)

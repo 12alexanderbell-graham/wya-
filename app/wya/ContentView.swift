@@ -170,6 +170,7 @@ struct ContentView: View {
                 // the tap that closed search opens nothing (one press, one job)
                 guard CACurrentMediaTime() - head.mapClosedSearchAt > 0.6 else { return }
                 // the region map: its regions answer (6.5); while the list is up or a country is still loading, nothing
+                if map.regionTowns { if map.townPressed != nil { townTapped() }; return }
                 if map.regionScene != nil { regionTapped(); return }
                 if head.mode == .regions { return }
                 // the Places map (7.4, the old app's system): a town of the open country answers; any other country opens
@@ -475,7 +476,7 @@ struct ContentView: View {
         // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
         // (30 Oct 23:55: "You're long pressing Frankfurt, so you get the page for Frankfurt"); empty land of the open
         // country: no menu yet (its land rows, Add a place here · What's here? · Copy coordinates, wait for 7.8)
-        if map.placesMode, let open = map.placeOpen {
+        if map.placesMode || map.regionTowns, let open = map.placeOpen {
             if let t = map.townHit(at: p), let sc = map.townScenes[t.cc], t.i < sc.towns.count {
                 map.townPressed = t
                 return townMenu(sc.towns[t.i], cc: t.cc, place: open, at: p, map: map, water: water, head: head)

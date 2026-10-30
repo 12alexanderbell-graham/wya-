@@ -283,12 +283,19 @@ struct SheetContent: View {
     /// THE REGION MAP'S LINE (6.6, the old app's band row): the country's name and its levels, in the caption's place
     private func regionLevels(width: CGFloat) -> AnyView? {
         guard let sc = map.regionScene, let w = map.world, sc.place < w.places.count else { return nil }
-        let levels = RegionCatalog.shared.used(sc.id).map { RegionLevels.Level(row: $0.row, word: RegionsMenuModel.word($0.level.many)) }
+        var levels = RegionCatalog.shared.used(sc.id).map { RegionLevels.Level(row: $0.row, word: RegionsMenuModel.word($0.level.many)) }
+        // the last word: towns (6.6), for a country with towns in the data
+        levels.append(RegionLevels.Level(row: Self.townsRow, word: "towns"))
         // while another level loads, the one asked for is already the bold one
-        let current = map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
+        let current = map.regionTowns ? Self.townsRow : map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
         return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
-                                    width: width, visible: captionShown) { row in map.openRegions(sc.place, row: row) })
+                                    width: width, visible: captionShown) { row in
+            if row == Self.townsRow { map.showRegionTowns() } else { map.leaveRegionTowns(); map.openRegions(sc.place, row: row) }
+        })
     }
+
+    /// the towns level's row in the level line (no region level uses it)
+    static let townsRow = 99
 
     /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
     private var placesCaption: (name: String, count: Int, tail: String)? {

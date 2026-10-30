@@ -25,7 +25,7 @@ final class TownNamesView: UIView {
     /// called every frame the map draws; `moving`: the camera or a finger is moving it (at rest no name is left half
     /// rolled: nothing cut off at rest, 30 Oct 16:04)
     func update(_ m: MapController, moving: Bool) {
-        guard m.placesMode, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return }
+        guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return }
         if key != cc { clear(); key = cc }
         let k = m.k
         // from 3x the country's framing zoom (each name rolling in across its own band from there)
