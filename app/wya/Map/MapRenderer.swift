@@ -372,6 +372,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         last = now
         if controller.view != view.bounds.size { controller.view = view.bounds.size }
         let moving = controller.step(dt)
+        // the Places map's names (7.4), placed for this frame's camera
+        (view as? MapMTKView)?.townNames.update(controller, moving: moving || controller.touching)
         // 120 a second while anything moves, 30 for the lights alone
         view.preferredFramesPerSecond = (moving || controller.touching || controller.needsFrame) ? 120 : 30
         controller.needsFrame = false
@@ -926,6 +928,13 @@ final class MapRenderer: NSObject, MTKViewDelegate {
 /// stamping, it never stops looking) - a double tap zooms in about the finger
 final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     weak var controller: MapController?
+    /// the Places map's names, over the map (they take no touch)
+    lazy var townNames: TownNamesView = {
+        let v = TownNamesView(frame: bounds)
+        v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(v)
+        return v
+    }()
     private var downAt: CGPoint?
     private var downTime: CFTimeInterval = 0
     private var lastTapTime: CFTimeInterval = 0
