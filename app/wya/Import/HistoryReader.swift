@@ -19,8 +19,9 @@ import Foundation
 /// A visit (B, C, D) covers every day from its start to its end; points are single instants.
 ///
 /// A Records.json over 50 MB is scanned byte by byte from a memory-mapped file (only each location's coordinate,
-/// accuracy and time keys), never parsed whole. Not here yet (logged): the same scanner for C and D (their files are
-/// smaller; today read whole), the level-1 region (step 3's second half). Photos: PhotosReader.
+/// accuracy and time keys), never parsed whole; a C or D file over 50 MB is cut into its segments (and C's raw signals)
+/// by the same kind of byte pass, each parsed on its own. Not here yet (logged): the level-1 region (step 3's second
+/// half). Photos: PhotosReader.
 nonisolated enum HistoryReader {
     enum Shape: String, Sendable { case records = "A", semantic = "B", android = "C", iphone = "D" }
 
@@ -47,6 +48,8 @@ nonisolated enum HistoryReader {
     static func read(_ data: Data) -> Result? {
         // a big Records.json (years of points, hundreds of MB) is scanned, never parsed whole
         if data.count > streamOver, isRecords(data) { return scanRecords(data) }
+        // so is a big Timeline.json (C) or iPhone export (D): one segment parsed at a time
+        if data.count > streamOver, let r = scanSegments(data) { return r }
         guard let j = try? JSONSerialization.jsonObject(with: data) else { return nil }
         var r: Result
         if let o = j as? [String: Any], let locs = o["locations"] as? [[String: Any]] {
@@ -75,12 +78,7 @@ nonisolated enum HistoryReader {
         } else if let o = j as? [String: Any], let segs = o["semanticSegments"] as? [[String: Any]] {
             r = Result(shape: .android, samples: [], dropped: 0)
             segments(segs, &r)
-            for s in (o["rawSignals"] as? [[String: Any]]) ?? [] {
-                guard let p = s["position"] as? [String: Any] else { continue }
-                if let ll = latLng(p["LatLng"] ?? p["latLng"]), let at = date(p["timestamp"]) {
-                    add(&r, ll.0, ll.1, at, offsetOf(p["timestamp"]), nil)
-                } else { r.dropped += 1 }
-            }
+            signals((o["rawSignals"] as? [[String: Any]]) ?? [], &r)
         } else if let a = j as? [[String: Any]], a.contains(where: { $0["startTime"] != nil }) {
             r = Result(shape: .iphone, samples: [], dropped: 0)
             segments(a, &r)
@@ -177,6 +175,90 @@ nonisolated enum HistoryReader {
             }
         }
         return r
+    }
+
+    /// C OR D WITHOUT PARSING THE FILE WHOLE: one pass over the bytes finds each element of D's top-level array, or of
+    /// C's `semanticSegments` and `rawSignals` arrays, and parses only that element (a few KB); strings are stepped over
+    /// whole. Nil when the file holds no segment (then it is read the ordinary way).
+    static func scanSegments(_ d: Data) -> Result? {
+        var r = Result(shape: .iphone, samples: [], dropped: 0)
+        var found = false
+        d.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let b = raw.bindMemory(to: UInt8.self)
+            guard let base = raw.baseAddress else { return }
+            let n = b.count
+            var i = 0
+            var depth = 0
+            var topArray = false             // D: the file is one array
+            var lastKey1 = (0, 0)            // C: the last string read at depth 1 (the key before an array)
+            var arrayKind = 0                // C: 1 inside semanticSegments, 2 inside rawSignals, 0 elsewhere
+            var start = -1, kind = 0         // the element being read
+            var segs: [[String: Any]] = [], sigs: [[String: Any]] = []
+            func flush() {
+                autoreleasepool {
+                    segments(segs, &r); signals(sigs, &r)
+                }
+                segs.removeAll(keepingCapacity: true); sigs.removeAll(keepingCapacity: true)
+            }
+            func key(_ k: String) -> Bool {
+                let u = Array(k.utf8)
+                return lastKey1.1 - lastKey1.0 == u.count && u.withUnsafeBufferPointer { kp in
+                    memcmp(base + lastKey1.0, kp.baseAddress!, u.count) == 0
+                }
+            }
+            while i < n {
+                let c = b[i]
+                switch c {
+                case 0x22: // a string: stepped over whole; at depth 1 it may be C's array key
+                    let s0 = i + 1
+                    i += 1
+                    while i < n, b[i] != 0x22 { if b[i] == 0x5C { i += 1 }; i += 1 }
+                    if depth == 1 { lastKey1 = (s0, i) }
+                case 0x5B: // [
+                    if depth == 0 { topArray = true }
+                    if depth == 1, !topArray { arrayKind = key("semanticSegments") ? 1 : key("rawSignals") ? 2 : 0 }
+                    depth += 1
+                case 0x7B: // {
+                    if start < 0 {
+                        if topArray, depth == 1 { start = i; kind = 1 }
+                        else if !topArray, depth == 2, arrayKind != 0 { start = i; kind = arrayKind }
+                    }
+                    depth += 1
+                case 0x7D: // }
+                    depth -= 1
+                    let back = topArray ? 1 : 2
+                    if start >= 0, depth == back {
+                        // each element's own pool, so the parser's temporaries never pile up over a big file
+                        autoreleasepool {
+                            let slice = Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: base + start), count: i + 1 - start, deallocator: .none)
+                            if let o = (try? JSONSerialization.jsonObject(with: slice)) as? [String: Any] {
+                                if kind == 1 { if o["startTime"] != nil { found = true }; segs.append(o) } else { sigs.append(o) }
+                            } else { r.dropped += 1 }
+                        }
+                        if segs.count + sigs.count >= 500 { flush() }
+                        start = -1
+                    }
+                case 0x5D: // ]
+                    depth -= 1
+                    if depth == 1 { arrayKind = 0 }
+                default: break
+                }
+                i += 1
+            }
+            flush()
+            if !topArray { r.shape = .android }
+        }
+        return found ? r : nil
+    }
+
+    /// C's raw signals: a position with its time (and the offset its time carries)
+    private static func signals(_ sigs: [[String: Any]], _ r: inout Result) {
+        for s in sigs {
+            guard let p = s["position"] as? [String: Any] else { continue }
+            if let ll = latLng(p["LatLng"] ?? p["latLng"]), let at = date(p["timestamp"]) {
+                add(&r, ll.0, ll.1, at, offsetOf(p["timestamp"]), nil)
+            } else { r.dropped += 1 }
+        }
     }
 
     /// C's and D's segments: a visit for its whole span, an activity's two ends, the path's points
@@ -293,12 +375,55 @@ nonisolated enum HistoryReader {
     }
 
     static func date(_ v: Any?) -> Date? {
-        guard let s = v as? String else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = f.date(from: s) { return d }
-        f.formatOptions = [.withInternetDateTime]
-        return f.date(from: s)
+        guard var s = v as? String else { return nil }
+        // the usual "2024-10-01T19:00:00.000+05:45" read straight from its bytes (a formatter per time made a 60 MB
+        // file take 90 s); anything else goes to Apple's ISO formatter
+        if let d = s.withUTF8({ iso($0) }) { return d }
+        return isoFrac.date(from: s) ?? isoPlain.date(from: s)
+    }
+    nonisolated(unsafe) private static let isoFrac: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
+    }()
+    nonisolated(unsafe) private static let isoPlain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f
+    }()
+    /// YYYY-MM-DDTHH:MM:SS, an optional fraction, then Z or ±HH:MM (nothing after); nil for any other form
+    static func iso(_ b: UnsafeBufferPointer<UInt8>) -> Date? {
+        let n = b.count
+        guard n >= 20 else { return nil }
+        func num(_ i: Int, _ k: Int) -> Int? {
+            var v = 0
+            for j in i ..< i + k { let c = b[j]; guard c >= 48, c <= 57 else { return nil }; v = v * 10 + Int(c - 48) }
+            return v
+        }
+        guard b[4] == 45, b[7] == 45, b[10] == 84 || b[10] == 116, b[13] == 58, b[16] == 58,
+              let y = num(0, 4), let mo = num(5, 2), let da = num(8, 2), let h = num(11, 2), let mi = num(14, 2), let se = num(17, 2),
+              (1 ... 12).contains(mo), da >= 1, h < 24, mi < 60, se < 60 else { return nil }
+        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+        guard da <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][mo - 1] else { return nil }
+        var i = 19
+        var frac = 0.0
+        if i < n, b[i] == 46 {
+            i += 1
+            var scale = 0.1
+            while i < n, b[i] >= 48, b[i] <= 57 { frac += Double(b[i] - 48) * scale; scale /= 10; i += 1 }
+        }
+        guard i < n else { return nil }
+        var off = 0
+        if b[i] == 90 || b[i] == 122 { i += 1 }
+        else if (b[i] == 43 || b[i] == 45), i + 6 <= n, b[i + 3] == 58, let oh = num(i + 1, 2), let om = num(i + 4, 2) {
+            off = (oh * 60 + om) * (b[i] == 45 ? -1 : 1); i += 6
+        } else { return nil }
+        guard i == n else { return nil }
+        // days since 1970 from the civil date (Howard Hinnant's days_from_civil)
+        let yy = mo <= 2 ? y - 1 : y
+        let era = (yy >= 0 ? yy : yy - 399) / 400
+        let yoe = yy - era * 400
+        let doy = (153 * ((mo + 9) % 12) + 2) / 5 + da - 1
+        let days = era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468
+        // milliseconds, as the formatter keeps them
+        let ms = (frac * 1000).rounded()
+        return Date(timeIntervalSince1970: Double(days * 86400 + h * 3600 + mi * 60 + se - off * 60) + ms / 1000)
     }
 
     /// the offset an ISO time carries, in minutes ("...+05:45" 345, "...Z" 0); nil when there is none

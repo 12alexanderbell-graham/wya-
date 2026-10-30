@@ -9,7 +9,10 @@ import Photos
 enum HistoryCheck {
     static func run(map: MapController) -> [String] {
         var out: [String] = []
-        func check(_ name: String, _ ok: Bool, _ seen: String) { out.append("\(ok ? "PASS" : "FAIL") \(name): \(seen)") }
+        func check(_ name: String, _ ok: Bool, _ seen: String) {
+            out.append("\(ok ? "PASS" : "FAIL") \(name): \(seen)")
+            NSLog("wya historycheck %@", out.last!)   // as it goes, so a check that never ends shows where
+        }
         guard let w = map.world else { return ["FAIL world: not loaded"] }
         let placeAt: (Double, Double) -> String? = { lat, lon in
             w.place(at: EqualEarth.project(lon: lon, lat: lat)).map { w.places[$0].id }
@@ -99,6 +102,50 @@ enum HistoryCheck {
         let hr = HistoryReader.read(huge)
         let ms = Int(Date().timeIntervalSince(t0) * 1000)
         check("A 60 MB scanned", hr?.samples.count == copies, "\(copies) points, \(hr?.samples.count ?? -1) read in \(ms) ms (debug build)")
+
+        // times read from their bytes agree with Apple's ISO formatter (fractions, offsets, Z, a leap day, a bad day)
+        let fFrac = ISO8601DateFormatter(); fFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fPlain = ISO8601DateFormatter(); fPlain.formatOptions = [.withInternetDateTime]
+        let times = ["2024-10-01T19:00:00.000Z", "2024-12-31T23:50:00.000+01:00", "2024-10-05T08:00:00.123+05:45",
+                     "1999-01-01T00:00:00Z", "2024-02-29T12:00:00-08:00", "2023-02-29T12:00:00Z", "2024-07-01T23:30:00.5Z",
+                     "1969-07-20T20:17:40Z"]
+        let bad = times.filter { t in
+            // (an impossible day, 29 Feb 2023, is left by the byte reader to Apple's, which reads it leniently)
+            let mine = HistoryReader.date(t)
+            let apple = fFrac.date(from: t) ?? fPlain.date(from: t)
+            return mine.map { Int(($0.timeIntervalSince1970 * 1000).rounded()) } != apple.map { Int(($0.timeIntervalSince1970 * 1000).rounded()) }
+        }
+        check("times read like Apple's", bad.isEmpty, bad.isEmpty ? "\(times.count) agree" : "differ: \(bad.joined(separator: " "))")
+
+        // C and D cut into segments (big files): the same samples as parsing whole, on many copies of the fixtures above
+        // (a string holding a bracket and a brace in C's profile, which is not a segment), then a 60 MB D, timed
+        func same(_ name: String, _ json: String) {
+            let whole = HistoryReader.read(Data(json.utf8))
+            let saved = HistoryReader.streamOver
+            HistoryReader.streamOver = 0
+            let cut = HistoryReader.read(Data(json.utf8))
+            HistoryReader.streamOver = saved
+            check("\(name) cut = parsed", whole?.samples == cut?.samples && whole?.dropped == cut?.dropped && whole?.shape == cut?.shape
+                  && (whole?.samples.count ?? 0) > 100,
+                  "parsed \(whole?.samples.count ?? -1)/\(whole?.dropped ?? -1), cut \(cut?.samples.count ?? -1)/\(cut?.dropped ?? -1)")
+        }
+        let cSeg = #"{"startTime":"2024-10-01T19:00:00.000Z","endTime":"2024-10-01T20:00:00.000Z","startTimeTimezoneUtcOffsetMinutes":345,"visit":{"topCandidate":{"placeLocation":{"latLng":"27.7172°, 85.3240°"}}},"timelinePath":[{"point":"27.7°, 85.3°","time":"2024-10-01T19:30:00.000+05:45"}]}"#
+        let cSig = #"{"position":{"LatLng":"48.8566°, 2.3522°","timestamp":"2024-10-05T08:00:00.000+02:00"}}"#
+        same("C", "{\"semanticSegments\":[" + Array(repeating: cSeg, count: 150).joined(separator: ",")
+             + "],\"rawSignals\":[" + Array(repeating: cSig, count: 150).joined(separator: ",")
+             + #"],"userLocationProfile":{"frequentPlaces":[{"label":"HOME ]}{ \"x","placeLocation":"1°, 2°"}]}}"#)
+        let dSeg = #"{"startTime":"2024-12-31T23:50:00.000+01:00","endTime":"2025-01-01T00:40:00.000+01:00","activity":{"start":"geo:47.376900,8.541700","end":"geo:47.366700,8.550000"},"timelinePath":[{"point":"geo:47.3700,8.5450","durationMinutesOffsetFromStartTime":"5"},{"point":"geo:47.3680,8.5480","durationMinutesOffsetFromStartTime":"30"}]}"#
+        same("D", "[" + Array(repeating: dSeg, count: 150).joined(separator: ",\n") + "]")
+        var hugeD = Data("[".utf8)
+        let oneD = Data(dSeg.utf8)
+        var segCount = 0
+        while hugeD.count < 60 * 1024 * 1024 { if segCount > 0 { hugeD.append(comma) }; hugeD.append(oneD); segCount += 1 }
+        hugeD.append(Data("]".utf8))
+        let t1 = Date()
+        let hd = HistoryReader.read(hugeD)
+        let msD = Int(Date().timeIntervalSince(t1) * 1000)
+        check("D 60 MB cut", hd?.samples.count == segCount * 4 && hd?.shape == .iphone,
+              "\(segCount) segments, \(hd?.samples.count ?? -1) samples in \(msD) ms (debug build)")
 
         // visits (step 5): photos allow 4 days between, history 1; home (step 6): the place in over 40% of the months
         func row(_ day: String, _ place: String) -> HistoryReader.Presence {
