@@ -23,6 +23,13 @@ nonisolated enum Palette {
     static let creamV = rgb(0xfbf6f2), beigeDarkV = rgb(0xbcb8b6), whiteV = rgb(0xffffff), inkV = rgb(0x000000)
     static let greyV = rgb(0xd7d2c7), limeV = rgb(0xd4e249), blueV = rgb(0x78aef8)
     static let tealV = rgb(0xb0e0cd), yellowV = rgb(0xffe04a), redV = rgb(0xd94f3d), brownV = rgb(0xa9784f)
+    /// THE FILTER'S PASSES (Part 1.14): a colour multiplied into the land n times (1 to 5), in steps small enough that
+    /// the fifth lime still reads lime, never green (the book's glitch; checked on the review sheet): the power runs
+    /// 1, 1.35, 1.7, 2.05, 2.4
+    static func passes(_ v: SIMD4<Float>, _ n: Int) -> SIMD4<Float> {
+        let e = 1 + 0.35 * Float(min(5, max(1, n)) - 1)
+        return SIMD4(pow(v.x, e), pow(v.y, e), pow(v.z, e), 1)
+    }
     /// the same twelve by name, for the living field's shader (LivingField, from the old app); greyDark is retired
     static let named: [String: SIMD3<Double>] = [
         "cream": hex3(0xfbf6f2), "beige-dark": hex3(0xbcb8b6), "white": hex3(0xffffff), "ink": hex3(0x000000),

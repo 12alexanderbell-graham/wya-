@@ -460,8 +460,22 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             let marked = (controller.showsStamped ? controller.stamped : []).union(controller.showsWished ? controller.wished : [])
             group(controller.territories.filter { !marked.contains($0) && $0 != pressed }, kind: 2, tint: Palette.whiteV)
         }
-        if controller.showsStamped { group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV) }
-        if controller.showsWished { group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV) }
+        // Stamped+ and Wishlist+ (1.14): each place by its passes (lime by visits, ink where you lived; blue by want)
+        if controller.filter == 2 {
+            let sp = controller.stampPasses
+            let st = controller.stamped.filter { $0 != pressed }
+            group(st.filter { sp[$0] == 0 }.sorted(), kind: 2, tint: Palette.inkV)
+            for n in 1 ... 5 { group(st.filter { (sp[$0] ?? 2) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.limeV, n)) }
+        } else if controller.showsStamped {
+            group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV)
+        }
+        if controller.filter == 3 {
+            let wp = controller.wantPasses
+            let wi = controller.wished.filter { $0 != pressed }
+            for n in 1 ... 5 { group(wi.filter { (wp[$0] ?? 1) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.blueV, n)) }
+        } else if controller.showsWished {
+            group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV)
+        }
         // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade); a
         // stamped place is never a find (its row reads "+n trips" instead)
         if !controller.found.isEmpty {
