@@ -67,6 +67,11 @@ struct ContentView: View {
                 // the open region map's country and level written into the session as they change
                 Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
                     .onChange(of: regionKey) { _, _ in saveSession(after: 0) }
+                    // the upload from Regions: once finding starts the wheel turns to Countries by itself, because the
+                    // review always opens on the Countries map (6.3's connections, A6.4)
+                    .onChange(of: UploadState.shared.phase) { _, ph in
+                        if ph == .finding, head.mode == .regions { head.quickStamp = false; head.mode = .countries; Feel.notch() }
+                    }
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
             }
