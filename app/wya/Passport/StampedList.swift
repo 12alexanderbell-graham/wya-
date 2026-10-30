@@ -14,6 +14,8 @@ struct StampedList: View {
     /// where the caption's bottom is (the rows start 12 pt under it)
     let top: CGFloat
     @State private var marks = MarkStore.shared
+    /// each place's latest year and verified, from the store
+    @State private var info: [String: (year: Int?, verified: Bool)] = [:]
 
     struct Row: Identifiable {
         let id: String
@@ -28,7 +30,12 @@ struct StampedList: View {
         for (i, p) in w.places.enumerated() { index[p.id] = i }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
-            let line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
+            // "Lived" / "Once" / "Twice" / "<n> times", " · " the latest visit's year, " · Verified" (no tick)
+            var line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
+            if let x = info[k.description] {
+                if let y = x.year { line += " · \(y)" }
+                if x.verified { line += " · Verified" }
+            }
             return Row(id: k.id, name: w.places[i].n, place: i, line: line)
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -62,6 +69,7 @@ struct StampedList: View {
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .environment(\.defaultMinListRowHeight, 56)
+        .task(id: marks.changes) { info = await MarkStore.shared.listInfo() }
         .frame(width: L.W - 2 * L.sheetInset, height: h)
         .position(x: L.W / 2, y: y0 + h / 2)
     }

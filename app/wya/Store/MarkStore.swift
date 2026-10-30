@@ -142,6 +142,13 @@ final class MarkStore {
         apply(r, words: "\(label(key, name)) details", origin: nil, who: .you)
     }
 
+    /// the Stamped list's second line: latest year and verified, by key ("c:fr")
+    func listInfo() async -> [String: (year: Int?, verified: Bool)] {
+        guard let store else { return [:] }
+        let acc = account
+        return (try? await store.listInfo(account: acc)) ?? [:]
+    }
+
     /// a wished place's details (4.4.5), read and written once as Details closes
     func wishDetails(_ key: PlaceKey) async -> (details: WishDetails, want: Int)? {
         guard let store else { return nil }

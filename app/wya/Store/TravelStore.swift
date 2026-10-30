@@ -101,6 +101,27 @@ actor TravelStore {
         return res
     }
 
+    /// THE STAMPED LIST'S SECOND LINE (4.6.3): each stamped place's latest visit year (its latest dated visit, else
+    /// the details' dates, else the month it was stamped for) and whether its stamp is verified
+    func listInfo(account: String) throws -> [String: (year: Int?, verified: Bool)] {
+        let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))
+        func year(_ s: String?) -> Int? { s.flatMap { Int($0.prefix(4)) } }
+        var latest: [String: Int] = [:]
+        for v in vs { if let y = year(v.arrived) { latest[v.key] = max(latest[v.key] ?? 0, y) } }
+        var out: [String: (year: Int?, verified: Bool)] = [:]
+        for r in rs {
+            let d = StampDetails(json: r.details)
+            let y = latest[r.key] ?? [year(d.to), year(d.from)].compactMap { $0 }.max() ?? year(r.when)
+            var verified = false
+            if let v = r.verification, let o = try? JSONSerialization.jsonObject(with: v) as? [String: Any] {
+                verified = (o["state"] as? String) == "verified"
+            }
+            out[r.key] = (y, verified)
+        }
+        return out
+    }
+
     /// A WISHED PLACE'S DETAILS (Part 4.4.5), as one write and one undo step: the wish details JSON and how badly
     /// (`want`, 1 to 5); nothing is written when nothing changed
     func setWishDetails(_ key: PlaceKey, account: String, details: Data?, want: Int) throws -> Result {
