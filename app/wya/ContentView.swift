@@ -169,7 +169,7 @@ struct ContentView: View {
     }
 
     /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one
-    /// write); the colour changes in one frame as every colour does (his 30 Oct rule; the book's fill front is not
+    /// write); the colour changes in one frame as every colour does (the book's fill front is not
     /// built); stamp or lift haptic (no sound); the undo drop rises each time (one tap, one undo step); VoiceOver
     /// says what happened. The record's source is `quick`.
     @MainActor static func quickStamp(_ i: Int, map: MapController) {
