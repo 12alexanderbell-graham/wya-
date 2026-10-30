@@ -9,7 +9,13 @@ import simd
 @Observable
 final class PlacePageState {
     static let shared = PlacePageState()
-    struct Facts { var prose = ""; var rows: [(String, String)] = [] }
+    struct Facts {
+        var prose = ""
+        var rows: [(String, String)] = []
+        /// For you (16.4.9): the visa line for each of your nationalities first, then each government's advice
+        var visa: [String] = []
+        var advice: [(who: String, text: String, when: String)] = []
+    }
     private(set) var key: PlaceKey?
     private(set) var name = ""
     /// one line of what it is ("City in Hessen, Germany"); empty for a country
@@ -21,6 +27,8 @@ final class PlacePageState {
     /// 0 at the origin to 1 full screen
     var p: CGFloat = 0
     var drag: CGFloat = 0
+    /// the test driver's scroll to the end (checks)
+    var toEnd = 0
     var isOpen: Bool { key != nil }
 
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, from origin: CGRect) {
@@ -70,7 +78,50 @@ final class PlacePageState {
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
         if let e = f["emergency"] as? [String], let first = e.first { out.rows.append(("Emergency", first)) }
         if let v = s("highestPoint") { out.rows.append(("Highest point", v)) }
+        // each government's advice, with who says it and when it was checked
+        let adv = j["advisories"] as? [String: Any] ?? [:]
+        if let ca = adv["ca"] as? [String: Any], let t = ca["text"] as? String {
+            out.advice.append(("Canada", t, Self.day(ca["updated"] as? String)))
+        }
+        if let us = adv["us"] as? [String: Any], let l = us["level"] as? String {
+            out.advice.append(("United States", l.replacingOccurrences(of: #"^Level \d+: "#, with: "", options: .regularExpression),
+                               Self.day(us["updated"] as? String)))
+        }
+        if let uk = adv["uk"] as? [String: Any], let a = uk["alert"] as? String, !a.isEmpty {
+            let t = a.replacingOccurrences(of: "_", with: " ")
+            out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), Self.day(uk["updated"] as? String)))
+        }
         facts = out
+        // the visa lines: for each of your nationalities (Profile), what its passport needs here
+        let name = (f["name"] as? String) ?? (j["name"] as? String) ?? ""
+        let nats = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).filter { $0 != cc }
+        var visa: [String] = []
+        for n in nats {
+            guard case .ok(let nd) = await Servers.data.file("country/\(n).json"),
+                  let nj = try? JSONSerialization.jsonObject(with: nd) as? [String: Any],
+                  let v = (nj["visaFromHere"] as? [String: Any])?[name] as? String else { continue }
+            let who = ((nj["facts"] as? [String: Any])?["name"] as? String) ?? (nj["name"] as? String) ?? n.uppercased()
+            visa.append(Self.visa(v) + "\n" + "With your passport from \(who)")
+        }
+        guard key?.id.lowercased() == cc else { return }
+        facts?.visa = visa
+    }
+
+    /// "90" -> "visa free for 90 days"; the rest as they are written
+    static func visa(_ v: String) -> String {
+        if let d = Int(v) { return d < 0 ? "no entry" : "visa free for \(d) days" }
+        return v.prefix(1).uppercased() + v.dropFirst()
+    }
+    /// a checked date as "21 Sep 2026" where it can be read, else as it is
+    static func day(_ s: String?) -> String {
+        guard let s, !s.isEmpty else { return "" }
+        for f in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "EEE, dd MMM yyyy"] {
+            let df = DateFormatter(); df.locale = Locale(identifier: "en_US_POSIX"); df.dateFormat = f
+            if let d = df.date(from: String(s.prefix(f.count + 2)).trimmingCharacters(in: .whitespaces)) ?? df.date(from: s) {
+                return d.formatted(.dateTime.day().month(.abbreviated).year())
+            }
+        }
+        return s
     }
 
     /// up to n characters, cut at a whole sentence (16.4: prose)
@@ -119,6 +170,7 @@ struct PlacePageView: View {
     private static let screenCorner: CGFloat = 55
 
     @ViewBuilder private func content(_ key: PlaceKey, L: Layout) -> some View {
+        ScrollViewReader { reader in
         ScrollView {
             VStack(spacing: 32) {
                 top(key, L: L)
@@ -127,12 +179,18 @@ struct PlacePageView: View {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
-                Color.clear.frame(height: 140)
+                if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
+                Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
+            // the ground scrolls with the page (one layer behind the whole scroll, 16.3)
+            .background(alignment: .top) { groundView(L: L) }
         }
         .scrollIndicators(.hidden)
-        .background(alignment: .top) { groundView(L: L) }
+        // the one blur under the head, only once words scroll under it (16.3)
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .onChange(of: page.toEnd) { _, _ in reader.scrollTo("end", anchor: .bottom) }
+        }
         .background(Palette.white)
     }
 
@@ -190,6 +248,27 @@ struct PlacePageView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// FOR YOU (16.4.9): the visa line first, then each government's advice with who says it and when it was checked
+    private func forYou(_ f: PlacePageState.Facts) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("For you").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            ForEach(f.visa, id: \.self) { v in
+                let parts = v.components(separatedBy: "\n")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(parts[0]).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                    if parts.count > 1 { Text(parts[1]).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)) }
+                }
+            }
+            ForEach(Array(f.advice.enumerated()), id: \.offset) { _, a in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(a.text).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+                    Text(a.when.isEmpty ? a.who : "\(a.who) · checked \(a.when)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// FACTS (16.4.5): two columns, each value 17 pt semibold over its label 15 pt black 50%, a thin line between rows
