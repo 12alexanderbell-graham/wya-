@@ -793,7 +793,9 @@ struct SearchResults: View {
         let typed = !head.query.trimmingCharacters(in: .whitespaces).isEmpty
         let hits = typed ? Self.matches(map: map, query: head.query) : Self.suggestions(map: map)
         // a typo with no match: the nearest place, as a row of its own
-        let guess = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
+        // the index first; with nothing there, Apple Intelligence's pick among the nearest names, once it has answered
+        let near = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
+        let guess = near ?? (hits.isEmpty && typed && smart?.q == head.query ? smart?.i : nil)
         // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so "Fra"
         // to "Frnace" keeps the France row and only its note rolls to
         // with Map settings open, the field searches the settings (Part 3.4, 5.11)
@@ -842,6 +844,25 @@ struct SearchResults: View {
             }
         }
         .onChange(of: keys, initial: true) { old, new in update(to: new, first: old == new) }
+        .task(id: head.query) { await askModel() }
+    }
+
+    /// "DID YOU MEAN", STEP 2 (1.10): when the index finds nothing, Apple Intelligence on the phone picks one of the 20
+    /// nearest names; the row shows only once it has answered (nothing turns while waiting); without Apple
+    /// Intelligence, or past 1.5 s, the index alone
+    @State private var smart: (q: String, i: Int)?
+    private func askModel() async {
+        let q = head.query.trimmingCharacters(in: .whitespaces)
+        guard q.count >= 3, !head.settingsOpen, Self.matches(map: map, query: q).isEmpty,
+              Self.nearest(map: map, query: q) == nil, let w = map.world else { return }
+        // a short wait so a word still being typed asks nothing
+        try? await Task.sleep(for: .milliseconds(250))
+        guard !Task.isCancelled else { return }
+        let names = Self.closest(map: map, query: q, count: 20)
+        guard !names.isEmpty, let pick = await SmartGuess.pick(typed: q, among: names.map { w.places[$0].n }) else { return }
+        guard !Task.isCancelled, head.query.trimmingCharacters(in: .whitespaces) == q,
+              let i = names.first(where: { w.places[$0].n == pick }) else { return }
+        smart = (head.query, i)
     }
 
     /// the rows on screen: the new rows in their order, each leaving row kept just after the row it followed, its slot
@@ -968,12 +989,12 @@ struct SearchResults: View {
     /// still finds a longer name); at most a third of the letters wrong, never for under 3 letters
     static func nearest(map: MapController, query: String) -> Int? {
         guard let w = map.world else { return nil }
-        let q = Array(query.lowercased().trimmingCharacters(in: .whitespaces))
+        let q = Array(fold(query.trimmingCharacters(in: .whitespaces)))
         guard q.count >= 3 else { return nil }
         var best: (Int, Int)?
         for (pi, p) in w.places.enumerated() where !p.junk {
             for name in [p.n] + [p.official ?? ""] + p.alt where !name.isEmpty {
-                let n = Array(name.lowercased())
+                let n = Array(fold(name))
                 let d = min(distance(q, n), distance(q, Array(n.prefix(q.count))))
                 if d < (best?.1 ?? Int.max) { best = (pi, d) }
             }
@@ -981,6 +1002,25 @@ struct SearchResults: View {
         guard let b = best, b.1 > 0, b.1 <= max(1, q.count / 3) else { return nil }
         return b.0
     }
+
+    /// the `count` places whose names are nearest to what was typed (the same measure as `nearest`), nearest first
+    static func closest(map: MapController, query: String, count: Int) -> [Int] {
+        guard let w = map.world else { return [] }
+        let q = Array(fold(query.trimmingCharacters(in: .whitespaces)))
+        var best: [(Int, Int)] = []
+        for (pi, p) in w.places.enumerated() where !p.junk {
+            var d = Int.max
+            for name in [p.n] + [p.official ?? ""] + p.alt where !name.isEmpty {
+                let n = Array(fold(name))
+                d = min(d, distance(q, n), distance(q, Array(n.prefix(q.count))))
+            }
+            best.append((pi, d))
+        }
+        return best.sorted { $0.1 < $1.1 }.prefix(count).map(\.0)
+    }
+
+    /// a name as search compares it: no case, no accents ("Curacao" finds Curaçao)
+    static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
 
     private static func distance(_ a: [Character], _ b: [Character]) -> Int {
         if a.isEmpty { return b.count }
@@ -1037,18 +1077,19 @@ struct SearchResults: View {
 
     static func matches(map: MapController, query: String) -> [Int] {
         guard let w = map.world else { return [] }
-        let q = query.lowercased().trimmingCharacters(in: .whitespaces)
+        let typedLower = query.lowercased().trimmingCharacters(in: .whitespaces)
+        let q = fold(query.trimmingCharacters(in: .whitespaces))
         guard !q.isEmpty else { return [] }
         // in order: a name people type for it (UK, Britain), its own name starting with what was typed, another of
         // its names starting with it ("Estados Unidos Mexicanos" is Mexico, after the United States for "united"),
         // then anything containing it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
-        if let a = w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
+        if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
         for (i, p) in w.places.enumerated() where !p.junk && !alias.contains(i) {
             let others = [p.official ?? ""] + p.alt
-            if p.n.lowercased().hasPrefix(q) { own.append(i) }
-            else if others.contains(where: { $0.lowercased().hasPrefix(q) }) { other.append(i) }
-            else if ([p.n] + others).contains(where: { $0.lowercased().contains(q) }) { contains.append(i) }
+            if fold(p.n).hasPrefix(q) { own.append(i) }
+            else if others.contains(where: { fold($0).hasPrefix(q) }) { other.append(i) }
+            else if ([p.n] + others).contains(where: { fold($0).contains(q) }) { contains.append(i) }
         }
         return Array((alias + own + other + contains).prefix(6))
     }
