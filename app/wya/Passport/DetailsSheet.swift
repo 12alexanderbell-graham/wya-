@@ -603,8 +603,9 @@ struct DetailsSheet: View {
             .foregroundStyle(on ? .white : Palette.ink)
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .padding(.horizontal, 16)
-            // its capsule shrinks about its centre while the band's block goes (and grows as it comes)
-            .background { Capsule().fill(on ? Palette.ink : .clear).scaleEffect(blank ? 0 : 1) }
+            // on: a plain black band edge to edge, square-ended, as Map settings' current choice (no oval); it shrinks
+            // about its centre while the band's block goes (and grows as it comes)
+            .background { Rectangle().fill(on ? Palette.ink : .clear).scaleEffect(blank ? 0 : 1) }
             .padding(.horizontal, -16)
             .contentShape(Rectangle())
             .onTapGesture(perform: tap)
