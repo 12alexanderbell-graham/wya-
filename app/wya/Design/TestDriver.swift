@@ -205,6 +205,21 @@ final class TestDriver {
                     try? line.write(toFile: Snap.dir + "/borders.log", atomically: true, encoding: .utf8)
                 case "shake": NotificationCenter.default.post(name: .wyaShake, object: nil)
                 case "redo": NotificationCenter.default.post(name: .wyaRedo, object: nil)
+                // card <id>: its stamping card, as a tap on the place opens it; details: that card's Details;
+                // close: Details first, then the card (as taps off do)
+                case "card":
+                    if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == a }) {
+                        let p = w.places[i]
+                        CardState.shared.open(i, at: m.screenPoint(SIMD2(p.c[0], p.c[1])), map: m, water: water)
+                    }
+                case "details":
+                    if let m = map, let w = m.world, let i = CardState.shared.place, let water {
+                        CardState.shared.heldTop = water.form().top
+                        DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
+                    }
+                case "close":
+                    if DetailsState.shared.isOpen, let water { DetailsState.shared.close(water: water) }
+                    else if let m = map { CardState.shared.close(map: m) }
                 // stamp <id>: a country stamped as a test would (undoable)
                 case "stamp": await MarkStore.shared.stamp(.country(a))
                 // slowmo N: the stamp's flight N times slower, for frame checks (slowmo 1 = real speed)

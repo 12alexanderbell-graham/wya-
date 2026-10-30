@@ -101,6 +101,29 @@ actor TravelStore {
         return res
     }
 
+    /// A WISHED PLACE'S DETAILS (Part 4.4.5), as one write and one undo step: the wish details JSON and how badly
+    /// (`want`, 1 to 5); nothing is written when nothing changed
+    func setWishDetails(_ key: PlaceKey, account: String, details: Data?, want: Int) throws -> Result {
+        var res = Result()
+        guard let r = try record(account, key), r.wished else { return res }
+        let w = max(1, min(5, want))
+        guard r.wishDetails != details || r.want != w else { return res }
+        let v = try visitCount(account, key)
+        res.undo.append(snapshot(key, r))
+        let old = state(r, visits: v)
+        r.wishDetails = details
+        r.want = w
+        res.changed[key] = (old, state(r, visits: v))
+        try modelContext.save()
+        return res
+    }
+
+    /// what a wished place's record holds for Details: its wish details JSON and how badly
+    func wishDetailsOf(_ key: PlaceKey, account: String) throws -> (details: Data?, want: Int)? {
+        guard let r = try record(account, key), r.wished else { return nil }
+        return (r.wishDetails, max(1, r.want))
+    }
+
     /// what a stamped place's record holds for Details: its details JSON, times and lived
     func detailsOf(_ key: PlaceKey, account: String) throws -> (details: Data?, times: Int, lived: Bool)? {
         guard let r = try record(account, key), r.stamped else { return nil }

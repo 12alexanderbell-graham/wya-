@@ -333,13 +333,14 @@ struct StampCard: View {
     /// is and the water rises over the book's lower part (A4.8)
     private func detailsButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat, words: Bool) -> some View {
         Button {
-            guard s.stamped, !card.flying else { Feel.refuse(); return }
+            // live once the place is stamped or wished (a wished place's Details are 4.4.5's)
+            guard s.stamped || s.wished, !card.flying else { Feel.refuse(); return }
             card.heldTop = water.form().top
             details.open(key, name: name, water: water)
         } label: {
             Text(words ? "Details" : " ")
                 .font(.body.weight(.semibold))
-                .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
+                .foregroundStyle(Palette.ink.opacity(s.stamped || s.wished ? 1 : 0.5))
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
