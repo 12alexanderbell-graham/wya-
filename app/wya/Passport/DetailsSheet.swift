@@ -735,7 +735,8 @@ struct DetailsSheet: View {
     private var timesFloor: Int { 1 + (s.d.trips?.count ?? 0) }
     private func circle(_ g: String, blank: Bool = false, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
-            Image(systemName: g).font(.body.weight(.semibold)).foregroundStyle(.white)
+            // the app's own icons only, never SF Symbols (0.8.7): "plus" and "minus" from Icons5
+            Icon5Still(key: g, progress: 0, ink: Palette.white, size: 17)
                 .frame(width: 36, height: 36).background(Palette.ink, in: .circle)
                 .scaleEffect(blank ? 0 : 1)
                 .frame(width: 44, height: 44)
@@ -745,7 +746,7 @@ struct DetailsSheet: View {
     /// × on a row (only where there is more than one): solid black, white ×, 24 pt drawn, 44 pt touch
     private func xCircle(_ act: @escaping () -> Void) -> some View {
         Button(action: act) {
-            Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.white)
+            Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
                 .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
                 .frame(width: 44, height: 44)
         }

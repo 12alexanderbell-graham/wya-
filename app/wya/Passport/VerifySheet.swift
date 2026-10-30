@@ -97,7 +97,7 @@ struct VerifySheet: View {
                 Text("Send to verify \(s.name)").font(.body).foregroundStyle(Palette.ink)
                 Spacer(minLength: 8)
                 Button { send(id) } label: {
-                    Image(systemName: "arrow.right").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                    Icon5Still(key: "forward", progress: 0, ink: Palette.ink, size: 17)
                         .frame(width: 36, height: 36).background(Palette.lime, in: .circle)
                         .frame(width: 44, height: 44)
                 }
