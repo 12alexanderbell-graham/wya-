@@ -107,6 +107,9 @@ final class MapController {
     @ObservationIgnored var onTouch: (() -> Void)?
     /// a confirmed tap on a place (after the double-tap window): its index and the screen point (Part 4.2.1)
     @ObservationIgnored var onPlaceTap: ((Int, CGPoint) -> Void)?
+    /// FINDS (Part 9.4, 9.5): places an upload found that are not stamped yet, drawn darkened as a pressed place is (the
+    /// relief darker, never grey or lime); they change in one frame, as every colour does
+    var found: Set<Int> = [] { didSet { if found != oldValue { needsFrame = true } } }
     /// a place held darkened while its card is up (Part 0.2.3 keepPressed / releasePressed)
     var kept: Int? { didSet { if kept != oldValue { needsFrame = true } } }
     @ObservationIgnored var pressed: Int? {

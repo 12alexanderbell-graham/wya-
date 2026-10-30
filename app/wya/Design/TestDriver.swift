@@ -220,10 +220,12 @@ final class TestDriver {
                 // choice and the swipe right would
                 case "upload":
                     switch a {
-                    case "open": if let water { UploadState.shared.open(water: water) }
+                    case "open": if let water, let map { UploadState.shared.open(water: water, map: map) }
                     case "close": UploadState.shared.close()
                     case "back": UploadState.shared.back()
                     case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
+                    case "read": UploadState.shared.testRead(empty: p.count > 2 && p[2] == "none")
+                    case "cancel": UploadState.shared.cancel()
                     default: break
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)

@@ -416,7 +416,7 @@ struct HeadView: View {
             // one is in the head, the other at the bottom)
             default:
                 head.toolsOpen = false
-                UploadState.shared.open(water: water)
+                UploadState.shared.open(water: water, map: map)
             }
         } label: {
             // bare circles until he picks their icons, filled when on: the ring thickens into the disc (and thins
