@@ -97,6 +97,17 @@ The United Kingdom's levels on its wards' borders: ONS Open Geography's Wards (D
     python3 pipeline/d2_level.py gb-wd.topojson gb 4 gb-4.wyar 0 --code-ids
     python3 pipeline/d2_gb.py gb-4.wyar wd.csv <old gb-2.wyar> <old gb-1.wyar> <out>
 
+The United States' levels on the county subdivisions' borders (Census cartographic boundaries 2024, public domain),
+longitudes 0 to 360 like the earlier files so the Aleutians stay whole:
+
+    mapshaper cb_2024_us_cousub_500k.shp -filter 'STATEFP <= "56"' -each 'shapeName=NAMELSAD, shapeISO=GEOID' -filter-fields shapeName,shapeISO -clean -simplify interval=150 keep-shapes -clean -proj '+proj=longlat +datum=WGS84 +lon_wrap=180' -o format=topojson quantization=4000000 us-cs360.topojson
+    mapshaper cb_2024_us_cousub_500k.shp -filter 'STATEFP <= "56"' -filter-fields GEOID,NAMELSADCO,STATE_NAME -o cs.csv
+    python3 pipeline/d2_level.py us-cs360.topojson us 3 us-3.wyar 0 --code-ids
+    python3 pipeline/d2_us.py us-3.wyar cs.csv <old us-2.wyar> <old us-1.wyar> <out>
+
+Simplify before the projection: after `-proj` the coordinates are no longer read as degrees, and 150 would be taken
+as 150 of them.
+
 ## Region units on the piece lines (D1b)
 
     python3 pipeline/nepieces.py <original detail-100m.wyad>      # nepieces.pkl
