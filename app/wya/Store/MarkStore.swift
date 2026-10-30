@@ -112,6 +112,17 @@ final class MarkStore {
         apply(r, words: "\(label(key, name)) off the wishlist", origin: origin, who: who)
     }
 
+    /// THE OLD APP'S stamps.json read in (OldStamps.swift): one write, one undo step; returns how many places came in
+    @discardableResult
+    func importOld(_ data: Data, who: Who = .importer) async -> Int {
+        guard let store, let book = try? OldBook(json: data) else { return 0 }
+        let acc = account
+        guard let r = try? await store.importOld(book, account: acc) else { return 0 }
+        apply(r, words: "\(r.changed.count) places from the old app", origin: nil, who: who)
+        markDates = (try? await store.markDates(account: acc)) ?? markDates
+        return r.changed.count
+    }
+
     var canUndo: Bool { !undoStack.isEmpty }
 
     /// UNDO the last write (the drop, a shake, a three-finger swipe left; Part 3.10)

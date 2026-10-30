@@ -130,6 +130,28 @@ nonisolated final class Positions: @unchecked Sendable {
         return says(d, view) == id
     }
 
+    /// WHAT COUNTS AS A COUNTRY under the view (the old WorldGeometry.counts, Slice 88): a country or a breakaway while
+    /// it is drawn on its own. A dotted one counts; one merged into another does not.
+    func counts(_ id: String) -> Bool {
+        guard let k = kind[id], drawn(id) else { return false }
+        return k == "country" || k == "entity"
+    }
+
+    /// WHO A PLACE COUNTS AS (the old WorldGeometry.countedAs, Slice 88): itself while it is drawn on its own; else the
+    /// place the view gives its land to (Taiwan on China's map counts as China). The stamp itself never changes, only
+    /// what it counts for.
+    func countedAs(_ id: String) -> String {
+        var cur = id
+        for _ in 0 ..< 4 {
+            guard !drawn(cur), let d = disputes.first(where: { $0.entity == cur && !$0.piece && assign($0) != cur })
+            else { return cur }
+            let o = assign(d)
+            guard o != "none", kind[o] != nil else { return cur }
+            cur = o
+        }
+        return cur
+    }
+
     /// A DOTTED PLACE (Slice 88): drawn on its own but not recognised by the view. On a country's own map, the places
     /// that country does not recognise and gives to nobody; on the UN's, a breakaway the UN does not call its own. On
     /// the ground's (De facto) nothing is dotted.

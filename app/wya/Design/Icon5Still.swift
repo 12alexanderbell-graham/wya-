@@ -10,7 +10,7 @@ struct Icon5Still: View {
     var size: CGFloat = 20
 
     var body: some View {
-        let frames = IC5.all[key]?.frames ?? []
+        let frames = (IC5.all[key] ?? IC5.drawn[key])?.frames ?? []
         let i = frames.isEmpty ? 0 : min(frames.count - 1, max(0, Int((progress * CGFloat(frames.count - 1)).rounded())))
         let layers = frames.isEmpty ? [] : frames[i]
         ZStack {

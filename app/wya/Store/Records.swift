@@ -10,9 +10,10 @@ enum TravelSchemaV1: VersionedSchema {
 
     /// ONE PER PLACE: stamped or wished, never both (the old StampBook's rule: stamping a wished place clears the wish
     /// and keeps when it came, `came`).
+    /// No unique constraint: iCloud sync for SwiftData refuses them (Part 10 Step 3: CloudKit's rules from day one),
+    /// so one record per place is kept by TravelStore, the only writer, which always looks a record up before making one.
     @Model
     final class StampRecord {
-        #Unique<StampRecord>([\.account, \.key])
         var account: String = ""
         /// the PlaceKey as text ("c:fr")
         var key: String = ""
@@ -30,6 +31,8 @@ enum TravelSchemaV1: VersionedSchema {
         var times: Int = 1
         var lived: Bool = false
         var note: String = ""
+        /// the old Stamp.how (holiday, work ...), kept until Details asks it again (Step 5)
+        var how: String?
         /// the old Stamp.when ("2026-08"): a month, when only that is known
         var when: String?
         /// the old StampDetails, kept whole as JSON until Details is built (Step 5)

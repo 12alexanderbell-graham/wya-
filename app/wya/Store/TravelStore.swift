@@ -28,6 +28,7 @@ actor TravelStore {
             var times: Int
             var lived: Bool
             var note: String
+            var how: String?
             var when: String?
             var details, wishDetails, verification: Data?
             var via: String?
@@ -65,7 +66,7 @@ actor TravelStore {
         guard let r else { return Snapshot(key: key, values: nil) }
         return Snapshot(key: key, values: .init(stamped: r.stamped, wished: r.wished, want: r.want, wishWhen: r.wishWhen,
                                                 at: r.at, source: r.source, times: r.times, lived: r.lived, note: r.note,
-                                                when: r.when, details: r.details, wishDetails: r.wishDetails,
+                                                how: r.how, when: r.when, details: r.details, wishDetails: r.wishDetails,
                                                 verification: r.verification, via: r.via, came: r.came, name: r.name,
                                                 cc: r.cc, level: r.level))
     }
@@ -179,6 +180,26 @@ actor TravelStore {
         return res
     }
 
+    /// THE OLD APP'S BOOK, read in (OldStamps.swift) as one write and one undo step. It only adds: a place that
+    /// already has a record here keeps it as it is (nothing you did in this app is overwritten).
+    func importOld(_ book: OldBook, account: String) throws -> Result {
+        var res = Result()
+        for row in book.rows {
+            guard try record(account, row.key) == nil else { continue }
+            res.undo.append(snapshot(row.key, nil))
+            let r = StampRecord(account: account, key: row.key)
+            modelContext.insert(r)
+            r.stamped = row.stamped; r.wished = row.wished; r.want = row.want
+            r.at = row.at; r.source = MarkSource.imported.rawValue; r.times = row.times; r.lived = row.lived
+            r.note = row.note; r.how = row.how; r.when = row.when; r.via = row.via; r.came = row.came
+            r.name = row.name; r.cc = row.cc; r.level = row.level
+            r.details = row.details; r.wishDetails = row.wishDetails; r.verification = row.verification
+            res.changed[row.key] = (.none, state(r, visits: 0))
+        }
+        try modelContext.save()
+        return res
+    }
+
     /// PUT BACK what a write changed (its snapshots), as one write
     func restore(_ snaps: [Snapshot], account: String) throws -> Result {
         var res = Result()
@@ -191,7 +212,7 @@ actor TravelStore {
                 let r = r0 ?? { let n = StampRecord(account: account, key: s.key); modelContext.insert(n); return n }()
                 r.stamped = vals.stamped; r.wished = vals.wished; r.want = vals.want; r.wishWhen = vals.wishWhen
                 r.at = vals.at; r.source = vals.source; r.times = vals.times; r.lived = vals.lived; r.note = vals.note
-                r.when = vals.when; r.details = vals.details; r.wishDetails = vals.wishDetails
+                r.how = vals.how; r.when = vals.when; r.details = vals.details; r.wishDetails = vals.wishDetails
                 r.verification = vals.verification; r.via = vals.via; r.came = vals.came
                 r.name = vals.name; r.cc = vals.cc; r.level = vals.level
                 res.changed[s.key] = (old, state(r, visits: v))
