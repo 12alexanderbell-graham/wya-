@@ -97,6 +97,8 @@ struct DetailsSheet: View {
     @State private var kind: String?
     @State private var placeName = ""
     @State private var scrolled = false
+    /// the gaps between rows (content coordinates) a list may end in (0.7)
+    @State private var cuts: [CGFloat] = []
     /// A4.14 / A4.15: a lived row's identity (the stays carry none), and the rows whose space is open but whose
     /// words and circle are not in yet (`arriving`), are on their way out (`leaving`), or are drawn as plain words
     /// for the roll (`rolling`: a field cannot roll its words, so it is swapped for a Text that looks the same)
@@ -132,7 +134,10 @@ struct DetailsSheet: View {
         let L = water.layout
         let top = max(form.top + 20, L.headBottom + 8)
         let bottom = kb > 0 ? L.H - kb - 8 : L.capsule.minY - 24
-        let h = max(60, bottom - top)
+        let room = max(60, bottom - top)
+        // whole rows only at rest (0.7): the visible height ends in the gap between two rows, the soft edge over that
+        // gap, and a scroll stops where the bottom lands in a gap (the top passes under the water's soft edge, 4.4.2)
+        let h = EdgeRows.fit(room, cuts: cuts)
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 28) {
@@ -140,6 +145,7 @@ struct DetailsSheet: View {
                     if form.page > 0.5 || !CardState.shared.isOpen {
                         Text(sheetGone || s.rollingOut ? Caption.blank(s.name, "\u{2002}") : s.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                             .contentTransition(.numericText(value: sheetGone || s.rollingOut ? 0 : 1))
+                            .edgeRow()
                             .accessibilityAddTraits(.isHeader)
                     }
                     if s.wish {
@@ -177,6 +183,8 @@ struct DetailsSheet: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
                 .padding(.bottom, 24)
+                .coordinateSpace(name: EdgeRows.space)
+                .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
@@ -187,9 +195,10 @@ struct DetailsSheet: View {
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                         .frame(height: scrolled ? 20 : 0)
                     Color.black
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 20)
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
                 }
             }
+            .scrollTargetBehavior(GapSnap(cuts: cuts))
             .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
             .onChange(of: typing) { _, id in
                 // typing takes Details to full, card or not (the card goes back as the water rises); the field scrolls above the keyboard; keyboard down, back to 50%
@@ -270,7 +279,7 @@ struct DetailsSheet: View {
         .font(.body)
         .foregroundStyle(Palette.ink)
         .lineLimit(lines ? 1 ... 12 : 1 ... 1)
-        .frame(minHeight: lines ? 52 : 44)
+        .frame(minHeight: lines ? 52 : 44).edgeRow()
         .focused($typing, equals: id)
         .id(id)
     }
@@ -313,7 +322,7 @@ struct DetailsSheet: View {
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
                         .foregroundStyle(v.isEmpty ? Color(uiColor: .placeholderText) : Palette.ink)
                         .contentTransition(.numericText(value: gone ? 0 : 1))
-                        .frame(minHeight: 44)
+                        .frame(minHeight: 44).edgeRow()
                 } else {
                     // a visit's time in words until our own calendar exists ("Summer 2019", 40 characters)
                     field("Summer 2019", id: "rough\(i)", max: 40, trailing: true, rough)
@@ -324,7 +333,7 @@ struct DetailsSheet: View {
                         .transition(.scale)
                 }
             }
-            .frame(minHeight: 52)
+            .frame(minHeight: 52).edgeRow()
             choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
             if s.d[keyPath: mode] == "other" {
                 if plain { fieldWords("How, in your words", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
@@ -364,7 +373,7 @@ struct DetailsSheet: View {
         return Text(gone ? Caption.blank(t, "\u{2002}") : t).font(.body)
             .foregroundStyle((v ?? "").isEmpty ? Color(uiColor: .placeholderText) : Palette.ink)
             .contentTransition(.numericText(value: gone ? 0 : 1))
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: trailing ? .trailing : .leading)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: trailing ? .trailing : .leading).edgeRow()
     }
 
     /// A4.14: the space opens, then the visit's words roll in; Times goes up to the visits there are when it was lower
@@ -431,7 +440,7 @@ struct DetailsSheet: View {
                     if now && last {
                         Text(gone ? Caption.blank("Now", "\u{2002}") : "Now").font(.body).foregroundStyle(Palette.ink)
                             .contentTransition(.numericText(value: gone ? 0 : 1))
-                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
                     } else if plain {
                         monthWords(stay.to, empty: "Moved out", gone: gone)
                     } else {
@@ -488,7 +497,7 @@ struct DetailsSheet: View {
                     xCircle { removePlace(Int(placeIDs.firstIndex(of: k) ?? 0)) }
                     .scaleEffect(gone ? 0 : 1)
                 }
-                .frame(minHeight: 52)
+                .frame(minHeight: 52).edgeRow()
             }
             HStack(spacing: 12) {
                 if out { fieldWords("Add a place", placeName, gone: true) } else {
@@ -505,12 +514,12 @@ struct DetailsSheet: View {
                 if canAdd {
                     Text("Add").font(.body.weight(.semibold)).foregroundStyle(.white)
                         .padding(.horizontal, 14).frame(height: 36).background(Palette.ink, in: .capsule)
-                        .frame(minHeight: 44).contentShape(Rectangle())
+                        .frame(minHeight: 44).contentShape(Rectangle()).edgeRow()
                         .onTapGesture { addPlace() }
                         .accessibilityAddTraits(.isButton)
                 }
             }
-            .frame(minHeight: 52)
+            .frame(minHeight: 52).edgeRow()
             // its kind, asked once a name is being typed
             if !placeName.trimmingCharacters(in: .whitespaces).isEmpty {
                 chips(Self.kinds.map { ($0, Self.word($0)) }, chosen: kind) { kind = kind == $0 ? nil : $0 }
@@ -603,7 +612,7 @@ struct DetailsSheet: View {
         return Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
             .foregroundStyle(shown == nil ? Color(uiColor: .placeholderText) : Palette.ink)
             .contentTransition(.numericText(value: gone ? 0 : 1))
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
     }
 
     // MARK: the parts
@@ -613,7 +622,7 @@ struct DetailsSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.headline).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: blank ? 0 : 1))
-                .frame(minHeight: 32, alignment: .bottom)
+                .frame(minHeight: 32, alignment: .bottom).edgeRow()
                 .accessibilityAddTraits(.isHeader)
             c()
         }
@@ -627,7 +636,7 @@ struct DetailsSheet: View {
             Spacer(minLength: 8)
             value()
         }
-        .frame(minHeight: 52)
+        .frame(minHeight: 52).edgeRow()
     }
 
     /// a two-state row as Map settings' current choice: on = a black band the water's width with white words,
@@ -637,7 +646,7 @@ struct DetailsSheet: View {
             .contentTransition(.numericText(value: blank ? 0 : 1))
             .font(.body)
             .foregroundStyle(on ? .white : Palette.ink)
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
             .padding(.horizontal, 16)
             // on: a plain black band edge to edge, square-ended, as Map settings' current choice (no oval); it shrinks
             // about its centre while the band's block goes (and grows as it comes)
@@ -660,7 +669,7 @@ struct DetailsSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: blank ? 0 : 1))
-                .frame(minHeight: 44, alignment: .leading)
+                .frame(minHeight: 44, alignment: .leading).edgeRow()
             chips(items, chosen: chosen, blank: blank) { set(chosen == $0 ? nil : $0) }
                 .padding(.bottom, 8)
         }
@@ -677,6 +686,7 @@ struct DetailsSheet: View {
                     .frame(height: 36)
                     .background { Capsule().fill(chosen == id ? Palette.ink : .clear).scaleEffect(blank ? 0 : 1) }
                     .padding(.vertical, 4)
+                    .edgeRow()
                     .contentShape(Rectangle())
                     .onTapGesture { Feel.tap(); tap(id) }
                     .accessibilityAddTraits(.isButton)
@@ -697,7 +707,7 @@ struct DetailsSheet: View {
             Text(out ? Caption.blank("\(s.times)", "\u{2002}") : "\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: out ? -1 : Double(s.times)))
                 .animation(Motion.quick, value: s.times)
-                .frame(minWidth: 36, minHeight: 44)
+                .frame(minWidth: 36, minHeight: 44).edgeRow()
                 .contentShape(Rectangle())
                 .highPriorityGesture(DragGesture(minimumDistance: 4).onChanged { g in
                     let base = dragFrom ?? s.times
@@ -778,7 +788,7 @@ struct DetailsSheet: View {
         .foregroundStyle(Palette.ink)
         .multilineTextAlignment(trailing ? .trailing : .leading)
         .lineLimit(lines ? 1 ... 12 : 1 ... 1)
-        .frame(minHeight: lines ? 52 : 44)
+        .frame(minHeight: lines ? 52 : 44).edgeRow()
         .focused($typing, equals: id)
         .id(id)
     }
@@ -833,7 +843,7 @@ struct MonthField: View {
         .keyboardType(.numberPad)
         .font(.body)
         .foregroundStyle(bad ? Color(hex: 0xd94f3d) : Palette.ink)
-        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
         .focused(focus, equals: id)
         .id(id)
         .onAppear {
@@ -884,5 +894,50 @@ struct FlowLayout: SwiftUI.Layout {
             v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
             x += s.width + spacing; row = max(row, s.height)
         }
+    }
+}
+
+/// WHOLE ROWS ONLY (0.7: nothing sits cut off at rest), for content whose rows differ in height: each row reports its
+/// frame; the gaps between them are where a list's visible height may end
+struct EdgeRows: PreferenceKey {
+    static let space = "edgeRows"
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+    /// the middle of every gap between rows (rows inside rows merge into one)
+    static func cuts(_ rects: [CGRect]) -> [CGFloat] {
+        let r = rects.filter { $0.height > 0 }.sorted { $0.minY < $1.minY }
+        var spans: [(CGFloat, CGFloat)] = []
+        for x in r {
+            if let last = spans.last, x.minY < last.1 - 0.5 { spans[spans.count - 1].1 = max(last.1, x.maxY) }
+            else { spans.append((x.minY, x.maxY)) }
+        }
+        var out: [CGFloat] = []
+        for k in 1 ..< max(1, spans.count) { out.append((spans[k - 1].1 + spans[k].0) / 2) }
+        if let end = spans.last?.1 { out.append(end + 8) }
+        return out
+    }
+    /// the tallest visible height that fits the room and ends 8 pt past a gap (the 16 pt soft edge centred on it);
+    /// the whole room when everything fits or nothing has been measured yet
+    static func fit(_ room: CGFloat, cuts: [CGFloat]) -> CGFloat {
+        guard let end = cuts.last, end + 8 > room else { return room }
+        guard let c = cuts.last(where: { $0 + 8 <= room }), c > 60 else { return room }
+        return c + 8
+    }
+}
+extension View {
+    /// a row whose frame a list keeps whole at rest (EdgeRows)
+    func edgeRow() -> some View {
+        background(GeometryReader { g in Color.clear.preference(key: EdgeRows.self, value: [g.frame(in: .named(EdgeRows.space))]) })
+    }
+}
+/// a scroll stops where the visible height's end lands in a gap between rows
+struct GapSnap: ScrollTargetBehavior {
+    var cuts: [CGFloat]
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let H = context.containerSize.height
+        let top = max(0, context.contentSize.height - H)
+        let want = target.rect.minY + H - 8
+        guard let c = cuts.min(by: { abs($0 - want) < abs($1 - want) }) else { return }
+        target.rect.origin.y = min(max(0, c - H + 8), top)
     }
 }
