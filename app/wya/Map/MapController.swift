@@ -722,6 +722,47 @@ final class MapController {
         }
     }
 
+    /// THE TURN DRIVES THE CAMERA (1.11): where the usual framing would fly for a view of `size` (its continent state set
+    /// as for that size), without flying; the turn then moves the camera itself, frame by frame, with the map's angle
+    func target(for size: CGSize, _ frame: () -> Void) -> (c: SIMD2<Double>, k: Double)? {
+        let was = view
+        view = size
+        flight = nil; afterFlight = nil
+        frame()
+        let t = flight.map { (c: SIMD2($0.to.x, $0.to.y), k: exp($0.to.z)) }
+        flight = nil; afterFlight = nil
+        view = was
+        return t
+    }
+    /// out of full screen where nothing moves the camera: the place you were looking at, held inside the world
+    func holdInside() {
+        let nk = min(kMax, max(kMin, k))
+        fly(to: clamped(c, nk), k: nk, dur: Self.flight)
+    }
+    /// one frame of the turn: the camera `p` of the way from `a` to `b` (the turn's own easing), the screen (portrait
+    /// `screen`) turned `deg` from upright; while it turns the screen never shows past the world's top or bottom edge
+    /// (no sea under Antarctica or over the Arctic): zoomed in just enough for its height across the map at that angle
+    func turnCamera(from a: (c: SIMD2<Double>, k: Double), to b: (c: SIMD2<Double>, k: Double), p: Double, deg: Double,
+                    screen: CGSize) {
+        flight = nil; afterFlight = nil
+        if p >= 1 { c = b.c; k = b.k; updateHome(); needsFrame = true; return }
+        var nk = exp(log(a.k) + (log(b.k) - log(a.k)) * p)
+        var nc = a.c + (b.c - a.c) * p
+        let r = deg * .pi / 180
+        let tall = Double(screen.width) * abs(sin(r)) + Double(screen.height) * abs(cos(r))
+        let worldH = bottom - Self.north
+        let free = (c: nc, k: nk)
+        nk = max(nk, tall / worldH)
+        let hh = tall / 2 / nk
+        nc.y = min(max(nc.y, Self.north + hh), bottom - hh)
+        // a continent framed past the world's edge on purpose (its flat blue): the hold lets go toward the end, so the
+        // turn lands on its framing without a jump
+        let w = b.k * worldH >= tall - 0.5 ? 0 : p * p * p
+        c = nc + (free.c - nc) * w
+        k = exp(log(nk) + (log(free.k) - log(nk)) * w)
+        needsFrame = true
+    }
+
     #if DEBUG
     /// test only: the camera on a longitude and latitude at a zoom (in multiples of the world's size)
     func look(lon: Double, lat: Double, zoom: Double) {
