@@ -89,8 +89,13 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 head.putAway(); water.hideCredit()
-                // the upload sheet closes (and that touch does nothing else, 9.3)
-                if water.upload { UploadState.shared.close(); return }
+                // the upload sheet while choosing closes (and that touch does nothing else, 9.3); while finding or at the
+                // review the touch is the map's (a pan, or a tap that drops or keeps a find)
+                if water.upload {
+                    let ph = UploadState.shared.phase
+                    if ph == .choosing || ph == .words { UploadState.shared.close() }
+                    return
+                }
                 // the passport book goes back into its tool (and that touch does nothing else)
                 if BookState.shared.isOpen { BookState.shared.close(); return }
                 if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) }
@@ -109,6 +114,8 @@ struct ContentView: View {
                 // at the review a found country's tap drops or keeps it (9.5)
                 if water.upload { _ = UploadState.shared.tap(i); return }
                 guard !map.locked else { return }
+                // a waiting find (9.6), quick stamping off: its review opens instead of the card
+                if !head.quickStamp, UploadState.shared.waits(i) { UploadState.shared.openReview(water: water, map: map); return }
                 // QUICK STAMPING (Part 4.7): the tap toggles the stamp at once, no card
                 if head.quickStamp { Self.quickStamp(i, map: map); return }
                 // the tap that put the book away opens no card (one press, one job)
@@ -128,6 +135,8 @@ struct ContentView: View {
         }
         .task {
             await map.load()
+            // finds left waiting at the last review are darkened again (9.6)
+            UploadState.shared.restoreWaiting(map: map)
             // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
             if let url = DeepLink.waiting {
                 DeepLink.waiting = nil
