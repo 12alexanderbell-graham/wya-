@@ -123,6 +123,13 @@ final class MarkStore {
         return r.changed.count
     }
 
+    /// the passport's order of stamped countries (oldest first), read fresh from the store
+    func passportOrder() async -> [String] {
+        guard let store else { return [] }
+        let acc = account
+        return (try? await store.passportOrder(account: acc)) ?? []
+    }
+
     var canUndo: Bool { !undoStack.isEmpty }
 
     /// UNDO the last write (the drop, a shake, a three-finger swipe left; Part 3.10)

@@ -84,6 +84,15 @@ actor TravelStore {
         return out
     }
 
+    /// THE PASSPORT'S ORDER (the old StampBook's: by when, then by id): the countries stamped, oldest first; each takes
+    /// the next slot of the book
+    func passportOrder(account: String) throws -> [String] {
+        let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        return rs.filter { $0.key.hasPrefix("c:") }
+            .sorted { ($0.when ?? "", $0.at, $0.key) < ($1.when ?? "", $1.at, $1.key) }
+            .map { String($0.key.dropFirst(2)) }
+    }
+
     /// When each mark was made (for the Streak: weeks with an act).
     func markDates(account: String) throws -> [Date] {
         try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account })).map(\.at)
