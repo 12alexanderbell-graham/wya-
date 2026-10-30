@@ -293,6 +293,15 @@ final class TestDriver {
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
+                // townpage frankf: the first town found's page (Part 16)
+                case "townpage":
+                    TownIndex.shared.load()
+                    for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let m = map, let t = TownIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first {
+                        let country = m.world?.placeIndex[t.file].map { m.world!.places[$0].n } ?? ""
+                        PlacePageState.shared.open(PlaceKey(.town, t.id), name: t.name, what: "Town in \(t.region), \(country)",
+                                                   country: t.file, from: CGRect(x: 200, y: 400, width: 44, height: 44))
+                    }
                 // regionfind bavar: search's first region found from Countries, opened (as its row's tap)
                 case "regionfind":
                     RegionIndex.shared.load()

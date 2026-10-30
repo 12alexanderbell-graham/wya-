@@ -714,6 +714,16 @@ struct ContentView: View {
         let down = UIAction(title: "Go one level down", attributes: next == nil ? .disabled : []) { _ in
             if let next { after { map.openRegions(sc.place, row: next) } }
         }
+        // OPEN ITS PAGE (16): the region's own page, growing from its shape on screen
+        let page = UIAction(title: "Open its page") { _ in
+            let from = sc.box(of: u).map { map.screenRect($0) } ?? map.screenRect(of: sc.place)
+            let word = RegionCatalog.shared.used(sc.id).first { $0.row == sc.row }.map { RegionsMenuModel.word($0.level.one) } ?? "region"
+            let code = RegionCatalog.shared.file(sc.id, row: sc.row)?.units.first { $0.id == key.id }?.code
+            after {
+                PlacePageState.shared.open(key, name: name, what: "\(word.prefix(1).uppercased() + word.dropFirst()) of \(country)",
+                                           country: sc.id, code: code, from: from)
+            }
+        }
         let share = UIAction(title: "Share") { _ in
             after {
                 let vc = UIActivityViewController(activityItems: ["\(name), \(country)"], applicationActivities: nil)
@@ -726,7 +736,7 @@ struct ContentView: View {
         return UIMenu(title: name, children: [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [down]),
+            UIMenu(options: .displayInline, children: [page, down]),
             UIMenu(options: .displayInline, children: [share]),
         ])
     }

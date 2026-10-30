@@ -31,7 +31,10 @@ final class PlacePageState {
     var toEnd = 0
     var isOpen: Bool { key != nil }
 
-    func open(_ key: PlaceKey, name: String, what: String = "", country: String, from origin: CGRect) {
+    /// a region's ISO 3166-2 code (its facts on the server are keyed by it)
+    private var code: String?
+    func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
+        self.code = code
         guard self.key == nil else { return }
         self.key = key; self.name = name; self.what = what; self.country = country.lowercased()
         self.origin = origin; facts = nil; drag = 0; p = 0
@@ -40,6 +43,8 @@ final class PlacePageState {
             withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.5, dampingFraction: 1)) { self?.p = 1 }
         }
         if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
+        if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
+        if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
     }
     func close() {
         guard key != nil else { return }
@@ -105,6 +110,39 @@ final class PlacePageState {
         }
         guard key?.id.lowercased() == cc else { return }
         facts?.visa = visa
+    }
+
+    /// A TOWN'S FACTS (16.4.5: People, Height, Local time, Climate) from the server's cities (D9 as it is), by its
+    /// GeoNames id
+    private func loadTown(_ cc: String, id: String) async {
+        guard let gid = Int(id.split(separator: "/").last ?? ""),
+              case .ok(let d) = await Servers.data.file("cities/\(cc).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]],
+              let t = all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }), key?.id == id else { return }
+        var out = Facts()
+        if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", Self.big(p.doubleValue))) }
+        if let e = t["ele"] as? NSNumber { out.rows.append(("Height", "\(e.intValue) m")) }
+        if let z = t["tz"] as? String, let tz = TimeZone(identifier: z) {
+            let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
+            out.rows.append(("Local time", f.string(from: Date())))
+        }
+        if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
+            out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
+        }
+        facts = out
+    }
+
+    /// A REGION'S FACTS (16.4.5: People, Area, Capital, its parent) from the server's regions (level 1, by ISO code)
+    private func loadRegion(_ cc: String, code: String) async {
+        guard case .ok(let d) = await Servers.data.file("regions/\(cc).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let r = all[code] as? [String: Any], self.code == code else { return }
+        var out = Facts()
+        if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
+        if let p = r["pop"] as? NSNumber { out.rows.append(("People", Self.big(p.doubleValue))) }
+        if let a = r["area"] as? NSNumber { out.rows.append(("Area", Self.big(a.doubleValue) + " km²")) }
+        if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
+        facts = out
     }
 
     /// "90" -> "visa free for 90 days"; the rest as they are written
