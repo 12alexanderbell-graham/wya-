@@ -23,6 +23,8 @@ final class HeadState {
         searching = false
     }
     var toolsOpen = false
+    /// Regions' selection menu is up: search filters its rows (no results box), and quick stamping can't be used (6.3)
+    var filtersMenu = false
     var quickStamp = false
     var history = false
     /// the top pull, in points of finger travel (0 at rest): it brings the AI out of the dot (TopPull)
@@ -350,7 +352,11 @@ struct HeadView: View {
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                    .onSubmit { if let first = SearchResults.matches(map: map, query: head.query).first { pick(first) } }
+                    .onSubmit {
+                        // over Regions' menu the search key opens the first country the list still shows
+                        if head.filtersMenu { RegionsMenuModel.shared.pickFirst(query: head.query, map: map); return }
+                        if let first = SearchResults.matches(map: map, query: head.query).first { pick(first) }
+                    }
                     .padding(.leading, 44)
                     .padding(.trailing, 14)
                     .frame(width: fieldW, height: 44, alignment: .leading)
@@ -440,7 +446,8 @@ struct HeadView: View {
         let on = (i == 0 && head.quickStamp) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
         let act = {
             switch i {
-            case 0: head.quickStamp.toggle()
+            // with no country (Regions' menu) quick stamping is shown in place but refuses (6.3)
+            case 0: if head.filtersMenu { Feel.refuse() } else { head.quickStamp.toggle() }
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
             case 1: BookState.shared.toggle()
             case 2: head.history.toggle()
@@ -658,6 +665,7 @@ struct ModeWheel: View {
         .onTapGesture {
             if head.settingsOpen { Feel.tap(); Sound.tap(); head.closeSettings(); return }
             guard tools else { return }
+            if head.filtersMenu { Feel.refuse(); return }
             Feel.tap(); Sound.tap()
             withAnimation(Motion.chrome) { head.quickStamp.toggle() }
         }
@@ -846,7 +854,8 @@ struct SearchResults: View {
         // to "Frnace" keeps the France row and only its note rolls to
         // with Map settings open, the field searches the settings (Part 3.4, 5.11)
         let settingHits = head.settingsOpen ? SettingsSearch.hits(head.query, map: map) : []
-        let keys: [ResultKey] = head.settingsOpen
+        // over Regions' menu the field filters the menu's own rows instead (6.3, A6.6)
+        let keys: [ResultKey] = head.filtersMenu && !head.settingsOpen ? [] : head.settingsOpen
             ? (typed ? (settingHits.isEmpty ? [.miss] : settingHits.map { .setting($0.id) }) : [])
             : hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
         let w = width > 0 ? width : fullWidth

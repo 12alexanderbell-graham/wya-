@@ -240,7 +240,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     struct Look { var tint: SIMD4<Float>; var kind: Float; var texelU: Float; var texelV: Float; var pad: Float = 0
                   var clip = SIMD4<Float>(0, 0, 0, 0); var clip2 = SIMD4<Float>(1, 0, 0, 0) }
     struct LineStyle { var colour: SIMD4<Float>; var width: Float; var feather: Float; var dash: Float; var gap: Float }
-    struct AuroraU { var yNorth: Float; var ySouth: Float; var bottom: Float; var strength: Float; var pin: Float = 0 }
+    struct AuroraU { var yNorth: Float; var ySouth: Float; var bottom: Float; var strength: Float; var pin: Float = 0; var away: Float = 0 }
 
     /// THE CONTINENT'S FLAT BLUE: on a continent's map the sea and the rest of the world's land go into one flat blue,
     /// our blue 60% on cream (the old flatP), over half a second on the old continent curve, cubic-bezier(.3, 0, .3,
@@ -251,10 +251,39 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private func flatNow(_ now: CFTimeInterval) -> Float {
         flatFrom + (flatTo - flatFrom) * Float(Motion.blend((now - flatAt) / 0.5))
     }
+    /// REGIONS' SELECTION MENU (A6.5): the aurora's bands move out past the screen's top and bottom edges and the
+    /// diamonds shrink into their points while the menu is up, and come back the same way; on the water's settle
+    /// (critically damped, 0.47 / 0.82 / 0.95 of the way at 25 / 50 / 75% of 0.42 s), from wherever they are
+    private var menuFrom: Float = 0, menuTo: Float = 0, menuAt: CFTimeInterval = -10
+    private func menuNow(_ now: CFTimeInterval) -> Float {
+        let x = max(0, now - menuAt) * 15.2
+        return menuFrom + (menuTo - menuFrom) * Float(1 - exp(-x) * (1 + x))
+    }
     private var awayCache: [String: (units: [Int], places: Set<Int>)] = [:]
+    /// a focus key ("place:12", Regions) and its place
+    static func focus(_ k: String) -> Int? { k.hasPrefix("place:") ? Int(k.dropFirst(6)) : nil }
+
+    /// THE REGION MAP'S BUFFERS (6.5), made once per scene
+    private weak var regionBuilt: RegionScene?
+    private var regionPoints: MTLBuffer?
+    private var regionFans: MTLBuffer?
+    private var regionSegs: MTLBuffer?
+    private func buildRegion(_ s: RegionScene) {
+        regionBuilt = s
+        regionPoints = s.points.isEmpty ? nil : device.makeBuffer(bytes: s.points, length: s.points.count * MemoryLayout<SIMD2<Float>>.stride)
+        regionFans = s.fans.isEmpty ? nil : device.makeBuffer(bytes: s.fans, length: s.fans.count * 4)
+        regionSegs = s.segs.isEmpty ? nil : device.makeBuffer(bytes: s.segs, length: s.segs.count * 4)
+    }
     /// the world's units away from continent k (a sliced country's other piece among them), and the places wholly away
     private func away(_ k: String, _ w: World) -> (units: [Int], places: Set<Int>) {
         if let a = awayCache[k] { return a }
+        // Regions (6.4): everything but the one country
+        if let fp = Self.focus(k) {
+            let units = w.unitOwner.indices.filter { w.unitOwner[$0] != fp }
+            let a = (units, Set(w.places.indices.filter { $0 != fp }))
+            awayCache[k] = a
+            return a
+        }
         let units = w.unitConts.indices.filter { !w.unitConts[$0].contains(k) }
         let places = Set(w.places.indices.filter { !w.inCont($0, k) })
         awayCache[k] = (units, places)
@@ -314,6 +343,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         if !built || (builtWorld !== controller.world && controller.world != nil) { build() }
         guard built, let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let cb = queue.makeCommandBuffer(), let w = controller.world else { return }
+        if let sc = controller.regionScene, regionBuilt !== sc { buildRegion(sc) }
 
         var cam = Cam(c: SIMD2(Float(controller.c.x), Float(controller.c.y)), k: Float(controller.k),
                       time: Float(now - start), view: SIMD2(Float(view.bounds.width), Float(view.bounds.height)))
@@ -363,6 +393,22 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 } else {
                     lines(nil, morph: 1)
                 }
+                // the lines between regions, drawing along their length as they come (A6.7: 0.4 s on the camera curve,
+                // from 0.3 s after the regions are ready, so they start as the camera nears the country)
+                if let rs = regionSegs, let sc = controller.regionScene, regionBuilt === sc {
+                    let t = (now - controller.regionSince - 0.3) / 0.4
+                    if t < 1 { controller.needsFrame = true }
+                    var st = ls
+                    st.colour.w = 1
+                    var m = Float(Motion.camera(max(0, t)))
+                    if m > 0.001 {
+                        ce.setVertexBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 2)
+                        ce.setVertexBytes(&m, length: 4, index: 3)
+                        ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
+                        ce.setVertexBuffer(rs, offset: 0, index: 0)
+                        ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: sc.segs.count / 10)
+                    }
+                }
                 ce.endEncoding()
             }
         }
@@ -395,12 +441,16 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
 
         // the continent's flat blue now: eased from where it is to where it is going over half a second
-        let ck = controller.drawnContinent
+        let ck = controller.drawnContinent ?? controller.focusPlace.map { "place:\($0)" }
         if let ck { awayKey = ck }
         let goal: Float = ck == nil ? 0 : 1
         if goal != flatTo { flatFrom = flatNow(now); flatTo = goal; flatAt = now }
         let flat = flatNow(now)
         if now - flatAt < 0.55 { controller.needsFrame = true }
+        let menuGoal: Float = controller.regionsMenu ? 1 : 0
+        if menuGoal != menuTo { menuFrom = menuNow(now); menuTo = menuGoal; menuAt = now }
+        let menu = menuNow(now)
+        if now - menuAt < 0.7 { controller.needsFrame = true }
 
         // 1. the sea, and the lights over it; the sea keeps its relief on a continent too
         enc.setDepthStencilState(noStencil)
@@ -414,7 +464,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let pinNorth = Float(cy + (0.34 * H - H / 2) / k), pinSouth = Float(cy + (0.73 * H - H / 2) / k)
         let worldNorth = EqualEarth.project(lon: 0, lat: 56).y, worldSouth = EqualEarth.project(lon: 0, lat: -50).y
         var au = AuroraU(yNorth: worldNorth + (pinNorth - worldNorth) * flat, ySouth: worldSouth + (pinSouth - worldSouth) * flat,
-                         bottom: Float(controller.bottom), strength: 1.0, pin: flat)
+                         bottom: Float(controller.bottom), strength: 1.0, pin: flat, away: menu)
         enc.setRenderPipelineState(auroraPipe)
         enc.setFragmentBytes(&au, length: MemoryLayout<AuroraU>.stride, index: 2)
         enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -511,6 +561,47 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
             relief(2, (base ?? Palette.whiteV) * shade)
         }
+        // 3b. THE REGIONS (6.5): over the country, its regions: plain land, then yours lime and wished blue, the one under
+        // the finger darkened in its own colour (never outlined)
+        if let sc = controller.regionScene, regionBuilt === sc, let rp = regionPoints, let rf = regionFans {
+            func regionFan(_ entries: [Int]) -> Bool {
+                var any = false
+                enc.setRenderPipelineState(fanPipe)
+                enc.setVertexBuffer(rp, offset: 0, index: 0)
+                enc.setVertexBuffer(rp, offset: 0, index: 2)
+                var one: Float = 1
+                enc.setVertexBytes(&one, length: 4, index: 3)
+                for e in entries {
+                    let r = sc.runs[e]
+                    guard r.count > 0 else { continue }
+                    enc.drawIndexedPrimitives(type: .triangle, indexCount: r.count, indexType: .uint32, indexBuffer: rf,
+                                              indexBufferOffset: r.start * 4)
+                    any = true
+                }
+                return any
+            }
+            func regionGroup(_ units: Set<Int>, kind: Float, tint: SIMD4<Float>, pattern: Float = 0) {
+                guard !units.isEmpty else { return }
+                enc.setDepthStencilState(markGroup)
+                guard regionFan(sc.entries(of: units)) else { return }
+                enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                relief(kind, tint, pattern: pattern)
+            }
+            enc.setDepthStencilState(markGroup)
+            if regionFan(Array(sc.runs.indices)) {
+                enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                relief(1)
+            }
+            let rpress = pressed == sc.place ? controller.regionPressed : nil
+            let st = controller.showsStamped ? controller.regionStamped : []
+            let wi = controller.showsWished ? controller.regionWished : []
+            regionGroup(st.subtracting([rpress ?? -1]), kind: 2, tint: Palette.limeV, pattern: hatch)
+            regionGroup(wi.subtracting([rpress ?? -1]), kind: 2, tint: Palette.blueV, pattern: dots)
+            if let u = rpress {
+                let base = st.contains(u) ? Palette.limeV : wi.contains(u) ? Palette.blueV : Palette.whiteV
+                regionGroup([u], kind: 2, tint: base * SIMD4<Float>(0.80, 0.79, 0.77, 1))
+            }
+        }
         // 4. the lakes (the slices carry their own, as holes in the land through which the sea's relief shows): drawn
         // with the same sea relief, so a lake is the same colour at every level and nothing changes when a level comes in
         if tiles == nil {
@@ -542,7 +633,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 if let tiles {
                     for t in tiles {
                         for it in t.items {
-                            let isAway = it.cont.map { $0 != k } ?? (it.place < 0 || aw.places.contains(it.place))
+                            let isAway = Self.focus(k).map { it.place != $0 }
+                                ?? it.cont.map { $0 != k } ?? (it.place < 0 || aw.places.contains(it.place))
                             if isAway && colourOf(it.place) == g { tileFans(t, start: it.start, count: it.count); any = true }
                         }
                     }
@@ -571,6 +663,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 // from it coming out; never blended into the blue
                 var size = Float(controller.diamondSize(i))
                 if flat > 0.001, let k = awayKey, !w.inCont(i, k) { size *= 1 - flat }
+                // under Regions' selection menu every diamond goes back into its point (A6.5: "no diamonds")
+                size *= 1 - menu
                 if size < 0.01 { continue }
                 ds.append(D(p: SIMD2(Float(pl.c[0]), Float(pl.c[1])), pad: SIMD2(size, 0), colour: c))
             }

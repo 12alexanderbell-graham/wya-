@@ -222,6 +222,7 @@ struct AuroraU {
     float bottom;    // the map's bottom edge
     float strength;
     float pin;       // on a continent (0 to 1 with the move): each band's outer end on the screen's own edge (A1.17)
+    float away;      // under Regions' selection menu (0 to 1): each band moved its own height out past its screen edge
 };
 vertex FullV fullVertex(uint vid [[vertex_id]], constant Cam& cam [[buffer(1)]]) {
     float2 p = float2((vid << 1) & 2, vid & 2);
@@ -279,7 +280,9 @@ fragment float4 auroraFragment(FullV in [[stage_in]], constant Cam& cam [[buffer
         // how far in from the band's outer edge (0, the edge of the world or of the screen) to its inner end (1)
         float outer = band == 0 ? mix(min(0.0, screenTop), screenTop, au.pin) : mix(max(au.bottom, screenBottom), screenBottom, au.pin);
         float inner = band == 0 ? au.yNorth : au.ySouth;
-        float s = (m.y - outer) / (inner - outer);
+        // moved out past its edge by `away` of its own height (A6.5): a point sees the band as if it were that much
+        // further along it
+        float s = (m.y - outer) / (inner - outer) + au.away;
         if (s >= 1.0) continue;
         s = max(s, 0.0);
         // strongest at the edge, easing away to nothing at its end: a gradient coming out of the edge

@@ -177,6 +177,12 @@ final class MapController {
     }
     func hit(at p: CGPoint) -> Int? {
         guard let w = world else { return nil }
+        // THE REGION MAP (6.5): only the open country's regions answer a finger (the faded world does nothing); the
+        // region found is kept for the press's darkening and the tap
+        if let sc = regionScene {
+            regionPressed = regionUnit(at: p)
+            return regionPressed == nil ? nil : sc.place
+        }
         let m = mapPoint(p)
         let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(10 / k), tiny = Float(14 / k)
         let small: (Int) -> Bool = { w.places[$0].tiny }
@@ -301,7 +307,7 @@ final class MapController {
         await marks.load()
         takeMarks(marks)
         recount()
-        marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared) }
+        marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared); self?.takeRegionMarks() }
         homeX = Self.homeLongitudeX(w)
         takeShapes(w)
         goHome(animated: false)
@@ -334,6 +340,111 @@ final class MapController {
     }
     /// the territories (drawn white when unmarked on Style Simple), worked out with the shapes
     @ObservationIgnored private(set) var territories: [Int] = []
+    // MARK: REGIONS (Part 6)
+    /// THE REGION MAP (6.5): the country whose regions are drawn, its scene, the region under the finger, and which
+    /// regions are yours (from MarkStore's `r:` keys)
+    private(set) var regionScene: RegionScene?
+    /// the country the camera is on in Regions: the rest of the world goes into the continent's one blue round it
+    @ObservationIgnored private(set) var focusPlace: Int?
+    /// when the scene came (its borders draw in from then, the renderer)
+    @ObservationIgnored private(set) var regionSince: CFTimeInterval = 0
+    @ObservationIgnored var regionPressed: Int? { didSet { if regionPressed != oldValue { needsFrame = true } } }
+    private(set) var regionStamped: Set<Int> = []
+    private(set) var regionWished: Set<Int> = []
+    /// your number at the open level (the Regions caption)
+    var regionCount: Int { regionStamped.count }
+    @ObservationIgnored private var regionJob = 0
+
+    /// INTO A COUNTRY'S REGIONS (A6.7): the camera flies to the country framed in the room between the head and the
+    /// 25% water, the rest of the world going into the one blue; the regions are read off the main thread (usually
+    /// already, from the row's touch) and drawn when ready, the country's own fill staying until then
+    func openRegions(_ i: Int) {
+        guard let w = world, i >= 0, i < w.places.count else { return }
+        regionJob += 1
+        let job = regionJob
+        let id = w.places[i].id.lowercased()
+        if regionScene?.place != i { regionScene = nil; regionPressed = nil }
+        frameRegion(i)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let scene = RegionScene(place: i, id: id)
+            await MainActor.run {
+                guard let self, self.regionJob == job, self.focusPlace == i else { return }
+                self.regionScene = scene
+                self.regionSince = CACurrentMediaTime()
+                self.takeRegionMarks()
+                self.needsFrame = true
+                #if DEBUG
+                NSLog("wya regions %@: %d regions, %d entries, %d border segments", id, scene?.unitIDs.count ?? -1,
+                      scene?.runs.count ?? -1, (scene?.segs.count ?? 0) / 10)
+                #endif
+            }
+        }
+    }
+    /// out of the country (back to the menu, or out of Regions): the regions go, the world comes back
+    func closeRegions() {
+        regionJob += 1
+        regionScene = nil
+        regionPressed = nil
+        regionStamped = []; regionWished = []
+        if focusPlace != nil {
+            focusPlace = nil
+            // the camera is free of the country again (it stays where it is)
+            continentFrame = nil; continentK = nil; continentY = nil
+            c = clamped(c, max(k, worldKMin)); k = max(k, worldKMin)
+            updateHome()
+        }
+        needsFrame = true
+    }
+    /// the country framed in the room between the head's foot + 8 and the 25% water's top − 12 (6.5), centred in it,
+    /// never past its box; the camera held to the country from then (its frame and zoom are the continent's limits)
+    func frameRegion(_ i: Int) {
+        guard let w = world, let f0 = w.frame(of: i) else { return }
+        let f = SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w))
+        continent = nil
+        drawnContinent = nil
+        let W = Double(view.width), H = Double(view.height)
+        let room = layout.room(sheetTop: layout.top(.quarter))
+        let top = Double(room.lowerBound), bottom = Double(room.upperBound)
+        let fw = max(0.05, f.z - f.x), fh = max(0.05, f.w - f.y)
+        let nk = min(kMax, max(worldKMin, min((W - 32) / fw, max(80, bottom - top) / fh)))
+        let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
+        let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
+        focusPlace = i
+        // the pan's limits: the country's box plus half a screen each way (6.5)
+        let hw = W / 2 / nk, hh = H / 2 / nk
+        continentFrame = SIMD4(f.x - hw, f.y - hh, f.z + hw, f.w + hh)
+        continentK = nk
+        continentY = centre.y
+        followMid = nil
+        updateHome()
+        needsFrame = true
+        fly(to: clamped(centre, nk), k: nk, dur: Self.flight)
+    }
+    /// the region under a screen point, if the region map is up
+    func regionUnit(at p: CGPoint) -> Int? {
+        guard let s = regionScene else { return nil }
+        let m = mapPoint(p)
+        return s.unit(at: SIMD2(Float(m.x), Float(m.y)))
+    }
+    /// which regions of the open scene are stamped and wished, from the store
+    func takeRegionMarks() {
+        guard let s = regionScene else { if !regionStamped.isEmpty { regionStamped = [] }; if !regionWished.isEmpty { regionWished = [] }; return }
+        var st = Set<Int>(), wi = Set<Int>()
+        let m = MarkStore.shared
+        for (u, id) in s.unitIDs.enumerated() {
+            let x = m.state(PlaceKey(.region, id))
+            if x.stamped { st.insert(u) } else if x.wished { wi.insert(u) }
+        }
+        if st != regionStamped { regionStamped = st }
+        if wi != regionWished { regionWished = wi }
+        needsFrame = true
+    }
+
+    /// REGIONS' SELECTION MENU IS UP (6.3), and in Regions generally: no aurora, no diamonds; the map keeps its fills
+    /// (the renderer moves them)
+    @ObservationIgnored var regionsMenu = false {
+        didSet { if regionsMenu != oldValue { needsFrame = true } }
+    }
     @ObservationIgnored var diamondsOff = false {
         didSet { if diamondsOff != oldValue { needsFrame = true } }
     }
@@ -585,7 +696,7 @@ final class MapController {
         if animated { fly(to: target, k: worldKMin, dur: Self.flight) } else { k = worldKMin; c = target; updateHome() }
     }
     private func offContinent() {
-        drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil; followMid = nil
+        drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil; followMid = nil; focusPlace = nil
         updateHome()
         needsFrame = true
     }
