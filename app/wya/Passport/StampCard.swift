@@ -97,7 +97,9 @@ final class CardState {
             }
         }
         place = i
-        at = point
+        // THE PASSPORT COMES FROM WHERE IT IS KEPT: it grows out of the plus, the passport tool's home, and goes back
+        // into it; the place keeps its darkening
+        if let L = water?.layout { at = CGPoint(x: L.rightX, y: L.headY) } else { at = point }
         stampedHere = false
         landing = false
         map.kept = i
@@ -118,7 +120,7 @@ final class CardState {
             }
             guard place == i else { return }
             Feel.tap()
-            withAnimation(.spring(response: 0.42, dampingFraction: 1)) { p = 1 }
+            withAnimation(.spring(response: 0.42 * Self.slow, dampingFraction: 1)) { p = 1 }
         }
     }
 
@@ -146,6 +148,9 @@ struct StampCard: View {
     @State private var card = CardState.shared
     @State private var marks = MarkStore.shared
     @State private var details = DetailsState.shared
+    @State private var verify = VerifyState.shared
+    /// what the Verify? button reads for this card's place (Verify? / In process / Verified)
+    @State private var proofWord = "Verify?"
 
     var body: some View {
         if let i = card.place, let w = map.world {
@@ -156,7 +161,7 @@ struct StampCard: View {
             // edge points on that edge (r 0 to 1): centre up 34 pt, scale 1 - r; their bottom never under the water
             let bookBottom = g.mid.y + g.bookH / 2 + 28
             let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
-            let detailsUp = details.isOpen
+            let detailsUp = details.isOpen || verify.isOpen
             // THE CARD GOES BACK (replacing A4.8's first version): once the bottom pair has
             // gone, the name, Stamp | Wishlist and the book shrink as one about their top centre, Apple's way with the
             // screen behind a sheet, so the book's bottom stays 12 pt above the water every frame; at full it has gone
@@ -170,7 +175,9 @@ struct StampCard: View {
             // the column grows out of the finger on one arc (A4.1): position and scale from one progress, animated
             // along the arc itself (ArcPlace), not on a straight line between the two ends
             let c = CGPoint(x: g.mid.x, y: g.mid.y)
-            let ctrl = Self.control(card.at, c)
+            // from the plus the way is straight down and in: an arc bowed upward ran the growing card across the
+            // head's dot, and nothing may cross anything
+            let ctrl = CGPoint(x: (card.at.x + c.x) / 2, y: (card.at.y + c.y) / 2)
             let half = (g.bookW - 12) / 2
             VStack(spacing: 12) {
                 nameCapsule(w.places[i].n, width: g.bookW)
@@ -182,7 +189,7 @@ struct StampCard: View {
                              size: CGSize(width: g.bookW, height: g.bookH))
                 HStack(spacing: 12) {
                     detailsButton(state, key: key, name: w.places[i].n, w: half, words: !detailsUp && r < 0.4)
-                    notYet("Verify?", w: half, live: false, dim: !state.stamped, words: !detailsUp && r < 0.4)
+                    verifyButton(state, key: key, name: w.places[i].n, place: i, w: half, words: !detailsUp && r < 0.4)
                 }
                 .scaleEffect(max(0.001, 1 - r))
                 .offset(y: -34 * r)
@@ -200,7 +207,7 @@ struct StampCard: View {
             .overlay {
                 if detailsUp {
                     Color.clear.contentShape(Rectangle())
-                        .onTapGesture { details.close(water: water) }
+                        .onTapGesture { details.close(water: water); verify.close(water: water) }
                 }
             }
             // A4.4: the stamp comes out of the Stamp button's centre, travels on one arc to above its slot growing to
@@ -327,6 +334,28 @@ struct StampCard: View {
                 .glassEffect(.clear, in: .capsule)
         }
         .buttonStyle(.plain)
+    }
+
+    /// VERIFY? (4.5): live once the place is stamped; reads Verify? / In process / Verified from the stamp's proof
+    private func verifyButton(_ s: MarkState, key: PlaceKey, name: String, place: Int, w: CGFloat, words: Bool) -> some View {
+        Button {
+            guard s.stamped, !card.flying else { Feel.refuse(); return }
+            card.heldTop = water.form().top
+            verify.open(key, name: name, place: place, water: water)
+        } label: {
+            Text(words ? proofWord : " ")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
+                .contentTransition(.numericText())
+                .animation(Motion.quick, value: words)
+                .animation(Motion.quick, value: proofWord)
+                .frame(width: w, height: 44)
+                .glassEffect(.clear, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .task(id: "\(key)-\(marks.changes)-\(s.stamped)") {
+            proofWord = s.stamped ? (await MarkStore.shared.verification(key))?.word ?? "Verify?" : "Verify?"
+        }
     }
 
     /// DETAILS (4.4): live once the place is stamped (a wished place's details come with 4.4.5); the card stays as it

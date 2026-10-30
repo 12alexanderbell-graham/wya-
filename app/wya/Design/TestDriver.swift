@@ -219,8 +219,14 @@ final class TestDriver {
                         CardState.shared.heldTop = water.form().top
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
+                case "verify":
+                    if let m = map, let w = m.world, let i = CardState.shared.place, let water {
+                        CardState.shared.heldTop = water.form().top
+                        VerifyState.shared.open(.country(w.places[i].id), name: w.places[i].n, place: i, water: water)
+                    }
                 case "close":
-                    if DetailsState.shared.isOpen, let water { DetailsState.shared.close(water: water) }
+                    if VerifyState.shared.isOpen, let water { VerifyState.shared.close(water: water) }
+                    else if DetailsState.shared.isOpen, let water { DetailsState.shared.close(water: water) }
                     else if let m = map { CardState.shared.close(map: m) }
                 // stamp <id>: a country stamped as a test would (undoable)
                 case "stamp": await MarkStore.shared.stamp(.country(a))

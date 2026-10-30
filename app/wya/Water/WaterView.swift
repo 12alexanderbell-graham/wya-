@@ -148,7 +148,11 @@ struct SheetContent: View {
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
             // (its contents are there in one frame once the water has risen; no fade, no words rolling yet)
-            if water.details && water.detailsWords { DetailsSheet(water: water, form: form).transition(.identity) }
+            if water.details && water.detailsWords {
+                // the same place in the water holds Verify (4.5) when that is what opened it
+                if VerifyState.shared.isOpen { VerifySheet(water: water, map: map, form: form).transition(.identity) }
+                else { DetailsSheet(water: water, form: form).transition(.identity) }
+            }
             // THE STAMPED LIST (Part 4.6) under the caption, which stays; hidden while Details from a row is up
             let captionY = max(L.headBottom + 12 + 52, form.top + 72)
             if water.stampedList && !water.details {

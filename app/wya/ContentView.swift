@@ -83,12 +83,14 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 head.putAway(); water.hideCredit()
-                if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) } else { CardState.shared.close(map: map) }
+                if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) }
+                else if VerifyState.shared.isOpen { VerifyState.shared.close(water: water) }
+                else { CardState.shared.close(map: map) }
             }
-            // a finger in the water is using Details when they are up; otherwise it closes the card
+            // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
                 head.putAwayAI()
-                if !DetailsState.shared.isOpen { CardState.shared.close(map: map) }
+                if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map) }
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
@@ -140,12 +142,16 @@ struct ContentView: View {
             } else if DetailsState.shared.isOpen, s == .quarter || s == .closed {
                 // Details pulled down below 50% close and keep (4.4.1)
                 DetailsState.shared.close(water: water)
+            } else if VerifyState.shared.isOpen, s == .quarter || s == .closed {
+                // Verify pulled down: back to the card (4.5.1)
+                VerifyState.shared.close(water: water)
             }
         }
     }
 
     private func closeCard() {
         DetailsState.shared.close(water: water)
+        VerifyState.shared.close(water: water)
         CardState.shared.close(map: map)
     }
 }

@@ -122,6 +122,22 @@ actor TravelStore {
         return out
     }
 
+    /// A STAMP'S PROOF (Part 4.5): the verification JSON as one write and one undo step (nil: none)
+    func setVerification(_ key: PlaceKey, account: String, data: Data?) throws -> Result {
+        var res = Result()
+        guard let r = try record(account, key), r.stamped, r.verification != data else { return res }
+        let v = try visitCount(account, key)
+        res.undo.append(snapshot(key, r))
+        let old = state(r, visits: v)
+        r.verification = data
+        res.changed[key] = (old, state(r, visits: v))
+        try modelContext.save()
+        return res
+    }
+    func verificationOf(_ key: PlaceKey, account: String) throws -> Data? {
+        try record(account, key)?.verification
+    }
+
     /// A WISHED PLACE'S DETAILS (Part 4.4.5), as one write and one undo step: the wish details JSON and how badly
     /// (`want`, 1 to 5); nothing is written when nothing changed
     func setWishDetails(_ key: PlaceKey, account: String, details: Data?, want: Int) throws -> Result {
