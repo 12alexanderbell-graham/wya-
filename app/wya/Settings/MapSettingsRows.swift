@@ -119,6 +119,7 @@ enum MapSettingsRows {
             map.recount()
         }
         map.diamondsOff = b.diamonds == "nowhere"
+        map.simple = b.map == "native" && b.style == "simple"
     }
 
     /// every row as an action the AI, Siri and links can call ("setting.count" with "countries")

@@ -75,19 +75,38 @@ final class CardState {
     /// A4.8: while Details (or Verify) is up the card keeps the size and place it had (nothing gets smaller): the
     /// water's top when it rose, which the geometry keeps using
     var heldTop: CGFloat?
+    /// the water's top the card was laid out for when it sent the water down to make room (until it is there)
+    var goingTop: CGFloat?
 
     var isOpen: Bool { place != nil }
 
-    func open(_ i: Int, at point: CGPoint, map: MapController) {
+    func open(_ i: Int, at point: CGPoint, map: MapController, water: Water? = nil) {
         // one press, one job: the touch that closed a card never opens another (Appendix A.4)
         guard place == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
+        // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water
+        // goes to the highest stop that leaves it 300 or more, and the card starts 0.1 s after the water starts. The
+        // card never shrinks to fit a high sheet
+        var delay = 0.0
+        if let water {
+            let L = water.layout
+            let fits: (Water.Stop) -> Bool = { StampCard.Geometry(L: L, sheetTop: water.y($0)).bookH >= 300 }
+            if !fits(water.stop) || water.stop == .full {
+                let to: Water.Stop = fits(.quarter) ? .quarter : .closed
+                water.go(to)
+                // laid out for where the water is going, so it never grows as the water goes down
+                goingTop = water.y(to)
+                delay = 0.1
+            }
+        }
         place = i
         at = point
         stampedHere = false
         landing = false
         map.kept = i
+        p = 0
         Task {
             order = await MarkStore.shared.passportOrder()
+            if delay > 0 { try? await Task.sleep(for: .milliseconds(Int(delay * 1000))) }
             Feel.tap()
             withAnimation(.spring(response: 0.42, dampingFraction: 1)) { p = 1 }
         }
@@ -101,6 +120,7 @@ final class CardState {
             guard let self, self.closedAt > 0, self.p < 0.01 else { return }
             self.place = nil
             self.heldTop = nil
+            self.goingTop = nil
             self.ghost = 0
             map.kept = nil
         }
@@ -121,7 +141,7 @@ struct StampCard: View {
         if let i = card.place, let w = map.world {
             let L = water.layout
             let waterTop = water.form().top
-            let g = Geometry(L: L, sheetTop: card.heldTop ?? waterTop)
+            let g = Geometry(L: L, sheetTop: card.heldTop ?? card.goingTop ?? waterTop)
             // A4.8: the water rising from where it was to the book's bottom edge takes Details | Verify? into their
             // edge points on that edge (r 0 to 1): centre up 34 pt, scale 1 - r; their bottom never under the water
             let bookBottom = g.mid.y + g.bookH / 2 + 28
@@ -162,6 +182,9 @@ struct StampCard: View {
             // Details closed and the water back where it was: the card follows the water again
             .onChange(of: !water.details && abs(waterTop - (card.heldTop ?? waterTop)) < 0.5) { _, back in
                 if back { card.heldTop = nil }
+            }
+            .onChange(of: abs(waterTop - (card.goingTop ?? waterTop)) < 0.5) { _, there in
+                if there { card.goingTop = nil }
             }
             // with Details up, a tap on the card closes Details only, back to the card (4.4.1)
             .overlay {

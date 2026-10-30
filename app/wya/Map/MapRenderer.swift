@@ -372,6 +372,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
 
         func relief(_ kind: Float, _ tint: SIMD4<Float> = .zero) {
             var look = Look(tint: tint, kind: kind, texelU: texel.x, texelV: texel.y)
+            // clip2.y: Map settings' Style Simple (flat cream land, blue 25% on cream sea)
+            look.clip2.y = controller.simple ? 1 : 0
             enc.setRenderPipelineState(reliefPipe)
             enc.setVertexBuffer(grid, offset: 0, index: 0)
             enc.setFragmentTexture(reliefTex, index: 0)

@@ -176,6 +176,7 @@ final class MapController {
         guard world == nil else { return }
         // the saved Map settings set the borders view, your dispute picks and the count before the world is read
         diamondsOff = MapSettingsStore.shared.value.diamonds == "nowhere"
+        simple = MapSettingsStore.shared.value.style == "simple"
         let loaded: (World, Relief)? = await Task.detached(priority: .userInitiated) {
             guard let w = try? World.load(), let r = try? Relief.load() else { return nil }
             return (w, r)
@@ -213,6 +214,11 @@ final class MapController {
     }
 
     /// Map settings' Diamonds is Nowhere (read from the settings at load and at each change of the row)
+    /// MAP SETTINGS' STYLE SIMPLE (Part 1.4): the sea blue 25% on cream, the land flat cream (no relief), your colours
+    /// as on Detailed; changes in one frame
+    @ObservationIgnored var simple = false {
+        didSet { if simple != oldValue { needsFrame = true } }
+    }
     @ObservationIgnored var diamondsOff = false {
         didSet { if diamondsOff != oldValue { needsFrame = true } }
     }
