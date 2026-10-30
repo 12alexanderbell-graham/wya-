@@ -172,7 +172,7 @@ struct LogoMark: View, Animatable {
         /// THE DAY for the light at `phase`: the planet's edge on the lit side from one end of the line to the other,
         /// back along the day/night curve, half an ellipse R * |sin(phase)| wide
         func day(_ phase: Double) -> Path {
-            let side: CGFloat = cos(phase) >= 0 ? -1 : 1           // -1: the day on the top-left side (the)
+            let side: CGFloat = cos(phase) >= 0 ? -1 : 1           // -1: the day on the top-left side
             let bulge = CGFloat(sin(phase)) * -side                // + towards the night side at rest
             let R = LogoMark.R, steps = 96
             var p = Path()

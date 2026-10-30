@@ -167,8 +167,8 @@ enum ReviewSheet {
             })
         }
         var items = IconsDrawn.order.map { k in ReviewItem(id: IC5.drawnIds[k] ?? k, name: k, view: cell(k)) }
-        items += IC5.all.keys.sorted().map { k in ReviewItem(id: k, name: "set", view: cell(k)) }
-        save("icons", title: "Icons to review (18.4): the drawn set T1 to T78, then the Icons5 set",
+        items += IC5.all.keys.sorted().map { k in ReviewItem(id: k, name: "Icons5", view: cell(k)) }
+        save("icons", title: "Icons to review (18.4): the drawn set T1 to T78, then the existing Icons5 set",
              items: items, cell: CGSize(width: 150, height: 130), columns: 9)
     }
 }
