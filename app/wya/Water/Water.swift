@@ -216,6 +216,9 @@ final class Water {
     @ObservationIgnored var onMapAgain: (() -> Void)?
     /// another tab chosen
     @ObservationIgnored var onTabChange: (() -> Void)?
+    /// a mode picked from the Map tab's hold menu (11.5): the mode, and the current one ("Countries")
+    @ObservationIgnored var onModePick: ((Int) -> Void)?
+    @ObservationIgnored var currentMode: (() -> Int)?
 
     func begin(at p: CGPoint) {
         // caught before a waiting move into the capsule started: it is still where it was

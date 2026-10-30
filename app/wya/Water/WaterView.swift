@@ -96,6 +96,25 @@ struct WaterView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // THE MAP TAB'S HOLD MENU (11.5): the four modes, from any tab. From another tab the mode is set unseen,
+                // then the tab changes; on the Map tab, once Apple's menu has closed, the wheel turns to it
+                .contextMenu {
+                    if i == 0 {
+                        let cur = water.currentMode?() ?? 0
+                        ForEach(Array(["Countries", "Regions", "Places", "Pins"].enumerated()), id: \.offset) { m, name in
+                            Button(name) {
+                                if tab != 0 {
+                                    water.onModePick?(m)
+                                    water.onTabChange?()
+                                    tab = 0
+                                } else {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { water.onModePick?(m) }
+                                }
+                            }
+                            .disabled(m == cur && tab == 0)
+                        }
+                    }
+                }
                 .accessibilityLabel(names[i])
                 .accessibilityAddTraits(i == tab ? .isSelected : [])
                 .position(x: L.W / 2 + CGFloat(i - 1) * spacing, y: L.capsule.midY)
