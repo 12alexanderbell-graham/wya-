@@ -118,6 +118,11 @@ struct ContentView: View {
                 Hints.shared.touched()
                 // search open: the touch closes it only (a drag still pans), keeping the typed text 10 s (1.10)
                 if head.searching { head.closeSearchFromMap(); return }
+                // anything this touch closes: that press opens no hold menu
+                if head.settingsOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
+                    || CardState.shared.isOpen || (water.upload && [.choosing, .words].contains(UploadState.shared.phase)) {
+                    map.touchClosedAt = CACurrentMediaTime()
+                }
                 head.putAway(); water.hideCredit()
                 // the upload sheet while choosing closes (and that touch does nothing else, 9.3); while finding or at the
                 // review the touch is the map's (a pan, or a tap that drops or keeps a find)
@@ -162,13 +167,6 @@ struct ContentView: View {
             }
             // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
             map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head) }
-            map.holdCloses = { [head] in
-                if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen {
-                    return { closeCard() }
-                }
-                if head.settingsOpen { return { head.closeSettings() } }
-                return nil
-            }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
@@ -311,13 +309,17 @@ struct ContentView: View {
 
     /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish | Details, Verify | Show in passport, Share. Rows
     /// that can't be used now are unavailable (Apple greys them in place). With a card, the book, Details or Verify up,
-    /// or Map settings open, the hold only closes them (one press, one job; MapController.holdCloses). Not here yet: Lived here, Open
+    /// or Map settings open, the hold only closes them (one press, one job; MapController.touchClosedAt). Not here yet: Lived here, Open
     /// its page, Open its region map, Its places, Add to a list, Add to a plan (their parts are not built).
-    /// Asked as the press starts, so it changes nothing itself (the closing a hold does is MapController.holdCloses).
+    /// Asked as the press starts, so it changes nothing itself (the press's own touch does the closing, onTouch).
     /// Sideways (1.11), with search open, or on the press that closed search: no menu.
     @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState) -> UIMenu? {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
-        if Sideways.shared.on || head.searching || CACurrentMediaTime() - head.mapClosedSearchAt < 0.6 { return nil }
+        let now = CACurrentMediaTime()
+        if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
+        // still up (the press's touch may not have reached the map yet): this press only closes it
+        if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
+            || head.settingsOpen { return nil }
         // THE REVIEW (9.5): a found country's menu is Keep or Drop · Its dates · Show in the list; other places none
         if water.upload {
             let u = UploadState.shared

@@ -1089,7 +1089,8 @@ struct SearchResults: View {
             return { hypot(w.places[$0].c[0] - hc[0], w.places[$0].c[1] - hc[1]) < hypot(w.places[$1].c[0] - hc[0], w.places[$1].c[1] - hc[1]) }
         }
         add(map.wished.subtracting(stamped).sorted(by: near(homes.first)))
-        let nb = w.neighbours
+        // read only once worked out (in the background after the world loads): the main thread never waits for them
+        let nb = w.neighboursIfReady ?? []
         for h in homes where h < nb.count { add(nb[h].subtracting(stamped).sorted(by: near(h))) }
         return out
     }

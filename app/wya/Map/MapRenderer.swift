@@ -659,20 +659,12 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         #endif
         // locked: no menu; the lift refuses the hold (finish) (11.7)
         if c.locked { return nil }
-        // a card, the book, Details, Verify or Map settings up: a hold that rests 0.5 s only closes them
-        if let close = c.holdCloses?() {
-            let t0 = downTime
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self, self.downAt != nil, self.downTime == t0 else { return }
-                close()
-            }
-            return nil
-        }
         // the sea, or a place off the continent you're on: no menu and no haptic
         guard let i = c.hit(at: location) else { return nil }
         if let k = c.drawnContinent, let w = c.world, !w.inCont(i, k) { return nil }
-        // made now only to know whether there is one; its actions change things only when chosen
-        guard let make = c.menuFor, make(i, location) != nil else { return nil }
+        // made now, once (making it changes nothing; its actions change things only when chosen), so what shows is
+        // what was decided at the press
+        guard let menu = c.menuFor?(i, location) else { return nil }
         menuTarget?.removeFromSuperview()
         let v = UIView(frame: CGRect(x: location.x - 22, y: location.y - 22, width: 44, height: 44))
         v.backgroundColor = .clear
@@ -681,8 +673,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         menuTarget = v
         return UIContextMenuConfiguration(identifier: NSNumber(value: i), previewProvider: nil) { [weak c] _ in
             // runs as the menu is about to show
-            guard let c, let menu = c.menuFor?(i, location) else { return nil }
-            c.menuHeld = i
+            c?.menuHeld = i
             return menu
         }
     }
@@ -808,8 +799,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     private func finish(_ touches: Set<UITouch>, _ event: UIEvent?, cancelled: Bool) {
         guard let c = controller else { return }
         let left = active(event).filter { !touches.contains($0) }
-        // a press UIKit readied a menu for, ended before the menu showed: its clear target goes
-        if left.isEmpty, !menuUp, menuTarget != nil {
+        // a press UIKit readied a menu for, lifted before the menu showed: its clear target goes (not on a cancel:
+        // UIKit cancels the touches as the menu begins, before it shows)
+        if left.isEmpty, !cancelled, !menuUp, menuTarget != nil {
             menuTarget?.removeFromSuperview(); menuTarget = nil
             c.menuHeld = nil
         }

@@ -116,9 +116,9 @@ final class MapController {
     @ObservationIgnored var menuHeld: Int? { didSet { if menuHeld != oldValue { needsFrame = true } } }
     /// the menu for a held place at a point (the map's hold, Part 11.3/11.5), nil for none; set by the screen
     @ObservationIgnored var menuFor: ((Int, CGPoint) -> UIMenu?)?
-    /// something a hold only closes (a card, the book, Details, Verify, Map settings): its closer, else nil. The map
-    /// closes it once the finger has rested 0.5 s without moving (one press, one job); no menu then
-    @ObservationIgnored var holdCloses: (() -> (() -> Void)?)?
+    /// when a touch on the map last closed something (a card, the book, Details, Verify, Map settings, the upload
+    /// sheet): that press does nothing else, so it opens no hold menu (one press, one job)
+    @ObservationIgnored var touchClosedAt: CFTimeInterval = 0
     @ObservationIgnored var pressed: Int? {
         didSet {
             guard pressed != oldValue else { return }
@@ -685,7 +685,12 @@ final class MapController {
     /// room for), or the continent you are on, its land whole; then `then`
     func frameSideways(then: (() -> Void)? = nil) {
         let W = Double(view.width), H = Double(view.height)
-        if let k = drawnContinent, k != "Antarctica", let w = world, let f = w.contViews[k] {
+        let k = continent ?? drawnContinent
+        if let k, k == "Antarctica" || drawnContinent != k {
+            // Antarctica (its polar map is not built), or halfway to another continent: kept as it is, the world framed
+            flight = nil; afterFlight = nil
+            fly(to: clamped(SIMD2(homeX, (Self.north + bottom) / 2), worldKMin), k: worldKMin, dur: Self.flight, then: then)
+        } else if let k, let w = world, let f = w.contViews[k] {
             // the continent's own land, whole, 16 pt in from the screen's edges (its view's frame has wide margins
             // made for portrait, and a tall continent cropped to the width would lose its ends)
             var b = SIMD4<Double>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
@@ -701,6 +706,7 @@ final class MapController {
             NSLog("wya sideways %@ land %.1f %.1f %.1f %.1f k %.3f", k, b.x, b.y, b.z, b.w, nk)
             #endif
             continentFrame = f; continentK = nk; followMid = nil
+            continentY = nil
             continentY = clamped(mid, nk).y
             updateHome()
             fly(to: clamped(mid, nk), k: nk, dur: Self.flight, then: then)
