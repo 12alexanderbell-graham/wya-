@@ -9,6 +9,7 @@ struct ZoomColumn: View {
     let head: HeadState
     /// the sideways mark's action (1.11)
     var sideways: () -> Void = {}
+    @State private var lockIn = false
 
     var body: some View {
         let f = water.form()
@@ -49,6 +50,14 @@ struct ZoomColumn: View {
                 .offset(x: slide(2))
                 .allowsHitTesting(slide(2) < 30)
             cell("lock", on: map.locked, label: map.locked ? "Unlock the map" : "Lock the map", ink: ink, feel: .notch) { map.locked.toggle() }
+                // A1.9: a press on the locked map presses the padlock in once about its centre (0.88, no overshoot)
+                .scaleEffect(lockIn ? 0.88 : 1)
+                .onChange(of: map.lockedPresses) { _, _ in
+                    withAnimation(.smooth(duration: 0.13)) { lockIn = true } completion: {
+                        withAnimation(.smooth(duration: 0.13)) { lockIn = false }
+                    }
+                }
+                .accessibilityAddTraits(map.locked ? .isSelected : [])
                 .offset(x: slide(3))
                 .allowsHitTesting(slide(3) < 30)
             cell("fullscreen", label: "Full screen", ink: ink, silent: true) { sideways() }

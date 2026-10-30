@@ -764,7 +764,7 @@ final class MapMTKView: MTKView {
                 c.doubleTap(at: d0); lastTapTime = 0
             } else {
                 lastTapTime = t.timestamp; lastTapAt = d0
-                if c.locked { Feel.refuse() }
+                if c.locked { Feel.refuse(); c.lockedPress() }
                 else if let hit = c.pressed {
                     // A CONFIRMED TAP (Part 4.2.1): once the double-tap window has passed with no second tap, the place
                     // is handed over (the stamping card opens); a double tap within the window never opens anything
