@@ -286,6 +286,12 @@ final class TestDriver {
                 case "placeopen":
                     if a == "off" { map?.closePlace(); map?.goHome() }
                     else if let m = map, let i = m.world?.placeIndex[a] { m.openPlace(i) }
+                // townfind frankf: Places' search's first town shown (as the search key would)
+                case "townfind":
+                    if let m = map, let t = TownIndex.shared.hits(p.dropFirst().joined(separator: " "), open: m.placeOpenID).first {
+                        head?.searching = false
+                        m.showTown(file: t.file, id: t.id)
+                    }
                 case "regiondirect":
                     if let h = head, let i = map?.world?.placeIndex[a] { ContentView.openRegionMap(i, head: h) }
                 // regionslow 8: the region borders' change at 1/8 speed (frame checks)

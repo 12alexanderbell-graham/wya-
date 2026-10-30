@@ -41,6 +41,22 @@ extension MapController {
             }
         }
     }
+    /// A TOWN FOUND BY SEARCH: its country opened (if it isn't), then, once its towns have come, the town framed and
+    /// darkened (as a region found on a region map is)
+    func showTown(file cc: String, id: String) {
+        guard let w = world, let i = w.placeIndex[cc] else { return }
+        if placeOpen != i { openPlace(i) }
+        Task { @MainActor [weak self] in
+            for _ in 0 ..< 150 {
+                if self?.townScenes[cc] != nil { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let self, self.placeOpen == i, let sc = self.townScenes[cc], let t = sc.index[id] else { return }
+            self.townPressed = (cc, t)
+            self.showBox(sc.box(t), place: i)
+        }
+    }
+
     /// back to the world: the towns go, the world comes back (the camera stays where it is)
     func closePlace() {
         guard placeOpen != nil else { return }

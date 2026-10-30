@@ -362,6 +362,10 @@ struct HeadView: View {
                             } else { Feel.refuse() }
                             return
                         }
+                        // Places: the first town found, else the first country
+                        if map.placesMode, let t = TownIndex.shared.hits(head.query, open: map.placeOpenID).first {
+                            Feel.tap(); closeSearch(); map.showTown(file: t.file, id: t.id); return
+                        }
                         if let first = SearchResults.matches(map: map, query: head.query).first { pick(first) }
                     }
                     .padding(.leading, 44)
@@ -418,6 +422,8 @@ struct HeadView: View {
     private func pick(_ i: Int) {
         Feel.tap(); Sound.tap()
         if let id = map.world?.places[i].id { SearchResults.remember(id) }
+        // Places: a country picked is opened with its towns (7.4)
+        if map.placesMode { map.openPlace(i); closeSearch(); return }
         let f = water.form()
         map.show(place: i, sheetTop: f.page > 0.5 ? water.layout.top(.quarter) : f.top)
         closeSearch()
@@ -817,7 +823,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -865,11 +871,20 @@ struct SearchResults: View {
         let regionHits = map.regionScene != nil && !head.settingsOpen && typed
             ? RegionSearch.hits(head.query, place: map.regionScene!.id) : []
         // over Regions' menu the field filters the menu's own rows instead (6.3, A6.6)
-        let keys: [ResultKey] = map.regionScene != nil && !head.settingsOpen
+        let baseKeys: [ResultKey] = map.regionScene != nil && !head.settingsOpen
             ? (typed ? (regionHits.isEmpty ? [.miss] : regionHits.map { .region($0.key) }) : [])
             : head.filtersMenu && !head.settingsOpen ? [] : head.settingsOpen
             ? (typed ? (settingHits.isEmpty ? [.miss] : settingHits.map { .setting($0.id) }) : [])
             : hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
+        // PLACES (7.4's head): towns first, the open country's before everywhere else's, then the maps (countries) by name
+        let placesSearch = map.placesMode && map.regionScene == nil && !head.settingsOpen
+        let _ = placesSearch ? TownIndex.shared.load() : ()
+        let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        let keys: [ResultKey] = !placesSearch ? baseKeys
+            : typed ? { () -> [ResultKey] in
+                let k = townHits.map { ResultKey.town($0.key) } + hits.prefix(max(2, 8 - townHits.count)).map { ResultKey.place($0) }
+                return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
+            }() : baseKeys
         let w = width > 0 ? width : fullWidth
         // a stack that is always there (an empty Group is no view, so its onChange never ran and the first list never
         // came)
@@ -892,6 +907,7 @@ struct SearchResults: View {
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
+                                case .town(let k): townRow(townHits.first { $0.key == k })
                                 }
                             }
                             .frame(height: 44 * open[n], alignment: .top)
@@ -1050,6 +1066,31 @@ struct SearchResults: View {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// a town found in Places: its name and where it is (its region inside the open country, else its country); a tap
+    /// closes search and shows it (its country opened)
+    private func townRow(_ h: TownIndex.Hit?) -> some View {
+        let country = h.flatMap { h in
+            h.file == map.placeOpenID && !h.region.isEmpty ? h.region
+                : map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } }
+        } ?? ""
+        return Button {
+            Feel.tap()
+            head.searching = false
+            if let h { map.showTown(file: h.file, id: h.id) }
+        } label: {
+            HStack(spacing: 12) {
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)

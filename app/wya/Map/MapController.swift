@@ -494,6 +494,12 @@ final class MapController {
     /// zoomed out past the country's frame) and it stays darkened 1.2 s
     func showRegion(_ id: String, in sc: RegionScene) {
         guard let u = sc.unitIDs.firstIndex(of: id), let b = sc.box(of: u) else { return }
+        regionPressed = u
+        showBox(b, place: sc.place)
+    }
+    /// A FOUND THING FRAMED (a region on a region map, a town in Places): its box in the 25% room, at least the
+    /// country's own zoom, the country pressed (so the region or town under it darkens) for two seconds after landing
+    func showBox(_ b: SIMD4<Float>, place: Int) {
         let W = Double(view.width), H = Double(view.height)
         let room = layout.room(sheetTop: layout.top(.quarter))
         let top = Double(room.lowerBound), bottom = Double(room.upperBound)
@@ -501,12 +507,11 @@ final class MapController {
         let nk = min(kMax, max(continentK ?? worldKMin, min((W - 32) / fw, max(80, bottom - top) / fh) * 0.6))
         let mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
         let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
-        regionPressed = u
-        pressed = sc.place
+        pressed = place
         fly(to: clamped(centre, nk), k: nk, dur: 0.8)
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(800 + 1200))
-            guard let self, self.pressed == sc.place, !self.touching else { return }
+            guard let self, self.pressed == place, !self.touching else { return }
             self.pressed = nil
         }
     }

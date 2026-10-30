@@ -60,6 +60,13 @@ nonisolated final class TownScene: @unchecked Sendable {
         at = towns.map { EqualEarth.project(lon: $0.lon, lat: $0.lat) }
     }
 
+    /// a town's box on the map (its shape's, or a small one round its point)
+    func box(_ i: Int) -> SIMD4<Float> {
+        if let b = boxes[i] { return b }
+        let p = at[i], r: Float = 0.0015
+        return SIMD4(p.x - r, p.y - r, p.x + r, p.y + r)
+    }
+
     /// the town under a map point: a shape holding it, else (shapeless towns shown as dots) the nearest dot within
     /// `reach`; only towns of the classes shown (`upTo` towns)
     func town(at p: SIMD2<Float>, reach: Float, upTo n: Int, dots: Bool) -> Int? {
