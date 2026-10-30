@@ -310,7 +310,8 @@ struct HeadView: View {
         // as when the plus closes them, must never leave the gear standing on a closed head)
         .onChange(of: head.settingsOpen) { _, _ in
             if head.settingsOpen {
-                if head.gear < 1 { withAnimation(Motion.chrome) { head.gear = 1 } }
+                // with search open the dot is in the island: the gear forms when search closes (its completion)
+                if head.gear < 1 && !head.searching { withAnimation(Motion.chrome) { head.gear = 1 } }
             } else if !head.dotHeld && !head.pullFromGear && head.gear > 0 {
                 withAnimation(Motion.chrome) { head.gear = 0 }
             }
