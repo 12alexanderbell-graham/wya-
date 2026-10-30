@@ -55,11 +55,12 @@ struct ContentView: View {
                 // the passport book from the plus's passport tool (Part 4.3)
                 PassportBook(water: water, map: map)
 
+                // a place's page (Part 16): over the map, under the water (closed to its tab capsule while the page is up:
+                // the capsule stays at the bottom as on every pushed page in iOS, 16.3) and under the head (A16.1)
+                PlacePageView(map: map, water: water)
+
                 WaterView(water: water, map: map, tab: $tab)
                     .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
-
-                // a place's page (Part 16): over the map and the water, under the head (A16.1)
-                PlacePageView(map: map, water: water)
 
                 if !Perf.shared.off.contains("head") {
                     HeadView(map: map, water: water, head: head)

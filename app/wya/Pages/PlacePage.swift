@@ -220,8 +220,18 @@ struct PlacePageView: View {
     let water: Water
     @State private var page = PlacePageState.shared
     @State private var ground: [Color] = []
+    /// the water's stop before the page came (it goes back there when the page closes)
+    @State private var before: Water.Stop?
 
     var body: some View {
+        ZStack { pageBody }
+            .onChange(of: page.key == nil) { _, closed in
+                if !closed { before = water.stop; water.go(.closed) }
+                else if let b = before { water.go(b); before = nil }
+            }
+    }
+
+    @ViewBuilder private var pageBody: some View {
         let L = water.layout
         if let key = page.key {
             let full = CGRect(x: 0, y: 0, width: L.W, height: L.H)
