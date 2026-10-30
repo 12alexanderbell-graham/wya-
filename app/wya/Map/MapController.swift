@@ -112,6 +112,10 @@ final class MapController {
     var found: Set<Int> = [] { didSet { if found != oldValue { needsFrame = true } } }
     /// a place held darkened while its card is up (Part 0.2.3 keepPressed / releasePressed)
     var kept: Int? { didSet { if kept != oldValue { needsFrame = true } } }
+    /// the place held for Apple's hold menu (Part 11.3): darkened in place while the menu is up, then it drains
+    @ObservationIgnored var menuHeld: Int? { didSet { if menuHeld != oldValue { needsFrame = true } } }
+    /// the menu for a held place at a point (the map's hold, Part 11.3/11.5), nil for none; set by the screen
+    @ObservationIgnored var menuFor: ((Int, CGPoint) -> UIMenu?)?
     @ObservationIgnored var pressed: Int? {
         didSet {
             guard pressed != oldValue else { return }
