@@ -115,6 +115,8 @@ struct ContentView: View {
         }
         // any control of the head closes the card first, keeping its changes (Part 4.2.3)
         .onChange(of: head.searching) { _, v in if v { CardState.shared.close(map: map) } }
+        // a shake undoes the store's last step (Part 3.10)
+        .modifier(ShakeToUndo())
         .onChange(of: head.toolsOpen) { _, v in if v { CardState.shared.close(map: map) } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
