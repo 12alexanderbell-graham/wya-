@@ -170,6 +170,11 @@ final class MapController {
     /// THE PLACE UNDER A FINGER (screen point): a diamond within its reach, else the smallest place under it in what is
     /// drawn (the detailed tiles, or the world's shapes when zoomed out); a fingertip is about 10 points, so a piece
     /// smaller than that within it is what was meant
+    /// the disputed piece under a screen point, if any (its hold menu's "Whose borders here?", 11.5)
+    func piece(at p: CGPoint) -> String? {
+        let m = mapPoint(p)
+        return world?.piece(at: SIMD2(Float(m.x), Float(m.y)))
+    }
     func hit(at p: CGPoint) -> Int? {
         guard let w = world else { return nil }
         let m = mapPoint(p)

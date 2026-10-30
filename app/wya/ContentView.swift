@@ -384,11 +384,30 @@ struct ContentView: View {
                 top?.present(vc, animated: true)
             }
         }
-        return UIMenu(title: pl.n, children: [
+        var sections: [UIMenuElement] = []
+        // a waiting find (9.6, outside a review): its review first
+        if UploadState.shared.waits(i) {
+            sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Open the review") { _ in
+                after { UploadState.shared.openReview(water: water, map: map) }
+            }]))
+        }
+        sections += [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [passport, share]),
-        ])
+        ]
+        // A DISPUTED PIECE (Crimea, the Kashmir pieces): Whose borders here? opens Map settings at 50% on the Disputes
+        // page at that piece's row; the map does not fly
+        if let piece = map.piece(at: p) {
+            sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Whose borders here?") { _ in
+                after {
+                    head.openSettings()
+                    let nav = SettingsNav.shared
+                    nav.path = ["disputes"]; nav.openDispute = piece; nav.show = "dispute:" + piece
+                }
+            }]))
+        }
+        return UIMenu(title: pl.n, children: sections)
     }
 
     /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one
