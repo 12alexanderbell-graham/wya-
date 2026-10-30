@@ -288,6 +288,8 @@ final class TestDriver {
                     else if let m = map, let i = m.world?.placeIndex[a] { m.openPlace(i) }
                 // townfind frankf: Places' search's first town shown (as the search key would)
                 case "townfind":
+                    TownIndex.shared.load()
+                    for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
                     if let m = map, let t = TownIndex.shared.hits(p.dropFirst().joined(separator: " "), open: m.placeOpenID).first {
                         head?.searching = false
                         m.showTown(file: t.file, id: t.id)

@@ -342,7 +342,7 @@ struct ContentView: View {
         if stamped { Feel.lift() } else { Feel.stamp() }
         Task {
             if stamped { await TownStamps.unstamp(town.key, name: town.name, cc: t.cc) }
-            else { await TownStamps.stamp(town.key, name: town.name, cc: t.cc, source: .quick) }
+            else { await TownStamps.stamp(town.key, name: town.name, cc: t.cc, source: .quick, place: place, at: sc.at[t.i]) }
             UIAccessibility.post(notification: .announcement, argument: "\(town.name) \(stamped ? "unstamped" : "stamped")")
         }
     }
@@ -603,7 +603,10 @@ struct ContentView: View {
             if st.stamped { Feel.lift() } else { Feel.stamp() }
             Task {
                 if st.stamped { await TownStamps.unstamp(key, name: town.name, cc: cc) }
-                else { await TownStamps.stamp(key, name: town.name, cc: cc, source: .hand) }
+                else {
+                    await TownStamps.stamp(key, name: town.name, cc: cc, source: .hand, place: place,
+                                           at: EqualEarth.project(lon: town.lon, lat: town.lat))
+                }
             }
         }
         let wish = UIAction(title: st.wished ? "Unwish" : "Wish", attributes: st.stamped ? .disabled : []) { _ in

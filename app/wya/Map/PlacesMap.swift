@@ -94,16 +94,36 @@ extension MapController {
 
 /// STAMPING A TOWN STAMPS ITS COUNTRY (7.4's quick add: "stamped (with its region chain and country)"): the country is
 /// stamped too unless it already is, and remembered as stamped only through a town; unstamping the town takes the
-/// country back only when it was stamped through a town and no other stamped town of it holds it. The region chain is
-/// not stamped yet (a town names its region by name, not by the region files' ids).
+/// country back only when it was stamped through a town and no other stamped town of it holds it. THE REGION CHAIN
+/// (Part 6.7's rule, A6.12): the finest region level the country has, the region holding the town's point, stamped with
+/// every parent above it (regions already stamped left as they are). Unstamping a town leaves its regions stamped.
 enum TownStamps {
     @MainActor
-    static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource) async {
+    static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource, place: Int? = nil,
+                      at point: SIMD2<Float>? = nil) async {
         await MarkStore.shared.stamp(key, name: name, cc: cc, source: source)
         let country = PlaceKey.country(cc)
-        guard !MarkStore.shared.state(country).stamped else { return }
-        await MarkStore.shared.stamp(country, source: source)
-        through.insert(cc)
+        if !MarkStore.shared.state(country).stamped {
+            await MarkStore.shared.stamp(country, source: source)
+            through.insert(cc)
+        }
+        if let place, let point { await stampRegions(cc: cc, place: place, at: point, source: source) }
+    }
+
+    /// each country's finest region level, made into a scene once (to find the region holding a point)
+    @MainActor private static var finest: [String: RegionScene] = [:]
+    @MainActor
+    static func stampRegions(cc: String, place: Int, at p: SIMD2<Float>, source: MarkSource) async {
+        guard let row = RegionCatalog.shared.used(cc).last?.row else { return }
+        var scene = finest[cc].flatMap { $0.row == row ? $0 : nil }
+        if scene == nil {
+            guard let f = await RegionCatalog.shared.fetch(cc, row: row) else { return }
+            scene = RegionScene(place: place, id: cc, row: row, file: f)
+            finest[cc] = scene
+        }
+        guard let scene, let u = scene.unit(at: p) else { return }
+        guard !MarkStore.shared.state(PlaceKey(.region, scene.unitIDs[u])).stamped else { return }
+        await RegionStamps.stamp(u, in: scene, source: source)
     }
 
     @MainActor
