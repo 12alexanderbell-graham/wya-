@@ -105,6 +105,12 @@ nonisolated final class World: @unchecked Sendable {
         madeNeighbours = n
         return n
     }
+    /// the neighbours if they are worked out already, never waiting for them (for the main thread)
+    var neighboursIfReady: [Set<Int>]? {
+        guard neighbourLock.try() else { return nil }
+        defer { neighbourLock.unlock() }
+        return madeNeighbours
+    }
     private let neighbourLock = NSLock()
     private var madeNeighbours: [Set<Int>]?
 

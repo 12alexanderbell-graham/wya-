@@ -89,8 +89,14 @@ final class Sideways {
     private func frameWhenLandscape(_ me: Int, tries: Int, then: @escaping () -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
             guard me == job, let m = map else { return }
+            // a finger already on the map: it is the map's; no framing, the marks come at once
+            if m.touching { then(); return }
             if m.view.width > m.view.height || tries <= 0 {
-                m.frameSideways { [self] in if me == job { then() } }
+                // the marks come when the flight lands, or after its time if a finger or another move took the flight
+                var done = false
+                let once = { [self] in if !done, me == job { done = true; then() } }
+                m.frameSideways { once() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + MapController.flight + 0.15) { once() }
             } else {
                 frameWhenLandscape(me, tries: tries - 1, then: then)
             }
@@ -115,9 +121,11 @@ final class Sideways {
                 // read once the map has its portrait size again
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
                     guard me == job, let m = map else { return }
+                    // the sheet's top as it is now (it was not followed while sideways)
+                    if let w = water { m.sheetMoved(top: w.form().top) }
                     // a continent framed again for portrait (its room above the sheet); the world back home if it was
                     // zoomed out further than portrait allows
-                    if let k = m.drawnContinent { m.show(continent: k) } else if m.k < m.kMin { m.goHome() }
+                    if let k = m.continent ?? m.drawnContinent { m.show(continent: k) } else if m.k < m.kMin { m.goHome() }
                 }
             }
             landscape = false
