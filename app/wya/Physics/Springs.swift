@@ -48,15 +48,48 @@ nonisolated enum Flow {
 /// Haptics are round for water (study 2.3): soft and scaled by speed, nothing on a slow settle; a tick at each stop.
 @MainActor
 enum Feel {
+    /// every haptic, logged in debug builds so a scripted run can be matched to Part 0.3's table (Step 1k)
+    static func trace(_ name: String) {
+        #if DEBUG
+        NSLog("wya feel %@", name)
+        #endif
+    }
     private static let soft = UIImpactFeedbackGenerator(style: .soft)
     private static let rigid = UIImpactFeedbackGenerator(style: .rigid)
     private static let light = UIImpactFeedbackGenerator(style: .light)
     private static let tickGen = UISelectionFeedbackGenerator()
 
-    static func tap() { light.impactOccurred(intensity: 0.7) }
-    static func tick() { tickGen.selectionChanged() }
-    static func notch() { rigid.impactOccurred(intensity: 0.75) }
+    private static let heavy = UIImpactFeedbackGenerator(style: .heavy)
+    static func tap() {
+        trace("tap"); light.impactOccurred(intensity: 0.7) }
+    /// a stamp landing: heavy, then light 70 ms later (Part 0.3, proposal)
+    static func stamp() {
+        trace("stamp")
+        heavy.impactOccurred(intensity: 1)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) { light.impactOccurred(intensity: 0.6) }
+    }
+    /// a stamp or wish removed
+    static func lift() {
+        trace("lift"); light.impactOccurred(intensity: 0.5) }
+    /// something that can't happen: rigid, twice, 80 ms apart
+    static func refuse() {
+        trace("refuse")
+        rigid.impactOccurred(intensity: 0.5)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { rigid.impactOccurred(intensity: 0.5) }
+    }
+    /// the undo drop rising: soft 0.3, 0.45, 0.6 at 0, 0.1, 0.2 s (proposal)
+    static func pour() {
+        trace("pour")
+        for (i, v) in [0.3, 0.45, 0.6].enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 * Double(i)) { soft.impactOccurred(intensity: v) }
+        }
+    }
+    static func tick() {
+        trace("tick"); tickGen.selectionChanged() }
+    static func notch() {
+        trace("notch"); rigid.impactOccurred(intensity: 0.75) }
     static func land(speed: CGFloat) {
+        trace("land")
         let s = min(1, abs(speed) / 2400)
         if s > 0.12 { soft.impactOccurred(intensity: 0.25 + 0.6 * s) }
     }
@@ -94,7 +127,12 @@ final class Clock: NSObject {
         var moving: [ObjectIdentifier: Bool] = [:]
         while carry >= h {
             carry -= h
-            for (k, s) in bodies { moving[k] = (moving[k] ?? false) || s(CGFloat(h)) }
+            // the step first: `moving[k] || s(h)` stopped stepping a body after its first step in a tick, so
+            // everything ran at one step per frame, not 240 a second (half speed at 120 Hz, a quarter at 52 Hz)
+            for (k, s) in bodies {
+                let m = s(CGFloat(h))
+                moving[k] = (moving[k] ?? false) || m
+            }
         }
         for (k, f) in frames where bodies[k] != nil { f() }
         for (k, m) in moving where !m { bodies[k] = nil; frames[k] = nil }

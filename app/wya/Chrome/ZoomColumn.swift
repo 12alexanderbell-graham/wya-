@@ -14,69 +14,85 @@ struct ZoomColumn: View {
         let W = L.W
         let minTop = L.headBottom + 8
         // past half the column stays at its height and the rising sheet takes its buttons one by one from the bottom:
-        // each shrinks into its own middle as the edge comes near it and is gone just before the edge reaches it, so
-        // the glass never passes over a button. It follows the finger, so it reverses exactly.
-        let centre = (L.headBottom + max(f.top, L.top(.half))) / 2
+        // each slides off the right edge, at its own size, as the edge comes from 60 to 10 pt below its centre, and is
+        // fully past the screen's edge before the glass reaches it. Nothing shrinks to nothing. It follows the finger,
+        // so it reverses exactly. centred in the room for the sheet's top, or its 50% top above that (Layout.room)
+        let room = L.room(sheetTop: max(f.top, L.top(.half)))
+        let centre = (room.lowerBound + room.upperBound) / 2
         let top = max(minTop, centre - 110)
         let ink: Color = FullView.night(f.page) ? Palette.white : Palette.ink
-        let away = { (i: Int) -> CGFloat in
+        /// how far a button has slid right (0 at rest, 60 pt fully past the edge): straight with the edge's distance
+        let slide = { (i: Int) -> CGFloat in
             let y = top + 22 + 44 * CGFloat(i)
-            return max(0.001, Flow.smooth(10, 60, f.top - y))
+            return 60 * (1 - Flow.clamp01((f.top - y - 10) / 50))
         }
         VStack(spacing: 0) {
             // at a limit a button dims to the one low-opacity black (50%) and can't be pressed
-            holdCell("plus", dir: 1, label: "Zoom in", ink: map.atMax ? ink.opacity(0.5) : ink) { map.zoomIn() }
+            holdCell("plus", dir: 1, label: "Zoom in", ink: ink, dim: map.atMax) { map.zoomIn() }
                 .disabled(map.atMax)
-                .scaleEffect(away(0))
-                .allowsHitTesting(away(0) > 0.5)
-            holdCell("minus", dir: -1, label: "Zoom out", ink: map.atHome ? ink.opacity(0.5) : ink) { map.zoomOut() }
+                // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)
+                .overlay { if map.atMax { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
+                .offset(x: slide(0))
+                .allowsHitTesting(slide(0) < 30)
+            holdCell("minus", dir: -1, label: "Zoom out", ink: ink, dim: map.atHome) { map.zoomOut() }
                 .disabled(map.atHome)
-                .scaleEffect(away(1))
-                .allowsHitTesting(away(1) > 0.5)
-            cell("reset", label: "Back to the world", ink: map.atRest ? ink.opacity(0.5) : ink) { map.goHome() }
+                // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)
+                .overlay { if map.atHome { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
+                .offset(x: slide(1))
+                .allowsHitTesting(slide(1) < 30)
+            cell("reset", label: "Back to the world", ink: ink, dim: map.atRest) { map.goHome() }
                 .disabled(map.atRest)
-                .scaleEffect(away(2))
-                .allowsHitTesting(away(2) > 0.5)
-            cell("lock", on: map.locked, label: map.locked ? "Unlock the map" : "Lock the map", ink: ink) { map.locked.toggle() }
-                .scaleEffect(away(3))
-                .allowsHitTesting(away(3) > 0.5)
+                // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)
+                .overlay { if map.atRest { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
+                .offset(x: slide(2))
+                .allowsHitTesting(slide(2) < 30)
+            cell("lock", on: map.locked, label: map.locked ? "Unlock the map" : "Lock the map", ink: ink, feel: .notch) { map.locked.toggle() }
+                .offset(x: slide(3))
+                .allowsHitTesting(slide(3) < 30)
             cell("fullscreen", label: "Full screen", ink: ink) { }
-                .scaleEffect(away(4))
-                .allowsHitTesting(away(4) > 0.5)
+                .offset(x: slide(4))
+                .allowsHitTesting(slide(4) < 30)
         }
         .frame(width: 44)
         .position(x: W - L.side - 22, y: top + 110)
     }
 
     /// plus and minus: a tap is one step; held past a third of a second the zoom keeps going until the finger lifts
-    private func holdCell(_ key: String, dir: Int, label: String, ink: Color, _ tap: @escaping () -> Void) -> some View {
-        HoldButton(onTap: { Feel.tap(); tap() },
+    private func holdCell(_ key: String, dir: Int, label: String, ink: Color, dim: Bool, _ tap: @escaping () -> Void) -> some View {
+        HoldButton(onTap: { Feel.tap(); Sound.tap(); tap() },
                    onHold: { held in
                        if held { Feel.tap() }
                        map.holdZoom = held ? dir : 0
                    }) {
-            Icon5(key: key, ink: ink, size: 22)
+            LimitIcon(key: key, ink: ink, dim: dim)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { Feel.tap(); tap() }
+        .accessibilityAction { Feel.tap(); Sound.tap(); tap() }
     }
 
-    private func cell(_ key: String, on: Bool = false, label: String, ink: Color, _ action: @escaping () -> Void) -> some View {
+    /// a two-state switch landing is a `notch` (the lock); any other mark a `tap` (Part 0.3)
+    enum CellFeel { case tap, notch }
+    private func cell(_ key: String, on: Bool = false, label: String, ink: Color, dim: Bool = false, feel: CellFeel = .tap, _ action: @escaping () -> Void) -> some View {
         Button {
-            Feel.tap()
+            if feel == .notch { Feel.notch(); Sound.click() } else { Feel.tap(); Sound.tap() }
             action()
         } label: {
-            Icon5(key: key, on: on, ink: ink, size: 22)
+            LimitIcon(key: key, on: on, ink: ink, dim: dim)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(BareButton())
         .accessibilityLabel(label)
     }
+}
+
+/// a button that draws only its label: `.plain` fades a disabled label on its own, in one frame, over A1.8's circle
+struct BareButton: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// A control that is tapped or held: a tap when the finger lifts within a third of a second, otherwise a hold from
@@ -118,3 +134,17 @@ struct HoldButton<Label: View>: View {
             )
     }
 }
+
+/// A MARK REACHING A LIMIT (A1.8): its ink turns 50% black the moment the limit is reached and back the moment it is
+/// left, in the same frame as the zoom's own landing, the way an iOS control's state changes. No circle.
+struct LimitIcon: View {
+    let key: String
+    var on = false
+    let ink: Color
+    let dim: Bool
+    var body: some View {
+        Icon5(key: key, on: on, ink: dim ? Palette.ink.opacity(0.5) : ink, size: 22)
+            .transaction { $0.animation = nil }
+    }
+}
+

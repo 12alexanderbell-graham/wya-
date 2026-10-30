@@ -16,10 +16,13 @@ inline float4 toClip(float2 s, constant Cam& cam) {
 }
 
 // MARK: the fans that mark land in the stencil (even-odd), no colour
+// each point from its place on the coarser level's outline to its own, as far as the zoom is into the band (morph)
 vertex float4 fanVertex(uint vid [[vertex_id]],
                         const device float2* pts [[buffer(0)]],
-                        constant Cam& cam [[buffer(1)]]) {
-    return toClip(toScreen(pts[vid], cam), cam);
+                        constant Cam& cam [[buffer(1)]],
+                        const device float2* from [[buffer(2)]],
+                        constant float& morph [[buffer(3)]]) {
+    return toClip(toScreen(mix(from[vid], pts[vid], morph), cam), cam);
 }
 fragment float4 fanFragment() { return float4(0.0); }
 
@@ -44,6 +47,8 @@ struct Look {
     float texelU;
     float texelV;
     float pad;
+    float4 clip;     // a fill front (Part 1.5): its origin (map units), its radius (map units), 1 when on
+    float4 clip2;    // pixels per point
 };
 
 constant float3 WHITE = float3(1.0);
@@ -60,7 +65,16 @@ inline float3 seaColour(float d) {
 fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> rel [[texture(0)]],
                                sampler s [[sampler(0)]],
-                               constant Look& look [[buffer(0)]]) {
+                               constant Look& look [[buffer(0)]],
+                               constant Cam& cam [[buffer(1)]]) {
+    // a fill front: only inside its circle, with a 1 pt edge (an edge, not a fade)
+    float front = 1.0;
+    if (look.clip.w > 0.5) {
+        float2 sp = in.position.xy / look.clip2.x;
+        float2 m = cam.c + (sp - cam.view * 0.5) / cam.k;
+        float d = length(m - look.clip.xy) * cam.k, r = look.clip.z * cam.k;
+        front = clamp(r - d + 0.5, 0.0, 1.0);
+    }
     int kind = int(look.kind + 0.5);
     float2 dh = rel.sample(s, in.uv).rg;
     if (kind == 0) {
@@ -96,7 +110,10 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // land, its own relief, mixed halfway toward our blue, and the colours on it go (tint.a: how far it has gone)
     if (kind == 5) land = mix(land * look.tint.rgb, mix(land, BLUE, 0.5), look.tint.a);
     // pad > 0: laid over what is there at that strength (premultiplied), so the borders under it go with it
-    if (look.pad > 0.0) return float4(land * look.pad, look.pad);
+    if (look.pad > 0.0 || look.clip.w > 0.5) {
+        float a = (look.pad > 0.0 ? look.pad : 1.0) * front;
+        return float4(land * a, a);
+    }
     return float4(land, 1.0);
 }
 
@@ -117,10 +134,12 @@ struct LineV {
 vertex LineV lineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                         const device float* segs [[buffer(0)]],
                         constant Cam& cam [[buffer(1)]],
-                        constant LineStyle& ls [[buffer(2)]]) {
-    const device float* g = segs + iid * 6;
-    float2 a = toScreen(float2(g[0], g[1]), cam);
-    float2 b = toScreen(float2(g[2], g[3]), cam);
+                        constant LineStyle& ls [[buffer(2)]],
+                        constant float& morph [[buffer(3)]]) {
+    // a segment: its ends, the same ends at the morph's start, its distance along the line, its kind
+    const device float* g = segs + iid * 10;
+    float2 a = toScreen(mix(float2(g[4], g[5]), float2(g[0], g[1]), morph), cam);
+    float2 b = toScreen(mix(float2(g[6], g[7]), float2(g[2], g[3]), morph), cam);
     float2 d = b - a;
     float len = length(d);
     float2 dir = len > 1e-5 ? d / len : float2(1.0, 0.0);
@@ -129,12 +148,14 @@ vertex LineV lineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float t = (vid == 1 || vid == 3 || vid == 4) ? 1.0 : 0.0;
     float side = (vid == 2 || vid == 4 || vid == 5) ? 1.0 : -1.0;
     float2 p = mix(a, b, t) + nrm * side * hw + dir * (t * 2.0 - 1.0) * ls.feather;
+    // a segment shrunk to nothing (a ring growing out of its own centre at the morph's start) draws nothing, not a dot
+    if (len < 0.001) p = a;
     LineV o;
     o.position = toClip(p, cam);
     o.across = side * hw;
     float segLen = length(float2(g[2] - g[0], g[3] - g[1]));
-    o.along = (g[4] + t * segLen) * cam.k;
-    o.dashed = fmod(g[5], 2.0);
+    o.along = (g[8] + t * segLen) * cam.k;
+    o.dashed = fmod(g[9], 2.0);
     return o;
 }
 struct FullV { float4 position [[position]]; float2 s; };
@@ -169,6 +190,7 @@ struct AuroraU {
     float ySouth;    // map y of 60°S, where the bottom band ends
     float bottom;    // the map's bottom edge
     float strength;
+    float pin;       // on a continent (0 to 1 with the move): each band's outer end on the screen's own edge (A1.17)
 };
 vertex FullV fullVertex(uint vid [[vertex_id]], constant Cam& cam [[buffer(1)]]) {
     float2 p = float2((vid << 1) & 2, vid & 2);
@@ -224,7 +246,7 @@ fragment float4 auroraFragment(FullV in [[stage_in]], constant Cam& cam [[buffer
     float alpha = 0.0;
     for (int band = 0; band < 2; band++) {
         // how far in from the band's outer edge (0, the edge of the world or of the screen) to its inner end (1)
-        float outer = band == 0 ? min(0.0, screenTop) : max(au.bottom, screenBottom);
+        float outer = band == 0 ? mix(min(0.0, screenTop), screenTop, au.pin) : mix(max(au.bottom, screenBottom), screenBottom, au.pin);
         float inner = band == 0 ? au.yNorth : au.ySouth;
         float s = (m.y - outer) / (inner - outer);
         if (s >= 1.0) continue;
@@ -268,7 +290,8 @@ vertex DiamondV diamondVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float2 s = toScreen(d.p, cam) + corner * extent;
     DiamondV o;
     o.position = toClip(s, cam);
-    o.local = corner * extent;
+    // pad.x: its size (1 at rest); a diamond away from the continent you're on shrinks into its own point (A1.15)
+    o.local = corner * extent / max(d.pad.x, 0.001);
     o.colour = d.colour;
     return o;
 }

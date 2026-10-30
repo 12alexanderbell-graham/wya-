@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// OUR AI MARK: two triangles whose short sides touch, with no circle between them, reaching slightly past the
-/// outside of the circle. Black north, white south, resting at 45°.
+/// OUR AI MARK:. Black north, white south, resting at 45°.
 struct AIMark: View {
     var angle: Double = 45
 

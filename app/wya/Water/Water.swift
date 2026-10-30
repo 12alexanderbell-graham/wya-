@@ -28,6 +28,22 @@ final class Water {
     private(set) var stop: Stop = .quarter
     /// true while a finger holds the water
     private(set) var held = false
+    /// THE START CREDIT (BUILD-BOOK 1.4, A1.20): the OpenStreetMap words on the water; once at every cold launch, for
+    /// 5 s or until the first touch on the map
+    var credit = false
+    @ObservationIgnored private(set) var creditDone = false
+    func showCredit() {
+        guard !creditDone else { return }
+        credit = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.38 + 5) { [weak self] in self?.hideCredit() }
+    }
+    /// back down into the edge, from wherever it is; not again until the next cold launch
+    func hideCredit() {
+        // a touch before it has started doesn't count: it is still shown once
+        guard !creditDone, credit else { return }
+        creditDone = true
+        credit = false
+    }
 
     // MARK: the shape's numbers, from the level
     struct Form: Equatable {
@@ -82,13 +98,24 @@ final class Water {
     @ObservationIgnored private var lastPassed: Stop?
     @ObservationIgnored private var running = false
     @ObservationIgnored private var landingSpeed: CGFloat = 0
+    /// a move into the capsule waiting for the caption's words to roll out
+    @ObservationIgnored private var pendingGo: UUID?
     /// pulled up from half, past the point where a release goes on to full
     @ObservationIgnored private var pastCommit = false
 
     /// a finger has started to move the water (the head puts settings or the AI away then)
     @ObservationIgnored var onTouch: (() -> Void)?
+    /// the Map tab tapped again: what a reset closes besides the water and the camera (2.3)
+    @ObservationIgnored var onMapAgain: (() -> Void)?
+    /// another tab chosen
+    @ObservationIgnored var onTabChange: (() -> Void)?
 
     func begin(at p: CGPoint) {
+        // caught before a waiting move into the capsule started: it is still where it was
+        if pendingGo != nil {
+            pendingGo = nil
+            stop = Stop.allCases.min(by: { abs(layout.top($0) - body.value) < abs(layout.top($1) - body.value) }) ?? stop
+        }
         grab = (body.value, p.y, stop)
         pastCommit = false
         fingerTop = body.value
@@ -172,13 +199,32 @@ final class Water {
     /// to a height. A release has the softest give at the end (water settling); anything else lands without one;
     /// the page never bounces against the screen's edges.
     func go(_ s: Stop, speed: CGFloat = 0, released: Bool = false) {
+        // sent into the capsule (not let go by a finger) with the caption's words showing: the words roll out first
+        // (0.15 s), then the water goes down, so the edge never passes over them (A2.5; the old content leaves first)
+        if s == .closed, !released, level <= layout.capsule.minY - 134, stop != .closed {
+            stop = s
+            let me = UUID()
+            pendingGo = me
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                guard let self, self.pendingGo == me, self.stop == .closed, self.grab == nil else { return }
+                self.pendingGo = nil
+                self.body.target = self.layout.top(.closed)
+                self.body.response = 0.42
+                self.body.damping = 1
+                self.run()
+            }
+            return
+        }
+        pendingGo = nil
         stop = s
         body.target = layout.top(s)
-        body.response = s == .full ? 0.5 : 0.42
+        // Reduce Motion: the same settle, shorter (Part 19)
+        body.response = (s == .full ? 0.5 : 0.42) * (Motion.reduce ? 0.65 : 1)
         body.damping = (released && s != .full && abs(speed) > 900) ? 0.9 : 1
         landingSpeed = abs(speed)
         run()
     }
+
 
     private func relayout() {
         // a new screen (the first layout, or the phone turned): sit at the same height, no movement
@@ -218,15 +264,18 @@ final class Water {
         let moving = grab != nil || !body.settled || !dropSpring.settled
         if !moving {
             body.snap(); dropSpring.snap()
-            if landingSpeed > 0 { Feel.land(speed: landingSpeed); landingSpeed = 0 }
+            if landingSpeed > 0 { Feel.land(speed: landingSpeed); Sound.land(landingSpeed / 2400); landingSpeed = 0 }
         }
         pubLevel = body.value
         pubDrop = dropSpring.value
+
         if !moving { running = false; publish() }
         return moving
     }
 
     private func publish() {
+        // the flow sound under the water's drag and settle (Part 2.3), by the body's speed
+        Sound.flow("water", speed: abs(body.velocity))
         if level != pubLevel { level = pubLevel }
         if drop != pubDrop { drop = pubDrop }
     }

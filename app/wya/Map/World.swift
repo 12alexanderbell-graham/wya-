@@ -326,7 +326,9 @@ nonisolated final class World: @unchecked Sendable {
         }
         if reach > 0 {
             var close: (place: Int, d: Float)?
-            for r in rings where r.unit >= 0 && unitOwner[r.unit] >= 0 {
+            for r in rings where r.unit >= 0 && unitOwner[r.unit] >= 0 && places[unitOwner[r.unit]].tiny {
+                // only a small place (smaller than a fingertip) is found by the reach, never a small piece of a big
+                // country (Step 1f: a press in Kaliningrad picked Lithuania's bit of the Curonian Spit)
                 let size = max(r.box.z - r.box.x, r.box.w - r.box.y)
                 guard size < tiny else { continue }
                 let dx = max(r.box.x - p.x, 0, p.x - r.box.z), dy = max(r.box.y - p.y, 0, p.y - r.box.w)

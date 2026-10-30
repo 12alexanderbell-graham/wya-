@@ -20,6 +20,12 @@ final class TestDriver {
         NSLog("wya test driver started")
         NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { _ in NSLog("wya t keyboard will show") }
         NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { _ in NSLog("wya t keyboard did show") }
+        // a launch to record: snaps/launch-burst.txt holds the burst's length in ms (read once, then emptied)
+        let lb = Snap.dir + "/launch-burst.txt"
+        if let ms = (try? String(contentsOfFile: lb, encoding: .utf8)).flatMap({ Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }), ms > 0 {
+            try? "".write(toFile: lb, atomically: true, encoding: .utf8)
+            Snap.burst(ms: ms)
+        }
         let path = Snap.dir + "/cmd.txt"
         // a command left over from the last run is not run again
         lastID = (try? String(contentsOfFile: path, encoding: .utf8))?.split(separator: "\n").first.map(String.init) ?? ""
@@ -115,6 +121,24 @@ final class TestDriver {
                     if !(p.count > 3 && p[3] == "hold") { h.pullEnded(velocity: 0) }
                 // a finger on the map: the same hook the map's touch calls (ContentView: map.onTouch)
                 case "maptap": map?.onTouch?()
+                // wheel <dx> <ms>: a finger turning the dot sideways, through the same path as the capsule's drag
+                case "wheel":
+                    guard let h = head else { break }
+                    let dx = CGFloat(Double(a) ?? 0), ms = Int(p.count > 2 ? p[2] : "600") ?? 600
+                    let steps = max(1, ms / 16)
+                    for k in 1 ... steps {
+                        h.capsuleDrag = dx * CGFloat(k) / CGFloat(steps)
+                        try? await Task.sleep(for: .milliseconds(16))
+                    }
+                    h.capsuleDragFling = 0
+                    h.capsuleDrag = nil
+                // sheet flags: a review sheet (1p) into snaps/review-<name>.png
+                case "sheet":
+                    if a == "flags" { ReviewSheet.flags(world: map?.world) }
+                    if a == "tabicons" { ReviewSheet.tabIcons() }
+                    if a == "launch" { ReviewSheet.launchPicture() }
+                    if a == "logoturn" { ReviewSheet.logoTurnMovie() }
+                case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 case "streak": map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
                 case "settings": if a == "on" { head?.openSettings() } else { head?.closeSettings() }
@@ -136,9 +160,63 @@ final class TestDriver {
                         NSLog("wya tap %.0f %.0f -> %@", x, y, h.flatMap { m.world?.places[$0].id } ?? "nothing")
                         m.pressed = h
                     }
+                case "mark":
+                    // mark <place id> stamp|wish|none: the place's marks change (a fill front from its middle)
+                    if p.count > 2, let m = map, let i = m.world?.placeIndex[p[1]] {
+                        if p[2] == "stamp" { m.wished.remove(i); m.stamped.insert(i) }
+                        else if p[2] == "wish" { m.stamped.remove(i); m.wished.insert(i) }
+                        else { m.stamped.remove(i); m.wished.remove(i) }
+                    }
+                // nationality <id> | none: Profile's first nationality, for the home's centre (1.4)
+                case "nationality":
+                    if a == "none" { UserDefaults.standard.removeObject(forKey: MapController.nationalitiesKey) }
+                    else { UserDefaults.standard.set([a], forKey: MapController.nationalitiesKey) }
+                    map?.refreshHome(); map?.goHome()
+                case "hittest": if let m = map { HitTest.run(map: m) }
+                case "probe":
+                    // probe x y (screen points): the rings there log how the morph laid them (snaps/probe.log)
+                    if p.count > 2, let x = Double(p[1]), let y = Double(p[2]), let m = map {
+                        let q = m.mapPoint(CGPoint(x: x, y: y))
+                        MorphIndex.probeFile = Snap.dir + "/probe.log"
+                        MorphIndex.probe = SIMD2(Float(q.x), Float(q.y))
+                        MorphIndex.note(String(format: "probe at %.3f %.3f", q.x, q.y))
+                        m.details?.dropTiles()
+                    }
+                case "detail": FrameStats.log("wya detail \(a): " + (map?.details?.debugState ?? "none"))
+                case "morph": map?.details?.testMorph = a == "auto" ? nil : Float(a)
+                case "coarse": map?.details?.testCoarse = a == "on"
                 case "off": Perf.shared.off.insert(a)
                 case "on": Perf.shared.off.remove(a)
                 case "sun": map?.sunPicked = a == "on"
+                case "tabicons": TabIconsTest.on = a == "on"
+                // FINGERS ON THE MAP (Step 1b-ii): the same MapController calls the Metal view's touches make, frame by
+                // frame, so a scripted gesture is the gesture. pinch <factor> <x> <y> <ms>; pan <dx> <dy> <ms>;
+                // flick <dx> <dy> <ms> (a pan let go at its speed); longpress <x> <y> <ms>; twofinger <x> <y>
+                case "pinch", "pan", "flick":
+                    guard let m = map, p.count > 3 else { break }
+                    let n1 = Double(p[1]) ?? 1, n2 = Double(p[2]) ?? 0, n3 = Double(p[3]) ?? 0
+                    let ms = Int(p.count > 4 ? p[4] : (c == "pinch" ? "800" : "400")) ?? 400
+                    let steps = max(1, ms / 8)
+                    m.grab()
+                    for _ in 0 ..< steps {
+                        if c == "pinch" { m.zoom(by: pow(n1, 1 / Double(steps)), about: CGPoint(x: n2, y: n3)) }
+                        else { m.pan(by: SIMD2(n1 / Double(steps), n2 / Double(steps))) }
+                        try? await Task.sleep(for: .milliseconds(8))
+                    }
+                    m.release(velocity: c == "flick" ? SIMD2(n1, n2) / (Double(ms) / 1000) : nil)
+                case "longpress":
+                    guard let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) else { break }
+                    m.grab(); m.pressed = m.hit(at: CGPoint(x: x, y: y))
+                    try? await Task.sleep(for: .milliseconds(Int(p.count > 3 ? p[3] : "700") ?? 700))
+                    m.pressed = nil; m.release(velocity: nil)
+                case "twofinger":
+                    guard let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) else { break }
+                    m.twoFingerTap(at: CGPoint(x: x, y: y))
+                case "measure": if a == "on" { FrameStats.start() } else { FrameStats.stop(p.count > 2 ? p[2] : "scene") }
+                case "layout":
+                    if let L = water?.layout {
+                        NSLog("wya layout model %@ W %.1f H %.1f safeTop %.1f safeBottom %.1f island %@ corner %.0f", L.model, L.W, L.H, L.safeTop, L.safeBottom, NSCoder.string(for: L.island), L.screenCorner)
+                    }
                 case "planet": map?.testPlanet = Int(a)
                 case "moon": map?.testMoon = a == "off" ? nil : Double(a)
                 default: NSLog("wya test driver: unknown %@", l)
@@ -148,7 +226,8 @@ final class TestDriver {
     }
 }
 
-/// TEST ONLY: parts of the screen switched off to find what costs frames ("off stars", "on stars")
+/// TEST ONLY: parts switched off to find what costs frames ("off <part>", "on <part>"; observed, so a switch takes
+/// effect on the next frame): map, cosmos, planets, sun, stars, caption, sheetglass, sheet, tabs, head, zoom, pull
 @MainActor @Observable
 final class Perf {
     static let shared = Perf()

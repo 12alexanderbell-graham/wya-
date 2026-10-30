@@ -37,6 +37,9 @@ enum Snap {
                 // ONLY WHILE I'M TESTING: a grab only in the 20 s after a test command, never while the app is just
                 // being used
                 guard CACurrentMediaTime() < activeUntil else { return }
+                // never while frames are being measured (each grab is itself a late frame: the first Step 1c tables
+                // counted the grabs, about 10 of the late frames in each 120)
+                guard !FrameStats.on else { return }
                 let ms = Int(Date().timeIntervalSince(t0) * 1000)
                 let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
                     .flatMap(\.windows).filter { !$0.isHidden && $0.alpha > 0 }
@@ -112,6 +115,7 @@ enum Hitches {
                 let d = t - last
                 n += 1
                 if d > 1.5 / 60 { late += 1 }
+                if FrameStats.on { FrameStats.gaps.append(d) }
                 worst = max(worst, d)
             }
             last = t
@@ -142,4 +146,57 @@ final class BurstLink: NSObject {
     func stop() { link?.invalidate(); link = nil; BurstLink.alive.remove(self) }
     @objc private func fire() { tick(self) }
     static var alive: Set<BurstLink> = []
+}
+
+/// THE FRAME-TIME CHECK (Step 1c; Part 19.7): while on, every frame's gap and the map's CPU and GPU time are kept;
+/// "measure off <scene>" logs p50, p95, worst and the late frames (a gap over 1.5 frames), the numbers the book's
+/// pass rule is written in (p95 under 8 ms and no more than 2 late frames in 120)
+@MainActor
+enum FrameStats {
+    static var on = false
+    static var gaps: [Double] = [], cpu: [Double] = [], gpu: [Double] = [], main: [Double] = []
+    /// the main thread's busy time per run-loop turn (woken to asleep): our own work per frame, apart from what the
+    /// render server (and on the simulator, the Mac drawing the glass) takes
+    nonisolated(unsafe) private static var observer: CFRunLoopObserver?
+    nonisolated(unsafe) private static var woke: CFTimeInterval = 0
+    /// the main thread's own CPU time (not wall time: the simulator shares the Mac, whose other work lengthens wall
+    /// time but not this)
+    nonisolated static func cpuNow() -> CFTimeInterval {
+        var ts = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts)
+        return CFTimeInterval(ts.tv_sec) + CFTimeInterval(ts.tv_nsec) / 1e9
+    }
+    /// each result also goes on the end of snaps/measure.log, so a run can be read without the console
+    static func log(_ s: String) {
+        NSLog("%@", s)
+        let url = URL(fileURLWithPath: Snap.dir).appendingPathComponent("measure.log")
+        let line = Data((s + "\n").utf8)
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(line); try? h.close() } else { try? line.write(to: url) }
+    }
+    static func start() {
+        gaps = []; cpu = []; gpu = []; main = []; on = true
+        if observer == nil {
+            let o = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.afterWaiting.rawValue | CFRunLoopActivity.beforeWaiting.rawValue, true, 0) { _, act in
+                let t = cpuNow()
+                if act == .afterWaiting { woke = t } else if woke > 0 {
+                    let d = t - woke
+                    MainActor.assumeIsolated { if FrameStats.on { FrameStats.main.append(d) } }
+                }
+            }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), o, .commonModes)
+            observer = o
+        }
+    }
+    static func stop(_ scene: String) {
+        on = false
+        func pct(_ a: [Double], _ p: Double) -> Double { a.isEmpty ? 0 : a.sorted()[min(a.count - 1, Int(Double(a.count) * p))] * 1000 }
+        let frame = gaps.isEmpty ? 1.0 / 60 : gaps.sorted()[gaps.count / 2]
+        let late = gaps.filter { $0 > 1.5 * frame }.count
+        log(String(format: "wya measure %@: %d frames at %.0f Hz; gap p50 %.1f p95 %.1f worst %.1f ms, late %d (%.1f in 120); map cpu p50 %.2f p95 %.2f worst %.2f ms; map gpu p50 %.2f p95 %.2f worst %.2f ms",
+              scene, gaps.count, 1 / frame, pct(gaps, 0.5), pct(gaps, 0.95), (gaps.max() ?? 0) * 1000, late,
+              gaps.isEmpty ? 0 : Double(late) * 120 / Double(gaps.count),
+              pct(cpu, 0.5), pct(cpu, 0.95), (cpu.max() ?? 0) * 1000, pct(gpu, 0.5), pct(gpu, 0.95), (gpu.max() ?? 0) * 1000))
+        log(String(format: "wya measure %@ main thread CPU per turn: p50 %.2f p95 %.2f worst %.1f ms, %d turns over 8 ms, total %.0f ms", scene,
+              pct(main, 0.5), pct(main, 0.95), (main.max() ?? 0) * 1000, main.filter { $0 > 0.008 }.count, main.reduce(0, +) * 1000))
+    }
 }
