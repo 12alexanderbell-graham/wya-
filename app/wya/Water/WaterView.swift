@@ -14,11 +14,19 @@ struct WaterView: View {
         let shape = WaterShape(form: f)
         ZStack(alignment: .topLeading) {
             // the sheet's glass
-            if !Perf.shared.off.contains("sheetglass") {
-                Color.clear
-                    .frame(width: L.W, height: L.H)
-                    .glassEffect(.clear, in: shape)
-                    .allowsHitTesting(false)
+            // the sheet's glass and the undo drop in one container: the drop is the water's own glass rising out of
+            // its edge (Part 3.10), never glass on glass
+            GlassEffectContainer(spacing: 20) {
+                ZStack(alignment: .topLeading) {
+                    if !Perf.shared.off.contains("sheetglass") {
+                        Color.clear
+                            .frame(width: L.W, height: L.H)
+                            .glassEffect(.clear, in: shape)
+                            .allowsHitTesting(false)
+                    }
+                    UndoDrop(water: water, form: f)
+                }
+                .frame(width: L.W, height: L.H, alignment: .topLeading)
             }
 
             // what rides inside it, cut only by the water's own curved outline (never a straight mask)

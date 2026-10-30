@@ -203,6 +203,14 @@ final class TestDriver {
                     let ms = Int((CACurrentMediaTime() - t0) * 1000)
                     let line = "borders \(a) picks \(picks) -> \(ok) in \(ms) ms; caption \(map?.count.n ?? -1) of \(map?.count.of ?? -1); dotted \(Borders.dottedPlaces.count)"
                     try? line.write(toFile: Snap.dir + "/borders.log", atomically: true, encoding: .utf8)
+                case "marks":
+                    // every mark in the store (stamped, then wished), and the places not in the debug demo set
+                    let ms = MarkStore.shared.marks
+                    let st = ms.filter { $0.value.stamped }.keys.map(\.description).sorted()
+                    let wi = ms.filter { $0.value.wished }.keys.map(\.description).sorted()
+                    let demo = Set(MarkStore.demoStamped.map { "c:" + $0 })
+                    let line = "stamped \(st.count): \(st.joined(separator: " "))\nwished \(wi.count): \(wi.joined(separator: " "))\nnot demo: \(st.filter { !demo.contains($0) }.joined(separator: " "))"
+                    try? line.write(toFile: Snap.dir + "/marks.log", atomically: true, encoding: .utf8)
                 case "storecheck":
                     let lines = await StoreCheck.run()
                     try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)

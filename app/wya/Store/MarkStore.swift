@@ -27,6 +27,8 @@ final class MarkStore {
     private(set) var account = ""
     /// the words of the last change, for the undo drop ("France stamped")
     private(set) var lastWords: String?
+    /// counts every undoable write (not the undos): the undo drop rises when it changes
+    private(set) var changes = 0
 
     @ObservationIgnored private var store: TravelStore?
     @ObservationIgnored private var undoStack: [(snaps: [TravelStore.Snapshot], words: String)] = []
@@ -164,6 +166,7 @@ final class MarkStore {
         markDates.append(Date())
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
         lastWords = words
+        changes += 1
         emit(MarksChanged(changed: r.changed, origin: origin, who: who))
     }
 
