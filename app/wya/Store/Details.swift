@@ -48,6 +48,39 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     }
 }
 
+/// A STAMP'S PROOF (Part 4.5): the old app's Verification (how, state, at, when, file). States as built here:
+/// "waiting" (kept on the phone until it can be sent: there is no server yet), "checking", "verified", "notAccepted".
+nonisolated struct Verification: Codable, Equatable, Sendable {
+    /// here / history / library / camera / documents / other
+    var how: String
+    var state: String
+    var at: Date
+    /// the proving day, "YYYY-MM-DD"
+    var when: String?
+    var file: String?
+
+    init(how: String, state: String, at: Date = Date(), when: String? = nil) {
+        self.how = how; self.state = state; self.at = at; self.when = when
+    }
+    init?(json: Data?) {
+        guard let json, let v = try? JSONDecoder().decode(Verification.self, from: json) else { return nil }
+        self = v
+    }
+    var json: Data? {
+        let e = JSONEncoder()
+        e.outputFormatting = .sortedKeys
+        return try? e.encode(self)
+    }
+    /// what the card's button reads (4.5.4)
+    var word: String {
+        switch state {
+        case "verified": return "Verified"
+        case "waiting", "checking": return "In process"
+        default: return "Verify?"
+        }
+    }
+}
+
 /// WHAT YOU SAY ABOUT A PLACE YOU WISH FOR (Part 4.4.5): the old app's WishDetails, field for field. How badly is the
 /// record's own `want` (1 to 5 stars, a new wish is 1), not kept here; `stars` is read and kept for old books.
 nonisolated struct WishDetails: Codable, Equatable, Sendable {

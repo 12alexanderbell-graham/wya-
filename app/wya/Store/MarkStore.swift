@@ -142,6 +142,19 @@ final class MarkStore {
         apply(r, words: "\(label(key, name)) details", origin: nil, who: .you)
     }
 
+    /// a stamp's proof (4.5): read, and written as one undo step
+    func verification(_ key: PlaceKey) async -> Verification? {
+        guard let store else { return nil }
+        let acc = account
+        return Verification(json: (try? await store.verificationOf(key, account: acc)) ?? nil)
+    }
+    func setVerification(_ key: PlaceKey, name: String, _ v: Verification?) async {
+        guard let store else { return }
+        let acc = account
+        guard let r = try? await store.setVerification(key, account: acc, data: v?.json) else { return }
+        apply(r, words: "\(label(key, name)) proof", origin: nil, who: .you)
+    }
+
     /// the Stamped list's second line: latest year and verified, by key ("c:fr")
     func listInfo() async -> [String: (year: Int?, verified: Bool)] {
         guard let store else { return [:] }
