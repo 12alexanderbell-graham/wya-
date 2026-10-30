@@ -137,6 +137,8 @@ struct ContentView: View {
             await map.load()
             // finds left waiting at the last review are darkened again (9.6)
             UploadState.shared.restoreWaiting(map: map)
+            // the time zones' shapes read once in the background, so the first upload's days don't wait for them (D13)
+            Task.detached(priority: .utility) { _ = ZoneShapes.shared.zone(lat: 0, lon: 0) }
             // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
             if let url = DeepLink.waiting {
                 DeepLink.waiting = nil
