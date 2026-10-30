@@ -244,6 +244,11 @@ final class TestDriver {
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
                 case "session": restoreSession?()
+                case "waterhint": water?.hint()
+                // hints: forget that the gestures were used and play the first-time hints (A3.15)
+                case "hints":
+                    for k in ["hint.water", "hint.pull", "hint.hold"] { UserDefaults.standard.removeObject(forKey: k) }
+                    if let water, let head { Hints.shared.start(water: water, head: head) }
                 // sideways on | off: the sideways mark, and out of full screen (1.11)
                 case "sideways":
                     if a == "off" { Sideways.shared.leave() }

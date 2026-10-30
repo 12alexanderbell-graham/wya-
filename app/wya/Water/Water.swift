@@ -224,6 +224,7 @@ final class Water {
             stop = Stop.allCases.min(by: { abs(layout.top($0) - body.value) < abs(layout.top($1) - body.value) }) ?? stop
         }
         grab = (body.value, p.y, stop)
+        Hints.shared.usedWater()
         pastCommit = false
         fingerTop = body.value
         dropX = p.x
@@ -325,6 +326,23 @@ final class Water {
 
     /// to a height. A release has the softest give at the end (water settling); anything else lands without one;
     /// the page never bounces against the screen's edges.
+    /// THE WATER'S FIRST-TIME HINT (A3.15): its top rises 24 pt and settles back, 0.8 s, the one time it moves by
+    /// itself; a finger takes it from wherever it is
+    func hint() {
+        guard grab == nil else { return }
+        body.target = layout.top(stop) - 24
+        // the water's own spring (one step per frame of the Clock, as its feel was tuned): about half way up at 0.2 s
+        body.response = 0.38
+        body.damping = 1
+        run()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, self.grab == nil else { return }
+            self.body.target = self.layout.top(self.stop)
+            self.body.response = 0.42
+            self.run()
+        }
+    }
+
     func go(_ s: Stop, speed: CGFloat = 0, released: Bool = false) {
         // sent into the capsule (not let go by a finger) with the caption's words showing: the words roll out first
         // (0.15 s), then the water goes down, so the edge never passes over them (A2.5; the old content leaves first)

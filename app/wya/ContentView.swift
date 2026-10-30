@@ -110,6 +110,7 @@ struct ContentView: View {
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
+                Hints.shared.touched()
                 head.putAway(); water.hideCredit()
                 // the upload sheet while choosing closes (and that touch does nothing else, 9.3); while finding or at the
                 // review the touch is the map's (a pan, or a tap that drops or keeps a find)
@@ -126,6 +127,7 @@ struct ContentView: View {
             }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
+                Hints.shared.touched()
                 head.putAwayAI()
                 BookState.shared.close()
                 if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map) }
@@ -185,6 +187,8 @@ struct ContentView: View {
                 launch.settled = true
                 // the start credit once all is at rest (A1.20)
                 water.showCredit()
+                // the first-time hints, once nothing has been touched for 1.2 s (A3.15)
+                Hints.shared.start(water: water, head: head)
             }
         }
         // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
