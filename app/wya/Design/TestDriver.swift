@@ -273,6 +273,20 @@ final class TestDriver {
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
                 // book [n]: the passport tool pressed (the book out or back); with n, open on page n (1-based)
+                // regionfile fr: the place's bundled region level read back (D10), logged
+                case "regionfile":
+                    let cat = RegionCatalog.shared
+                    for cc in p.dropFirst() {
+                        guard let (row, lv) = cat.first(String(cc)), let f = cat.file(String(cc), row: row) else {
+                            NSLog("wya regionfile %@: none", String(cc)); continue
+                        }
+                        let pts = f.units.flatMap { $0.rings.flatMap { $0 } }
+                        let lo = pts.reduce(SIMD2(Double.infinity, .infinity)) { pointwiseMin($0, $1) }
+                        let hi = pts.reduce(SIMD2(-Double.infinity, -.infinity)) { pointwiseMax($0, $1) }
+                        NSLog("wya regionfile %@-%d %@: %d units, %d regions (table %d), %d points, box %.2f %.2f %.2f %.2f, pieces %@",
+                              String(cc), row, lv.many, f.units.count, f.ids.count, lv.n, pts.count, lo.x, lo.y, hi.x, hi.y,
+                              Set(f.units.compactMap(\.piece)).sorted().joined(separator: " "))
+                    }
                 // row labels on: a Map settings row set as a tap on it would (id, value id)
                 case "row": if let m = map, p.count > 2 { _ = await MapSettingsRows.set(p[1], p[2], map: m) }
                 // pageturn 45: the passport's leaf held at that angle (> 0 forward, < 0 the previous page coming back)
