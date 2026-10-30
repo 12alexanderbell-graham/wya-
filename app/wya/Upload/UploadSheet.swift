@@ -61,6 +61,8 @@ final class UploadState {
     @ObservationIgnored private var order: [Int] = []
     private(set) var dropped: Set<Int> = []
     @ObservationIgnored weak var map: MapController?
+    /// what A9.8 says when a file gave nothing (not a history, unreadable); nil: "No places found"
+    @ObservationIgnored private var failed: String?
     @ObservationIgnored private var job = 0
     @ObservationIgnored private var moving = false
 
@@ -192,13 +194,19 @@ final class UploadState {
         guard !urls.isEmpty else { return }
         Task.detached(priority: .userInitiated) {
             var out: [HistoryReader.Sample] = []
+            var unreadable = 0, notHistory = 0
             for u in urls {
                 let ok = u.startAccessingSecurityScopedResource()
                 defer { if ok { u.stopAccessingSecurityScopedResource() } }
-                if let r = HistoryReader.read(url: u) { out += r.samples }
+                guard let d = try? Data(contentsOf: u, options: .alwaysMapped) else { unreadable += 1; continue }
+                if let r = HistoryReader.read(d) { out += r.samples } else { notHistory += 1 }
             }
             let got = out
-            await MainActor.run { UploadState.shared.found(got, from: .history, read: urls.count) }
+            // nothing read from any file: A9.8 says why in the number's place
+            let why: String? = !got.isEmpty || urls.isEmpty ? nil
+                : unreadable == urls.count ? "Couldn't read this file"
+                : notHistory > 0 && unreadable == 0 ? "That file is not a location history" : nil
+            await MainActor.run { UploadState.shared.found(got, from: .history, read: urls.count, why: why) }
         }
     }
     /// Here: one fix, When In Use asked at this press only; the icon gives way to the working mark while it waits
@@ -228,8 +236,9 @@ final class UploadState {
     }
 
     /// what was read: finding starts (A9.4): the pair out, then the caption (World / 0 / found), the mark and the ×
-    private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int) {
+    private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int, why: String? = nil) {
         samples = s; source = src
+        failed = why
         NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
         guard let w = water, w.upload, phase == .choosing else { return }
         job += 1
@@ -278,7 +287,7 @@ final class UploadState {
         dropped = []
         let order = self.order
         NSLog("wya upload found %d places from %d rows", order.count, rows.count)
-        if order.isEmpty { say("No places found"); return }
+        if order.isEmpty { say(failed ?? "No places found"); return }
         let per = max(1, Int((Double(order.count) / 20).rounded(.up)))
         func step(_ k: Int) {
             guard me == job, phase == .finding else { return }

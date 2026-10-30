@@ -225,6 +225,8 @@ final class TestDriver {
                     case "back": UploadState.shared.back()
                     case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
                     case "read": UploadState.shared.testRead(empty: p.count > 2 && p[2] == "none")
+                    // upload file <name in snaps>: as Files would hand it over
+                    case "file": if p.count > 2 { UploadState.shared.imported([URL(fileURLWithPath: Snap.dir + "/" + p[2])]) }
                     case "cancel": UploadState.shared.cancel()
                     case "go": UploadState.shared.go()
                     case "drop": if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == (p.count > 2 ? p[2] : "") }) { _ = UploadState.shared.tap(i) }
