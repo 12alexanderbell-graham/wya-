@@ -273,6 +273,8 @@ final class TestDriver {
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
                 // book [n]: the passport tool pressed (the book out or back); with n, open on page n (1-based)
+                // pageturn 45: the passport's leaf held at that angle (> 0 forward, < 0 the previous page coming back)
+                case "pageturn": BookState.shared.turn = Double(a) ?? 0
                 case "book":
                     if let n = Int(a) { BookState.shared.page = max(0, n - 1) }
                     BookState.shared.toggle()
