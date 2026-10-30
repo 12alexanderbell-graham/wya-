@@ -169,6 +169,14 @@ struct ContentView: View {
             map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head) }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
+            water.currentMode = { [head] in head.mode.rawValue }
+            water.onModePick = { [head] m in
+                guard m != head.mode.rawValue, let mode = HeadState.Mode(rawValue: m) else { return }
+                // a new mode starts fresh, quick stamping off (3.1a, 4.7), as the wheel does
+                head.quickStamp = false
+                head.mode = mode
+                Feel.notch()
+            }
             water.onMapAgain = { [head] in
                 UploadState.shared.close()
                 head.searching = false
