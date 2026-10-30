@@ -29,6 +29,9 @@ struct WaterView: View {
                     .allowsHitTesting(f.sheet > 0.5)
             }
 
+            // the OpenStreetMap credit, on the map just above the water (outside the water's own outline)
+            StartCredit(water: water, form: f)
+
             // the tabs sit on the water itself; at full the night leaves the capsule's place clear, so they are still
             // on that same glass
             if !Perf.shared.off.contains("tabs") { tabs(L) }
@@ -144,21 +147,6 @@ struct SheetContent: View {
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
         }
-        .overlay(alignment: .topLeading) {
-            // THE START CREDIT: plain words on the water, top left, no box of its own; in and out by the text roll like
-            // every word; at each cold launch until 5 s or the first touch on the map
-            Text(creditShown ? "© OpenStreetMap" : "\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}")
-                .font(.caption)
-                .foregroundStyle(Palette.ink.opacity(0.5))
-                .contentTransition(.numericText(value: creditShown ? 1 : 0))
-                .fixedSize()
-                .padding(.leading, L.sheetInset + 16)
-                .padding(.top, form.top + 22)
-                .allowsHitTesting(false)
-                .accessibilityHidden(!creditShown)
-                .accessibilityLabel("Map data from OpenStreetMap")
-        }
-        .onChange(of: water.credit && captionFits) { _, on in withAnimation(on ? Motion.quick : .smooth(duration: 0.15)) { creditShown = on } }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
             if captionShown != fits { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
@@ -171,7 +159,6 @@ struct SheetContent: View {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held)
     }
     @State private var captionShown = false
-    @State private var creditShown = false
 }
 
 /// THE FULL VIEW IS CLEAR GLASS WITH STARS: no field, no mist, nothing spreading from the sun; the water stays the
@@ -349,4 +336,29 @@ struct Caption: View {
 
     /// a line's placeholder: one space per character (en spaces for words, figure spaces for digits)
     static func blank(_ s: String, _ space: String) -> String { String(repeating: space, count: max(1, s.count)) }
+}
+
+/// THE START CREDIT: plain words on the map just above the water's top edge, at the sheet's inner left, no box of its
+/// own; in and out by the text roll like every word; at each cold launch until 5 s or the first touch on the map, while
+/// the water is low enough for its caption.
+struct StartCredit: View {
+    let water: Water
+    let form: Water.Form
+    @State private var shown = false
+    var body: some View {
+        let L = water.layout
+        let fits = form.top <= L.capsule.minY - 134 && !(water.stop == .closed && !water.held)
+        Text(shown ? "© OpenStreetMap" : "\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}")
+            .font(.caption)
+            .foregroundStyle(Palette.ink.opacity(0.5))
+            .contentTransition(.numericText(value: shown ? 1 : 0))
+            .fixedSize()
+            .padding(.leading, L.sheetInset + 16)
+            .padding(.top, form.top - 22)
+            .frame(width: L.W, height: L.H, alignment: .topLeading)
+            .allowsHitTesting(false)
+            .accessibilityHidden(!shown)
+            .accessibilityLabel("Map data from OpenStreetMap")
+            .onChange(of: water.credit && fits) { _, on in withAnimation(on ? Motion.quick : .smooth(duration: 0.15)) { shown = on } }
+    }
 }

@@ -53,8 +53,8 @@ final class MapController {
     var locked = false
     /// the sun picked: the words show your streak instead of the count, and the fire rises
     var sunPicked = false
-    /// weeks in a row with a new stamp (the demo account's, until accounts exist)
-    var streakWeeks = 3
+    /// weeks in a row with an act (Streak, from the store)
+    var streakWeeks = 0
     /// the test driver's way to choose a planet as a tap would (simulator only)
     var testPlanet: Int?
     /// the test driver holding the moon at an angle in degrees, nil to let go (simulator only)
@@ -143,6 +143,22 @@ final class MapController {
 
     static let north = 2.2081   // map y of 83.64°N, the northernmost land (Greenland)
 
+    /// the countries' marks as the map draws them (indices into the world's places); the streak from when they were made
+    private func takeMarks(_ m: MarkStore) {
+        guard let w = world else { return }
+        var s = Set<Int>(), wi = Set<Int>()
+        for (k, st) in m.marks where k.kind == .country {
+            guard let i = w.placeIndex[k.id] else { continue }
+            if st.stamped { s.insert(i) } else if st.wished { wi.insert(i) }
+        }
+        if s != stamped { stamped = s }
+        if wi != wished { wished = wi }
+        if !streakHeld { streakWeeks = Streak.weeks(acts: m.markDates) }
+    }
+    @ObservationIgnored private var marksListener: UUID?
+    /// the test driver holding the streak at a number (simulator only)
+    @ObservationIgnored var streakHeld = false
+
     // MARK: loading
     func load() async {
         guard world == nil else { return }
@@ -153,9 +169,11 @@ final class MapController {
         guard let (w, r) = loaded else { return }
         world = w
         relief = r
-        let demo = DemoAccount.make(w)
-        stamped = demo.stamped
-        wished = demo.wished
+        // YOUR MARKS, from the store (Part 0.2.3: the map reads MarkState per place and listens to marksChanged)
+        let marks = MarkStore.shared
+        await marks.load()
+        takeMarks(marks)
+        marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared) }
         homeX = Self.homeLongitudeX(w)
         tinyPlaces = w.places.indices.filter { w.places[$0].tiny && !w.places[$0].junk }
         // each tiny place's biggest piece across, in map units (the Vatican's is a speck)
@@ -486,18 +504,7 @@ final class MapController {
     /// moves what moves; returns true while something still does
     func step(_ dt: Double) -> Bool {
         let moving = stepCamera(dt)
-        flowStep(dt)
         return moving
-    }
-    /// THE FLOW SOUND (Part 0.3): how fast the map moves on the screen this frame, whatever moves it (fingers, a
-    /// glide, a flight, a held zoom): the pan in points a second plus the zoom (200 pt a second per doubling)
-    @ObservationIgnored private var flowLast: (c: SIMD2<Double>, k: Double)?
-    private func flowStep(_ dt: Double) {
-        defer { flowLast = (c, k) }
-        guard let l = flowLast, dt > 0 else { return }
-        let pan = simd_length(c - l.c) * k / dt
-        let zoom = abs(log(k / l.k)) / log(2.0) * 200 / dt
-        Sound.flow("map", speed: CGFloat(pan + zoom))
     }
     private func stepCamera(_ dt: Double) -> Bool {
         // HOLDING PLUS OR MINUS: the zoom keeps going about the screen's middle, gently faster the longer it is held,
@@ -576,18 +583,5 @@ nonisolated enum EqualEarth {
         th = min(max(th, -Double.pi / 3), Double.pi / 3)
         let t2 = th * th, t6 = t2 * t2 * t2
         return 2 * Double.pi * cos(th) / (M * (A1 + 3 * A2 * t2 + t6 * (7 * A3 + 9 * A4 * t2))) * S
-    }
-}
-
-/// THE DEMO ACCOUNT: there is no stamping yet (a tap opens the passport in the next build), so the map would be
-/// all plain and the count 0. Until then the app starts with the same 34 stamped and 6 wished countries the
-/// composition used, so lime and the count can be judged. Remove when stamping lands.
-nonisolated enum DemoAccount {
-    static let stampedIDs = ["fr", "es", "pt", "it", "gr", "tr", "ma", "eg", "de", "gb", "ch", "at", "hr", "nl", "be", "ie",
-                             "no", "se", "dk", "pl", "cz", "tn", "jo", "il", "ae", "in", "th", "jp", "us", "br", "ar", "za",
-                             "ke", "tz"]
-    static let wishedIDs = ["na", "is", "ir", "et", "mg", "fi"]
-    static func make(_ w: World) -> (stamped: Set<Int>, wished: Set<Int>) {
-        (Set(stampedIDs.compactMap { w.placeIndex[$0] }), Set(wishedIDs.compactMap { w.placeIndex[$0] }))
     }
 }

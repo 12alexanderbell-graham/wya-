@@ -139,7 +139,7 @@ final class TestDriver {
                     if a == "launch" { ReviewSheet.launchPicture() }
                     if a == "logoturn" { ReviewSheet.logoTurnMovie() }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
-                case "streak": map?.streakWeeks = Int(a) ?? 0
+                case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
                 case "settings": if a == "on" { head?.openSettings() } else { head?.closeSettings() }
                 case "frames":
@@ -162,11 +162,14 @@ final class TestDriver {
                     }
                 case "mark":
                     // mark <place id> stamp|wish|none: the place's marks change (a fill front from its middle)
-                    if p.count > 2, let m = map, let i = m.world?.placeIndex[p[1]] {
-                        if p[2] == "stamp" { m.wished.remove(i); m.stamped.insert(i) }
-                        else if p[2] == "wish" { m.stamped.remove(i); m.wished.insert(i) }
-                        else { m.stamped.remove(i); m.wished.remove(i) }
+                    // through the store, as every marking surface does (MarkStore)
+                    if p.count > 2, map?.world?.placeIndex[p[1]] != nil {
+                        let k = PlaceKey.country(p[1]), st = MarkStore.shared
+                        if p[2] == "stamp" { await st.stamp(k, source: .hand) }
+                        else if p[2] == "wish" { await st.wish(k, source: .hand) }
+                        else if st.state(k).stamped { await st.unstamp(k) } else { await st.unwish(k) }
                     }
+                case "undo": await MarkStore.shared.undo()
                 // nationality <id> | none: Profile's first nationality, for the home's centre (1.4)
                 case "nationality":
                     if a == "none" { UserDefaults.standard.removeObject(forKey: MapController.nationalitiesKey) }

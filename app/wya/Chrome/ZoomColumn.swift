@@ -59,7 +59,7 @@ struct ZoomColumn: View {
 
     /// plus and minus: a tap is one step; held past a third of a second the zoom keeps going until the finger lifts
     private func holdCell(_ key: String, dir: Int, label: String, ink: Color, dim: Bool, _ tap: @escaping () -> Void) -> some View {
-        HoldButton(onTap: { Feel.tap(); Sound.tap(); tap() },
+        HoldButton(onTap: { Feel.tap(); tap() },
                    onHold: { held in
                        if held { Feel.tap() }
                        map.holdZoom = held ? dir : 0
@@ -71,14 +71,14 @@ struct ZoomColumn: View {
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
-        .accessibilityAction { Feel.tap(); Sound.tap(); tap() }
+        .accessibilityAction { Feel.tap(); tap() }
     }
 
     /// a two-state switch landing is a `notch` (the lock); any other mark a `tap` (Part 0.3)
     enum CellFeel { case tap, notch }
     private func cell(_ key: String, on: Bool = false, label: String, ink: Color, dim: Bool = false, feel: CellFeel = .tap, _ action: @escaping () -> Void) -> some View {
         Button {
-            if feel == .notch { Feel.notch(); Sound.click() } else { Feel.tap(); Sound.tap() }
+            if feel == .notch { Feel.notch() } else { Feel.tap() }
             action()
         } label: {
             LimitIcon(key: key, on: on, ink: ink, dim: dim)

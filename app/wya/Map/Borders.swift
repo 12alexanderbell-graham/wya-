@@ -78,10 +78,16 @@ nonisolated final class Positions: @unchecked Sendable {
 
     @inline(__always) private static func some(_ s: String?) -> String? { (s?.isEmpty ?? true) ? nil : s }
 
+    /// ON THE DE FACTO MAP, NOTHING CARVED OUT: Bir Tawil, which no one holds, is drawn with Sudan, on whose side of
+    /// the 22nd parallel (the line Egypt itself uses) it lies (author's call). Halaib is Egypt's already (its
+    /// controller). Every other view keeps the data's own answer.
+    static let deFactoGiven: [String: String] = ["bir-tawil": "sd"]
+
     /// What a view says about a piece: one of its options, or nil when it says nothing (WorldGeometry.positionSays).
     func says(_ d: Dispute, _ v: Borders.View) -> String? {
         switch v {
         case .deFacto:
+            if let g = Self.deFactoGiven[d.id], d.options.contains(g) { return g }
             if let c = Self.some(d.controller), c != "none", d.options.contains(c) { return c }
             return nil
         case .unitedNations:

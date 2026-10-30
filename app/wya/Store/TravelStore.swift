@@ -1,0 +1,220 @@
+import Foundation
+import SwiftData
+
+/// THE ONE WRITER (Part 0.2.2, 20.1): every write to stamps, wishes, visits and evidence goes through this actor, in
+/// order, each one whole (SwiftData saves it in one transaction: killing the app mid-write keeps nothing half done).
+/// It returns what changed and how to undo it; `MarkStore` is its face on the main thread.
+@ModelActor
+actor TravelStore {
+    /// the stored values of one place's record, so a change can be undone exactly (nil: there was no record)
+    struct Snapshot: Sendable {
+        let key: PlaceKey
+        let values: Values?
+        /// the place's visits as they were, when the write removed them (an unstamp)
+        var visits: [Visit]? = nil
+        struct Visit: Sendable {
+            var id: UUID
+            var arrived, left, rough: String?
+            var lived, transit: Bool
+            var planId: String?
+            var source: String
+        }
+        struct Values: Sendable {
+            var stamped, wished: Bool
+            var want: Int
+            var wishWhen: String?
+            var at: Date
+            var source: String
+            var times: Int
+            var lived: Bool
+            var note: String
+            var when: String?
+            var details, wishDetails, verification: Data?
+            var via: String?
+            var came: Date?
+            var name, cc: String
+            var level: Int
+        }
+    }
+
+    /// what one write did: the places it changed, before and after, and the snapshots that undo it
+    struct Result: Sendable {
+        var changed: [PlaceKey: (old: MarkState, new: MarkState)] = [:]
+        var undo: [Snapshot] = []
+    }
+
+    private func record(_ account: String, _ key: PlaceKey) throws -> StampRecord? {
+        let k = key.description
+        var d = FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.key == k })
+        d.fetchLimit = 1
+        return try modelContext.fetch(d).first
+    }
+
+    private func visitCount(_ account: String, _ key: PlaceKey) throws -> Int {
+        let k = key.description
+        return try modelContext.fetchCount(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.key == k }))
+    }
+
+    private func state(_ r: StampRecord?, visits: Int) -> MarkState {
+        guard let r else { return .none }
+        return MarkState(stamped: r.stamped, visits: max(r.times, visits), transitOnly: false, lived: r.lived,
+                         wished: r.wished, want: r.wished ? r.want : 0)
+    }
+
+    private func snapshot(_ key: PlaceKey, _ r: StampRecord?) -> Snapshot {
+        guard let r else { return Snapshot(key: key, values: nil) }
+        return Snapshot(key: key, values: .init(stamped: r.stamped, wished: r.wished, want: r.want, wishWhen: r.wishWhen,
+                                                at: r.at, source: r.source, times: r.times, lived: r.lived, note: r.note,
+                                                when: r.when, details: r.details, wishDetails: r.wishDetails,
+                                                verification: r.verification, via: r.via, came: r.came, name: r.name,
+                                                cc: r.cc, level: r.level))
+    }
+
+    /// Every mark there is for an account (the map's start).
+    func all(account: String) throws -> [PlaceKey: MarkState] {
+        var out: [PlaceKey: MarkState] = [:]
+        for r in try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account })) {
+            if let k = PlaceKey(r.key) { out[k] = state(r, visits: 0) }
+        }
+        let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))
+        var counts: [String: Int] = [:]
+        for v in vs { counts[v.key, default: 0] += 1 }
+        for (k, n) in counts { if let pk = PlaceKey(k), var s = out[pk] { s.visits = max(s.visits, n); out[pk] = s } }
+        return out
+    }
+
+    /// When each mark was made (for the Streak: weeks with an act).
+    func markDates(account: String) throws -> [Date] {
+        try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account })).map(\.at)
+    }
+
+    // MARK: the writes (the old StampBook's rules)
+
+    /// STAMP a place. A wished place loses its wish and keeps when it was wished (`came`). A region, town or thing in one
+    /// country stamps that country too, on only (unstamping it later leaves the country), the old app's cascade.
+    func stamp(_ key: PlaceKey, account: String, source: MarkSource, at: Date = Date(),
+               name: String = "", cc: String = "", level: Int = 0) throws -> Result {
+        var res = Result()
+        try stampOne(key, account: account, source: source, at: at, name: name, cc: cc, level: level, via: nil, into: &res)
+        if key.kind != .country, !cc.isEmpty {
+            let c = PlaceKey.country(cc.lowercased())
+            if try record(account, c)?.stamped != true {
+                try stampOne(c, account: account, source: source, at: at, name: "", cc: cc, level: 0, via: key.description, into: &res)
+            }
+        }
+        try modelContext.save()
+        return res
+    }
+
+    private func stampOne(_ key: PlaceKey, account: String, source: MarkSource, at: Date, name: String, cc: String,
+                          level: Int, via: String?, into res: inout Result) throws {
+        let r0 = try record(account, key)
+        let v = try visitCount(account, key)
+        if r0?.stamped == true { return }
+        res.undo.append(snapshot(key, r0))
+        let old = state(r0, visits: v)
+        let r = r0 ?? { let n = StampRecord(account: account, key: key); modelContext.insert(n); return n }()
+        if r.wished { r.came = r.at }
+        r.wished = false; r.want = 0; r.wishWhen = nil; r.wishDetails = nil
+        r.stamped = true
+        r.at = at
+        r.source = source.rawValue
+        r.times = max(1, r.times)
+        r.via = via
+        if !name.isEmpty { r.name = name }
+        if !cc.isEmpty { r.cc = cc }
+        if level > 0 { r.level = level }
+        res.changed[key] = (old, state(r, visits: v))
+    }
+
+    /// UNSTAMP: the record goes, with its details, its proof and when it was wished (the old dropDetails); the places it
+    /// stamped through (`via`) go with it only when nothing else holds them (a country stays stamped).
+    func unstamp(_ key: PlaceKey, account: String) throws -> Result {
+        var res = Result()
+        guard let r = try record(account, key), r.stamped else { return res }
+        let v = try visitCount(account, key)
+        var snap = snapshot(key, r)
+        // its visits go with it (Part 0.2.5), its evidence stays
+        let k = key.description
+        let visits = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.key == k }))
+        snap.visits = visits.map { .init(id: $0.id, arrived: $0.arrived, left: $0.left, rough: $0.rough, lived: $0.lived,
+                                         transit: $0.transit, planId: $0.planId, source: $0.source) }
+        for x in visits { modelContext.delete(x) }
+        res.undo.append(snap)
+        res.changed[key] = (state(r, visits: v), .none)
+        modelContext.delete(r)
+        try modelContext.save()
+        return res
+    }
+
+    /// WISH a place, `want` 1 to 5. A stamped place can't be wished (the old toggleWish refused it).
+    func wish(_ key: PlaceKey, account: String, want: Int = 3, source: MarkSource = .hand,
+              name: String = "", cc: String = "", level: Int = 0) throws -> Result {
+        var res = Result()
+        let r0 = try record(account, key)
+        if r0?.stamped == true { return res }
+        if r0?.wished == true && r0?.want == want { return res }
+        res.undo.append(snapshot(key, r0))
+        let old = state(r0, visits: 0)
+        let r = r0 ?? { let n = StampRecord(account: account, key: key); modelContext.insert(n); return n }()
+        r.wished = true
+        r.want = min(5, max(1, want))
+        r.at = Date()
+        r.source = source.rawValue
+        if !name.isEmpty { r.name = name }
+        if !cc.isEmpty { r.cc = cc }
+        if level > 0 { r.level = level }
+        res.changed[key] = (old, state(r, visits: 0))
+        try modelContext.save()
+        return res
+    }
+
+    func unwish(_ key: PlaceKey, account: String) throws -> Result {
+        var res = Result()
+        guard let r = try record(account, key), r.wished else { return res }
+        res.undo.append(snapshot(key, r))
+        res.changed[key] = (state(r, visits: 0), .none)
+        modelContext.delete(r)
+        try modelContext.save()
+        return res
+    }
+
+    /// PUT BACK what a write changed (its snapshots), as one write
+    func restore(_ snaps: [Snapshot], account: String) throws -> Result {
+        var res = Result()
+        for s in snaps.reversed() {
+            let r0 = try record(account, s.key)
+            let v = try visitCount(account, s.key)
+            res.undo.append(snapshot(s.key, r0))
+            let old = state(r0, visits: v)
+            if let vals = s.values {
+                let r = r0 ?? { let n = StampRecord(account: account, key: s.key); modelContext.insert(n); return n }()
+                r.stamped = vals.stamped; r.wished = vals.wished; r.want = vals.want; r.wishWhen = vals.wishWhen
+                r.at = vals.at; r.source = vals.source; r.times = vals.times; r.lived = vals.lived; r.note = vals.note
+                r.when = vals.when; r.details = vals.details; r.wishDetails = vals.wishDetails
+                r.verification = vals.verification; r.via = vals.via; r.came = vals.came
+                r.name = vals.name; r.cc = vals.cc; r.level = vals.level
+                res.changed[s.key] = (old, state(r, visits: v))
+            } else if let r0 {
+                modelContext.delete(r0)
+                res.changed[s.key] = (old, .none)
+            }
+            for x in s.visits ?? [] {
+                let n = VisitRecord(account: account, key: s.key)
+                n.id = x.id; n.arrived = x.arrived; n.left = x.left; n.rough = x.rough; n.lived = x.lived
+                n.transit = x.transit; n.planId = x.planId; n.source = x.source
+                modelContext.insert(n)
+            }
+        }
+        try modelContext.save()
+        return res
+    }
+
+    /// SIGN OUT (Part 19.3, 20.10): everything of an account goes
+    func empty(account: String) throws {
+        try modelContext.delete(model: StampRecord.self, where: #Predicate { $0.account == account })
+        try modelContext.delete(model: VisitRecord.self, where: #Predicate { $0.account == account })
+        try modelContext.delete(model: EvidenceRecord.self, where: #Predicate { $0.account == account })
+        try modelContext.save()
+    }
+}
