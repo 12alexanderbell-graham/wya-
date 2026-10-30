@@ -1114,13 +1114,21 @@ struct SearchResults: View {
         // then anything containing it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
         if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
-        let names = w.searchNames
+        let names = w.searchNames, more = w.otherLanguageNames
         for (i, p) in w.places.enumerated() where !p.junk && !alias.contains(i) {
             let n = names[i]
             if n[0].hasPrefix(q) { own.append(i) }
             else if n.dropFirst().contains(where: { $0.hasPrefix(q) }) { other.append(i) }
             else if n.contains(where: { $0.contains(q) }) { contains.append(i) }
         }
-        return Array((alias + own + other + contains).prefix(6))
+        // its names in other languages ("Allemagne", "ドイツ") last, so they never push an English match down
+        var language: [Int] = []
+        let picked = Set(alias + own + other + contains)
+        if q.count >= 2 {
+            for (i, p) in w.places.enumerated() where !p.junk && !picked.contains(i) && more[i].contains(where: { $0.hasPrefix(q) }) {
+                language.append(i)
+            }
+        }
+        return Array((alias + own + other + contains + language).prefix(6))
     }
 }

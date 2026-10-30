@@ -53,3 +53,9 @@ A towns file is one place's towns: raw DEFLATE of JSON rows `[name, region, popu
 
 - The merge never re-keys: every earlier row stays exactly as it was; a GeoNames place joins only if its id is new, and not when one of its names matches an earlier row with no id within 15 km. Sections of a city (PPLX) are left out.
 - `town-zones.json` lists, for every disputed piece and every place a view can move, the towns of each file that lie in it, so a place's towns follow the borders view. New towns are placed by the world map's outlines; a town of a file that can't hold the item (a border slip on the coarse outline) is left out.
+
+## Countries' names in every language (`place-names.json`)
+
+    python3 pipeline/d12_country_names.py <GeoNames folder> world-meta.json place-names.json   # countryInfo.txt, alternateNamesV2.txt
+
+Search finds a country by any of these names starting with what was typed, after every match on its own names.

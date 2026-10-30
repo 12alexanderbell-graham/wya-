@@ -114,6 +114,21 @@ nonisolated final class World: @unchecked Sendable {
     private let neighbourLock = NSLock()
     private var madeNeighbours: [Set<Int>]?
 
+    /// D12, first part: each country's and territory's names in every language (GeoNames, `place-names.json`), folded,
+    /// for search's "starts with" (typing "Allemagne" or "ドイツ" finds Germany). Read once, on first use; never used
+    /// for "did you mean" (its edit distance runs over the place's own names only)
+    private(set) lazy var otherLanguageNames: [[String]] = {
+        var out = [[String]](repeating: [], count: places.count)
+        guard let url = Bundle.main.url(forResource: "place-names", withExtension: "json"),
+              let d = try? Data(contentsOf: url),
+              let m = try? JSONDecoder().decode([String: [String]].self, from: d) else { return out }
+        for (id, names) in m {
+            guard let i = placeIndex[id] else { continue }
+            out[i] = names.map { $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        }
+        return out
+    }()
+
     /// each place's names folded for search (case and accents gone), made once on first use, not per keystroke:
     /// its own name first, then its official name and other names
     private(set) lazy var searchNames: [[String]] = places.map { p in
