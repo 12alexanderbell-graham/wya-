@@ -89,7 +89,7 @@ struct Icon5: View {
     /// the gear's 18 frames are an eighth of a turn: 18 a second is one turn in 8 seconds
     private static func fps(_ key: String) -> Double { key == "settings-open" ? 18 : 30 }
 
-    private var icon: IC5Icon? { IC5.all[key] ?? IC5.extra[key] }   // extra: TabIconsTest.swift (29 Oct)
+    private var icon: IC5Icon? { IC5.all[key] ?? IC5.extra[key] ?? IC5.drawn[key] }   // extra: TabIconsTest.swift (29 Oct); drawn: IconsDrawn.swift (18.4)
 
     private func frameIndex(at date: Date) -> Int {
         guard let ic = icon, !ic.frames.isEmpty else { return 0 }

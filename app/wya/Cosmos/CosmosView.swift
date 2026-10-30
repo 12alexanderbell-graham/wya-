@@ -436,21 +436,15 @@ struct CosmosView: View {
     }
 
     /// each continent's share of its places you've stamped; Earth's is the world's
-    /// worked out again only when the stamps change (Step 1c: this ran on every frame the sheet moved, all places x 8)
-    private static var sharesMade: (stamped: Set<Int>, v: [CGFloat])?
+    /// read from the Count service (Store/Count.swift), the same numbers the caption shows; MapController works them
+    /// out again only when the stamps or the Count setting change (Step 1c: never per frame)
     static func shares(_ m: MapController) -> [CGFloat] {
-        let stamped = m.stamped    // observed first, so the planets update once the world has loaded
-        guard m.ready, let w = m.world else { return Array(repeating: 0, count: 8) }
-        if let s = sharesMade, s.stamped == stamped { return s.v }
-        let v: [CGFloat] = planets.map { pl in
-            var tot = 0, got = 0
-            for (i, p) in w.places.enumerated() where pl.k == "World" ? !p.junk : w.inCont(i, pl.k) {
-                tot += 1; if stamped.contains(i) { got += 1 }
-            }
-            return tot == 0 ? 0 : CGFloat(got) / CGFloat(tot)
+        let sh = m.shares    // observed first, so the planets update once the world has loaded
+        guard m.ready else { return Array(repeating: 0, count: 8) }
+        return planets.map { pl in
+            let s = sh[pl.k] ?? MapCounts.Share()
+            return s.total == 0 ? 0 : CGFloat(s.have) / CGFloat(s.total)
         }
-        sharesMade = (stamped, v)
-        return v
     }
 }
 

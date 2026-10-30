@@ -138,6 +138,7 @@ final class TestDriver {
                     if a == "tabicons" { ReviewSheet.tabIcons() }
                     if a == "launch" { ReviewSheet.launchPicture() }
                     if a == "logoturn" { ReviewSheet.logoTurnMovie() }
+                    if a == "icons" { ReviewSheet.icons() }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
@@ -176,6 +177,62 @@ final class TestDriver {
                     else { UserDefaults.standard.set([a], forKey: MapController.nationalitiesKey) }
                     map?.refreshHome(); map?.goHome()
                 case "hittest": if let m = map { HitTest.run(map: m) }
+                case "action":
+                    // action <id> [arg] [source]: one registered action, logged with the screen state after it
+                    let ok = await Actions.shared.perform(a, p.count > 2 ? p[2] : nil,
+                                                          source: ActionSource(rawValue: p.count > 3 ? p[3] : "you") ?? .you)
+                    try? await Task.sleep(for: .milliseconds(100))
+                    var line = "action \(a) \(p.count > 2 ? p[2] : "") -> \(ok)"
+                    if let m = map, let w = water, let h = head {
+                        line += "\n\(ScreenStateSource(map: m, water: w, head: h, tab: { 0 }).now())"
+                    }
+                    line += "\nregistered: \(Actions.shared.all.keys.sorted().joined(separator: ", "))"
+                    line += "\nfeatures: " + Feature.allCases.map { "\($0.rawValue) \($0.isOn)" }.joined(separator: ", ")
+                    try? line.write(toFile: Snap.dir + "/action.log", atomically: true, encoding: .utf8)
+                case "storecheck":
+                    let lines = await StoreCheck.run()
+                    try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)
+                case "importold":
+                    // importold <file in snaps>: the old app's stamps.json read into the store; what came in, into
+                    // snaps/import.log (each row's key, state, name, level, and whether details/proof were kept)
+                    if let d = try? Data(contentsOf: URL(fileURLWithPath: Snap.dir + "/" + a)) {
+                        let n = await MarkStore.shared.importOld(d)
+                        var lines = ["imported \(n)"]
+                        if let book = try? OldBook(json: d) {
+                            lines.append("waiting: \(book.waiting)")
+                            for r in book.rows {
+                                lines.append("\(r.key) stamped \(r.stamped) wished \(r.wished) want \(r.want) times \(r.times) "
+                                    + "name \(r.name) cc \(r.cc) lvl \(r.level) at \(r.at) came \(r.came.map { "\($0)" } ?? "-") "
+                                    + "details \(r.details != nil) proof \(r.verification != nil) how \(r.how ?? "-")")
+                            }
+                        }
+                        lines.append("store now: \(MarkStore.shared.marks.count) marks; caption \(map?.count.n ?? -1) of \(map?.count.of ?? -1)")
+                        try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/import.log", atomically: true, encoding: .utf8)
+                    }
+                case "counts":
+                    // the Count service's totals per borders view and Count setting (Part 17 D18's check: the world's
+                    // total equals what the caption shows; each view as the old app counted it), into snaps/counts.log
+                    if let m = map, let w = m.world,
+                       let u = Bundle.main.url(forResource: "disputes", withExtension: "json"), let d = try? Data(contentsOf: u),
+                       let f = try? JSONDecoder().decode(DisputeFile.self, from: d) {
+                        let places = w.places.map { ($0.id, $0.s ?? $0.n, $0.k) }
+                        let views: [(String, Borders.View)] = [("de facto", .deFacto), ("UN", .unitedNations)]
+                            + ["US", "RU", "CN", "MA", "RS", "KO", "IN", "PK"].map { ($0, Borders.View.country($0)) }
+                        let mine = Set(m.stamped.map { w.places[$0].id })
+                        var lines = ["counts \(Date())", "caption now: \(m.count.n) of \(m.count.of)"]
+                        for (name, v) in views {
+                            let pos = Positions(file: f, places: places, view: v)
+                            for kind in [CountKind.stamps, .countries] {
+                                let sh = MapCounts.shares(stamped: mine, world: w, count: kind, positions: pos)
+                                let conts = sh.filter { $0.key != "World" }
+                                let sum = conts.filter { $0.key != "Antarctica" }.values.reduce(0) { $0 + $1.total }
+                                lines.append("\(name) \(kind.rawValue): world \(sh["World"]?.have ?? 0)/\(sh["World"]?.total ?? 0); "
+                                    + conts.keys.sorted().map { "\($0) \(conts[$0]!.have)/\(conts[$0]!.total)" }.joined(separator: ", ")
+                                    + "; continents (no Antarctica) sum \(sum)")
+                            }
+                        }
+                        try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/counts.log", atomically: true, encoding: .utf8)
+                    }
                 case "probe":
                     // probe x y (screen points): the rings there log how the morph laid them (snaps/probe.log)
                     if p.count > 2, let x = Double(p[1]), let y = Double(p[2]), let m = map {

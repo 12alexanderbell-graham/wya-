@@ -17,7 +17,15 @@ final class MapController {
     private(set) var ready = false
 
     // MARK: what's on the map (a demo account for now: see DemoAccount)
-    var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter) } }
+    var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter); recount() } }
+    /// YOUR COUNT for the world and each continent (the Count service, Store/Count.swift), worked out again when your
+    /// stamps or the Count setting change, never per frame
+    private(set) var shares: [String: MapCounts.Share] = [:]
+    func recount() {
+        guard let w = world else { return }
+        let ids = Set(stamped.map { w.places[$0].id })
+        shares = MapCounts.shares(stamped: ids, world: w, count: CountKind.current)
+    }
     var wished: Set<Int> = [] { didSet { marksChanged(stamped: stamped, wished: oldValue, filter: filter) } }
     /// the moon's stop: 0 Both, 1 Stamped, 2 Stamped+, 3 Wishlist+, 4 Wishlist (the + views come with counts)
     var filter = 0 { didSet { needsFrame = true; marksChanged(stamped: stamped, wished: wished, filter: oldValue) } }
@@ -61,9 +69,9 @@ final class MapController {
     var testMoon: Double?
     /// places in the world you haven't stamped: one star each in the night
     var placesLeft: Int {
-        let s = stamped
-        guard ready, let w = world else { return 0 }
-        return max(0, w.countable - s.count)
+        let sh = shares["World"]
+        guard ready, let sh else { return 0 }
+        return max(0, sh.total - sh.have)
     }
 
     // MARK: the camera
@@ -173,6 +181,7 @@ final class MapController {
         let marks = MarkStore.shared
         await marks.load()
         takeMarks(marks)
+        recount()
         marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared) }
         homeX = Self.homeLongitudeX(w)
         tinyPlaces = w.places.indices.filter { w.places[$0].tiny && !w.places[$0].junk }
@@ -285,6 +294,13 @@ final class MapController {
         return SIMD2(x, min(max(p.y, y0), y1))
     }
 
+    /// the camera's box in longitude and latitude (west, south, east, north), for the screen state (Part 20.7.1)
+    func cameraBox() -> [Double] {
+        let a = mapPoint(.zero), b = mapPoint(CGPoint(x: view.width, y: view.height))
+        let g = EqualEarth.geoBox(x0: a.x, x1: b.x, y0: a.y, y1: b.y)
+        return [g.lon0, g.lat0, g.lon1, g.lat1]
+    }
+
     func mapPoint(_ s: CGPoint) -> SIMD2<Double> {
         c + (SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2) / k
     }
@@ -359,13 +375,11 @@ final class MapController {
     /// your count and the total, for the world or the picked continent
     var count: (n: Int, of: Int) {
         // read the observed values first, so a view that asks before the world has loaded still updates when it does
-        let s = stamped, k0 = continent
-        guard ready, let w = world else { return (0, 263) }
-        guard let k = k0 else { return (s.count, w.countable) }
-        // the old Cosmos.share: the continent's members (a country across two counts in both)
-        var n = 0, of = 0
-        for i in w.places.indices where w.inCont(i, k) { of += 1; if stamped.contains(i) { n += 1 } }
-        return (n, of)
+        // the Count service's share (a country across two continents counts in both, the old Cosmos.share)
+        let sh = shares, k = continent ?? "World"
+        guard ready else { return (0, 263) }
+        let s = sh[k] ?? MapCounts.Share()
+        return (s.have, s.total)
     }
 
     func goHome(animated: Bool = true) {
