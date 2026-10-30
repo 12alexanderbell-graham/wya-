@@ -18,7 +18,8 @@ Rules:
 - a piece that is a whole place (Kosovo, Taiwan) takes its own place's file whole, uncut;
 - a sliver inside a piece (under 3% of its unit) joins the part of the same piece it shares the longest border with,
   so region borders follow the piece's line (the unit loses that sliver to its neighbour);
-- every cut is made on the file's own integer grid, so both sides of a seam share their points.
+- every cut is made on the file's own integer grid, then all the file's outlines are noded together and each part's
+  rings are rebuilt from the faces between those lines, so neighbours share every point.
 
 usage: d1b_pieces.py <old Regions folder> <original detail-100m.wyad> <disputes.json> <truth.pkl> <nepieces.pkl> <out>
 """
@@ -30,7 +31,6 @@ from shapely.ops import unary_union
 from shapely import make_valid
 from shapely.affinity import affine_transform
 import shapely
-import numpy as np
 
 regdir, detail, dfile, tfile, nfile, out = sys.argv[1:7]
 os.makedirs(out, exist_ok=True)
