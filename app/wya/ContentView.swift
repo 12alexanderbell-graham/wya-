@@ -57,6 +57,8 @@ struct ContentView: View {
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
                 }
                 if side.on { SidewaysMarks(map: map, L: water.layout) }
+                // the sheet's top read in a view of its own, so its every frame re-runs only this, not the whole screen
+                SheetWatch(water: water, map: map)
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
             }
@@ -83,6 +85,9 @@ struct ContentView: View {
             .onChange(of: Layout.current(size: g.size, insets: g.safeAreaInsets), initial: true) { _, l in
                 water.layout = l
                 map.layout = l
+                // the map's size from the layout too, so a session restored before the map view's first layout frames
+                // on this phone's size, not the placeholder's (the map view sets it again from its own bounds)
+                if !Sideways.shared.on { map.view = CGSize(width: l.W, height: l.H) }
                 #if DEBUG
                 NSLog("wya layout %@ %.0fx%.0f safe top %.0f bottom %.0f", l.model, l.W, l.H, l.safeTop, l.safeBottom)
                 #endif
@@ -156,8 +161,14 @@ struct ContentView: View {
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
             // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
-            map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head,
-                                                                         closeCard: { closeCard() }) }
+            map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head) }
+            map.holdCloses = { [head] in
+                if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen {
+                    return { closeCard() }
+                }
+                if head.settingsOpen { return { head.closeSettings() } }
+                return nil
+            }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
@@ -208,7 +219,6 @@ struct ContentView: View {
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
         // a continent follows the sheet (A1.16)
-        .onChange(of: water.form().top) { _, t in if !side.on { map.sheetMoved(top: t) } }
         // the session written as it changes; the camera 0.5 s after it last moved (19.2)
         .onChange(of: map.restVersion) { _, _ in saveSession(after: 0.5) }
         .onChange(of: water.stop) { _, _ in saveSession(after: 0) }
@@ -301,15 +311,13 @@ struct ContentView: View {
 
     /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish | Details, Verify | Show in passport, Share. Rows
     /// that can't be used now are unavailable (Apple greys them in place). With a card, the book, Details or Verify up,
-    /// or Map settings or an upload open, the hold only closes them (one press, one job). Not here yet: Lived here, Open
+    /// or Map settings open, the hold only closes them (one press, one job; MapController.holdCloses). Not here yet: Lived here, Open
     /// its page, Open its region map, Its places, Add to a list, Add to a plan (their parts are not built).
-    @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState,
-                                       closeCard: @escaping () -> Void) -> UIMenu? {
+    /// Asked as the press starts, so it changes nothing itself (the closing a hold does is MapController.holdCloses).
+    /// Sideways (1.11), with search open, or on the press that closed search: no menu.
+    @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState) -> UIMenu? {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
-        if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen {
-            closeCard(); return nil
-        }
-        if head.settingsOpen { head.closeSettings(); return nil }
+        if Sideways.shared.on || head.searching || CACurrentMediaTime() - head.mapClosedSearchAt < 0.6 { return nil }
         // THE REVIEW (9.5): a found country's menu is Keep or Drop · Its dates · Show in the list; other places none
         if water.upload {
             let u = UploadState.shared
@@ -396,5 +404,16 @@ struct ContentView: View {
             else { await MarkStore.shared.stamp(key, name: p.n, source: .quick) }
             UIAccessibility.post(notification: .announcement, argument: "\(p.n) \(stamped ? "unstamped" : "stamped")")
         }
+    }
+}
+
+/// Hands the water's top to the map as the sheet moves (MapController.sheetMoved: a continent follows it). Its own view
+/// so the per-frame read re-evaluates this body only.
+private struct SheetWatch: View {
+    let water: Water
+    let map: MapController
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
+            .onChange(of: water.form().top) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t) } }
     }
 }

@@ -164,7 +164,8 @@ struct TopPullView: View {
                 .frame(width: L.W, height: L.H)
                 .contentShape(PullArea(layout: L, ai: head.pullStop > 0))
                 .gesture(pullGesture)
-                .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh)
+                // sideways (1.11) the strip would be one of the map's side edges: the map's own
+                .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on)
                 .onChange(of: sheetHigh) { _, high in if high { head.putAway() } }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)

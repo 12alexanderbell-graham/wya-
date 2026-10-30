@@ -15,12 +15,12 @@ enum SmartGuess {
             or with NONE if none of them is what was meant. No other words.
             """)
         let prompt = "Typed: \(typed)\nList: \(names.joined(separator: "; "))"
-        let answer: String? = await withTaskGroup(of: String?.self) { g in
-            g.addTask { (try? await session.respond(to: prompt))?.content }
-            g.addTask { try? await Task.sleep(for: .milliseconds(1500)); return nil }
-            let first = await g.next() ?? nil
-            g.cancelAll()
-            return first
+        // the first of the answer and the 1.5 s cap wins; the model is never waited for past it (a task group would
+        // wait for every child, so the cap would hold only if the model stopped when cancelled)
+        let answer: String? = await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
+            let once = Once(c)
+            let work = Task { once.resume((try? await session.respond(to: prompt))?.content) }
+            Task { try? await Task.sleep(for: .milliseconds(1500)); work.cancel(); once.resume(nil) }
         }
         guard let a = answer?.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)) else { return nil }
         return names.first { $0.caseInsensitiveCompare(a) == .orderedSame }
@@ -35,5 +35,16 @@ enum SmartGuess {
         if case .available = SystemLanguageModel.default.availability { return true }
         #endif
         return false
+    }
+}
+
+/// resumes a continuation once; later calls do nothing
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var c: CheckedContinuation<String?, Never>?
+    init(_ c: CheckedContinuation<String?, Never>) { self.c = c }
+    func resume(_ v: String?) {
+        lock.lock(); let k = c; c = nil; lock.unlock()
+        k?.resume(returning: v)
     }
 }

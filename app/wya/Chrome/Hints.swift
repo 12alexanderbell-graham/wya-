@@ -11,7 +11,9 @@ final class Hints {
     static let shared = Hints()
     private let d = UserDefaults.standard
     private enum Part: String { case water, pull, hold }
+    /// each play's number, never reused (a stale step from an earlier play never matches); `playing` says one is on
     private var job = 0
+    private var playing = false
     private var lastTouch = Date()
     private var shortPulls: [Date] = []
     private weak var water: Water?
@@ -30,7 +32,7 @@ final class Hints {
     /// a touch anywhere: a hint playing stops where it is and goes back
     func touched() {
         lastTouch = Date()
-        guard job > 0 else { return }
+        guard playing else { return }
         job += 1
         stopNow()
     }
@@ -63,6 +65,7 @@ final class Hints {
         guard !parts.isEmpty, let w = water, let h = head, !w.upload, w.stop == .quarter, !h.searching, !h.toolsOpen,
               !h.settingsOpen, h.pull < 0.5, !Sideways.shared.on else { return }
         job += 1
+        playing = true
         let me = job
         var at = 0.0
         for p in parts {
@@ -86,7 +89,7 @@ final class Hints {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [self] in
                     guard me == job else { return }
                     Feel.land(speed: 0)
-                    if p == parts.last { job = 0 }
+                    if p == parts.last { playing = false }
                 }
             }
             at += 1.2
@@ -94,8 +97,8 @@ final class Hints {
     }
 
     private func stopNow() {
+        playing = false
         guard let h = head else { return }
-        job = 0
         if h.pullStop == 0, h.pull > 0.5, h.pull < 19 { withAnimation(Motion.settle) { h.pull = 0 } }
         if !h.settingsOpen, !h.dotHeld, h.gear > 0, h.gear < 0.3 { withAnimation(Motion.settle) { h.gear = 0 } }
     }

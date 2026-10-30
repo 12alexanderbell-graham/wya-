@@ -79,6 +79,13 @@ nonisolated final class World: @unchecked Sendable {
     /// Coral Sea Islands, Ashmore and Cartier): 263.
     var countable: Int { places.reduce(0) { $0 + ($1.junk ? 0 : 1) } }
 
+    /// each place's names folded for search (case and accents gone), made once on first use, not per keystroke:
+    /// its own name first, then its official name and other names
+    private(set) lazy var searchNames: [[String]] = places.map { p in
+        let f = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        return [f(p.n)] + ([p.official ?? ""] + p.alt).filter { !$0.isEmpty }.map(f)
+    }
+
     init(wyam: Data, meta: Data, disputes: Data?, view: Borders.View) throws {
         let m = try JSONDecoder().decode(Meta.self, from: meta)
         places = m.places
