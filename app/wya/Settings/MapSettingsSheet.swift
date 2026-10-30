@@ -142,6 +142,16 @@ private struct SettingsList: View {
             } else {
                 RowWords(name: row.name, value: row.valueName(s))
                     .onTapGesture { tap(row, choices, s) }
+                    // THE ROW'S HOLD MENU (5.3, Part 11): Reset to default, unavailable when it is already the default
+                    .contextMenu {
+                        if let d = row.defaultValue {
+                            Button("Reset to default") {
+                                Feel.tap()
+                                Task { await MapSettingsRows.set(row.id, d, map: map) }
+                            }
+                            .disabled(row.get(s) == d)
+                        }
+                    }
                 if open == row.id {
                     ForEach(Array(choices.enumerated()), id: \.element.id) { j, c in
                         ChoiceRow(name: c.name, picked: row.get(s) == c.id, delay: Double(j) * 0.05) {
