@@ -3,10 +3,12 @@ import SwiftUI
 /// SIDEWAYS FULL SCREEN (Part 1.11, A1.14): the map alone, landscape, bigger. The app stays portrait; the turn is ours.
 /// Enter: every card and sheet over the map closes first, then the head slides up past the top edge, the zoom column
 /// off the right edge and the water pours into the capsule as the capsule slides down past the bottom edge (chrome
-/// curve); when the chrome is half way the map turns a quarter about the screen's centre (0.42 s), drawn into a square
-/// the size of the screen's diagonal so no corner is ever empty; at rest it is drawn at landscape size (the same
-/// content); then one row of marks (plus, minus, reset, out of full screen) slides in along the landscape bottom edge,
-/// 0.05 s apart, each glyph upright in landscape. Leave: the exact reverse.
+/// curve); when the chrome is half way the map turns a quarter about the screen's centre (0.5 s), drawn into a square
+/// the size of the screen's diagonal so no corner is ever empty, and the camera frames the world (or the continent)
+/// for landscape in the same move; at rest it is drawn at landscape size (the same content); then one row of marks
+/// (plus, minus, reset, out of full screen) slides in along the landscape bottom edge, 0.05 s apart, each glyph upright
+/// in landscape. Leave: the reverse, the camera framing portrait as it turns back; through both turns the screen never
+/// shows past the world's top or bottom edge.
 @Observable @MainActor
 final class Sideways {
     static let shared = Sideways()
@@ -36,7 +38,46 @@ final class Sideways {
         #if DEBUG
         if let t = testTurn { return 90 * dir * t }
         #endif
+        if let t = turnAt { return 90 * dir * t }
         return turned ? 90 * dir : 0
+    }
+    /// the turn now (0 upright, 1 sideways) while it runs, driven frame by frame with the camera
+    private(set) var turnAt: Double?
+    @ObservationIgnored private var link: CADisplayLink?
+    @ObservationIgnored private var linkTarget: TurnTick?
+    @ObservationIgnored private var turnStart: CFTimeInterval = 0
+    @ObservationIgnored private var turnStep: ((Double) -> Void)?
+    @ObservationIgnored private var turnEnd: (() -> Void)?
+    /// the turn's length (Reduce Motion: shorter, never a cut)
+    private var turnDur: Double { Motion.reduce ? 0.3 : 0.5 }
+
+    /// THE TURN AND THE CAMERA AS ONE MOVE (two actions at the same time, never one after the other): each frame the map's angle and the camera take the same eased step, so the framing happens while it
+    /// turns, and the camera is held so the screen never shows past the world's top or bottom edge
+    private func runTurn(step: @escaping (Double) -> Void, end: @escaping () -> Void) {
+        link?.invalidate()
+        turnStep = step; turnEnd = end
+        turnStart = CACurrentMediaTime()
+        let t = TurnTick { [weak self] in self?.tick() }
+        linkTarget = t
+        let l = CADisplayLink(target: t, selector: #selector(TurnTick.fire))
+        l.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        l.add(to: .main, forMode: .common)
+        link = l
+        tick()
+    }
+    private func tick() {
+        let x = min(1, (CACurrentMediaTime() - turnStart) / turnDur)
+        // ease in and out (a smooth start and a calm landing)
+        let p = x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
+        turnStep?(p)
+        if x >= 1 {
+            link?.invalidate(); link = nil; linkTarget = nil
+            let e = turnEnd; turnStep = nil; turnEnd = nil
+            e?()
+        }
+    }
+    private func stopTurn() {
+        link?.invalidate(); link = nil; linkTarget = nil; turnStep = nil; turnEnd = nil
     }
     @ObservationIgnored private var job = 0
     @ObservationIgnored private var stopBefore: Water.Stop = .quarter
@@ -61,46 +102,35 @@ final class Sideways {
         let me = job
         w.go(.closed)
         withAnimation(Motion.chrome) { chromeOut = true }
-        // the turn starts when the chrome is half way (0.19 s)
+        // the turn starts when the chrome is half way (0.19 s); the camera frames the world (or your continent)
+        // sideways during the turn itself
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.19) { [self] in
             guard me == job else { return }
+            let L = w.layout
+            let portrait = CGSize(width: L.W, height: L.H)
+            let from = (c: m.c, k: m.k)
+            let to = m.target(for: CGSize(width: L.H, height: L.W)) { m.frameSideways() } ?? from
             square = true
-            withAnimation(Motion.settle) { turned = true } completion: { [self] in
+            turnAt = 0
+            runTurn(step: { [self] p in
+                turnAt = p
+                m.turnCamera(from: from, to: to, p: p, deg: 90 * p, screen: portrait)
+            }, end: { [self] in
                 guard me == job else { return }
                 // the same picture at landscape size; nothing reloads
+                turned = true; turnAt = nil
                 square = false; landscape = true
                 Feel.land(speed: 0)
-                // then the whole map (or the continent you're on) framed sideways, once the map has its landscape
-                // size; the marks come in after it lands, one move at a time
-                frameWhenLandscape(me, tries: 6) { [self] in
-                    for k in 0 ..< 4 {
-                        // the one nearest the corner first
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05 * Double(3 - k)) { [self] in
-                            guard me == job else { return }
-                            withAnimation(Motion.chrome) { marks[k] = true }
-                        }
+                for k in 0 ..< 4 {
+                    // the one nearest the corner first
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05 * Double(3 - k)) { [self] in
+                        guard me == job else { return }
+                        withAnimation(Motion.chrome) { marks[k] = true }
                     }
                 }
-            }
+            })
         }
         watch()
-    }
-
-    private func frameWhenLandscape(_ me: Int, tries: Int, then: @escaping () -> Void) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
-            guard me == job, let m = map else { return }
-            // a finger already on the map: it is the map's; no framing, the marks come at once
-            if m.touching { then(); return }
-            if m.view.width > m.view.height || tries <= 0 {
-                // the marks come when the flight lands, or after its time if a finger or another move took the flight
-                var done = false
-                let once = { [self] in if !done, me == job { done = true; then() } }
-                m.frameSideways { once() }
-                DispatchQueue.main.asyncAfter(deadline: .now() + MapController.flight + 0.15) { once() }
-            } else {
-                frameWhenLandscape(me, tries: tries - 1, then: then)
-            }
-        }
     }
 
     /// out of full screen: the mark, turning the phone back to portrait, a link, leaving the tab
@@ -118,33 +148,48 @@ final class Sideways {
                 square = false
                 on = false
                 Feel.land(speed: 0)
-                // read once the map has its portrait size again
+                // the sheet's top as it is now (it was not followed while sideways)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
-                    guard me == job, let m = map else { return }
-                    // the sheet's top as it is now (it was not followed while sideways)
-                    if let w = water { m.sheetMoved(top: w.form().top) }
-                    // a continent framed again for portrait (its room above the sheet); the world back home if it was
-                    // zoomed out further than portrait allows
-                    // (a continent with no view of its own, Antarctica, only clamps like the world)
-                    if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
-                    else if m.k < m.kMin { m.goHome() }
+                    guard me == job, let m = map, let w = water else { return }
+                    m.sheetMoved(top: w.form().top)
                 }
             }
             landscape = false
             // left before the turn began (a link right after entering): nothing to turn back, so it ends now
-            guard turned else {
+            guard turned, let m = map, let w = water else {
+                stopTurn(); turnAt = nil
+                // a camera the turn left part way: back inside the world for portrait
+                if let m = map { if m.k < m.worldKMin { m.goHome() } else { m.holdInside() } }
                 withAnimation(Motion.chrome) { chromeOut = false }
                 water?.go(stopBefore)
                 done(); return
             }
+            let L = w.layout
+            let portrait = CGSize(width: L.W, height: L.H)
+            let from = (c: m.c, k: m.k)
+            // where portrait puts it: a continent framed again for portrait (its room above the sheet); the world home if
+            // it was zoomed out further than portrait allows, else the place you were looking at
+            let to = m.target(for: portrait) {
+                if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
+                else if m.k < m.worldKMin { m.goHome() } else { m.holdInside() }
+            } ?? from
             square = true
-            withAnimation(Motion.settle) { turned = false } completion: { done() }
-            // the chrome comes back as the turn passes half way
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.21) { [self] in
-                guard me == job else { return }
-                withAnimation(Motion.chrome) { chromeOut = false }
-                water?.go(stopBefore)
-            }
+            turned = false
+            turnAt = 1
+            var chromeBack = false
+            runTurn(step: { [self] p in
+                turnAt = 1 - p
+                m.turnCamera(from: from, to: to, p: p, deg: 90 * (1 - p), screen: portrait)
+                // the chrome comes back as the turn passes half way
+                if p >= 0.5, !chromeBack {
+                    chromeBack = true
+                    withAnimation(Motion.chrome) { chromeOut = false }
+                    water?.go(stopBefore)
+                }
+            }, end: { [self] in
+                turnAt = nil
+                done()
+            })
         }
     }
 
@@ -205,4 +250,11 @@ struct SidewaysMarks: View {
         .offset(x: side.marks[k] ? 0 : (side.dir < 0 ? 70 : -70))
         .allowsHitTesting(side.marks[k])
     }
+}
+
+/// the display link's target (a class the link may hold without holding Sideways)
+private final class TurnTick: NSObject {
+    let f: () -> Void
+    init(_ f: @escaping () -> Void) { self.f = f }
+    @objc func fire() { MainActor.assumeIsolated { f() } }
 }
