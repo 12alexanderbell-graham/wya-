@@ -76,6 +76,12 @@ final class UploadState {
     @ObservationIgnored private var readToken = 0
     /// the go's write or the leaving is under way: taps, pulls and a second go wait for it
     @ObservationIgnored private var busy = false
+    /// the review as it was when Add more left it: × on the next finding puts it back (only the new read is cancelled)
+    @ObservationIgnored private var kept: (finds: [Finds.Find], order: [Int], dropped: Set<Int>, trips: [String: Set<Int>])?
+    /// the source of the read being found (a review joined by Add more keeps its first source's words)
+    @ObservationIgnored private var readSource: MarkSource = .photos
+    /// Its dates' own counter, so opening dates never cancels the sheet's other steps
+    @ObservationIgnored private var datesJob = 0
     @ObservationIgnored private var moving = false
 
     var isOpen: Bool { water?.upload ?? false }
@@ -88,6 +94,7 @@ final class UploadState {
     func open(water w: Water, map m: MapController) {
         guard !w.upload else { return }
         readToken += 1
+        moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0
         // finds waiting: the Upload tool opens straight on their review (9.2)
         if !order.isEmpty { openReview(water: w, map: m); return }
         water = w; map = m
@@ -156,6 +163,8 @@ final class UploadState {
         moving = true
         job += 1
         let me = job
+        kept = (finds, order, dropped, droppedTrips)
+        opened = []; datesIn = []
         if w.stop != .quarter { w.go(.quarter) }
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
@@ -200,6 +209,8 @@ final class UploadState {
         if phase == .review { leave(); return }
         guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
         readToken += 1
+        // nothing half-done carries into the next session
+        moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0; kept = nil
         if phase == .words { endWords(close: true); return }
         job += 1
         let me = job
@@ -351,7 +362,8 @@ final class UploadState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
             phase = .finding
-            count = 0
+            // after Add more the number rolls on from the finds kept
+            count = order.count - dropped.count
             withAnimation(Motion.quick) { captionIn = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
                 guard me == job else { return }
@@ -365,11 +377,15 @@ final class UploadState {
     private func deliver() {
         guard let p = pending else { return }
         pending = nil
-        samples = p.0; source = p.1; failed = p.2
+        samples = p.0; readSource = p.1; failed = p.2
+        // a review joined by Add more keeps its first source (its stamps and its undo words)
+        if order.isEmpty { source = p.1 }
+        let me = job
         // the line draws back into its left end first (A9.6), then the finds come
         DispatchQueue.main.asyncAfter(deadline: .now() + (lineShown ? 0.28 : 0)) { [self] in
+            guard me == job, phase == .finding else { return }
             lineShown = false
-            find(job)
+            find(me)
         }
     }
     /// a read waiting for finding's row to be in place
@@ -403,23 +419,27 @@ final class UploadState {
             world.place(at: EqualEarth.project(lon: lon, lat: lat)).map { world.places[$0].id }
         }
         let rows = HistoryReader.presence(samples, placeAt: placeAt)
-        let all = Finds.finds(rows, source: source)
+        let all = Finds.finds(rows, source: readSource)
         let index = Dictionary(world.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
         // finds kept by Add more stay; the new ones join them (a place found again gains the new trips)
         let had = self.order
-        let kept = had.count - dropped.count
+        let keptCount = had.count - dropped.count
+        let tripsBefore = finds.reduce(0) { $0 + $1.visits.count }
         joinFinds(all)
+        let gained = finds.reduce(0) { $0 + $1.visits.count } != tripsBefore
         self.order = had + all.compactMap { index[$0.place] }.filter { !had.contains($0) }
         opened = []; datesIn = []
         let order = Array(self.order.dropFirst(had.count))
         NSLog("wya upload found %d places (%d new) from %d rows", all.count, order.count, rows.count)
+        // nothing new to darken but new trips joined to kept places: straight back to the review
+        if order.isEmpty, gained, !had.isEmpty { ready(me); return }
         if order.isEmpty { say(failed ?? "No places found"); return }
         let per = max(1, Int((Double(order.count) / 20).rounded(.up)))
         func step(_ k: Int) {
             guard me == job, phase == .finding else { return }
             let upto = min(order.count, k + per)
             m.found.formUnion(order[k ..< upto])
-            withAnimation(Motion.quick) { count = kept + upto }
+            withAnimation(Motion.quick) { count = keptCount + upto }
             if upto < order.count {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { step(upto) }
             } else {
@@ -533,6 +553,7 @@ final class UploadState {
     func openReview(water w: Water, map m: MapController) {
         guard !w.upload, !order.isEmpty else { return }
         Feel.tap()
+        moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0; kept = nil
         water = w; map = m
         let at25 = w.stop == .quarter
         w.openUpload()
@@ -560,6 +581,7 @@ final class UploadState {
         job += 1
         let me = job
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        opened = []; datesIn = []; kept = nil
         // every find dropped: nothing is left waiting (the way to let a whole upload go)
         if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
@@ -602,7 +624,7 @@ final class UploadState {
     }
     /// nothing waits any more (go, ×): the file goes too
     private func forget() {
-        order = []; dropped = []; finds = []; droppedTrips = [:]; opened = []; datesIn = []
+        order = []; dropped = []; finds = []; droppedTrips = [:]; opened = []; datesIn = []; kept = nil
         if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
     }
     /// at launch, once the map is loaded: the waiting finds back, darkened (a place stamped since is not drawn darkened;
@@ -647,18 +669,18 @@ final class UploadState {
     func toggleDates(_ id: String) {
         guard phase == .review, !busy else { return }
         Feel.tap()
-        job += 1
-        let me = job
+        datesJob += 1
+        let me = datesJob
         if opened.contains(id) {
             withAnimation(Motion.quick) { _ = datesIn.remove(id) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) { [self] in
-                guard me == job else { return }
+                guard me == datesJob else { return }
                 withAnimation(Motion.chrome) { _ = opened.remove(id) }
             }
         } else {
             withAnimation(Motion.chrome) { _ = opened.insert(id) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) { [self] in
-                guard me == job, opened.contains(id) else { return }
+                guard me == datesJob, phase == .review, opened.contains(id) else { return }
                 withAnimation(Motion.quick) { _ = datesIn.insert(id) }
             }
         }
@@ -671,11 +693,16 @@ final class UploadState {
               let f = finds.first(where: { $0.place == id }), f.visits.indices.contains(k) else { return }
         Feel.tap()
         var off = droppedTrips[id] ?? []
-        if off.contains(k) { off.remove(k) } else { off.insert(k) }
+        // a trip kept again keeps its place; dropping a trip never brings a dropped place back
+        let keeping = off.contains(k) || dropped.contains(i)
+        if dropped.contains(i) {
+            // the place was dropped whole: keeping this trip keeps the place with this trip alone
+            off = Set(f.visits.indices).subtracting([k])
+        } else if off.contains(k) { off.remove(k) } else { off.insert(k) }
         droppedTrips[id] = off.isEmpty ? nil : off
         let none = off.count >= f.visits.count
-        if none && !dropped.contains(i) { dropped.insert(i); m.found.remove(i) }
-        if !none && dropped.contains(i) { dropped.remove(i); m.found.insert(i) }
+        if keeping && !none && dropped.contains(i) { dropped.remove(i); m.found.insert(i) }
+        if !keeping && none && !dropped.contains(i) { dropped.insert(i); m.found.remove(i) }
         withAnimation(Motion.quick) { count = order.count - dropped.count }
     }
 
@@ -745,8 +772,16 @@ final class UploadState {
         readToken += 1
         reading = false; pending = nil
         withAnimation(Motion.quick) { fileShare = 0 }
-        map?.found = []
-        forget()
+        if let k = kept {
+            // only the new read goes: the finds kept by Add more wait again, as before it
+            finds = k.finds; order = k.order; dropped = k.dropped; droppedTrips = k.trips; opened = []; datesIn = []
+            kept = nil
+            map?.found = Set(order).subtracting(dropped)
+            if order.isEmpty { forget() } else { save() }
+        } else {
+            map?.found = []
+            forget()
+        }
         withAnimation(Motion.quick) { markIn = false; xIn = false; goIn = false; captionIn = false }
         let me = job
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
@@ -818,13 +853,15 @@ struct UploadSheet: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         // a swipe right (more than 60 pt, mostly sideways) goes back from step 2; a tick as it passes the point
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { g in
-            guard (u.phase == .choosing && u.step != 0) || u.phase == .review,
+            guard (u.phase == .choosing && u.step != 0) || u.phase == .review, !onRows(g.startLocation, L),
                   abs(g.translation.width) > abs(g.translation.height) else { return }
             let past = g.translation.width > 60
             if past != (swipe > 60) { if past { Feel.tick() } }
             swipe = g.translation.width
         }.onEnded { g in
             defer { swipe = 0 }
+            // a swipe on the review's rows is the rows' own (closing a revealed Drop is not Add more)
+            guard !onRows(g.startLocation, L) else { return }
             guard g.translation.width > 60 || g.predictedEndTranslation.width > 300,
                   abs(g.translation.width) > abs(g.translation.height) else { return }
             // from the review: Add more (back to step 1, finds kept); from step 2: back to step 1
@@ -902,7 +939,7 @@ struct UploadSheet: View {
     /// 50% and out as it comes back down); 56 pt rows, the flag 28 pt at 16 pt from the water's side
     @ViewBuilder
     private func reviewRows(_ L: Layout) -> some View {
-        let y0 = max(L.headBottom + 12 + 52, form.top + 72) + 56
+        let y0 = rowsTop(L)
         let h = max(0, L.capsule.minY - 24 - y0)
         let shown = rowsShown
         // a List for Apple's swipe actions and hold menu, styled as the Stamped list's (Part 4.6, 11.9). Every row,
@@ -962,6 +999,9 @@ struct UploadSheet: View {
         }
     }
     @State private var rowsShown = false
+    /// the review's rows' top (the list under the caption), as reviewRows places it
+    private func rowsTop(_ L: Layout) -> CGFloat { max(L.headBottom + 12 + 52, form.top + 72) + 56 }
+    private func onRows(_ p: CGPoint, _ L: Layout) -> Bool { u.phase == .review && rowsShown && p.y >= rowsTop(L) }
 
     /// one find: its flag, its name, its dates
     private func findRow(_ r: UploadState.Row, shown: Bool) -> some View {
@@ -994,7 +1034,8 @@ struct UploadSheet: View {
     /// one found trip under its find (Its dates): arrived to left, 15 pt, under the name; its own × (a dropped trip in
     /// black 50%)
     private func tripRow(_ r: UploadState.Row, _ k: Int, _ t: String, shown: Bool) -> some View {
-        let off = r.tripsDropped.contains(k)
+        // a trip of a dropped place reads as dropped too
+        let off = r.dropped || r.tripsDropped.contains(k)
         return HStack(spacing: 12) {
             Text(shown ? t : Caption.blank(t, "\u{2002}")).font(.subheadline)
                 .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
@@ -1118,6 +1159,7 @@ struct RowSnap: ScrollTargetBehavior {
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
         let top = max(0, context.contentSize.height - context.containerSize.height)
         let y = (target.rect.minY / row).rounded() * row
-        target.rect.origin.y = min(max(0, y), top)
+        // the end rounded up to a whole row (the list's own end clamps the rest)
+        target.rect.origin.y = min(max(0, y), (top / row).rounded(.up) * row)
     }
 }
