@@ -128,11 +128,14 @@ final class MarkStore {
     }
 
     /// AN UPLOAD'S FINDS STAMPED with their found trips (Part 9.5's go): one write, one undo step
-    func importFinds(_ finds: [TravelStore.Found], source: MarkSource, words: String) async {
-        guard let store else { return }
+    /// false when the store refused the write (nothing was changed)
+    @discardableResult
+    func importFinds(_ finds: [TravelStore.Found], source: MarkSource, words: String) async -> Bool {
+        guard let store else { return false }
         let acc = account
-        guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return }
+        guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return false }
         apply(r, words: words, origin: nil, who: .importer)
+        return true
     }
 
     /// DETAILS (Part 4.4): read a stamped place's, and write them back once when Details closes (one undo step;
@@ -221,6 +224,8 @@ final class MarkStore {
     /// SIGN OUT (Part 19.3): everything of this account goes, and the map is plain
     func signOut() async {
         guard let store else { return }
+        // finds waiting from an upload are this account's too
+        UploadState.shared.signedOut()
         let acc = account
         try? await store.empty(account: acc)
         let old = marks

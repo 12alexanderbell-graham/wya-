@@ -280,7 +280,9 @@ final class Water {
         // the upload sheet: pulled down (past 40 pt or flicked) it closes and the water goes back to where it was;
         // pulled up it settles back to 25% with a refuse (9.3)
         // the review (9.5) can be pulled up to its rows like any sheet; pulled down past 25% it is left
-        if upload, UploadState.shared.phase == .review, fingerTop <= layout.top(.quarter) + 40, v <= 300 {
+        // (a flick down from higher up goes to the next stop; only a pull or flick down from about 25% leaves it)
+        if upload, UploadState.shared.phase == .review, fingerTop <= layout.top(.quarter) + 40,
+           v <= 300 || fingerTop < layout.top(.quarter) - 40 {
             // falls through to the ordinary stops below
         } else if upload {
             let q = layout.top(.quarter)
