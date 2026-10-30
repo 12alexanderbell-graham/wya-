@@ -212,6 +212,8 @@ final class TestDriver {
                         let p = w.places[i]
                         CardState.shared.open(i, at: m.screenPoint(SIMD2(p.c[0], p.c[1])), map: m, water: water)
                     }
+                // list on|off: the Stamped list, as the caption's number opens and closes it
+                case "list": if a == "off" { water?.closeList() } else { water?.openList() }
                 case "details":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top
