@@ -289,6 +289,8 @@ struct DetailsSheet: View {
                     if t.count > 1 {
                         xCircle { removeLived(i) }
                             .scaleEffect(gone ? 0 : 1)
+                            // the first row's × comes and goes with the second row: about its own centre, never a fade
+                            .transition(.scale)
                     }
                 }
             }
@@ -404,10 +406,11 @@ struct DetailsSheet: View {
             var x = s.d.places ?? []; x.remove(at: j); s.d.places = x.isEmpty ? nil : x; placeIDs.remove(at: j)
         }
     }
-    /// the test driver's hands on the rows (simulator checks): addtime, removelived N, addplace <kind> <name>, removeplace N
+    /// the test driver's hands on the rows (simulator checks): lived, addtime, removelived N, addplace <kind> <name>, removeplace N
     @MainActor static var test: (([String]) -> Void)?
     private func driver(_ p: [String]) {
         switch p.first {
+        case "lived": s.lived.toggle()
         case "addtime": addLived()
         case "removelived": removeLived(Int(p.count > 1 ? p[1] : "0") ?? 0)
         case "addplace": kind = p.count > 1 ? p[1] : "city"; placeName = p.dropFirst(2).joined(separator: " "); addPlace()
