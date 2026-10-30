@@ -34,6 +34,13 @@ struct StampedList: View {
     @State private var kept: [Row] = []
     /// A4.21: how far the rows have dropped through the list's bottom edge
     @State private var listDrop: CGFloat = 0
+    /// the continent the list was opened on (nil: the world)
+    @State private var scope: String?
+
+    init(water: Water, map: MapController, form: Water.Form, top: CGFloat) {
+        self.water = water; self.map = map; self.form = form; self.top = top
+        _scope = State(initialValue: map.continent)
+    }
     static let each = 0.26, gap = 0.025, animated = 15
 
     struct Row: Identifiable {
@@ -49,8 +56,10 @@ struct StampedList: View {
         for (i, p) in w.places.enumerated() { index[p.id] = i }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
-            // a continent picked: its countries only (20.3.2; the caption's number counts the same)
-            if let c = map.continent ?? map.drawnContinent, !w.inCont(i, c) { return nil }
+            // a continent picked: its stamps only (20.3.2), fixed as the list opened, so a row's flight (which leaves the
+            // continent) never reflows the rows while they leave. Every stamp is a row; under Count = Countries the
+            // caption's number leaves territories out
+            if let c = scope, !w.inCont(i, c) { return nil }
             // "Lived" / "Once" / "Twice" / "<n> times", " · " the latest visit's year, " · Verified" (no tick)
             var line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
             if let x = info[k.description] {
@@ -287,3 +296,4 @@ struct StampedList: View {
         Task { await MarkStore.shared.unstamp(.country(r.id), name: r.name) }
     }
 }
+

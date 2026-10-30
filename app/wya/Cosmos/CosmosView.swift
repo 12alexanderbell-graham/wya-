@@ -204,10 +204,12 @@ struct CosmosView: View {
                 Color.clear
                     .frame(width: sunSize + 20, height: sunSize + 20)
                     .contentShape(Circle())
+                    // 11.5: Your streak (as its tap); sharing it waits for its picture. Given before .position, so the
+                    // lift is the sun's circle, not the whole system's frame
+                    .contentShape(.contextMenuPreview, Circle())
+                    .contextMenu { Button("Your streak") { if !map.sunPicked { pickSun() } } }
                     .position(sunC)
                     .onTapGesture { pickSun() }
-                    // 11.5: Your streak (as its tap); sharing it waits for its picture
-                    .contextMenu { Button("Your streak") { if !map.sunPicked { pickSun() } } }
                     .accessibilityElement()
                     .accessibilityLabel("Your streak")
                     .accessibilityAddTraits(.isButton)
@@ -285,23 +287,25 @@ struct CosmosView: View {
         let len = max(1e-6, (dx * dx + dy * dy).squareRoot())
         let light = SIMD3<Float>(Float(dx / len * sin(alpha)), Float(dy / len * sin(alpha)), Float(cos(alpha)))
         PlanetBody(tex: pl.tex, size: it.size, spin: Float(it.face * 2 * .pi), light: light, ring: pl.n == "Saturn", lights: pl.n == "Earth")
-            // the hold menu on a clear disc over the planet (the planet's own view draws with Metal and keeps its touches
-            // from SwiftUI's menu), as the sun's is
+            // the tap and the hold on a clear disc over the planet (the planet and 6 pt round it), given before it is
+            // placed: a shape given after .position is a circle in the whole system's frame and missed planets away from
+            // the middle. The planet itself takes no touch (its frame is 2.3 times it, for Saturn's ring), and is not
+            // the menu's lift: drawn by its shader outside the system it lifts as a black square
+            .allowsHitTesting(false)
             .overlay {
                 Color.clear
-                    .frame(width: it.size + 12, height: it.size + 12)    // the planet and 6 pt round it
+                    .frame(width: it.size + 12, height: it.size + 12)
                     .contentShape(Circle())
                     .contentShape(.contextMenuPreview, Circle())
                     .onTapGesture { select(it.i) }
                     .contextMenu { planetMenu(it.i) }
             }
-            // the tap and the hold are the clear disc's: a shape given after .position is a circle in the whole
-            // system's frame, not the planet's, and took the touches of planets outside it
             .position(it.pos)
             .allowsHitTesting(form.page < 0.5)
             .accessibilityElement()
             .accessibilityLabel("\(pl.k == "World" ? "The world" : pl.k), \(Int((share * 100).rounded())) percent")
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction { select(it.i) }
     }
 
     /// choosing a planet turns the ring the short way, carrying on from however it is moving now
@@ -336,7 +340,10 @@ struct CosmosView: View {
         } else {
             Button("Open \(Self.planets[i].k)") { select(i) }
             Button("Its stamped list") {
-                if chosen != i { select(i) }
+                // the list is scoped to the continent the map is on, whatever the ring last chose
+                if map.continent != Self.planets[i].k { select(i) }
+                // none stamped there: nothing to list (as the caption's number refuses at 0)
+                guard (map.shares[Self.planets[i].k]?.have ?? 0) > 0 else { Feel.refuse(); return }
                 // once Apple's menu has closed and the flight has started
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { water.openList() }
             }
@@ -346,10 +353,28 @@ struct CosmosView: View {
     /// a filter stop from the moon's menu: the moon moves along its path there, the colours change behind
     private func pickStop(_ st: Int) {
         Feel.tick()
+        // a menu that began over a drag's first points: the hold is over
+        moonHeld = false
         moonStop = st
-        withAnimation(Motion.chrome) { moonAngle = Self.stopAngle(st) }
         map.filter = st
+        // along its path the short way round (its angle stepped, so it never cuts across as a straight line), on the
+        // chrome curve's shape, 0.38 s
+        let from = moonAngle
+        var to = Self.stopAngle(st)
+        while to - from > .pi { to -= 2 * .pi }
+        while to - from < -.pi { to += 2 * .pi }
+        pickJob += 1
+        let me = pickJob, start = Date()
+        Task { @MainActor in
+            while me == pickJob {
+                let t = min(1, Date().timeIntervalSince(start) / 0.38)
+                moonAngle = from + (to - from) * Double(Flow.smooth(0, 1, CGFloat(t)))
+                if t >= 1 { break }
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+        }
     }
+    @State private var pickJob = 0
 
     private func pickSun() {
         Feel.tap(); Sound.tap()
@@ -461,14 +486,16 @@ struct CosmosView: View {
         Color.clear
             .frame(width: 36, height: 36)
             .contentShape(Circle())
-            .position(moonPos(host))
-            .onTapGesture { select(host.i) }
-            // 11.5: the five filter stops; the moon goes along its path to the one picked
+            // 11.5: the five filter stops; the moon goes along its path to the one picked (before .position, so the
+            // lift is the moon's own circle)
+            .contentShape(.contextMenuPreview, Circle())
             .contextMenu {
                 ForEach(0 ..< 5, id: \.self) { st in
                     Button(Self.stops[st]) { pickStop(st) }.disabled(st == moonStop)
                 }
             }
+            .position(moonPos(host))
+            .onTapGesture { select(host.i) }
             .gesture(
                 DragGesture(minimumDistance: 6, coordinateSpace: .global)
                     .onChanged { g in

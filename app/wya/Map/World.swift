@@ -115,19 +115,25 @@ nonisolated final class World: @unchecked Sendable {
     private var madeNeighbours: [Set<Int>]?
 
     /// D12, first part: each country's and territory's names in every language (GeoNames, `place-names.json`), folded,
-    /// for search's "starts with" (typing "Allemagne" or "ドイツ" finds Germany). Read once, on first use; never used
-    /// for "did you mean" (its edit distance runs over the place's own names only)
-    private(set) lazy var otherLanguageNames: [[String]] = {
+    /// for search's "starts with" (typing "Allemagne" or "ドイツ" finds Germany). Worked out once, in the background
+    /// after the world loads; never used for "did you mean" (its edit distance runs over the place's own names only)
+    var otherLanguageNames: [[String]] {
+        namesLock.lock(); defer { namesLock.unlock() }
+        if let n = madeNames { return n }
         var out = [[String]](repeating: [], count: places.count)
-        guard let url = Bundle.main.url(forResource: "place-names", withExtension: "json"),
-              let d = try? Data(contentsOf: url),
-              let m = try? JSONDecoder().decode([String: [String]].self, from: d) else { return out }
-        for (id, names) in m {
-            guard let i = placeIndex[id] else { continue }
-            out[i] = names.map { $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        if let url = Bundle.main.url(forResource: "place-names", withExtension: "json"),
+           let d = try? Data(contentsOf: url),
+           let m = try? JSONDecoder().decode([String: [String]].self, from: d) {
+            for (id, names) in m {
+                guard let i = placeIndex[id] else { continue }
+                out[i] = names.map { $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+            }
         }
+        madeNames = out
         return out
-    }()
+    }
+    private let namesLock = NSLock()
+    private var madeNames: [[String]]?
 
     /// each place's names folded for search (case and accents gone), made once on first use, not per keystroke:
     /// its own name first, then its official name and other names

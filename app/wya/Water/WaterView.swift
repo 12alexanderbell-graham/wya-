@@ -201,12 +201,7 @@ struct SheetContent: View {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
-                    .position(x: L.W / 2, y: captionY + 4)
-                    .onTapGesture {
-                        if water.stampedList { Feel.tap(); water.closeList() }
-                        else if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
-                        else { Feel.refuse() }
-                    }
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 22))
                     // THE NUMBER'S HOLD MENU (11.5): count by Stamps or Countries (Map settings' Count row), Copy. Share
                     // waits for its picture
                     .contextMenu {
@@ -218,6 +213,12 @@ struct SheetContent: View {
                                 .disabled(by == "countries")
                         }
                         Button("Copy") { UIPasteboard.general.string = "\(count) of \(total)" }
+                    }
+                    .position(x: L.W / 2, y: captionY + 4)
+                    .onTapGesture {
+                        if water.stampedList { Feel.tap(); water.closeList() }
+                        else if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
+                        else { Feel.refuse() }
                     }
                     .accessibilityLabel("Stamped list")
                     .accessibilityAddTraits(.isButton)
