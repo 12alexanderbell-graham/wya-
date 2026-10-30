@@ -242,7 +242,7 @@ final class Water {
         // past full it does not go at all: no give and no spring back at the top
         if t < lo { t = lo }
         // the upload sheet has no 50% while choosing: pulled up, the water gives 12 pt and no more (9.3)
-        if upload, t < L.top(.quarter) { t = L.top(.quarter) - Flow.rubber(L.top(.quarter) - t, 12) }
+        if upload, UploadState.shared.phase != .review, t < L.top(.quarter) { t = L.top(.quarter) - Flow.rubber(L.top(.quarter) - t, 12) }
         // under the capsule it does not go either
         if t > hi { t = hi + Flow.rubber(t - hi, 10) }
         // from 50% up to full it is harder: above half the water follows at 0.75 for the first 60 points, then 1:1,
@@ -279,7 +279,10 @@ final class Water {
         held = false
         // the upload sheet: pulled down (past 40 pt or flicked) it closes and the water goes back to where it was;
         // pulled up it settles back to 25% with a refuse (9.3)
-        if upload {
+        // the review (9.5) can be pulled up to its rows like any sheet; pulled down past 25% it is left
+        if upload, UploadState.shared.phase == .review, fingerTop <= layout.top(.quarter) + 40, v <= 300 {
+            // falls through to the ordinary stops below
+        } else if upload {
             let q = layout.top(.quarter)
             if fingerTop > q + 40 || v > 300 {
                 go(.quarter, speed: v, released: true)
