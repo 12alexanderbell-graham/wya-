@@ -11,9 +11,10 @@ nonisolated final class RegionScene: @unchecked Sendable {
     let id: String
     let row: Int
     let level: RegionCatalog.Level
-    /// the distinct regions (a unit cut by a piece line is one region), their names
+    /// the distinct regions (a unit cut by a piece line is one region), their names, their parents one level up
     let unitIDs: [String]
     let unitNames: [String]
+    let unitParents: [String?]
     /// each drawn entry's region
     let entryUnit: [Int]
     /// the fans' points and index, each entry's run in it
@@ -29,16 +30,18 @@ nonisolated final class RegionScene: @unchecked Sendable {
     /// the regions' box (every part, far ones included)
     let box: SIMD4<Float>
 
-    init?(place: Int, id: String) {
-        guard let first = RegionCatalog.shared.first(id), let f = RegionCatalog.shared.file(id, row: first.row) else { return nil }
-        self.place = place; self.id = id; row = first.row; level = first.level
-        var ids: [String] = [], names: [String] = [], index: [String: Int] = [:]
+    init?(place: Int, id: String, row: Int, file f: RegionFile) {
+        guard let rows = RegionCatalog.shared.levels[id], row >= 1, row <= rows.count else { return nil }
+        self.place = place; self.id = id; self.row = row; level = rows[row - 1]
+        var ids: [String] = [], names: [String] = [], parents: [String?] = [], index: [String: Int] = [:]
         var eu: [Int] = [], pts: [SIMD2<Float>] = [], fan: [UInt32] = [], rn: [(Int, Int)] = []
         var bx: [SIMD4<Float>] = [], rs: [[[SIMD2<Float>]]] = []
         var all = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
         for u in f.units {
             let ui: Int
-            if let i = index[u.id] { ui = i } else { ui = ids.count; index[u.id] = ui; ids.append(u.id); names.append(u.name) }
+            if let i = index[u.id] { ui = i } else {
+                ui = ids.count; index[u.id] = ui; ids.append(u.id); names.append(u.name); parents.append(u.parent)
+            }
             eu.append(ui)
             let s = fan.count
             var b = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
@@ -64,7 +67,7 @@ nonisolated final class RegionScene: @unchecked Sendable {
             }
         }
         guard !rn.isEmpty, all.x < all.z else { return nil }
-        unitIDs = ids; unitNames = names; entryUnit = eu
+        unitIDs = ids; unitNames = names; unitParents = parents; entryUnit = eu
         points = pts; fans = fan; runs = rn; segs = sg
         boxes = bx; rings = rs; box = all
     }

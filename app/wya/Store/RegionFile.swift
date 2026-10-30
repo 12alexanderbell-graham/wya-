@@ -120,15 +120,27 @@ nonisolated final class RegionCatalog: @unchecked Sendable {
         (levels[place] ?? []).enumerated().filter { $0.element.n > 0 }.map { ($0.offset + 1, $0.element) }
             .sorted { $0.1.n < $1.1.n }
     }
-    /// a level's file, read once (off the main thread is the caller's business: the biggest bundled one is 1 MB)
+    /// a level's file, read once: the bundled first level, or a finer one already downloaded (off the main thread is
+    /// the caller's business: the biggest bundled one is 1 MB)
     func file(_ place: String, row: Int) -> RegionFile? {
         let key = "\(place)-\(row)"
         lock.lock()
         if let f = files[key] { lock.unlock(); return f }
         lock.unlock()
-        guard let url = Bundle.main.url(forResource: key, withExtension: "wyar"),
-              let d = try? Data(contentsOf: url), let f = RegionFile(data: d) else { return nil }
+        let url = Bundle.main.url(forResource: key, withExtension: "wyar") ?? DevDataClient.cache(Self.path(key))
+        guard let d = try? Data(contentsOf: url), let f = RegionFile(data: d) else { return nil }
         lock.lock(); files[key] = f; lock.unlock()
         return f
     }
+    /// a level's file from wherever it is: the phone, or the data server (Part 17.7), kept once it has come. nil when it
+    /// can't be had now (offline, or the server has no such file)
+    func fetch(_ place: String, row: Int) async -> RegionFile? {
+        if let f = file(place, row: row) { return f }
+        let key = "\(place)-\(row)"
+        guard case .ok(let d) = await Servers.data.file(Self.path(key)), let f = RegionFile(data: d) else { return nil }
+        lock.lock(); files[key] = f; lock.unlock()
+        return f
+    }
+    /// where a level's file is on the data server
+    static func path(_ key: String) -> String { "native/regions/\(key).wyar" }
 }

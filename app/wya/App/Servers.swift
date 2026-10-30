@@ -31,7 +31,8 @@ nonisolated struct OfflineServers: PageClient, DataClient, VerifyClient, AIClien
 /// which client each part uses (one place to switch them)
 nonisolated enum Servers {
     static let pages: PageClient = OfflineServers()
-    static let data: DataClient = OfflineServers()
+    /// the data files: the Mac's dev server while developing (DataServer.swift)
+    static let data: DataClient = DevDataClient()
     static let verify: VerifyClient = OfflineServers()
     static let ai: AIClient = OfflineServers()
 }

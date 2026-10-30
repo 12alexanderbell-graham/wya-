@@ -49,6 +49,8 @@ struct ContentView: View {
 
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
+                // the region card (6.7): over the map, standing on the 25% water
+                RegionCard(map: map, water: water)
                 // the passport book from the plus's passport tool (Part 4.3)
                 PassportBook(water: water, map: map)
 
@@ -125,7 +127,7 @@ struct ContentView: View {
                 if head.searching { head.closeSearchFromMap(); return }
                 // anything this touch closes: that press opens no hold menu
                 if head.settingsOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
-                    || CardState.shared.isOpen || (water.upload && [.choosing, .words].contains(UploadState.shared.phase)) {
+                    || CardState.shared.isOpen || RegionCardState.shared.isOpen || (water.upload && [.choosing, .words].contains(UploadState.shared.phase)) {
                     map.touchClosedAt = CACurrentMediaTime()
                 }
                 head.putAway(); water.hideCredit()
@@ -140,14 +142,14 @@ struct ContentView: View {
                 if BookState.shared.isOpen { BookState.shared.close(); return }
                 if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) }
                 else if VerifyState.shared.isOpen { VerifyState.shared.close(water: water) }
-                else { CardState.shared.close(map: map) }
+                else { CardState.shared.close(map: map); RegionCardState.shared.close(map: map) }
             }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
                 head.putAwayAI()
                 BookState.shared.close()
-                if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map) }
+                if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map); RegionCardState.shared.close(map: map) }
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
@@ -277,6 +279,7 @@ struct ContentView: View {
             water.openMenu()
             map.goHome()
         } else if old == .regions {
+            closeCard()
             map.regionsMenu = false
             map.closeRegions()
             water.closeMenu(to: .quarter)
@@ -292,17 +295,22 @@ struct ContentView: View {
     }
     /// THE MAP TAB IN REGIONS (20 Oct answer 15): back to the list, the regions folding away, the world under it
     private func backToRegionsList() {
+        closeCard()
         map.closeRegions()
         water.openMenu()
         map.goHome()
     }
-    /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7, not
-    /// built yet: the tap only darkens it)
+    /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7)
     private func regionTapped() {
         guard let sc = map.regionScene, let u = map.regionPressed, u < sc.unitIDs.count else { return }
         let key = PlaceKey(.region, sc.unitIDs[u])
         let name = sc.unitNames[u]
-        guard head.quickStamp else { Feel.tap(); return }
+        guard head.quickStamp else {
+            // the card from the water (6.7); its parents' line: the country at the first level
+            let country = map.world.map { $0.places[sc.place].n } ?? ""
+            RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+            return
+        }
         let stamped = MarkStore.shared.state(key).stamped
         if stamped { Feel.lift() } else { Feel.stamp() }
         Task {
@@ -371,6 +379,7 @@ struct ContentView: View {
         DetailsState.shared.close(water: water)
         VerifyState.shared.close(water: water)
         CardState.shared.close(map: map)
+        RegionCardState.shared.close(map: map)
     }
 
     /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish | Details, Verify | Show in passport, Share. Rows
