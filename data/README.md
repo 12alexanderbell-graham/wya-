@@ -85,6 +85,15 @@ each municipality's district, NUTS-2 region and Land from its official key (AGS)
 
 The districts are the current 401 (ids `DE3-<AGS>`); `de-3-moves.tsv` gives each earlier district id its new one.
 
+The United Kingdom's levels on its wards' borders: ONS Open Geography's Wards (December 2025) Boundaries UK BGC
+(Open Government Licence v3.0), fetched as GeoJSON from its feature service, then each ward's local authority district
+(a new level) and the earlier counties and countries matched by area:
+
+    mapshaper -i wd-*.geojson combine-files -merge-layers -each 'shapeName=WD25NM, shapeISO=WD25CD' -filter-fields shapeName,shapeISO -o format=topojson quantization=2000000 gb-wd.topojson
+    mapshaper -i wd-*.geojson combine-files -merge-layers -filter-fields WD25CD,LAD25CD,LAD25NM -o wd.csv
+    python3 pipeline/d2_level.py gb-wd.topojson gb 4 gb-4.wyar 0.002 --code-ids
+    python3 pipeline/d2_gb.py gb-4.wyar wd.csv <old gb-2.wyar> <old gb-1.wyar> <out>
+
 ## Region units on the piece lines (D1b)
 
     python3 pipeline/nepieces.py <original detail-100m.wyad>      # nepieces.pkl
