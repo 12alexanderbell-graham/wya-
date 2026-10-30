@@ -145,6 +145,38 @@ final class UploadState {
         readToken += 1
         go(to: 0, lead: nil)
     }
+
+    /// ADD MORE (9.5: a swipe right on the review): back to step 1 with the finds kept, darkened on the map, to read
+    /// another source; its finds join the same review. The water comes to 25% first (the rows roll out as it passes
+    /// 50%); the go circle shrinks and the caption rolls out, then the pair grows (A9.3 reversed)
+    func addMore() {
+        guard phase == .review, !busy, !moving, let w = water else { return }
+        Feel.tick()
+        readToken += 1
+        moving = true
+        job += 1
+        let me = job
+        if w.stop != .quarter { w.go(.quarter) }
+        withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+            guard me == job else { return }
+            phase = .choosing; step = 0; note = [:]; locating = false
+            shapes = [false, false]; words = false
+            grow(after: 0, job: me)
+        }
+    }
+
+    /// THE REVIEW AGAIN after words (a read that found nothing new, or a file that was not a history, while finds
+    /// were kept by Add more): the caption's number rolls back to the kept finds, then the go circle grows
+    private func reviewAgain(_ me: Int) {
+        phase = .review
+        count = order.count - dropped.count
+        withAnimation(Motion.quick) { captionIn = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
+            guard me == job else { return }
+            withAnimation(Motion.quick) { goIn = true }
+        }
+    }
     private func go(to s: Int, lead: Int?) {
         moving = true
         job += 1
@@ -173,6 +205,10 @@ final class UploadState {
         let me = job
         shrink()
         picking = false; importing = false
+        // finds kept by Add more wait, darkened, as when the review is left (9.6)
+        if !order.isEmpty {
+            if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
             w.closeUpload()
@@ -347,8 +383,10 @@ final class UploadState {
     #if DEBUG
     /// the test driver's read: a few dated points in eight countries, as if a history file had given them (none in
     /// a place you have stamped twice, one at sea), or none at all
-    func testRead(empty: Bool = false) {
-        let pts: [(Double, Double, String)] = [(38.72, -9.14, "2024-08-03T10:00:00Z"), (38.72, -9.14, "2024-08-05T10:00:00Z"), (38.72, -9.14, "2023-01-10T10:00:00Z"), (38.72, -9.14, "2022-05-20T10:00:00Z"),
+    func testRead(empty: Bool = false, more: Bool = false) {
+        // `more`: a second source for Add more (Japan again with a new trip, and Brazil)
+        let second: [(Double, Double, String)] = [(35.68, 139.69, "2025-03-01T03:00:00Z"), (-22.91, -43.17, "2023-02-18T15:00:00Z")]
+        let pts: [(Double, Double, String)] = more ? second : [(38.72, -9.14, "2024-08-03T10:00:00Z"), (38.72, -9.14, "2024-08-05T10:00:00Z"), (38.72, -9.14, "2023-01-10T10:00:00Z"), (38.72, -9.14, "2022-05-20T10:00:00Z"),
             (35.68, 139.69, "2024-04-01T03:00:00Z"), (48.86, 2.35, "2023-06-10T12:00:00Z"), (-33.87, 151.21, "2022-12-24T01:00:00Z"),
             (64.14, -21.94, "2021-07-01T12:00:00Z"), (-1.29, 36.82, "2020-02-02T09:00:00Z"), (19.43, -99.13, "2019-11-01T18:00:00Z"),
             (-13.16, -72.54, "2018-05-05T15:00:00Z"), (30.0, -40.0, "2018-05-06T15:00:00Z")]
@@ -366,19 +404,22 @@ final class UploadState {
         }
         let rows = HistoryReader.presence(samples, placeAt: placeAt)
         let all = Finds.finds(rows, source: source)
-        finds = all
         let index = Dictionary(world.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
-        order = all.compactMap { index[$0.place] }
-        dropped = []; droppedTrips = [:]; opened = []; datesIn = []
-        let order = self.order
-        NSLog("wya upload found %d places from %d rows", order.count, rows.count)
+        // finds kept by Add more stay; the new ones join them (a place found again gains the new trips)
+        let had = self.order
+        let kept = had.count - dropped.count
+        joinFinds(all)
+        self.order = had + all.compactMap { index[$0.place] }.filter { !had.contains($0) }
+        opened = []; datesIn = []
+        let order = Array(self.order.dropFirst(had.count))
+        NSLog("wya upload found %d places (%d new) from %d rows", all.count, order.count, rows.count)
         if order.isEmpty { say(failed ?? "No places found"); return }
         let per = max(1, Int((Double(order.count) / 20).rounded(.up)))
         func step(_ k: Int) {
             guard me == job, phase == .finding else { return }
             let upto = min(order.count, k + per)
             m.found.formUnion(order[k ..< upto])
-            withAnimation(Motion.quick) { count = upto }
+            withAnimation(Motion.quick) { count = kept + upto }
             if upto < order.count {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { step(upto) }
             } else {
@@ -390,6 +431,33 @@ final class UploadState {
 
     /// A9.7: the mark goes first; then the go circle grows from the ×'s centre behind it, the × giving way to the
     /// stamp's place (the review, 9.5, starts here)
+    /// a new read's finds joined to the kept ones: a place found again gains the new trips (trips that overlap or
+    /// touch become one); a trip dropped alone stays dropped where it is unchanged
+    private func joinFinds(_ new: [Finds.Find]) {
+        var out = finds
+        for f in new {
+            guard let k = out.firstIndex(where: { $0.place == f.place }) else { out.append(f); continue }
+            let old = out[k]
+            let off = Set((droppedTrips[f.place] ?? []).compactMap { old.visits.indices.contains($0) ? old.visits[$0] : nil }
+                .map { "\($0.from)\($0.to)" })
+            var v = (old.visits + f.visits).sorted { $0.from < $1.from }
+            var joined: [Finds.Visit] = []
+            for x in v {
+                if var last = joined.last, x.from <= last.to.plus(1) {
+                    if x.to > last.to { last.to = x.to }
+                    last.count += x.count
+                    joined[joined.count - 1] = last
+                } else { joined.append(x) }
+            }
+            v = joined
+            out[k].visits = v
+            out[k].home = old.home || f.home
+            let still = Set(v.indices.filter { off.contains("\(v[$0].from)\(v[$0].to)") })
+            droppedTrips[f.place] = still.isEmpty ? nil : still
+        }
+        finds = out
+    }
+
     private func ready(_ me: Int) {
         guard me == job, phase == .finding else { return }
         UIAccessibility.post(notification: .announcement, argument: "Done, \(count) \(count == 1 ? "place" : "places") found")
@@ -716,7 +784,10 @@ final class UploadState {
             guard me == job else { return }
             message = nil
             phase = .choosing
-            if close { water?.closeUpload(); step = 0 } else { grow(after: 0, job: me) }
+            if close {
+                if !order.isEmpty { save() }
+                water?.closeUpload(); step = 0
+            } else if !order.isEmpty { reviewAgain(me) } else { grow(after: 0, job: me) }
         }
     }
 }
@@ -747,14 +818,17 @@ struct UploadSheet: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         // a swipe right (more than 60 pt, mostly sideways) goes back from step 2; a tick as it passes the point
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { g in
-            guard u.step != 0, abs(g.translation.width) > abs(g.translation.height) else { return }
+            guard (u.phase == .choosing && u.step != 0) || u.phase == .review,
+                  abs(g.translation.width) > abs(g.translation.height) else { return }
             let past = g.translation.width > 60
             if past != (swipe > 60) { if past { Feel.tick() } }
             swipe = g.translation.width
         }.onEnded { g in
             defer { swipe = 0 }
-            if u.step != 0, g.translation.width > 60 || g.predictedEndTranslation.width > 300,
-               abs(g.translation.width) > abs(g.translation.height) { u.back() }
+            guard g.translation.width > 60 || g.predictedEndTranslation.width > 300,
+                  abs(g.translation.width) > abs(g.translation.height) else { return }
+            // from the review: Add more (back to step 1, finds kept); from step 2: back to step 1
+            if u.phase == .review { u.addMore() } else if u.step != 0 { u.back() }
         })
         .photosPicker(isPresented: $u.picking, selection: $u.picked, maxSelectionCount: 0, selectionBehavior: .ordered,
                       matching: .any(of: [.images, .livePhotos, .videos]), photoLibrary: .shared())
@@ -766,6 +840,7 @@ struct UploadSheet: View {
             if case .success(let urls) = r { u.imported(urls) }
         }
         .accessibilityAction(named: "Back") { u.back() }
+        .accessibilityAction(named: "Add more") { u.addMore() }
     }
 
     /// FINDING'S ROW (9.4): the caption in its own place reading World / n / found (or A9.8's words in the number's
