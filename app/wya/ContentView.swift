@@ -109,6 +109,9 @@ struct ContentView: View {
             await map.load()
             // the map's first frame drawn under the loading screen, then the screen lifts away
             try? await Task.sleep(for: .milliseconds(80))
+            #if DEBUG
+            NSLog("wya launch: map ready, lifting at %.3f s", CACurrentMediaTime() - Launch.startTime)
+            #endif
             withAnimation(Motion.chrome) { launch.reveal = 1 } completion: {
                 launch.done = true
                 launch.settled = true

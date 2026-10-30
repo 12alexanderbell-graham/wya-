@@ -51,6 +51,9 @@ final class LogoTurnUIView: UIView {
             DispatchQueue.main.async {
                 guard let self, let p = self.player else { return }
                 p.playImmediately(atRate: Motion.reduce ? 0.5 : 1)
+                #if DEBUG
+                NSLog("wya logoturn: film up %.3f s after launch", CACurrentMediaTime() - Launch.startTime)
+                #endif
                 self.started()
                 self.watch = nil
             }
