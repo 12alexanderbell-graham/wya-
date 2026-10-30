@@ -20,6 +20,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var linePipe: MTLRenderPipelineState!
     private var auroraPipe: MTLRenderPipelineState!
     private var diamondPipe: MTLRenderPipelineState!
+    private var townDotPipe: MTLRenderPipelineState?
     /// the lines' coverage, drawn first into `coverage` (max at each pixel), then laid over the map once
     private var coveragePipe: MTLRenderPipelineState?
     /// the borders between regions, drawn in and out along their length (A6.9)
@@ -107,6 +108,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         linePipe = pipe("lineVertex", "lineFragment", colour: true, blend: true)
         auroraPipe = pipe("fullVertex", "auroraFragment", colour: true, blend: true)
         diamondPipe = pipe("diamondVertex", "diamondFragment", colour: true, blend: true)
+        townDotPipe = pipe("townDotVertex", "townDotFragment", colour: true, blend: true)
         compositePipe = pipe("fullVertex", "lineComposite", colour: true, blend: true)
         if let vf = lib.makeFunction(name: "lineVertex"), let ff = lib.makeFunction(name: "lineCoverage") {
             let p = MTLRenderPipelineDescriptor()
@@ -266,6 +268,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         return menuFrom + (menuTo - menuFrom) * Float(1 - exp(-x) * (1 + x))
     }
     private var awayCache: [String: (units: [Int], places: Set<Int>)] = [:]
+    /// each place's towns' buffers (points, fan index), made once per scene
+    private var townBuffers: [String: (scene: TownScene, points: MTLBuffer, fans: MTLBuffer)] = [:]
     /// a focus key ("place:12", Regions) and its place
     static func focus(_ k: String) -> Int? { k.hasPrefix("place:") ? Int(k.dropFirst(6)) : nil }
 
@@ -537,8 +541,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             let marked = (controller.showsStamped ? controller.stamped : []).union(controller.showsWished ? controller.wished : [])
             group(controller.territories.filter { !marked.contains($0) && $0 != pressed }, kind: 2, tint: Palette.whiteV)
         }
+        // PLACES (7.4): countries' fills drained so towns read
+        let placesOn = controller.placesMode
         // Stamped+ and Wishlist+ (1.14): each place by its passes (lime by visits, ink where you lived; blue by want)
-        if controller.filter == 2 {
+        if placesOn {
+        } else if controller.filter == 2 {
             let sp = controller.stampPasses
             let st = controller.stamped.filter { $0 != pressed }
             group(st.filter { sp[$0] == 0 }.sorted(), kind: 2, tint: Palette.inkV)
@@ -546,7 +553,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         } else if controller.showsStamped {
             group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV, pattern: hatch)
         }
-        if controller.filter == 3 {
+        if placesOn {
+        } else if controller.filter == 3 {
             let wp = controller.wantPasses
             let wi = controller.wished.filter { $0 != pressed }
             for n in 1 ... 5 { group(wi.filter { (wp[$0] ?? 1) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.blueV, n), pattern: dots) }
@@ -555,7 +563,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade); a
         // stamped place is never a find (its row reads "+n trips" instead)
-        if !controller.found.isEmpty {
+        if !controller.found.isEmpty, !placesOn {
             let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
             let f = controller.found.subtracting(controller.stamped).filter { $0 != pressed }
             let blue = controller.showsWished ? f.intersection(controller.wished) : []
@@ -576,7 +584,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             for u in units { fan(unitRun[u]) }
             return true
         }
-        if let p = pressed, mark(p) {
+        if !placesOn, let p = pressed, mark(p) {
             let look = controller.look(of: p, stamped: controller.stamped, wished: controller.wished, filter: controller.filter)
             let base: SIMD4<Float>? = look == .lime ? Palette.limeV : look == .blue ? Palette.blueV : nil
             let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
@@ -668,6 +676,72 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             }
         }
 
+        // 3c. THE TOWNS (7.4, the old native app's encodeTownShapes): the open country's built-up shapes, every one at
+        // once, solid in our grey so neighbours are one colour; yours lime, wished blue; the one under the finger the
+        // darker grey (or its colour darkened). They just appear. No circles (30 Oct 23:38); dots only with Map
+        // settings' Town dots on
+        if placesOn, let cc = controller.placeOpenID, let sc = controller.townScenes[cc] {
+            if townBuffers[cc]?.scene !== sc, !sc.fans.isEmpty,
+               let pb = device.makeBuffer(bytes: sc.points, length: sc.points.count * MemoryLayout<SIMD2<Float>>.stride),
+               let fb = device.makeBuffer(bytes: sc.fans, length: sc.fans.count * 4) {
+                townBuffers[cc] = (sc, pb, fb)
+            }
+            let st = controller.townStamped[cc] ?? [], wi = controller.townWished[cc] ?? []
+            // darkened while a finger is on it or its card is up (the press's place, as a region's is)
+            let pressedTown = pressed == controller.placeOpen ? controller.townPressed.flatMap { $0.cc == cc ? $0.i : nil } : nil
+            let grey = Palette.greyV, greyDark = SIMD4<Float>(0xa1, 0x9e, 0x95, 255) / 255
+            func dark(_ c: SIMD4<Float>) -> SIMD4<Float> { SIMD4(c.x * 0.75, c.y * 0.75, c.z * 0.75, 1) }
+            if let tb = townBuffers[cc], tb.scene === sc {
+                func towns(_ set: [Int], _ colour: SIMD4<Float>) {
+                    enc.setDepthStencilState(markGroup)
+                    enc.setRenderPipelineState(fanPipe)
+                    enc.setVertexBuffer(tb.points, offset: 0, index: 0)
+                    enc.setVertexBuffer(tb.points, offset: 0, index: 2)
+                    var one: Float = 1
+                    enc.setVertexBytes(&one, length: 4, index: 3)
+                    // one draw per run of neighbouring towns in the index (the towns are laid biggest first, one after another)
+                    var draws: [(start: Int, count: Int)] = []
+                    for i in set {
+                        guard let r = sc.runs[i], r.count > 0 else { continue }
+                        if let l = draws.last, l.start + l.count == r.start { draws[draws.count - 1].count += r.count }
+                        else { draws.append(r) }
+                    }
+                    guard !draws.isEmpty else { return }
+                    for r in draws {
+                        enc.drawIndexedPrimitives(type: .triangle, indexCount: r.count, indexType: .uint32, indexBuffer: tb.fans,
+                                                  indexBufferOffset: r.start * 4)
+                    }
+                    enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                    relief(3, colour)
+                }
+                let marked = (controller.showsStamped ? st : []).union(controller.showsWished ? wi : [])
+                var plain: [Int] = []
+                for i in sc.runs.indices where !marked.contains(i) && i != pressedTown { plain.append(i) }
+                towns(plain, grey)
+                if controller.showsStamped { towns(st.filter { $0 != pressedTown }.sorted(), Palette.limeV) }
+                if controller.showsWished { towns(wi.filter { $0 != pressedTown && !st.contains($0) }.sorted(), Palette.blueV) }
+                if let tp = pressedTown {
+                    towns([tp], st.contains(tp) ? dark(Palette.limeV) : wi.contains(tp) ? dark(Palette.blueV) : greyDark)
+                }
+            }
+            // dots only with Town dots on (every town, the old app's 2.5 to 6 points by its population in the country)
+            if MapSettingsStore.shared.value.townDots, let dp = townDotPipe {
+                struct D { var p: SIMD2<Float>; var r: Float; var pad: Float; var colour: SIMD4<Float> }
+                let lo = log(Float(max(1, sc.towns.last?.people ?? 1))), hi = log(Float(max(1, sc.towns.first?.people ?? 1)))
+                let ds: [D] = sc.towns.indices.map { i in
+                    let t = hi > lo ? min(1, max(0, (log(Float(max(1, sc.towns[i].people))) - lo) / (hi - lo))) : 0.5
+                    var col = st.contains(i) ? Palette.limeV : wi.contains(i) ? Palette.blueV : grey
+                    if i == pressedTown { col = st.contains(i) ? dark(Palette.limeV) : wi.contains(i) ? dark(Palette.blueV) : greyDark }
+                    return D(p: sc.at[i], r: 2.5 + 3.5 * t, pad: 0, colour: col)
+                }
+                enc.setDepthStencilState(noStencil)
+                enc.setRenderPipelineState(dp)
+                if !ds.isEmpty, let b = device.makeBuffer(bytes: ds, length: ds.count * MemoryLayout<D>.stride) {
+                    enc.setVertexBuffer(b, offset: 0, index: 0)
+                    enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
+                }
+            }
+        }
         // 4. the lakes (the slices carry their own, as holes in the land through which the sea's relief shows): drawn
         // with the same sea relief, so a lake is the same colour at every level and nothing changes when a level comes in
         if tiles == nil {

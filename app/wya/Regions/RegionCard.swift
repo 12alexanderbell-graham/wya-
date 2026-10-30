@@ -128,7 +128,9 @@ struct RegionCard: View {
                 Feel.stamp()
                 Task {
                     // with every parent above it (A6.12)
-                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
+                    if key.kind == .town {
+                        await TownStamps.stamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" }), source: .hand)
+                    } else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
                         await RegionStamps.stamp(u, in: sc, source: .hand)
                     } else {
                         await MarkStore.shared.stamp(key, name: card.name)
@@ -138,7 +140,8 @@ struct RegionCard: View {
             } else if card.stampedHere {
                 Feel.lift()
                 Task {
-                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
+                    if key.kind == .town { await TownStamps.unstamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" })) }
+                    else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
                     else { await MarkStore.shared.unstamp(key, name: card.name) }
                     card.stampedHere = false
                 }
@@ -164,7 +167,8 @@ struct RegionCard: View {
             Task {
                 if s.stamped {
                     // with the parents stamped only through it (the unstamp rule, 6.5)
-                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
+                    if key.kind == .town { await TownStamps.unstamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" })) }
+                    else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
                     else { await MarkStore.shared.unstamp(key, name: card.name) }
                     card.stampedHere = false
                     Feel.lift()

@@ -46,7 +46,8 @@ struct ZoomColumn: View {
             // on a region map: back to the country's frame (6.5)
             cell("reset", label: map.regionScene != nil ? "Back to the country" : "Back to the world", ink: ink,
                  dim: map.regionScene == nil && map.atRest) {
-                if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.goHome() }
+                // Places with a country open: back to the world, the towns going (7.4)
+                if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.closePlace(); map.goHome() }
             }
                 .disabled(map.atRest)
                 // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)

@@ -230,7 +230,7 @@ struct SidewaysMarks: View {
             mark(0, "plus", "Zoom in", dim: map.atMax) { map.zoomIn() }.position(x: x, y: ys[0])
             mark(1, "minus", "Zoom out", dim: map.atHome) { map.zoomOut() }.position(x: x, y: ys[1])
             mark(2, "reset", map.regionScene != nil ? "Back to the country" : "Back to the world", dim: map.regionScene == nil && map.atRest) {
-                if map.regionScene != nil { map.frameSideways() } else { map.goHome() }
+                if map.regionScene != nil { map.frameSideways() } else { map.closePlace(); map.goHome() }
             }.position(x: x, y: ys[2])
             mark(3, "unfullscreen", "Out of full screen", dim: false) { side.leave(feel: false) }.position(x: x, y: ys[3])
         }

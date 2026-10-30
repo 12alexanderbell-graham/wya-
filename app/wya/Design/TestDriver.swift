@@ -282,6 +282,10 @@ final class TestDriver {
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
                 // regiondirect fr: a country's "Open its region map" (A6.14), from whatever mode
+                // placeopen de: Places' country opened with its towns (7.4); placeopen off: back to the world
+                case "placeopen":
+                    if a == "off" { map?.closePlace(); map?.goHome() }
+                    else if let m = map, let i = m.world?.placeIndex[a] { m.openPlace(i) }
                 case "regiondirect":
                     if let h = head, let i = map?.world?.placeIndex[a] { ContentView.openRegionMap(i, head: h) }
                 // regionslow 8: the region borders' change at 1/8 speed (frame checks)

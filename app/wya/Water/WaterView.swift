@@ -205,9 +205,11 @@ struct SheetContent: View {
                     .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil {
-                    Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
-                            count: map.sunPicked ? map.streakWeeks : count,
-                            tail: map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
+                    // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
+                    // country's (its towns you marked, of its towns)
+                    Caption(name: map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
+                            count: map.placesMode ? (placesCaption?.count ?? map.townCount) : map.sunPicked ? map.streakWeeks : count,
+                            tail: map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
                             night: FullView.night(form.page), visible: captionShown)
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
@@ -286,6 +288,14 @@ struct SheetContent: View {
         let current = map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
         return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
                                     width: width, visible: captionShown) { row in map.openRegions(sc.place, row: row) })
+    }
+
+    /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
+    private var placesCaption: (name: String, count: Int, tail: String)? {
+        guard let i = map.placeOpen, let w = map.world, let cc = map.placeOpenID else { return nil }
+        let all = map.townScenes[cc]?.towns.count
+        _ = map.townsVersion
+        return (w.places[i].n, map.townStamped[cc]?.count ?? 0, all.map { "of \($0.formatted())" } ?? "")
     }
 
     /// is a region map up (the caption's own taps stand down for it)
@@ -489,7 +499,8 @@ struct Caption: View {
                 .contentTransition(.numericText(value: visible ? Double(count) : -1))
                 .animation(Motion.quick, value: count)
                 .padding(.top, -6)
-            Text(visible ? tail : Self.blank(tail, "\u{2002}"))
+            // an empty tail (Everywhere) keeps its line as a space, so the caption keeps its place and sizes
+            Text(visible && !tail.isEmpty ? tail : Self.blank(tail, "\u{2002}"))
                 .font(.headline)
                 .foregroundStyle(ink.opacity(0.5))
                 .contentTransition(.numericText(value: way))
@@ -501,7 +512,7 @@ struct Caption: View {
         // largest standard size: past it the caption would not fit above the capsule at 25% (the AX sizes are Part 19)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name), \(count) \(tail)")
+        .accessibilityLabel(tail.isEmpty ? "\(name), \(count)" : "\(name), \(count) \(tail)")
         .accessibilityHidden(!visible)
     }
 

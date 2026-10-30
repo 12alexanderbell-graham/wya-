@@ -171,6 +171,11 @@ struct ContentView: View {
                 // the region map: its regions answer (6.5); while the list is up or a country is still loading, nothing
                 if map.regionScene != nil { regionTapped(); return }
                 if head.mode == .regions { return }
+                // the Places map (7.4, the old app's system): a town of the open country answers; any other country opens
+                if map.placesMode {
+                    if map.townPressed != nil { townTapped() } else if map.placeOpen != i { closeCard(); map.openPlace(i) }
+                    return
+                }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
                 if Sideways.shared.on {
                     if head.quickStamp { Self.quickStamp(i, map: map) } else { Feel.refuse() }
@@ -281,6 +286,9 @@ struct ContentView: View {
     /// A6.5 entering Regions' menu (Regions always restarts there), and leaving Regions for another mode: the regions
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
+        // 7.4: the Places map's towns come and go with the mode
+        map.placesMode = new == .places
+        if new == .places || old == .places { closeCard() }
         if new == .regions {
             closeCard()
             water.closeList(back: false)
@@ -318,6 +326,26 @@ struct ContentView: View {
         map.goHome()
     }
     /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7)
+    /// A TOWN TAPPED (7.4): quick add stamps it with its country (or unstamps it); otherwise its card from the water
+    private func townTapped() {
+        guard let t = map.townPressed, let sc = map.townScenes[t.cc], t.i < sc.towns.count,
+              let w = map.world, let place = w.placeIndex[t.cc] ?? w.placeIndex[t.cc.uppercased()] else { return }
+        let town = sc.towns[t.i]
+        guard head.quickStamp else {
+            let country = w.places[place].n
+            RegionCardState.shared.open(town.key, name: town.name, parents: town.region.isEmpty ? country : "\(town.region), \(country)",
+                                        place: place, map: map)
+            return
+        }
+        let stamped = MarkStore.shared.state(town.key).stamped
+        if stamped { Feel.lift() } else { Feel.stamp() }
+        Task {
+            if stamped { await TownStamps.unstamp(town.key, name: town.name, cc: t.cc) }
+            else { await TownStamps.stamp(town.key, name: town.name, cc: t.cc, source: .quick) }
+            UIAccessibility.post(notification: .announcement, argument: "\(town.name) \(stamped ? "unstamped" : "stamped")")
+        }
+    }
+
     private func regionTapped() {
         guard let sc = map.regionScene, let u = map.regionPressed, u < sc.unitIDs.count else { return }
         let key = PlaceKey(.region, sc.unitIDs[u])
