@@ -196,11 +196,14 @@ struct SheetContent: View {
             }
 
             // the name and number: at full they stay under the head
-            if !Perf.shared.off.contains("caption") { Caption(name: region.map { $0.name } ?? (map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
-                    count: region != nil ? map.regionCount : map.sunPicked ? map.streakWeeks : count,
-                    tail: region.map { $0.tail } ?? (map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                    night: FullView.night(form.page), visible: captionShown, flag: region?.flag,
-                    line: levelLine(width: L.W - 2 * 24))
+            if !Perf.shared.off.contains("caption") { Group {
+                if let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) { rl } else {
+                    Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
+                            count: map.sunPicked ? map.streakWeeks : count,
+                            tail: map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
+                            night: FullView.night(form.page), visible: captionShown)
+                }
+            }
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -270,26 +273,18 @@ struct SheetContent: View {
         }
     }
 
-    /// THE LEVEL LINE (6.6) under the Regions caption's number, when the country has more than one level
-    private func levelLine(width: CGFloat) -> AnyView? {
-        guard let sc = map.regionScene else { return nil }
-        let used = RegionCatalog.shared.used(sc.id)
-        guard used.count > 1 else { return nil }
-        let n = sc.unitIDs.count
-        let levels = used.map { r in
-            LevelLine.Level(row: r.row, word: RegionsMenuModel.word(r.row == sc.row && n == 1 ? r.level.one : r.level.many))
-        }
-        return AnyView(LevelLine(levels: levels, current: sc.row, total: n, notReady: map.regionNotReady, width: width,
-                                 visible: captionShown) { row in map.openRegions(sc.place, row: row) })
+    /// THE REGION MAP'S LINE (6.6, the old app's band row): the country's name and its levels, in the caption's place
+    private func regionLevels(width: CGFloat) -> AnyView? {
+        guard let sc = map.regionScene, let w = map.world, sc.place < w.places.count else { return nil }
+        let levels = RegionCatalog.shared.used(sc.id).map { RegionLevels.Level(row: $0.row, word: RegionsMenuModel.word($0.level.many)) }
+        // while another level loads, the one asked for is already the bold one
+        let current = map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
+        return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
+                                    width: width, visible: captionShown) { row in map.openRegions(sc.place, row: row) })
     }
 
-    /// THE REGIONS CAPTION (6.5): the country's flag and name, your number at the level, "of 101 departments"
-    private var region: (name: String, tail: String, flag: Image?)? {
-        guard let sc = map.regionScene, let w = map.world, sc.place < w.places.count else { return nil }
-        let n = sc.unitIDs.count
-        let word = RegionsMenuModel.word(n == 1 ? sc.level.one : sc.level.many)
-        return (w.places[sc.place].n, "of \(n.formatted()) \(word)", Flags.square(sc.id))
-    }
+    /// is a region map up (the caption's own taps stand down for it)
+    private var region: Bool? { map.regionScene != nil ? true : nil }
 
     /// A2.5: the top at or above the capsule's top less 134 pt (PM 739, 17e 627: 10 pt under the 25% stop); and not
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
@@ -470,10 +465,6 @@ struct Caption: View {
     /// A2.5: the words there (rolled in) or not (each line a placeholder of spaces of about its width, never an empty
     /// string, which SwiftUI would insert with a blur and a fade); in rises, out goes down
     var visible = true
-    /// the Regions caption's country flag, 22 pt square, 8 pt before the name (6.5)
-    var flag: Image? = nil
-    /// the Regions caption's level line in the tail's place (6.6)
-    var line: AnyView? = nil
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
 
     var body: some View {
@@ -481,19 +472,11 @@ struct Caption: View {
         let way = visible ? 1.0 : 0.0
         VStack(spacing: 0) {
             // a new name rolls in letter by letter, the way the number does, never swapped in place
-            HStack(spacing: 8) {
-                if let flag {
-                    // a flag is a picture, not a word: it grows about its own centre with the words' roll
-                    flag.resizable().interpolation(.high).frame(width: 22, height: 22)
-                        .scaleEffect(visible ? 1 : 0.01)
-                        .animation(Motion.quick, value: visible)
-                }
-                Text(visible ? name : Self.blank(name, "\u{2002}"))
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(ink)
-                    .contentTransition(.numericText(value: way))
-                    .animation(Motion.quick, value: name)
-            }
+            Text(visible ? name : Self.blank(name, "\u{2002}"))
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(ink)
+                .contentTransition(.numericText(value: way))
+                .animation(Motion.quick, value: name)
             Text(visible ? "\(count)" : Self.blank("\(count)", "\u{2007}"))
                 .font(.system(size: big, weight: .semibold, design: .rounded))
                 .monospacedDigit()
@@ -501,15 +484,11 @@ struct Caption: View {
                 .contentTransition(.numericText(value: visible ? Double(count) : -1))
                 .animation(Motion.quick, value: count)
                 .padding(.top, -6)
-            if let line {
-                line.padding(.top, -8)
-            } else {
-                Text(visible ? tail : Self.blank(tail, "\u{2002}"))
-                    .font(.headline)
-                    .foregroundStyle(ink.opacity(0.5))
-                    .contentTransition(.numericText(value: way))
-                    .padding(.top, -8)
-            }
+            Text(visible ? tail : Self.blank(tail, "\u{2002}"))
+                .font(.headline)
+                .foregroundStyle(ink.opacity(0.5))
+                .contentTransition(.numericText(value: way))
+                .padding(.top, -8)
         }
         .multilineTextAlignment(.center)
         .fixedSize()

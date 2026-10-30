@@ -587,8 +587,20 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
                 relief(kind, tint, pattern: pattern)
             }
+            // every region at once: their fans are one run from the start of the index, one draw
+            func allRegions() -> Bool {
+                guard !sc.fans.isEmpty else { return false }
+                enc.setRenderPipelineState(fanPipe)
+                enc.setVertexBuffer(rp, offset: 0, index: 0)
+                enc.setVertexBuffer(rp, offset: 0, index: 2)
+                var one: Float = 1
+                enc.setVertexBytes(&one, length: 4, index: 3)
+                enc.drawIndexedPrimitives(type: .triangle, indexCount: sc.fans.count, indexType: .uint32, indexBuffer: rf,
+                                          indexBufferOffset: 0)
+                return true
+            }
             enc.setDepthStencilState(markGroup)
-            if regionFan(Array(sc.runs.indices)) {
+            if allRegions() {
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
                 relief(1)
             }
