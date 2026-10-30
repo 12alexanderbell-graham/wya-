@@ -1122,6 +1122,11 @@ struct SearchResults: View {
         // read only once worked out (in the background after the world loads): the main thread never waits for them
         let nb = w.neighboursIfReady ?? []
         for h in homes where h < nb.count { add(nb[h].subtracting(stamped).sorted(by: near(h))) }
+        // still short (an island home has no neighbours, or they are not worked out yet): the unstamped places nearest
+        // the first home
+        if out.count < 5, let h = homes.first {
+            add(w.places.indices.filter { !stamped.contains($0) && $0 != h }.sorted(by: near(h)))
+        }
         return out
     }
 
@@ -1144,7 +1149,7 @@ struct SearchResults: View {
         // then anything containing it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
         if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
-        let names = w.searchNames, more = w.otherLanguageNames
+        let names = w.searchNames
         for (i, p) in w.places.enumerated() where !p.junk && !alias.contains(i) {
             let n = names[i]
             if n[0].hasPrefix(q) { own.append(i) }
@@ -1154,7 +1159,7 @@ struct SearchResults: View {
         // its names in other languages ("Allemagne", "ドイツ") last, so they never push an English match down
         var language: [Int] = []
         let picked = Set(alias + own + other + contains)
-        if q.count >= 2 {
+        if q.count >= 2, let more = w.otherLanguageNamesIfReady {
             for (i, p) in w.places.enumerated() where !p.junk && !picked.contains(i) && more[i].contains(where: { $0.hasPrefix(q) }) {
                 language.append(i)
             }

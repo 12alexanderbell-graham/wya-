@@ -125,12 +125,18 @@ final class Sideways {
                     if let w = water { m.sheetMoved(top: w.form().top) }
                     // a continent framed again for portrait (its room above the sheet); the world back home if it was
                     // zoomed out further than portrait allows
-                    if let k = m.continent ?? m.drawnContinent { m.show(continent: k) } else if m.k < m.kMin { m.goHome() }
+                    // (a continent with no view of its own, Antarctica, only clamps like the world)
+                    if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
+                    else if m.k < m.kMin { m.goHome() }
                 }
             }
             landscape = false
             // left before the turn began (a link right after entering): nothing to turn back, so it ends now
-            guard turned else { done(); return }
+            guard turned else {
+                withAnimation(Motion.chrome) { chromeOut = false }
+                water?.go(stopBefore)
+                done(); return
+            }
             square = true
             withAnimation(Motion.settle) { turned = false } completion: { done() }
             // the chrome comes back as the turn passes half way

@@ -48,6 +48,7 @@ struct WaterView: View {
         .contentShape(shape)
         .gesture(
             DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                .updating($dragLive) { _, live, _ in live = true }
                 .onChanged { g in
                     if !dragging { dragging = true; water.onTouch?(); water.begin(at: g.startLocation) }
                     water.move(to: g.location)
@@ -57,9 +58,14 @@ struct WaterView: View {
                     water.end(velocity: g.velocity.height)
                 }
         )
+        // a drag cancelled with no end (a hold menu on the caption or a tab took the touch): the water lets go there
+        .onChange(of: dragLive) { _, live in
+            if !live, dragging { dragging = false; water.end(velocity: 0) }
+        }
     }
 
     @State private var dragging = false
+    @GestureState private var dragLive = false
 
     /// the Map tab tapped again (the tab and the test driver run this one function)
     static func mapAgain(water: Water, map: MapController) {
