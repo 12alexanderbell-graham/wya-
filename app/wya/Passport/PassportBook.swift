@@ -70,6 +70,7 @@ final class BookState {
 /// the chip). Not here yet: a stamp's tap (its place page), its hold menu, the flick through several pages.
 struct PassportBook: View {
     let water: Water
+    let map: MapController
     @State private var b = BookState.shared
     @State private var drag: CGFloat?
 
@@ -103,7 +104,8 @@ struct PassportBook: View {
         return ZStack(alignment: .leading) {
             // what lies under the leaf being turned: forward, the next page; backward, the current page
             PassportPage(id: "", order: b.order, hidden: nil, size: size,
-                         pageIndex: b.turn > 0 ? min(current + 1, b.pages - 1) : current)
+                         pageIndex: b.turn > 0 ? min(current + 1, b.pages - 1) : current,
+                         menu: b.turn == 0 ? { stampMenu($0) } : nil)
             if b.turn > 0 {
                 // the current page turning away about the spine
                 PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current)
@@ -129,6 +131,36 @@ struct PassportBook: View {
         .accessibilityLabel("Your passport, page \(current + 1) of \(b.pages)")
         .accessibilityAction(named: "Next page") { turn(forward: true, from: 0, speed: 0) }
         .accessibilityAction(named: "Previous page") { turn(forward: false, from: 0, speed: 0) }
+    }
+
+    /// A STAMP HELD (4.3.3): Apple's menu: Details · Verify · Unstamp (red). The book goes back into its tool first,
+    /// then Details or Verify rise in the water with the place's name as their heading. Not yet: Open its page, Add to
+    /// a list, Share this stamp (their parts are not built)
+    private func stampMenu(_ id: String) -> [StampMenuItem] {
+        let key = PlaceKey.country(id)
+        let place = map.world?.places.firstIndex { $0.id == id }
+        let name = place.flatMap { map.world?.places[$0].n } ?? id.uppercased()
+        return [
+            StampMenuItem(title: "Details") {
+                b.close()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }
+            },
+            StampMenuItem(title: "Verify") {
+                guard let place else { return }
+                b.close()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    VerifyState.shared.open(key, name: name, place: place, water: water)
+                }
+            },
+            StampMenuItem(title: "Unstamp", destructive: true) {
+                Feel.lift()
+                Task {
+                    await MarkStore.shared.unstamp(key, name: name)
+                    b.order = await MarkStore.shared.passportOrder()
+                    b.page = min(b.page, b.pages - 1)
+                }
+            },
+        ]
     }
 
     /// A4.13: the leaf follows the finger: angle = travel / (half the book's width) x 90; released past 40 pt or faster
