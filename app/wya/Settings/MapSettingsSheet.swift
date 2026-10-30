@@ -10,19 +10,21 @@ struct MapSettingsSheet: View {
     let water: Water
     let map: MapController
     let form: Water.Form
-    @State private var path: [String] = []
+    @State private var nav = SettingsNav.shared
 
     var body: some View {
         let L = water.layout
         let top = max(form.top + 16, L.headBottom + 8)
         let bottom = L.capsule.minY - 24
         let width = L.W - 2 * L.sheetInset
-        NavigationStack(path: $path) {
+        NavigationStack(path: $nav.path) {
             SettingsList(map: map, width: width)
                 .navigationDestination(for: String.self) { page in
-                    SettingsPage(page: page, map: map, width: width) { path.removeLast() }
+                    SettingsPage(page: page, map: map, width: width) { if !nav.path.isEmpty { nav.path.removeLast() } }
                 }
         }
+        // closed: the next opening starts at the list's top
+        .onDisappear { nav.path = []; nav.open = nil; nav.openDispute = nil; nav.show = nil }
         .frame(width: width, height: max(48, bottom - top))
         .position(x: L.W / 2, y: top + max(48, bottom - top) / 2)
         .environment(\.settingsWordsOn, water.settingsWords)
@@ -82,20 +84,32 @@ private struct RowWords: View {
 private struct SettingsList: View {
     let map: MapController
     let width: CGFloat
-    @State private var open: String?
+    @State private var nav = SettingsNav.shared
     @State private var settings = MapSettingsStore.shared
+    private var open: String? {
+        get { nav.open }
+        nonmutating set { nav.open = newValue }
+    }
 
     var body: some View {
         let s = settings.value
         let rows = MapSettingsRows.all.filter { $0.shows(s) }
-        ScrollView(.vertical) {
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                    if i > 0, rows[i - 1].group != row.group { Color.clear.frame(height: 24) }
-                    rowView(row, s)
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
+                        if i > 0, rows[i - 1].group != row.group { Color.clear.frame(height: 24) }
+                        rowView(row, s).id(row.id)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .scrollTargetLayout()
+            // a search result: the row brought into view (its choices already open)
+            .onChange(of: nav.show, initial: true) { _, id in
+                guard let id, rows.contains(where: { $0.id == id }) else { return }
+                withAnimation(Motion.chrome) { proxy.scrollTo(id, anchor: .top) }
+                nav.show = nil
+            }
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
@@ -210,9 +224,11 @@ private struct SettingsPage: View {
     let back: () -> Void
     @State private var settings = MapSettingsStore.shared
     @State private var open: String?
+    @State private var nav = SettingsNav.shared
 
     var body: some View {
         let s = settings.value
+        ScrollViewReader { proxy in
         ScrollView(.vertical) {
             VStack(spacing: 0) {
                 HStack {
@@ -233,6 +249,16 @@ private struct SettingsPage: View {
             }
             .scrollTargetLayout()
         }
+        // a search result: its row brought into view (a dispute's sides open)
+        .onChange(of: nav.show, initial: true) { _, id in
+            guard let id, id.hasPrefix("view:") || id.hasPrefix("dispute:") else { return }
+            if let d = nav.openDispute, page == "disputes" { open = d; nav.openDispute = nil }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(Motion.chrome) { proxy.scrollTo(id, anchor: .top) }
+                nav.show = nil
+            }
+        }
+        }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
@@ -245,7 +271,7 @@ private struct SettingsPage: View {
         viewRow("United Nations", "un", current)
         viewRow("De facto", "deFacto", current)
         Color.clear.frame(height: 24)
-        ForEach(countries, id: \.key) { c in viewRow(c.name, c.key, current) }
+        ForEach(countries, id: \.key) { c in viewRow(c.name, c.key, current).id("view:" + c.key) }
     }
     private var countries: [(key: String, name: String)] {
         (Bundle.main.url(forResource: "disputes", withExtension: "json").flatMap { try? Data(contentsOf: $0) }
@@ -268,6 +294,7 @@ private struct SettingsPage: View {
             let side = map.world?.positions?.assign(d) ?? d.default
             VStack(spacing: 0) {
                 RowWords(name: d.name ?? d.id, value: sideName(side))
+                    .id("dispute:" + d.id)
                     .onTapGesture {
                         Feel.tap()
                         withAnimation(Motion.chrome) { open = open == d.id ? nil : d.id }
