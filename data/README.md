@@ -43,3 +43,13 @@ any script that calls a public API; it goes into the User-Agent, as those servic
 
 The earlier app's region, town, urban-area and things pipelines and its stamp builds are not in this repository; their
 output is what the app keeps using until each is rebuilt.
+
+## Towns (`towns-<file>.wyat`, `town-zones.json`)
+
+A towns file is one place's towns: raw DEFLATE of JSON rows `[name, region, population, lat, lon, kind, GeoNames id, part of]` (kind 2 the capital, 1 a regional capital). The earlier app's 51,694 towns are merged with GeoNames `cities500` (every place over 500 people and every seat of an administrative division):
+
+    python3 pipeline/d3_towns.py <old Towns folder> <GeoNames folder> <out>     # cities500.txt, admin1CodesASCII.txt
+    python3 pipeline/d3_zones.py world.wyam world-meta.json <out> <old town-zones.json> <out>/town-zones.json --only-new <old Towns folder>
+
+- The merge never re-keys: every earlier row stays exactly as it was; a GeoNames place joins only if its id is new, and not when one of its names matches an earlier row with no id within 15 km. Sections of a city (PPLX) are left out.
+- `town-zones.json` lists, for every disputed piece and every place a view can move, the towns of each file that lie in it, so a place's towns follow the borders view. New towns are placed by the world map's outlines; a town of a file that can't hold the item (a border slip on the coarse outline) is left out.
