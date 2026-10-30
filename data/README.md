@@ -77,21 +77,24 @@ Germany's levels on its municipalities' borders: the municipalities from BKG's V
 Gemeinden with GF 4; licence dl-de/by-2-0, credit "© GeoBasis-DE / BKG"), turned into TopoJSON with mapshaper, then
 each municipality's district, NUTS-2 region and Land from its official key (AGS) and NUTS code:
 
-    mapshaper VG250_GEM.shp encoding=utf8 -filter 'GF == 4' -each 'shapeName=GEN, shapeISO=AGS' -filter-fields shapeName,shapeISO -proj wgs84 -o format=topojson quantization=2000000 de-gem.topojson
+    mapshaper VG250_GEM.shp encoding=utf8 -filter 'GF == 4' -each 'shapeName = BEZ == "gemeindefreies Gebiet" ? GEN + " (gemeindefreies Gebiet)" : GEN, shapeISO=AGS' -filter-fields shapeName,shapeISO -proj wgs84 -simplify interval=150 keep-shapes -clean -o format=topojson quantization=2000000 de-gem.topojson
     mapshaper VG250_GEM.shp encoding=utf8 -filter 'GF == 4' -filter-fields AGS,NUTS -o gem.csv
     mapshaper VG250_KRS.dbf encoding=utf8 -filter 'GF == 4' -filter-fields AGS,GEN,BEZ,NUTS -o krs.csv
-    python3 pipeline/d2_level.py de-gem.topojson de 4 de-4.wyar 0.002 --code-ids
+    python3 pipeline/d2_level.py de-gem.topojson de 4 de-4.wyar 0 --code-ids
     python3 pipeline/d2_ags.py de-4.wyar gem.csv krs.csv <old de-3.wyar> <old de-2.wyar> <old de-1.wyar> <out>
 
 The districts are the current 401 (ids `DE3-<AGS>`); `de-3-moves.tsv` gives each earlier district id its new one.
+
+mapshaper simplifies the shared lines (150 m, keeping every shape) and `-clean` removes the overlaps and gaps a source's
+separately generalised polygons have, so the levels need no simplifying of their own (tolerance 0).
 
 The United Kingdom's levels on its wards' borders: ONS Open Geography's Wards (December 2025) Boundaries UK BGC
 (Open Government Licence v3.0), fetched as GeoJSON from its feature service, then each ward's local authority district
 (a new level) and the earlier counties and countries matched by area:
 
-    mapshaper -i wd-*.geojson combine-files -merge-layers -each 'shapeName=WD25NM, shapeISO=WD25CD' -filter-fields shapeName,shapeISO -o format=topojson quantization=2000000 gb-wd.topojson
+    mapshaper -i wd-*.geojson combine-files -merge-layers -each 'shapeName=WD25NM, shapeISO=WD25CD' -filter-fields shapeName,shapeISO -clean -simplify interval=150 keep-shapes -clean -o format=topojson quantization=2000000 gb-wd.topojson
     mapshaper -i wd-*.geojson combine-files -merge-layers -filter-fields WD25CD,LAD25CD,LAD25NM -o wd.csv
-    python3 pipeline/d2_level.py gb-wd.topojson gb 4 gb-4.wyar 0.002 --code-ids
+    python3 pipeline/d2_level.py gb-wd.topojson gb 4 gb-4.wyar 0 --code-ids
     python3 pipeline/d2_gb.py gb-4.wyar wd.csv <old gb-2.wyar> <old gb-1.wyar> <out>
 
 ## Region units on the piece lines (D1b)
