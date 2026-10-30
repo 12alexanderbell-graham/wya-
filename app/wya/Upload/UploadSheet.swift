@@ -307,14 +307,18 @@ final class UploadState {
     /// stamp's place (the review, 9.5, starts here)
     private func ready(_ me: Int) {
         guard me == job, phase == .finding else { return }
-        withAnimation(Motion.quick) { markIn = false }
+        withAnimation(Motion.quick) { markIn = false; if stampAtOnce { xIn = false } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [self] in
             guard me == job else { return }
             phase = .review
+            // Map settings' Found places = Stamp them: no review, the finds land as stamps at once (9.4)
+            if stampAtOnce { go(); return }
             withAnimation(Motion.quick) { goIn = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { Feel.land(speed: 0) }
         }
     }
+
+    private var stampAtOnce: Bool { MapSettingsStore.shared.value.foundPlaces == "stamp" }
 
     /// THE REVIEW'S ROWS (9.5 at 50%): newest trip first, the dropped ones at the end
     struct Row: Identifiable, Equatable {
