@@ -142,6 +142,20 @@ final class MarkStore {
         apply(r, words: "\(label(key, name)) details", origin: nil, who: .you)
     }
 
+    /// a wished place's details (4.4.5), read and written once as Details closes
+    func wishDetails(_ key: PlaceKey) async -> (details: WishDetails, want: Int)? {
+        guard let store else { return nil }
+        let acc = account
+        guard let d = try? await store.wishDetailsOf(key, account: acc) else { return nil }
+        return (WishDetails(json: d.details), d.want)
+    }
+    func setWishDetails(_ key: PlaceKey, name: String, details: WishDetails, want: Int) async {
+        guard let store else { return }
+        let acc = account
+        guard let r = try? await store.setWishDetails(key, account: acc, details: details.json, want: want) else { return }
+        apply(r, words: "\(label(key, name)) details", origin: nil, who: .you)
+    }
+
     /// the passport's order of stamped countries (oldest first), read fresh from the store
     func passportOrder() async -> [String] {
         guard let store else { return [] }

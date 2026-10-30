@@ -10,7 +10,12 @@ final class DetailsState {
     var d = StampDetails()
     var times = 1
     var lived = false
+    /// a wished place's Details (4.4.5) instead of a stamped one's
+    private(set) var wish = false
+    var wd = WishDetails()
+    var want = 1
     @ObservationIgnored private var start: (StampDetails, Int, Bool)?
+    @ObservationIgnored private var wishStart: (WishDetails, Int)?
     @ObservationIgnored private var opening = false
 
     var isOpen: Bool { key != nil }
@@ -20,9 +25,15 @@ final class DetailsState {
         opening = true
         Task {
             defer { opening = false }
-            guard let x = await MarkStore.shared.details(key) else { Feel.refuse(); return }
-            d = x.details; times = max(1, x.times); lived = x.lived
-            start = (d, times, lived)
+            if let x = await MarkStore.shared.details(key) {
+                d = x.details; times = max(1, x.times); lived = x.lived
+                start = (d, times, lived)
+                wish = false
+            } else if let x = await MarkStore.shared.wishDetails(key) {
+                wd = x.details; want = x.want
+                wishStart = (wd, want)
+                wish = true
+            } else { Feel.refuse(); return }
             self.name = name
             self.key = key
             Feel.tap()
@@ -33,10 +44,20 @@ final class DetailsState {
     /// closed (pulled down, a tap off): kept, written once; nothing changed, nothing written (no undo drop)
     func close(water: Water) {
         guard let key else { return }
+        let n = name
+        if wish {
+            let changed = wishStart.map { $0.0 != wd || $0.1 != want } ?? false
+            let (w, k) = (wd, want)
+            self.key = nil
+            wishStart = nil
+            water.closeDetails()
+            if changed { Task { await MarkStore.shared.setWishDetails(key, name: n, details: w, want: k) } }
+            return
+        }
         var dd = d
         dd.lived = lived ? true : nil
         let changed = start.map { $0.0 != d || $0.1 != times || $0.2 != lived } ?? false
-        let (t, l, n) = (times, lived, name)
+        let (t, l) = (times, lived)
         self.key = nil
         start = nil
         water.closeDetails()
@@ -86,19 +107,23 @@ struct DetailsSheet: View {
                         Text(s.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                             .accessibilityAddTraits(.isHeader)
                     }
-                    VStack(alignment: .leading, spacing: 0) {
-                        band("Lived here", on: s.lived) { Feel.notch(); s.lived.toggle() }
-                        if s.lived { livedBlock } else { visitsBlock }
-                    }
-                    placesBlock
-                    section("Notes") {
-                        field("What you did", id: "did", max: 600, lines: true, \.did)
-                        field("Anything else", id: "note", max: 600, lines: true, \.note)
-                    }
-                    VStack(alignment: .leading, spacing: 0) {
-                        row("Rating") { stars }
-                        row("With") {
-                            field("Names", id: "with", max: 120, trailing: true, \.with)
+                    if s.wish {
+                        wishBlock
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            band("Lived here", on: s.lived) { Feel.notch(); s.lived.toggle() }
+                            if s.lived { livedBlock } else { visitsBlock }
+                        }
+                        placesBlock
+                        section("Notes") {
+                            field("What you did", id: "did", max: 600, lines: true, \.did)
+                            field("Anything else", id: "note", max: 600, lines: true, \.note)
+                        }
+                        VStack(alignment: .leading, spacing: 0) {
+                            row("Rating") { stars }
+                            row("With") {
+                                field("Names", id: "with", max: 120, trailing: true, \.with)
+                            }
                         }
                     }
                 }
@@ -139,6 +164,57 @@ struct DetailsSheet: View {
     }
 
     // MARK: the blocks
+
+    /// A WISHED PLACE (4.4.5): how badly (5 stars, feeding Wishlist+; a wish is at least 1), when (Someday /
+    /// Sometime soon / Next trip, or in your own words), what you'd do there, notes
+    private var wishBlock: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            VStack(alignment: .leading, spacing: 0) {
+                row("How badly") { wishStars }
+                choiceWords("When", [("someday", "Someday"), ("soon", "Sometime soon"), ("next", "Next trip")],
+                            chosen: s.wd.prio) { s.wd.prio = $0 }
+                wishField("When, in your words", id: "wishWhen", max: 40, \.when)
+            }
+            section("Notes") {
+                wishField("What you'd do there", id: "why", max: 600, lines: true, \.why)
+                wishField("Anything else", id: "wishNote", max: 600, lines: true, \.note)
+            }
+        }
+    }
+    /// 1 to 5 stars; a wish never goes below 1 (the first star refuses to clear)
+    private var wishStars: some View {
+        HStack(spacing: 0) {
+            ForEach(1 ... 5, id: \.self) { n in
+                Star().fill(n <= s.want ? Palette.ink : Palette.ink.opacity(0.15))
+                    .frame(width: 24, height: 24)
+                    .frame(width: 40, height: 44)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if n == s.want && n == 1 { Feel.refuse(); return }
+                        Feel.tap(); s.want = n == s.want ? 1 : n
+                    }
+            }
+        }
+        .padding(.trailing, -8)
+        .accessibilityElement()
+        .accessibilityLabel("How badly")
+        .accessibilityValue("\(s.want) of 5")
+        .accessibilityAdjustableAction { dir in s.want = max(1, min(5, s.want + (dir == .increment ? 1 : -1))) }
+    }
+    private func wishField(_ empty: String, id: String, max: Int, lines: Bool = false,
+                           _ k: WritableKeyPath<WishDetails, String?>) -> some View {
+        TextField(empty, text: Binding(get: { s.wd[keyPath: k] ?? "" }, set: { v in
+            if v.count > max { Feel.refuse() }
+            let c = String(v.prefix(max))
+            s.wd[keyPath: k] = c.isEmpty ? nil : c
+        }), axis: lines ? .vertical : .horizontal)
+        .font(.body)
+        .foregroundStyle(Palette.ink)
+        .lineLimit(lines ? 1 ... 12 : 1 ... 1)
+        .frame(minHeight: lines ? 52 : 44)
+        .focused($typing, equals: id)
+        .id(id)
+    }
 
     private var visitsBlock: some View {
         VStack(alignment: .leading, spacing: 0) {

@@ -47,3 +47,29 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
         return try? e.encode(self)
     }
 }
+
+/// WHAT YOU SAY ABOUT A PLACE YOU WISH FOR (Part 4.4.5): the old app's WishDetails, field for field. How badly is the
+/// record's own `want` (1 to 5 stars, a new wish is 1), not kept here; `stars` is read and kept for old books.
+nonisolated struct WishDetails: Codable, Equatable, Sendable {
+    /// someday / soon / next
+    var prio: String?
+    /// when, in words (40 characters)
+    var when: String?
+    /// what you would do there (the sheet's Activities, 600 characters)
+    var why: String?
+    /// notes (600 characters)
+    var note: String?
+    var stars: Int?
+
+    var isEmpty: Bool { self == WishDetails() }
+    init() {}
+    init(json: Data?) {
+        self = json.flatMap { try? JSONDecoder().decode(WishDetails.self, from: $0) } ?? WishDetails()
+    }
+    var json: Data? {
+        guard !isEmpty else { return nil }
+        let e = JSONEncoder()
+        e.outputFormatting = .sortedKeys
+        return try? e.encode(self)
+    }
+}
