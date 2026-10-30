@@ -241,6 +241,12 @@ final class TestDriver {
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
+                // sideways on | off: the sideways mark, and out of full screen (1.11)
+                case "sideways":
+                    if a == "off" { Sideways.shared.leave() }
+                    // sideways frame 0.5: the turn held at that point (sideways frame none: let go)
+                    else if a == "frame" { Sideways.shared.testTurn = p.count > 2 ? Double(p[2]) : nil }
+                    else if let water, let head, let map { Sideways.shared.enter(water: water, head: head, map: map) { CardState.shared.close(map: map) } }
                 case "details":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top

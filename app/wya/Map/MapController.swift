@@ -142,7 +142,10 @@ final class MapController {
     // MARK: the camera
     @ObservationIgnored var c = SIMD2<Double>(500, 244)
     @ObservationIgnored var k: Double = 1.8
-    @ObservationIgnored var view = CGSize(width: 402, height: 874)
+    @ObservationIgnored var view = CGSize(width: 402, height: 874) {
+        // a new size (the sideways turn, 1.11) moves the limits: the marks' dimmed states follow at once
+        didSet { if view != oldValue { updateHome() } }
+    }
     /// where the chrome sits on this phone (the open map is between the head and the sheet)
     @ObservationIgnored var layout = Layout.placeholder
     @ObservationIgnored private(set) var homeX: Double = 500

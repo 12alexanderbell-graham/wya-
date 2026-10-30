@@ -790,6 +790,9 @@ struct MapLayer: UIViewRepresentable {
             context.coordinator.renderer = r
         }
         v.installGestures()
+        // a size change (the sideways turn, 1.11) keeps the last frame's pixels where they were, centred, until the next
+        // frame is drawn at the new size: never stretched or squeezed for a frame (the camera's centre is the view's)
+        v.layer.contentsGravity = .center
         return v
     }
     func updateUIView(_ uiView: MapMTKView, context: Context) {}
