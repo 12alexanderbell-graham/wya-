@@ -286,6 +286,15 @@ final class TestDriver {
                 case "placeopen":
                     if a == "off" { map?.closePlace(); map?.goHome() }
                     else if let m = map, let i = m.world?.placeIndex[a] { m.openPlace(i) }
+                // regionfind bavar: search's first region found from Countries, opened (as its row's tap)
+                case "regionfind":
+                    RegionIndex.shared.load()
+                    for _ in 0 ..< 100 where !RegionIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let m = map, let h = head, let r = RegionIndex.shared.hits(p.dropFirst().joined(separator: " ")).first,
+                       let i = m.world?.placeIndex[r.place] {
+                        h.searching = false
+                        ContentView.openRegionMap(i, head: h, row: r.row, focus: r.id, map: m)
+                    }
                 // townfind frankf: Places' search's first town shown (as the search key would)
                 case "townfind":
                     TownIndex.shared.load()
