@@ -9,6 +9,11 @@ struct ContentView: View {
     @State private var tab = 0
     @State private var launch = Launch.shared
     @State private var side = Sideways.shared
+    /// THE SESSION (19.2), for when the system ends the app in the background (Apple's scene storage: discarded when
+    /// the person quits the app, so a cold launch opens fresh): the tab, the mode, the continent, the camera, the sheet
+    /// stop, the lock
+    @SceneStorage("wya.map.session") private var session = ""
+    @State private var sessionWrite: Task<Void, Never>?
 
     var body: some View {
         // THE SCREEN, pinned to its top left: everything inside is sized from the window (Layout), never from the room
@@ -96,6 +101,9 @@ struct ContentView: View {
         }
         .onAppear {
             TestDriver.shared.start(map: map, water: water, head: head)
+            #if DEBUG
+            TestDriver.shared.restoreSession = { restoreSession() }
+            #endif
             // the Map's actions, by stable id (Part 20.12): the AI, Siri, links and hold menus call these
             Actions.shared.registerMap(map: map, water: water, head: head)
             MapSettingsRows.registerActions(map: map)
@@ -160,6 +168,8 @@ struct ContentView: View {
             Task.detached(priority: .utility) { _ = ZoneShapes.shared.zone(lat: 0, lon: 0) }
             // the flags of the places you have stamped or wished, drawn ahead for the rows that show them (D14)
             if let w = map.world { Flags.prewarm(map.stamped.union(map.wished).map { w.places[$0].id.lowercased() }) }
+            // the system ended the app in the background: everything back as it was, under the loading screen
+            if DeepLink.waiting == nil { restoreSession() }
             // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
             if let url = DeepLink.waiting {
                 DeepLink.waiting = nil
@@ -186,6 +196,13 @@ struct ContentView: View {
         .onChange(of: head.searching) { _, v in if v { closeCard() } }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
+        // the session written as it changes; the camera 0.5 s after it last moved (19.2)
+        .onChange(of: map.restVersion) { _, _ in saveSession(after: 0.5) }
+        .onChange(of: water.stop) { _, _ in saveSession(after: 0) }
+        .onChange(of: map.locked) { _, _ in saveSession(after: 0) }
+        .onChange(of: head.mode) { _, _ in saveSession(after: 0) }
+        .onChange(of: map.continent) { _, _ in saveSession(after: 0.5) }
+        .onChange(of: tab) { _, _ in saveSession(after: 0) }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
@@ -230,6 +247,32 @@ struct ContentView: View {
             .frame(width: w, height: h)
             .rotationEffect(.degrees(side.angle))
             .position(x: L.W / 2, y: L.H / 2)
+    }
+
+    private struct Session: Codable {
+        var tab: Int; var mode: Int; var cont: String?; var x: Double; var y: Double; var k: Double; var stop: Int; var lock: Bool
+    }
+    private func saveSession(after d: Double) {
+        sessionWrite?.cancel()
+        sessionWrite = Task { @MainActor in
+            if d > 0 { try? await Task.sleep(for: .seconds(d)) }
+            guard !Task.isCancelled, map.ready, !side.on else { return }
+            // a stop the sheet only passes through for a moment (the upload, a list) is kept as where it rests
+            let s = Session(tab: tab, mode: head.mode.rawValue, cont: map.continent, x: map.c.x, y: map.c.y, k: map.k,
+                            stop: water.stop.rawValue, lock: map.locked)
+            if let d = try? JSONEncoder().encode(s), let t = String(data: d, encoding: .utf8) { session = t }
+        }
+    }
+    private func restoreSession() {
+        guard !session.isEmpty, let s = try? JSONDecoder().decode(Session.self, from: Data(session.utf8)) else { return }
+        tab = s.tab
+        head.mode = HeadState.Mode(rawValue: s.mode) ?? .countries
+        map.locked = s.lock
+        if let c = s.cont { map.show(continent: c) } else { map.restore(c: SIMD2(s.x, s.y), k: s.k) }
+        if let st = SheetStop(rawValue: s.stop), st != water.stop { water.go(st) }
+        #if DEBUG
+        NSLog("wya session restored: tab %d mode %d continent %@ k %.2f stop %d lock %d", s.tab, s.mode, s.cont ?? "none", s.k, s.stop, s.lock ? 1 : 0)
+        #endif
     }
 
     private func enterSideways() {

@@ -13,6 +13,8 @@ final class TestDriver {
     private var lostOwner = false
     /// where the whole content is on screen (to see whether the keyboard moves it)
     var contentFrame: CGRect = .zero
+    /// the session put back as after the system ended the app (19.2): `session restore`
+    var restoreSession: (() -> Void)?
 
     func start(map: MapController, water: Water, head: HeadState) {
         #if targetEnvironment(simulator) && DEBUG
@@ -241,6 +243,7 @@ final class TestDriver {
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
+                case "session": restoreSession?()
                 // sideways on | off: the sideways mark, and out of full screen (1.11)
                 case "sideways":
                     if a == "off" { Sideways.shared.leave() }

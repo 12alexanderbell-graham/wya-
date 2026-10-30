@@ -32,6 +32,8 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
     var afghanistanFlag = "tricolour" // tricolour | taliban
     /// the moon's stop, set only by the moon (0 Both ... 4 Wishlist)
     var filter = 0
+    /// the last 12 places opened from search, newest first (19.2; the empty field's suggestions show the first five)
+    var recent: [String] = []
 
     init() {}
 
@@ -48,6 +50,7 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
         pinMarksPlace = v(.pinMarksPlace, d.pinMarksPlace); tracking = v(.tracking, d.tracking)
         placesMap = v(.placesMap, d.placesMap); pinsMap = v(.pinsMap, d.pinsMap)
         afghanistanFlag = v(.afghanistanFlag, d.afghanistanFlag); filter = v(.filter, d.filter)
+        recent = v(.recent, d.recent)
     }
 
     /// the borders view the map draws
