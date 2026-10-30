@@ -70,16 +70,31 @@ final class Sideways {
                 // the same picture at landscape size; nothing reloads
                 square = false; landscape = true
                 Feel.land(speed: 0)
-                for k in 0 ..< 4 {
-                    // the one nearest the corner first
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05 * Double(3 - k)) { [self] in
-                        guard me == job else { return }
-                        withAnimation(Motion.chrome) { marks[k] = true }
+                // then the whole map (or the continent you're on) framed sideways, once the map has its landscape
+                // size; the marks come in after it lands, one move at a time
+                frameWhenLandscape(me, tries: 6) { [self] in
+                    for k in 0 ..< 4 {
+                        // the one nearest the corner first
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05 * Double(3 - k)) { [self] in
+                            guard me == job else { return }
+                            withAnimation(Motion.chrome) { marks[k] = true }
+                        }
                     }
                 }
             }
         }
         watch()
+    }
+
+    private func frameWhenLandscape(_ me: Int, tries: Int, then: @escaping () -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
+            guard me == job, let m = map else { return }
+            if m.view.width > m.view.height || tries <= 0 {
+                m.frameSideways { [self] in if me == job { then() } }
+            } else {
+                frameWhenLandscape(me, tries: tries - 1, then: then)
+            }
+        }
     }
 
     /// out of full screen: the mark, turning the phone back to portrait, a link, leaving the tab
@@ -97,11 +112,12 @@ final class Sideways {
                 square = false
                 on = false
                 Feel.land(speed: 0)
-                // zoomed out further sideways than portrait allows (landscape's world is shorter): back to the world,
                 // read once the map has its portrait size again
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
-                    guard me == job, let m = map, m.k < m.kMin else { return }
-                    m.goHome()
+                    guard me == job, let m = map else { return }
+                    // a continent framed again for portrait (its room above the sheet); the world back home if it was
+                    // zoomed out further than portrait allows
+                    if let k = m.drawnContinent { m.show(continent: k) } else if m.k < m.kMin { m.goHome() }
                 }
             }
             landscape = false

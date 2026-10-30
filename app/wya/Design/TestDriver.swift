@@ -92,8 +92,18 @@ final class TestDriver {
                 case "quick": head?.quickStamp = a == "on"
                 case "dial": head?.testDial = a == "off" ? nil : CGFloat(Double(a) ?? 0)
                 case "mode": head?.mode = HeadState.Mode(rawValue: Int(a) ?? 0) ?? .countries
+                // neighbours <id>: who borders it in this borders view (D19)
+                case "neighbours":
+                    if let w = map?.world, let i = w.placeIndex[a] {
+                        NSLog("wya neighbours %@: %@", a, w.neighbours[i].map { w.places[$0].id }.sorted().joined(separator: " "))
+                    }
                 case "search":
                     if a == "off" { head?.searching = false }
+                    // search suggest [new]: the empty field's suggestions, logged by id (new: as with no searches yet)
+                    else if a == "suggest", let m = map, let w = m.world {
+                        let s = SearchResults.suggestions(map: m, recentToo: p.count < 3)
+                        NSLog("wya suggestions %@", s.map { w.places[$0].id }.joined(separator: " "))
+                    }
                     else { NSLog("wya t search open"); head?.searching = true; head?.query = p.dropFirst().joined(separator: " ") }
                 case "zoom":
                     if a == "in" { map?.zoomIn() } else if a == "out" { map?.zoomOut() } else { map?.goHome() }
