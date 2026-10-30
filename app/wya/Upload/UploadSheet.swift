@@ -210,16 +210,33 @@ final class UploadState {
     /// File: the Files picker, JSON, several at once (Takeout's monthly files go in together)
     private func file() { importing = true }
     func imported(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty, phase == .choosing, !moving else { return }
         let t = readToken
+        // finding starts at once; the line grows along the water's top as the files are read (A9.6)
+        reading = true
+        fileShare = 0
+        lineShown = true
+        startFinding()
+        let sizes = urls.map { (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 } ?? 1 }
+        let total = Double(max(1, sizes.reduce(0, +)))
         Task.detached(priority: .userInitiated) {
             var out: [HistoryReader.Sample] = []
             var unreadable = 0, notHistory = 0
-            for u in urls {
+            var before = 0.0
+            for (k, u) in urls.enumerated() {
                 let ok = u.startAccessingSecurityScopedResource()
                 defer { if ok { u.stopAccessingSecurityScopedResource() } }
+                let mine = Double(sizes[k])
+                let base = before
+                defer { before += mine }
                 guard let d = try? Data(contentsOf: u, options: .alwaysMapped) else { unreadable += 1; continue }
-                if let r = HistoryReader.read(d) { out += r.samples } else { notHistory += 1 }
+                let r = HistoryReader.read(d) { share in
+                    let all = (base + share * mine) / total
+                    Task { @MainActor in UploadState.shared.readShare(all, token: t) }
+                }
+                if let r { out += r.samples } else { notHistory += 1 }
+                let done = (base + mine) / total
+                await MainActor.run { UploadState.shared.readShare(done, token: t) }
             }
             let got = out
             // nothing read from any file: A9.8 says why in the number's place
@@ -228,6 +245,11 @@ final class UploadState {
                 : notHistory > 0 && unreadable == 0 ? "That file is not a location history" : nil
             await MainActor.run { UploadState.shared.found(got, from: .history, read: urls.count, why: why, token: t) }
         }
+    }
+    /// the file's share read, on the quick curve so the line never jumps
+    func readShare(_ v: Double, token t: Int) {
+        guard t == readToken, reading else { return }
+        withAnimation(Motion.quick) { fileShare = max(fileShare, min(1, v)) }
     }
     /// Here: one fix, When In Use asked at this press only; the icon gives way to the working mark while it waits
     private func here() {
@@ -261,12 +283,27 @@ final class UploadState {
     private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int, why: String? = nil, token: Int? = nil) {
         NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
         // a read from a sheet or step that has gone since is dropped
-        guard token == nil || token == readToken, let w = water, w.upload, phase == .choosing, !moving else { return }
-        samples = s; source = src
-        failed = why
+        guard token == nil || token == readToken, let w = water, w.upload else { return }
+        // a file's finding has already started (its line growing): the samples go to it
+        if phase == .finding, reading {
+            pending = (s, src, why)
+            reading = false
+            withAnimation(Motion.quick) { fileShare = 0 }
+            if findingIn { deliver() }
+            return
+        }
+        guard phase == .choosing, !moving else { return }
+        pending = (s, src, why)
+        startFinding()
+    }
+
+    /// A9.4: the pair out, then the caption (World / 0 / found), the mark and the ×; the samples are worked out once
+    /// they are all in place (a file's are still being read: its line grows along the water's top meanwhile)
+    private func startFinding() {
         job += 1
         let me = job
         moving = true
+        findingIn = false
         shrink()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
@@ -277,10 +314,28 @@ final class UploadState {
                 guard me == job else { return }
                 withAnimation(Motion.quick) { markIn = true; xIn = true }
                 moving = false
-                find(me)
+                findingIn = true
+                if !reading { deliver() }
             }
         }
     }
+    private func deliver() {
+        guard let p = pending else { return }
+        pending = nil
+        samples = p.0; source = p.1; failed = p.2
+        // the line draws back into its left end first (A9.6), then the finds come
+        DispatchQueue.main.asyncAfter(deadline: .now() + (lineShown ? 0.28 : 0)) { [self] in
+            lineShown = false
+            find(job)
+        }
+    }
+    /// a read waiting for finding's row to be in place
+    @ObservationIgnored private var pending: ([HistoryReader.Sample], MarkSource, String?)?
+    @ObservationIgnored private var findingIn = false
+    /// a file is being read: the share read so far, drawn as the line along the water's top (A9.6)
+    @ObservationIgnored private var reading = false
+    private(set) var fileShare: Double = 0
+    private(set) var lineShown = false
 
     #if DEBUG
     /// the test driver's read: a few dated points in eight countries, as if a history file had given them (none in
@@ -541,6 +596,9 @@ final class UploadState {
         guard let w = water, phase == .finding || phase == .review, !busy else { return }
         Feel.tap()
         job += 1
+        readToken += 1
+        reading = false; pending = nil
+        withAnimation(Motion.quick) { fileShare = 0 }
         map?.found = []
         forget()
         withAnimation(Motion.quick) { markIn = false; xIn = false; goIn = false; captionIn = false }
@@ -651,6 +709,15 @@ struct UploadSheet: View {
             Caption(name: name, count: u.count, tail: "found", night: false, visible: u.captionIn)
                 .position(x: L.W / 2, y: y)
                 .transition(.identity)
+        }
+        // A9.6: a file's progress, a 2 pt line in black 50% along the water's top edge (2 pt under it, between the ends
+        // of its rounded corners), growing from the left; it draws back into its left end when the reading ends
+        if u.lineShown {
+            let run = L.W - 2 * L.sheetInset - 2 * form.corner
+            Rectangle().fill(Palette.ink.opacity(0.5))
+                .frame(width: max(0, run * u.fileShare), height: 2)
+                .frame(width: run, alignment: .leading)
+                .position(x: L.W / 2, y: form.top + 3)
         }
         WorkingMark(size: 20, running: u.markIn)
             .scaleEffect(u.markIn ? 1 : 0)

@@ -45,11 +45,12 @@ nonisolated enum HistoryReader {
     }
 
     /// the file's samples, or nil when it is not a location history in any of the four shapes
-    static func read(_ data: Data) -> Result? {
+    /// `progress` hears the share of the file read (0 to 1), about 100 times over a big file (A9.6's line)
+    static func read(_ data: Data, progress: ((Double) -> Void)? = nil) -> Result? {
         // a big Records.json (years of points, hundreds of MB) is scanned, never parsed whole
-        if data.count > streamOver, isRecords(data) { return scanRecords(data) }
+        if data.count > streamOver, isRecords(data) { return scanRecords(data, progress: progress) }
         // so is a big Timeline.json (C) or iPhone export (D): one segment parsed at a time
-        if data.count > streamOver, let r = scanSegments(data) { return r }
+        if data.count > streamOver, let r = scanSegments(data, progress: progress) { return r }
         guard let j = try? JSONSerialization.jsonObject(with: data) else { return nil }
         var r: Result
         if let o = j as? [String: Any], let locs = o["locations"] as? [[String: Any]] {
@@ -108,7 +109,7 @@ nonisolated enum HistoryReader {
     /// A RECORDS.JSON READ WITHOUT PARSING IT: one pass over the bytes, keeping only each location's own latitudeE7,
     /// longitudeE7, accuracy and timestamp / timestampMs (the keys inside its nested objects, an activity's timestamp,
     /// are not its own and are skipped); strings are stepped over whole, so a brace inside one never counts.
-    static func scanRecords(_ d: Data) -> Result {
+    static func scanRecords(_ d: Data, progress: ((Double) -> Void)? = nil) -> Result {
         var r = Result(shape: .records, samples: [], dropped: 0)
         d.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
             let b = raw.bindMemory(to: UInt8.self)
@@ -120,7 +121,10 @@ nonisolated enum HistoryReader {
             var lastKey: [UInt8] = []
             var lat: Double?, lon: Double?, acc: Double?, ts: Date?
             func reset() { lat = nil; lon = nil; acc = nil; ts = nil }
+            let step = max(1 << 20, n / 100)
+            var tick = step
             while i < n {
+                if i >= tick { progress?(Double(i) / Double(n)); tick += step }
                 let c = b[i]
                 if c == 0x22 { // a string: a key when a ':' follows it
                     var j = i + 1
@@ -180,7 +184,7 @@ nonisolated enum HistoryReader {
     /// C OR D WITHOUT PARSING THE FILE WHOLE: one pass over the bytes finds each element of D's top-level array, or of
     /// C's `semanticSegments` and `rawSignals` arrays, and parses only that element (a few KB); strings are stepped over
     /// whole. Nil when the file holds no segment (then it is read the ordinary way).
-    static func scanSegments(_ d: Data) -> Result? {
+    static func scanSegments(_ d: Data, progress: ((Double) -> Void)? = nil) -> Result? {
         var r = Result(shape: .iphone, samples: [], dropped: 0)
         var found = false
         d.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
@@ -206,7 +210,10 @@ nonisolated enum HistoryReader {
                     memcmp(base + lastKey1.0, kp.baseAddress!, u.count) == 0
                 }
             }
+            let step = max(1 << 20, n / 100)
+            var tick = step
             while i < n {
+                if i >= tick { progress?(Double(i) / Double(n)); tick += step }
                 let c = b[i]
                 switch c {
                 case 0x22: // a string: stepped over whole; at depth 1 it may be C's array key
