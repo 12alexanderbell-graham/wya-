@@ -142,8 +142,9 @@ struct SheetContent: View {
             // water's bottom, under the tabs, its own motion untouched (asked him; default), and back up on close
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
-                    .offset(y: water.settings || water.details || water.stampedList ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList)
+                    // (back only once the list's rows have left: never both at once)
+                    .offset(y: water.settings || water.details || water.stampedList || water.listLeaving ? water.layout.H - form.top : 0)
+                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList || water.listLeaving)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
@@ -155,7 +156,7 @@ struct SheetContent: View {
             }
             // THE STAMPED LIST (Part 4.6) under the caption, which stays; hidden while Details from a row is up
             let captionY = max(L.headBottom + 12 + 52, form.top + 72)
-            if water.stampedList && !water.details {
+            if (water.stampedList || water.listLeaving) && !water.details {
                 StampedList(water: water, map: map, form: form, top: captionY + 56).transition(.identity)
             }
 

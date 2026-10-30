@@ -99,9 +99,18 @@ final class Water {
         if stop != .full { go(.full) }
     }
     /// closed by the number again or a pull (`to` nil: stay where the pull left it)
+    /// the list stays on screen this long after it is closed, while its rows leave (A4.19 reversed)
+    var listLeaving = false
+    @ObservationIgnored private var leaveJob = 0
     func closeList(to: Stop? = nil, back: Bool = true) {
         guard stampedList else { return }
         stampedList = false
+        listLeaving = true
+        leaveJob += 1
+        let job = leaveJob
+        DispatchQueue.main.asyncAfter(deadline: .now() + StampedList.leaving(StampedList.animated)) { [weak self] in
+            if self?.leaveJob == job { self?.listLeaving = false }
+        }
         let s = to ?? (back ? listFrom : nil)
         listFrom = nil
         if let s, s != stop { go(s) }
