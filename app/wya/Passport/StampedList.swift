@@ -85,8 +85,17 @@ struct StampedList: View {
                     }
                     .contextMenu {
                         Button("Show on the map") { open(r) }
+                        // the passport on that stamp's page (11.5); the list closes first
+                        Button("Show in passport") {
+                            water.closeList(to: .quarter)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                        }
                         Button("Details") { details(r) }
                         Button("Verify") { VerifyState.shared.open(.country(r.id), name: r.name, place: r.place, water: water) }
+                        // offline for now: the app's own link and the name (11.7)
+                        ShareLink(item: URL(string: "wya://country/\(r.id)")!, subject: Text(r.name), message: Text(r.name)) {
+                            Text("Share")
+                        }
                         Button("Unstamp", role: .destructive) { unstamp(r) }
                     }
             }
