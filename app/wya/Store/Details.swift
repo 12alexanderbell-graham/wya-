@@ -24,6 +24,32 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     var livesNow: Bool?
     var livedRough: String?
     var stays: [Stay]?
+    /// the visits after the first (one row per trip), each with its own time in words, how and why;
+    /// the first visit is the fields above, as the old app kept it
+    struct Trip: Codable, Equatable, Sendable {
+        var whenRough: String?
+        var mode: String?
+        var modeOther: String?
+        var purpose: String?
+        var purposeOther: String?
+    }
+    var trips: [Trip]?
+    /// visit i as one Trip: 0 is the record's own fields, the others `trips` (setting past the end does nothing)
+    subscript(trip i: Int) -> Trip {
+        get {
+            if i == 0 { return Trip(whenRough: whenRough, mode: mode, modeOther: modeOther, purpose: purpose, purposeOther: purposeOther) }
+            let t = trips ?? []
+            return i - 1 < t.count ? t[i - 1] : Trip()
+        }
+        set {
+            if i == 0 {
+                whenRough = newValue.whenRough; mode = newValue.mode; modeOther = newValue.modeOther
+                purpose = newValue.purpose; purposeOther = newValue.purposeOther
+            } else if var t = trips, i - 1 < t.count {
+                t[i - 1] = newValue; trips = t
+            }
+        }
+    }
     var places: [Went]?
     /// activities, 600 characters
     var did: String?

@@ -71,7 +71,7 @@ final class DetailsState {
 /// white only; rows 52 pt with their name on the left and their value on the right; a choice is its word, the chosen
 /// one a black capsule with white words that just appears; section
 /// names 17 pt semibold black; every word lines up on one 16 pt edge. Haptics only.
-/// Not here yet (logged): a visit's exact dates (they wait for our own calendar), more than one visit, Photos,
+/// Not here yet (logged): a visit's exact dates (they wait for our own calendar), Photos,
 /// the Lived block swap and the stars' rows by A4.14, the letters rolling at a limit. (A lived time and a place you
 /// went come and go by A4.14 / A4.15 as built: see `arrive`, `removeRow`.)
 struct DetailsSheet: View {
@@ -87,6 +87,7 @@ struct DetailsSheet: View {
     /// words and circle are not in yet (`arriving`), are on their way out (`leaving`), or are drawn as plain words
     /// for the roll (`rolling`: a field cannot roll its words, so it is swapped for a Text that looks the same)
     @State private var livedIDs: [String] = []
+    @State private var tripIDs: [String] = []
     @State private var placeIDs: [String] = []
     @State private var arriving: Set<String> = []
     @State private var leaving: Set<String> = []
@@ -173,6 +174,7 @@ struct DetailsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kb = 0 }
         // the rows' identities follow the stored rows (a change from outside, an undo, makes them fresh)
         .onChange(of: livedTimes.count, initial: true) { _, n in livedIDs = Self.synced(livedIDs, n) }
+        .onChange(of: 1 + (s.d.trips?.count ?? 0), initial: true) { _, n in tripIDs = Self.synced(tripIDs, n) }
         .onAppear { Self.test = { driver($0) } }
         .onChange(of: s.d.places?.count ?? 0, initial: true) { _, n in placeIDs = Self.synced(placeIDs, n) }
     }
@@ -231,14 +233,89 @@ struct DetailsSheet: View {
     }
 
     private var visitsBlock: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let n = 1 + (s.d.trips?.count ?? 0)
+        return VStack(alignment: .leading, spacing: 0) {
             row("Times") { stepper }
-            // a visit's time in words until our own calendar exists ("Summer 2019", 40 characters)
-            row("When") { field("Summer 2019", id: "rough", max: 40, trailing: true, \.whenRough) }
-            choice("How", Self.modes, chosen: s.d.mode) { s.d.mode = $0 }
-            if s.d.mode == "other" { field("How, in your words", id: "modeOther", max: 60, \.modeOther) }
-            choice("Trip", Self.purposes, chosen: s.d.purpose) { s.d.purpose = $0 }
-            if s.d.purpose == "other" { field("Trip, in your words", id: "purposeOther", max: 60, \.purposeOther) }
+            // one row per trip (4.4.3): each visit its time in words (until our own calendar
+            // exists), how and why; the × only when there is more than one
+            ForEach(0 ..< n, id: \.self) { i in
+                visitRows(i, key: Self.key(tripIDs, i, "trip"), count: n)
+                    .padding(.top, i == 0 ? 0 : 12)   // a little air between one trip and the next
+            }
+            row("Add a visit") { EmptyView() }
+                .contentShape(Rectangle())
+                .onTapGesture { addTrip() }
+                .accessibilityAddTraits(.isButton)
+        }
+    }
+
+    /// visit i's key paths: the first visit is the record's own fields, the others its `trips`
+    private func tk(_ i: Int, _ field: WritableKeyPath<StampDetails.Trip, String?>) -> WritableKeyPath<StampDetails, String?> {
+        let visit: WritableKeyPath<StampDetails, StampDetails.Trip> = \StampDetails.[trip: i]
+        return visit.appending(path: field)
+    }
+    @ViewBuilder
+    private func visitRows(_ i: Int, key k: String, count n: Int) -> some View {
+        let gone = arriving.contains(k) || leaving.contains(k)
+        let plain = rolling.contains(k)
+        let rough = tk(i, \.whenRough), mode = tk(i, \.mode), purpose = tk(i, \.purpose)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Text(gone ? Caption.blank("When", "\u{2002}") : "When").font(.body).foregroundStyle(Palette.ink)
+                    .contentTransition(.numericText(value: gone ? 0 : 1))
+                Spacer(minLength: 8)
+                if plain {
+                    let v = s.d[keyPath: rough] ?? ""
+                    let w = v.isEmpty ? "Summer 2019" : v
+                    Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
+                        .foregroundStyle(v.isEmpty ? Color(uiColor: .placeholderText) : Palette.ink)
+                        .contentTransition(.numericText(value: gone ? 0 : 1))
+                        .frame(minHeight: 44)
+                } else {
+                    // a visit's time in words until our own calendar exists ("Summer 2019", 40 characters)
+                    field("Summer 2019", id: "rough\(i)", max: 40, trailing: true, rough)
+                }
+                if n > 1 {
+                    xCircle { removeTrip(k) }
+                        .scaleEffect(gone ? 0 : 1)
+                        .transition(.scale)
+                }
+            }
+            .frame(minHeight: 52)
+            choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
+            if s.d[keyPath: mode] == "other" { field("How, in your words", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
+            choice("Trip", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
+            if s.d[keyPath: purpose] == "other" { field("Trip, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
+        }
+    }
+    /// A4.14: the space opens, then the visit's words roll in; Times goes up to the visits there are when it was lower
+    private func addTrip() {
+        Feel.tap()
+        let k = UUID().uuidString
+        let n = 1 + (s.d.trips?.count ?? 0)
+        tripIDs = Self.synced(tripIDs, n)
+        arriving.insert(k); rolling.insert(k)
+        withAnimation(Motion.quick) {
+            tripIDs.append(k)
+            s.d.trips = (s.d.trips ?? []) + [StampDetails.Trip()]
+        }
+        if s.times < n + 1 { s.times = n + 1 }
+        arrive(k)
+    }
+    /// A4.15: its words roll out and its × shrinks, then the rows below move up; the first visit going takes the
+    /// second's place in the record's own fields
+    private func removeTrip(_ k: String) {
+        let n = 1 + (s.d.trips?.count ?? 0)
+        tripIDs = Self.synced(tripIDs, n)
+        guard n > 1, tripIDs.contains(k) else { return }
+        removeRow(k, index: { tripIDs.firstIndex(of: k) }) { j in
+            var all = [s.d[trip: 0]] + (s.d.trips ?? [])
+            guard j < all.count else { return }
+            all.remove(at: j)
+            s.d[trip: 0] = all.first ?? StampDetails.Trip()
+            let rest = Array(all.dropFirst())
+            s.d.trips = rest.isEmpty ? nil : rest
+            tripIDs.remove(at: j)
         }
     }
 
@@ -411,6 +488,8 @@ struct DetailsSheet: View {
     private func driver(_ p: [String]) {
         switch p.first {
         case "lived": s.lived.toggle()
+        case "addvisit": addTrip()
+        case "removevisit": tripIDs = Self.synced(tripIDs, 1 + (s.d.trips?.count ?? 0)); if let i = Int(p.count > 1 ? p[1] : "1"), i < tripIDs.count { removeTrip(tripIDs[i]) }
         case "addtime": addLived()
         case "removelived": removeLived(Int(p.count > 1 ? p[1] : "0") ?? 0)
         case "addplace": kind = p.count > 1 ? p[1] : "city"; placeName = p.dropFirst(2).joined(separator: " "); addPlace()
@@ -481,21 +560,26 @@ struct DetailsSheet: View {
 
     /// a row of choices under its name: the words wrap; the chosen one sits on a black capsule with white words; the
     /// chosen one tapped again clears
-    private func choice(_ name: String, _ ids: [String], chosen: String?, set: @escaping (String?) -> Void) -> some View {
-        choiceWords(name, ids.map { ($0, Self.word($0)) }, chosen: chosen, set: set)
+    private func choice(_ name: String, _ ids: [String], chosen: String?, blank: Bool = false, set: @escaping (String?) -> Void) -> some View {
+        choiceWords(name, ids.map { ($0, Self.word($0)) }, chosen: chosen, blank: blank, set: set)
     }
-    private func choiceWords(_ name: String, _ items: [(String, String)], chosen: String?, set: @escaping (String?) -> Void) -> some View {
+    /// `blank`: the words as blanks of their length, for a row coming or going (they roll, never fade)
+    private func choiceWords(_ name: String, _ items: [(String, String)], chosen: String?, blank: Bool = false,
+                             set: @escaping (String?) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(name).font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44, alignment: .leading)
-            chips(items, chosen: chosen) { set(chosen == $0 ? nil : $0) }
+            Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
+                .contentTransition(.numericText(value: blank ? 0 : 1))
+                .frame(minHeight: 44, alignment: .leading)
+            chips(items, chosen: chosen, blank: blank) { set(chosen == $0 ? nil : $0) }
                 .padding(.bottom, 8)
         }
     }
     /// 17 pt words, 36 pt capsules with 44 pt touch areas, 8 pt apart; the first word lines up with the names above
-    private func chips(_ items: [(String, String)], chosen: String?, tap: @escaping (String) -> Void) -> some View {
+    private func chips(_ items: [(String, String)], chosen: String?, blank: Bool = false, tap: @escaping (String) -> Void) -> some View {
         FlowLayout(spacing: 4) {
             ForEach(items, id: \.0) { id, word in
-                Text(word)
+                Text(blank ? Caption.blank(word, "\u{2002}") : word)
+                    .contentTransition(.numericText(value: blank ? 0 : 1))
                     .font(.body)
                     .foregroundStyle(chosen == id ? .white : Palette.ink)
                     .padding(.horizontal, 12)
@@ -517,7 +601,8 @@ struct DetailsSheet: View {
     @State private var atFloor = false
     private var stepper: some View {
         HStack(spacing: 4) {
-            circle("minus") { if s.times > 1 { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
+            // the floor is the number of visit rows
+            circle("minus") { if s.times > timesFloor { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
             Text("\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: Double(s.times)))
                 .animation(Motion.quick, value: s.times)
@@ -528,7 +613,7 @@ struct DetailsSheet: View {
                     dragFrom = base
                     let v = base + Int((-g.translation.height / 16).rounded())
                     // no haptic while it runs; one refuse when it hits the floor
-                    if v < 1 { if !atFloor { atFloor = true; Feel.refuse() }; if s.times != 1 { s.times = 1 }; return }
+                    if v < timesFloor { if !atFloor { atFloor = true; Feel.refuse() }; if s.times != timesFloor { s.times = timesFloor }; return }
                     atFloor = false
                     if v != s.times { s.times = v }
                 }.onEnded { _ in
@@ -542,9 +627,11 @@ struct DetailsSheet: View {
         .accessibilityLabel("Times")
         .accessibilityValue("\(s.times)")
         .accessibilityAdjustableAction { dir in
-            if dir == .increment { s.times += 1 } else if s.times > 1 { s.times -= 1 }
+            if dir == .increment { s.times += 1 } else if s.times > timesFloor { s.times -= 1 }
         }
     }
+    /// Times never goes below the visit rows there are
+    private var timesFloor: Int { 1 + (s.d.trips?.count ?? 0) }
     private func circle(_ g: String, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             Image(systemName: g).font(.body.weight(.semibold)).foregroundStyle(.white)
