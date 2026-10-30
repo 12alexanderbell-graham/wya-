@@ -21,7 +21,29 @@ extension MapController {
         townPressed = nil
         placeOpen = i
         frameRegion(i)
-        let cc = w.places[i].id.lowercased()
+        loadTowns(w.places[i].id.lowercased())
+    }
+    /// REGIONS' TOWNS LEVEL (6.6, the level line's last word "towns"): the level that was up kept, drawn as borders
+    /// only (the book's finest level was tried on 31 Oct: France's 35,000 communes' borders buried the towns), and the
+    /// country's towns as Places draws them (their names too); a tap is a town's
+    func showRegionTowns() {
+        guard let sc = regionScene, let w = world else { return }
+        regionTowns = true
+        regionPressed = nil
+        placeOpen = sc.place
+        loadTowns(w.places[sc.place].id.lowercased())
+        needsFrame = true
+    }
+    /// out of the towns level (another level picked, or the region map closed)
+    func leaveRegionTowns() {
+        guard regionTowns else { return }
+        regionTowns = false
+        townPressed = nil
+        if !placesMode { placeOpen = nil }
+        needsFrame = true
+    }
+    /// a place's towns read (from the data server, kept for the session)
+    func loadTowns(_ cc: String) {
         guard townScenes[cc] == nil, !townLoading.contains(cc) else { takeTownMarks(); return }
         townLoading.insert(cc)
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -67,7 +89,7 @@ extension MapController {
 
     /// the town under a screen point (only towns showing now)
     func townHit(at p: CGPoint) -> (cc: String, i: Int)? {
-        guard placesMode else { return nil }
+        guard placesMode || regionTowns else { return nil }
         let m = mapPoint(p)
         let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(12 / k)
         let dots = MapSettingsStore.shared.value.townDots

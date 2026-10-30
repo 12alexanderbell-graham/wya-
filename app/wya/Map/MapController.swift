@@ -186,6 +186,11 @@ final class MapController {
         // THE REGION MAP (6.5): only the open country's regions answer a finger (the faded world does nothing); the
         // region found is kept for the press's darkening and the tap
         if let sc = regionScene {
+            // the towns level: its towns answer, not its regions
+            if regionTowns {
+                townPressed = townHit(at: p)
+                return townPressed == nil ? nil : sc.place
+            }
             regionPressed = regionUnit(at: p)
             return regionPressed == nil ? nil : sc.place
         }
@@ -353,6 +358,8 @@ final class MapController {
     }
     /// the country open in Places (its towns drawn), or the world
     var placeOpen: Int?
+    /// Regions' towns level (6.6): the region map's last word, the country's towns drawn as Places draws them
+    var regionTowns = false
     @ObservationIgnored var townScenes: [String: TownScene] = [:]
     @ObservationIgnored var townLoading: Set<String> = []
     /// the town under the finger (or held by its card)
@@ -405,6 +412,7 @@ final class MapController {
         let id = w.places[i].id.lowercased()
         guard let r = row ?? RegionCatalog.shared.first(id)?.row else { return }
         if regionScene?.place != i {
+            leaveRegionTowns()
             // another country's borders go back into its outline as this one comes (never left drawn)
             if let old = regionScene { regionLines = RegionLines(shared: [], new: [], old: old.segs, start: CACurrentMediaTime(), delay: 0) }
             regionScene = nil; regionPressed = nil; frameRegion(i)
@@ -448,6 +456,7 @@ final class MapController {
     /// out of the country (back to the menu, or out of Regions): the regions go, the world comes back
     func closeRegions() {
         regionJob += 1
+        leaveRegionTowns()
         // the inner borders undraw back into the country's outline (A6.13)
         if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }
         regionScene = nil
