@@ -122,7 +122,12 @@ struct RegionCard: View {
             if !s.stamped {
                 Feel.stamp()
                 Task {
-                    await MarkStore.shared.stamp(key, name: card.name, cc: map.regionScene?.id ?? "", level: 1)
+                    // with every parent above it (A6.12)
+                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
+                        await RegionStamps.stamp(u, in: sc, source: .hand)
+                    } else {
+                        await MarkStore.shared.stamp(key, name: card.name)
+                    }
                     card.stampedHere = true
                 }
             } else if card.stampedHere {
