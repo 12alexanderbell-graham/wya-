@@ -310,7 +310,23 @@ struct ContentView: View {
             closeCard(); return nil
         }
         if head.settingsOpen { head.closeSettings(); return nil }
-        if water.upload { return nil }
+        // THE REVIEW (9.5): a found country's menu is Keep or Drop · Its dates · Show in the list; other places none
+        if water.upload {
+            let u = UploadState.shared
+            guard u.reviewing(i), let row = u.rows.first(where: { $0.place == i }) else { return nil }
+            let keep = UIAction(title: row.dropped ? "Keep" : "Drop", attributes: row.dropped ? [] : .destructive) { _ in
+                _ = u.tap(i)
+            }
+            let dates = UIAction(title: "Its dates", attributes: row.trips.isEmpty ? .disabled : []) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { u.showInList(row.id) }
+            }
+            let list = UIAction(title: "Show in the list") { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if water.stop == .quarter || water.stop == .closed { water.go(.half) }
+                }
+            }
+            return UIMenu(title: row.name, children: [UIMenu(options: .displayInline, children: [keep, dates, list])])
+        }
         let pl = w.places[i]
         let key = PlaceKey.country(pl.id)
         let st = MarkStore.shared.state(key)
