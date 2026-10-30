@@ -31,8 +31,6 @@ struct CosmosView: View {
     @State private var trail = TrailFollower()
     /// how far the moon's ring and label are out (0 in the moon, 1 out), frame by frame inside the timeline
     @State private var heldTween = Tween(0)
-    /// each planet's night as drawn, sweeping to its share (A2.14)
-    @State private var night = NightFollower()
     @State private var moonStop = 0
     @State private var start = Date()
 
@@ -157,13 +155,13 @@ struct CosmosView: View {
         let hidden = form.top > L.top(.quarter) - 20
         let busy = water.held || moonHeld || trail.moving(moonAngle) || heldTween.moving(Date()) || map.flying > 0
             || (form.page > 0.001 && form.page < 0.999) || Date().timeIntervalSince(ringStart) < 1
-            || night.moving(Self.shares(map), Date())
         // full speed while anything moves; at rest the slow things (the spin, the sun's plasma) at 15 a second
         TimelineView(.animation(minimumInterval: busy || fullSince != nil ? 1.0 / 60 : 1.0 / 15, paused: hidden)) { ctx in
             let now = ctx.date
             // a planet's night grows by a stamp's share only once that stamp's star has landed in it (A2.20) or the
-            // system has been seen at 50% since; and it sweeps there (A2.14), starting on the first frame it is seen
-            let shares = night.follow(Self.shares(map, now: now), at: now)
+            // system has been seen at 50% since; it changes in one frame, as it always has (the A2.14 sweep is the
+            // book's proposal, reverted with the other Cosmos changes on 30 Oct and not asked for again)
+            let shares = Self.shares(map, now: now)
             let (th, _) = theta(now)
             let items = (0 ..< 8).map { place($0, th: th, now: now, r: r) }
             let host = items[chosen]
@@ -715,37 +713,6 @@ enum Textures {
         } ?? Image(systemName: "circle")
         cache[name] = img
         return img
-    }
-}
-
-/// A PLANET'S NIGHT SWEEPS TO ITS NEW SHARE (A2.14): after a stamp, a Count or a borders change (and as the world
-/// loads, from fully lit), each planet's share eases to the new one over 0.6 s (frames 0, 47%, 82%, 95%, 100% at the
-/// quarters), so the night's edge crosses the disc like a phase of the Moon. Read and moved from inside the timeline,
-/// which is paused while the system is out of sight, so a change made then sweeps the first time it is seen. A class
-/// so moving it never redraws anything by itself.
-final class NightFollower {
-    private var from = [CGFloat](repeating: 0, count: 8)
-    private var to = [CGFloat](repeating: 0, count: 8)
-    private var start = [Date](repeating: .distantPast, count: 8)
-    static let time = 0.6
-    private static let frames: [CGFloat] = [0, 0.47, 0.82, 0.95, 1]
-    private func value(_ i: Int, _ now: Date) -> CGFloat {
-        let t = min(1, max(0, now.timeIntervalSince(start[i]) / Self.time)) * 4
-        let k = min(3, Int(t))
-        let e = Self.frames[k] + (Self.frames[k + 1] - Self.frames[k]) * CGFloat(t - Double(k))
-        return from[i] + (to[i] - from[i]) * e
-    }
-    func follow(_ target: [CGFloat], at now: Date) -> [CGFloat] {
-        (0 ..< min(8, target.count)).map { i in
-            if abs(target[i] - to[i]) > 1e-6 {
-                from[i] = value(i, now); to[i] = target[i]; start[i] = now
-            }
-            return value(i, now)
-        }
-    }
-    /// a sweep is under way, or one is due (the timeline then runs at full speed until it is done)
-    func moving(_ target: [CGFloat], _ now: Date) -> Bool {
-        (0 ..< min(8, target.count)).contains { abs(target[$0] - to[$0]) > 1e-6 || now.timeIntervalSince(start[$0]) < Self.time + 0.05 }
     }
 }
 
