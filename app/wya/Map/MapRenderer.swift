@@ -23,6 +23,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var townDotPipe: MTLRenderPipelineState?
     /// the lines' coverage, drawn first into `coverage` (max at each pixel), then laid over the map once
     private var coveragePipe: MTLRenderPipelineState?
+    /// a country's own map (Regions, Places): its shape as a mask, and the lines composited through it
+    private var compositeFocusPipe: MTLRenderPipelineState?
+    private var maskPipe: MTLRenderPipelineState?
+    private var focusMask: MTLTexture?
     /// the borders between regions, drawn in and out along their length (A6.9)
     private var regionCoveragePipe: MTLRenderPipelineState?
     private var compositePipe: MTLRenderPipelineState?
@@ -110,6 +114,20 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         diamondPipe = pipe("diamondVertex", "diamondFragment", colour: true, blend: true)
         townDotPipe = pipe("townDotVertex", "townDotFragment", colour: true, blend: true)
         compositePipe = pipe("fullVertex", "lineComposite", colour: true, blend: true)
+        compositeFocusPipe = pipe("fullVertex", "lineCompositeFocus", colour: true, blend: true)
+        if let vf = lib.makeFunction(name: "fanVertex"), let ff = lib.makeFunction(name: "maskFragment") {
+            let p = MTLRenderPipelineDescriptor()
+            p.vertexFunction = vf; p.fragmentFunction = ff
+            p.rasterSampleCount = 1
+            let c = p.colorAttachments[0]!
+            c.pixelFormat = .r8Unorm
+            // one minus what is there: the fans fill even-odd
+            c.isBlendingEnabled = true
+            c.rgbBlendOperation = .add; c.alphaBlendOperation = .add
+            c.sourceRGBBlendFactor = .oneMinusDestinationColor; c.sourceAlphaBlendFactor = .oneMinusDestinationAlpha
+            c.destinationRGBBlendFactor = .zero; c.destinationAlphaBlendFactor = .zero
+            maskPipe = try? device.makeRenderPipelineState(descriptor: p)
+        }
         if let vf = lib.makeFunction(name: "lineVertex"), let ff = lib.makeFunction(name: "lineCoverage") {
             let p = MTLRenderPipelineDescriptor()
             p.vertexFunction = vf; p.fragmentFunction = ff
@@ -438,6 +456,50 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 ce.endEncoding()
             }
         }
+        // THE OPEN COUNTRY'S MASK (Regions, Places): its shape, so the lines outside it can go with the rest of the world
+        let ck0 = controller.drawnContinent ?? controller.focusPlace.map { "place:\($0)" }
+        if let ck0 { awayKey = ck0 }
+        var maskOn = false
+        if let fp = awayKey.flatMap(Self.focus), flatNow(now) > 0.001, let mp = maskPipe {
+            if focusMask == nil || focusMask!.width != tw || focusMask!.height != th {
+                let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm, width: tw, height: th, mipmapped: false)
+                td.usage = [.renderTarget, .shaderRead]
+                td.storageMode = .private
+                focusMask = device.makeTexture(descriptor: td)
+            }
+            let d = MTLRenderPassDescriptor()
+            d.colorAttachments[0].texture = focusMask
+            d.colorAttachments[0].loadAction = .clear
+            d.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            d.colorAttachments[0].storeAction = .store
+            if focusMask != nil, let me = cb.makeRenderCommandEncoder(descriptor: d) {
+                me.setRenderPipelineState(mp)
+                me.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
+                if let tiles {
+                    var m = detail?.morph ?? 1
+                    me.setVertexBytes(&m, length: 4, index: 3)
+                    for t in tiles {
+                        me.setVertexBuffer(t.points, offset: 0, index: 0)
+                        me.setVertexBuffer(t.from, offset: 0, index: 2)
+                        for it in t.items where it.place == fp && it.count > 0 {
+                            me.drawIndexedPrimitives(type: .triangle, indexCount: it.count, indexType: .uint32, indexBuffer: t.fans,
+                                                     indexBufferOffset: it.start * 4)
+                        }
+                    }
+                } else if let pts = points, let fi = fanIndex {
+                    var one: Float = 1
+                    me.setVertexBytes(&one, length: 4, index: 3)
+                    me.setVertexBuffer(pts, offset: 0, index: 0)
+                    me.setVertexBuffer(pts, offset: 0, index: 2)
+                    for u in placeUnits[fp] ?? [] where unitRun[u].count > 0 {
+                        me.drawIndexedPrimitives(type: .triangle, indexCount: unitRun[u].count, indexType: .uint32, indexBuffer: fi,
+                                                 indexBufferOffset: unitRun[u].start * 4)
+                    }
+                }
+                me.endEncoding()
+                maskOn = true
+            }
+        }
         guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
         enc.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
         enc.setFragmentBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
@@ -752,7 +814,17 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         // 5. borders and coasts
         enc.setDepthStencilState(noStencil)
-        if let cp = compositePipe, let cov = coverage {
+        if maskOn, let cp = compositeFocusPipe, let cov = coverage, let mk = focusMask {
+            // a country's own map: the lines outside it go with the rest of the world
+            enc.setRenderPipelineState(cp)
+            enc.setFragmentTexture(cov, index: 0)
+            enc.setFragmentTexture(mk, index: 1)
+            // (index 3: the camera stays bound at 1 for the passes after this one)
+            var aw = flat
+            enc.setFragmentBytes(&aw, length: 4, index: 3)
+            enc.setFragmentBytes(&ls, length: MemoryLayout<LineStyle>.stride, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        } else if let cp = compositePipe, let cov = coverage {
             enc.setRenderPipelineState(cp)
             enc.setFragmentTexture(cov, index: 0)
             enc.setFragmentBytes(&ls, length: MemoryLayout<LineStyle>.stride, index: 0)
@@ -784,7 +856,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 }
                 guard any else { continue }
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
-                relief(5, tint)
+                // a country's own map: the rest keeps its relief in the sea's lightest blue (kind 6); a continent's: the
+                // flat blue (kind 5)
+                relief(focusAway == nil ? 5 : 6, tint)
             }
         }
         enc.setDepthStencilState(noStencil)
