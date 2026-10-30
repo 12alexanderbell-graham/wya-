@@ -91,9 +91,9 @@ struct ContentView: View {
                 if !DetailsState.shared.isOpen { CardState.shared.close(map: map) }
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
-            map.onPlaceTap = { [head, map] i, p in
+            map.onPlaceTap = { [head, map, water] i, p in
                 guard !head.quickStamp, !map.locked else { return }
-                CardState.shared.open(i, at: p, map: map)
+                CardState.shared.open(i, at: p, map: map, water: water)
             }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }

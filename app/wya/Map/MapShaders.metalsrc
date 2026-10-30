@@ -54,6 +54,7 @@ struct Look {
 constant float3 WHITE = float3(1.0);
 constant float3 BLUE = float3(0.4706, 0.6824, 0.9725);       // 78AEF8
 constant float3 BEIGE_DARK = float3(0.7373, 0.7216, 0.7137); // BCB8B6
+constant float3 CREAM = float3(0.9843, 0.9647, 0.9490);      // FBF6F2
 
 inline float3 seaColour(float d) {
     // our blue down to near-white in the shallows, never washed out
@@ -77,6 +78,19 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     }
     int kind = int(look.kind + 0.5);
     float2 dh = rel.sample(s, in.uv).rg;
+    // MAP SETTINGS' STYLE SIMPLE (Part 1.4): no relief; the sea blue 25% on cream, unmarked land cream, your colours
+    // on white as on Detailed (so lime and blue read the same in both styles)
+    if (look.clip2.y > 0.5) {
+        if (kind == 0) return float4(mix(mix(CREAM, BLUE, 0.25), look.tint.rgb, look.tint.a), 1.0);
+        if (kind == 3) return float4(look.tint.rgb, 1.0);
+        float3 flat = kind == 2 ? WHITE * look.tint.rgb : CREAM;
+        if (kind == 5) flat = mix(CREAM * look.tint.rgb, mix(CREAM, BLUE, 0.5), look.tint.a);
+        if (look.pad > 0.0 || look.clip.w > 0.5) {
+            float a = (look.pad > 0.0 ? look.pad : 1.0) * front;
+            return float4(flat * a, a);
+        }
+        return float4(flat, 1.0);
+    }
     if (kind == 0) {
         // outside the real world (past ±180°) the depth deepens into open ocean over 25°, so no ghost of the other side
         float out = max(-in.uv.x, in.uv.x - 1.0);
