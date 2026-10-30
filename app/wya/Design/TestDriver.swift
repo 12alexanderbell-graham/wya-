@@ -232,6 +232,10 @@ final class TestDriver {
                     case "cancel": UploadState.shared.cancel()
                     case "go": UploadState.shared.go()
                     case "drop": if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == (p.count > 2 ? p[2] : "") }) { _ = UploadState.shared.tap(i) }
+                    // upload dates <id> | trip <id> <k> | show <id>: the review row's hold menu and a trip's ×
+                    case "dates": if p.count > 2 { UploadState.shared.toggleDates(p[2]) }
+                    case "trip": if p.count > 3, let k = Int(p[3]) { UploadState.shared.tapTrip(p[2], k) }
+                    case "show": if let m = map, let i = m.world?.placeIndex[p.count > 2 ? p[2] : ""] { UploadState.shared.show(i) }
                     default: break
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)

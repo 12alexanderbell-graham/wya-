@@ -65,6 +65,10 @@ struct StampedList: View {
         let y0 = top + 12
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - y0)
+        // whole rows only (0.7: nothing sits cut off at rest): the height ends between two rows, the soft edge lies
+        // over their empty margins, and a scroll stops on a row boundary
+        let n = max(1, Int((h - 8) / 56))
+        let vh = CGFloat(n) * 56 + 8
         List {
             ForEach(listed) { r in
                 row(r)
@@ -92,10 +96,10 @@ struct StampedList: View {
         // List's own cell layout moved the rows over each other on the way)
         .offset(y: listDrop)
         // the list's bottom soft edge (P3): rows scrolling and leaving go out through it, never cut by a hard line
-        .mask {
+        .mask(alignment: .top) {
             VStack(spacing: 0) {
-                Rectangle()
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
+                Rectangle().frame(height: vh - 16)
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
         }
         // a row going or coming: the rows below move by its height (A4.20; A4.19's own motion does the row itself)
@@ -103,9 +107,12 @@ struct StampedList: View {
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .environment(\.defaultMinListRowHeight, 56)
+        .contentMargins(.top, 0, for: .scrollContent)
+        .contentMargins(.bottom, 8, for: .scrollContent)
+        .scrollTargetBehavior(RowSnap(row: 56))
         .task(id: marks.changes) { info = await MarkStore.shared.listInfo() }
-        .frame(width: L.W - 2 * L.sheetInset, height: h)
-        .position(x: L.W / 2, y: y0 + h / 2)
+        .frame(width: L.W - 2 * L.sheetInset, height: vh)
+        .position(x: L.W / 2, y: y0 + vh / 2)
         .allowsHitTesting(water.stampedList)
         .onAppear {
             startTop = form.top; openedAt = Date()
