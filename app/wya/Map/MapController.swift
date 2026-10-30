@@ -116,6 +116,9 @@ final class MapController {
     @ObservationIgnored var menuHeld: Int? { didSet { if menuHeld != oldValue { needsFrame = true } } }
     /// the menu for a held place at a point (the map's hold, Part 11.3/11.5), nil for none; set by the screen
     @ObservationIgnored var menuFor: ((Int, CGPoint) -> UIMenu?)?
+    /// something a hold only closes (a card, the book, Details, Verify, Map settings): its closer, else nil. The map
+    /// closes it once the finger has rested 0.5 s without moving (one press, one job); no menu then
+    @ObservationIgnored var holdCloses: (() -> (() -> Void)?)?
     @ObservationIgnored var pressed: Int? {
         didSet {
             guard pressed != oldValue else { return }
@@ -132,6 +135,9 @@ final class MapController {
     private(set) var lockedPresses = 0
     func lockedPress() {
         lockedPresses &+= 1
+        #if DEBUG
+        NSLog("wya locked press %d", lockedPresses)
+        #endif
         UIAccessibility.post(notification: .announcement, argument: "The map is locked")
     }
     /// the sun picked: the words show your streak instead of the count, and the fire rises

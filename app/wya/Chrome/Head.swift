@@ -1007,9 +1007,10 @@ struct SearchResults: View {
         let q = Array(fold(query.trimmingCharacters(in: .whitespaces)))
         guard q.count >= 3 else { return nil }
         var best: (Int, Int)?
+        let names = w.searchNames
         for (pi, p) in w.places.enumerated() where !p.junk {
-            for name in [p.n] + [p.official ?? ""] + p.alt where !name.isEmpty {
-                let n = Array(fold(name))
+            for name in names[pi] {
+                let n = Array(name)
                 let d = min(distance(q, n), distance(q, Array(n.prefix(q.count))))
                 if d < (best?.1 ?? Int.max) { best = (pi, d) }
             }
@@ -1023,10 +1024,11 @@ struct SearchResults: View {
         guard let w = map.world else { return [] }
         let q = Array(fold(query.trimmingCharacters(in: .whitespaces)))
         var best: [(Int, Int)] = []
+        let names = w.searchNames
         for (pi, p) in w.places.enumerated() where !p.junk {
             var d = Int.max
-            for name in [p.n] + [p.official ?? ""] + p.alt where !name.isEmpty {
-                let n = Array(fold(name))
+            for name in names[pi] {
+                let n = Array(name)
                 d = min(d, distance(q, n), distance(q, Array(n.prefix(q.count))))
             }
             best.append((pi, d))
@@ -1100,11 +1102,12 @@ struct SearchResults: View {
         // then anything containing it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
         if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
+        let names = w.searchNames
         for (i, p) in w.places.enumerated() where !p.junk && !alias.contains(i) {
-            let others = [p.official ?? ""] + p.alt
-            if fold(p.n).hasPrefix(q) { own.append(i) }
-            else if others.contains(where: { fold($0).hasPrefix(q) }) { other.append(i) }
-            else if ([p.n] + others).contains(where: { fold($0).contains(q) }) { contains.append(i) }
+            let n = names[i]
+            if n[0].hasPrefix(q) { own.append(i) }
+            else if n.dropFirst().contains(where: { $0.hasPrefix(q) }) { other.append(i) }
+            else if n.contains(where: { $0.contains(q) }) { contains.append(i) }
         }
         return Array((alias + own + other + contains).prefix(6))
     }

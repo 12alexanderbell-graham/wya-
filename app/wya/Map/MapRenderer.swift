@@ -647,26 +647,44 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
 
     // MARK: the hold menu (11.3): no lift; the held place darkens in place and Apple's menu opens at the finger
     private var menuTarget: UIView?
+    /// the menu is on screen (between willDisplay and willEnd); until then a press that pans or lifts leaves nothing
+    private var menuUp = false
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
                                 configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
+        // UIKit asks this as the press starts, before it knows the press is a hold: nothing changes here; the place
+        // darkens, other things close and the menu's actions are made only once the menu shows (willDisplay)
         guard let c = controller else { return nil }
         #if DEBUG
         NSLog("wya hold menu asked at %.0f %.0f", location.x, location.y)
         #endif
-        // locked: refused, the padlock presses in (11.7)
-        if c.locked { Feel.refuse(); c.lockedPress(); return nil }
+        // locked: no menu; the lift refuses the hold (finish) (11.7)
+        if c.locked { return nil }
+        // a card, the book, Details, Verify or Map settings up: a hold that rests 0.5 s only closes them
+        if let close = c.holdCloses?() {
+            let t0 = downTime
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, self.downAt != nil, self.downTime == t0 else { return }
+                close()
+            }
+            return nil
+        }
         // the sea, or a place off the continent you're on: no menu and no haptic
         guard let i = c.hit(at: location) else { return nil }
         if let k = c.drawnContinent, let w = c.world, !w.inCont(i, k) { return nil }
-        guard let make = c.menuFor, let menu = make(i, location) else { return nil }
+        // made now only to know whether there is one; its actions change things only when chosen
+        guard let make = c.menuFor, make(i, location) != nil else { return nil }
         menuTarget?.removeFromSuperview()
         let v = UIView(frame: CGRect(x: location.x - 22, y: location.y - 22, width: 44, height: 44))
         v.backgroundColor = .clear
         v.isUserInteractionEnabled = false
         addSubview(v)
         menuTarget = v
-        c.menuHeld = i
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in menu }
+        return UIContextMenuConfiguration(identifier: NSNumber(value: i), previewProvider: nil) { [weak c] _ in
+            // runs as the menu is about to show
+            guard let c, let menu = c.menuFor?(i, location) else { return nil }
+            c.menuHeld = i
+            return menu
+        }
     }
     private func clearTarget() -> UITargetedPreview? {
         guard let v = menuTarget else { return nil }
@@ -685,6 +703,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         #if DEBUG
         NSLog("wya hold menu shown for %d", controller?.menuHeld ?? -1)
         #endif
+        menuUp = true
         lastTapTime = 0
         downAt = nil; last = nil; lastMid = nil; lastMoveTime = 0; velocity = .zero
         controller?.pressed = nil
@@ -692,6 +711,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration,
                                 animator: (any UIContextMenuInteractionAnimating)?) {
         let done = { [weak self] in
+            self?.menuUp = false
             self?.menuTarget?.removeFromSuperview(); self?.menuTarget = nil
             self?.controller?.menuHeld = nil
         }
@@ -788,6 +808,11 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     private func finish(_ touches: Set<UITouch>, _ event: UIEvent?, cancelled: Bool) {
         guard let c = controller else { return }
         let left = active(event).filter { !touches.contains($0) }
+        // a press UIKit readied a menu for, ended before the menu showed: its clear target goes
+        if left.isEmpty, !menuUp, menuTarget != nil {
+            menuTarget?.removeFromSuperview(); menuTarget = nil
+            c.menuHeld = nil
+        }
         if !left.isEmpty {
             // fingers remain: they carry on from where they are
             reset(left)
@@ -833,6 +858,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                     }
                 }
             }
+        } else if !cancelled, c.locked, downAt != nil {
+            // LOCKED, a hold that didn't move (11.7: "Refuses holds"): refused once, the padlock pressing in
+            Feel.refuse(); c.lockedPress()
         }
         let recent = t.map { $0.timestamp - lastMoveTime < 0.08 } ?? false
         c.release(velocity: (!pinched && !cancelled && recent && downAt == nil) ? velocity : nil)

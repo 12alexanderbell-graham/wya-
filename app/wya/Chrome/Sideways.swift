@@ -92,15 +92,23 @@ final class Sideways {
         withAnimation(Motion.quick) { marks = [false, false, false, false] }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [self] in
             guard me == job else { return }
-            landscape = false; square = true
-            withAnimation(Motion.settle) { turned = false } completion: { [self] in
+            let done = { [self] in
                 guard me == job else { return }
                 square = false
                 on = false
                 Feel.land(speed: 0)
-                // zoomed out further sideways than portrait allows (landscape's world is shorter): back to the world
-                if let m = map, m.k < m.kMin { m.goHome() }
+                // zoomed out further sideways than portrait allows (landscape's world is shorter): back to the world,
+                // read once the map has its portrait size again
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+                    guard me == job, let m = map, m.k < m.kMin else { return }
+                    m.goHome()
+                }
             }
+            landscape = false
+            // left before the turn began (a link right after entering): nothing to turn back, so it ends now
+            guard turned else { done(); return }
+            square = true
+            withAnimation(Motion.settle) { turned = false } completion: { done() }
             // the chrome comes back as the turn passes half way
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.21) { [self] in
                 guard me == job else { return }
