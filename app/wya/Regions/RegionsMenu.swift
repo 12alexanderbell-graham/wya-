@@ -185,24 +185,33 @@ final class RegionsMenuModel {
     static func word(_ w: String) -> String { w.unicodeScalars.allSatisfy(\.isASCII) ? w.lowercased() : w }
 
     /// your number per country at its first level: the region stamps (`r:` keys) counted against each country's
-    /// bundled units; with no region stamps nothing is read
+    /// bundled units; with no region stamps nothing is read. Each file's region ids are read once, off the main thread,
+    /// and only the ids are kept (the shapes are dropped), so a stamp later counts without reading anything again.
     func recount(map: MapController) async {
         build(map: map)
         let stamped = Set(MarkStore.shared.marks.compactMap { k, s in k.kind == .region && s.stamped ? k.id : nil })
         let places = rows.map { ($0.flag, $0.row) }
-        let counts: [String: Int] = stamped.isEmpty ? [:] : await Task.detached(priority: .utility) {
-            var out: [String: Int] = [:]
+        let known = idsByPlace
+        let counted: (counts: [String: Int], ids: [String: Set<String>]) = stamped.isEmpty ? ([:], [:]) : await Task.detached(priority: .utility) {
+            var out: [String: Int] = [:], ids = known
             for (id, row) in places {
-                guard let f = RegionCatalog.shared.file(id, row: row) else { continue }
-                let n = f.ids.reduce(0) { $0 + (stamped.contains($1) ? 1 : 0) }
+                if ids[id] == nil {
+                    guard let url = Bundle.main.url(forResource: "\(id)-\(row)", withExtension: "wyar"),
+                          let d = try? Data(contentsOf: url), let f = RegionFile(data: d) else { continue }
+                    ids[id] = Set(f.ids)
+                }
+                let n = ids[id]?.intersection(stamped).count ?? 0
                 if n > 0 { out[id] = n }
             }
-            return out
+            return (out, ids)
         }.value
+        if !counted.ids.isEmpty { idsByPlace = counted.ids }
         var next = rows
-        for i in next.indices { next[i].count = counts[next[i].flag] ?? 0 }
+        for i in next.indices { next[i].count = counted.counts[next[i].flag] ?? 0 }
         if next != rows { rows = next }
     }
+    /// each country's first-level region ids, once read
+    @ObservationIgnored private var idsByPlace: [String: Set<String>] = [:]
 
     /// the search key over the menu: the first country the list still shows (a typo: the nearest one in the menu)
     func pickFirst(query: String, map: MapController) {
