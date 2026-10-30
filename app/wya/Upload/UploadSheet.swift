@@ -12,8 +12,12 @@ import UniformTypeIdentifiers
 /// from and the caption's words roll back in.
 ///
 /// The icons are bare rings until their glyphs are picked (as the plus's tools); the words are the book's.
-/// Not here yet (logged): finding on the map (9.4) and the review (9.5): a read's samples are counted, logged and
-/// kept in `samples`; videos picked with Pick are not read (their place needs the file's own metadata).
+/// FINDING (9.4) follows in the same water: the pair goes, the caption comes back reading World / 0 / found with the
+/// working mark at its left and a × at its right, and each found country darkens (in one frame) as the number rolls
+/// up, at most 10 times a second; × cancels (the finds clear in one frame, the caption back to your count). With
+/// nothing found the words say so in the number's place, then the pair comes back.
+/// Not here yet (logged): the review (9.5; finding ends at its go circle), the mode wheel turning to Countries, the
+/// file's progress line, Add more, videos picked with Pick (their place needs the file's own metadata).
 @MainActor
 @Observable
 final class UploadState {
@@ -33,6 +37,19 @@ final class UploadState {
     /// the last read's samples and where they came from (finding, 9.4, starts from these)
     private(set) var samples: [HistoryReader.Sample] = []
     private(set) var source: MarkSource = .photos
+    /// choosing (the pair), finding (the number rolling up), review (the go circle), words (A9.8)
+    enum Phase { case choosing, finding, review, words }
+    private(set) var phase: Phase = .choosing
+    /// finding's row: the caption's words, the working mark, the × (or the go circle at the review)
+    private(set) var captionIn = false
+    private(set) var markIn = false
+    private(set) var xIn = false
+    private(set) var goIn = false
+    /// places found so far (the number), and A9.8's words in its place
+    private(set) var count = 0
+    private(set) var message: String?
+    private(set) var finds: [Finds.Find] = []
+    @ObservationIgnored weak var map: MapController?
     @ObservationIgnored private var job = 0
     @ObservationIgnored private var moving = false
 
@@ -43,9 +60,10 @@ final class UploadState {
     static let spoken = [["Photos", "Location"], ["Pick photos", "All photos"], ["Location history file", "Where I am now"]]
 
     /// A9.1 and A9.2: the water to 25% (it stays if it is there), the caption's words out, then the pair in
-    func open(water w: Water) {
+    func open(water w: Water, map m: MapController) {
         guard !w.upload else { return }
-        water = w
+        water = w; map = m
+        phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
         step = 0; note = [:]; locating = false
         shapes = [false, false]; words = false
         let at25 = w.stop == .quarter
@@ -84,7 +102,7 @@ final class UploadState {
 
     /// A9.3: a tap on step 1's choices goes to its step 2
     func choose(_ side: Int) {
-        guard !moving, words else { return }
+        guard phase == .choosing, !moving, words else { return }
         Feel.tap()
         switch step {
         case 0: go(to: side == 0 ? 1 : 2, lead: side)
@@ -94,7 +112,7 @@ final class UploadState {
     }
     /// A9.3 back: step 2 to step 1 (a swipe right on the water)
     func back() {
-        guard step != 0, !moving else { return }
+        guard phase == .choosing, step != 0, !moving else { return }
         Feel.tick()
         go(to: 0, lead: nil)
     }
@@ -113,9 +131,11 @@ final class UploadState {
         }
     }
 
-    /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in
+    /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in (while
+    /// finding, neither closes: finding holds the 25% and owns the map's presses; × cancels)
     func close() {
-        guard let w = water, w.upload else { return }
+        guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
+        if phase == .words { endWords(close: true); return }
         job += 1
         let me = job
         shrink()
@@ -192,10 +212,129 @@ final class UploadState {
         if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
     }
 
-    /// what was read: kept for finding (9.4, next)
+    /// what was read: finding starts (A9.4): the pair out, then the caption (World / 0 / found), the mark and the ×
     private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int) {
         samples = s; source = src
         NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
+        guard let w = water, w.upload, phase == .choosing else { return }
+        job += 1
+        let me = job
+        moving = true
+        shrink()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+            guard me == job else { return }
+            phase = .finding
+            count = 0
+            withAnimation(Motion.quick) { captionIn = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
+                guard me == job else { return }
+                withAnimation(Motion.quick) { markIn = true; xIn = true }
+                moving = false
+                find(me)
+            }
+        }
+    }
+
+    #if DEBUG
+    /// the test driver's read: a few dated points in eight countries, as if a history file had given them (none in
+    /// a place you have stamped twice, one at sea), or none at all
+    func testRead(empty: Bool = false) {
+        let pts: [(Double, Double, String)] = [(38.72, -9.14, "2024-08-03T10:00:00Z"), (38.72, -9.14, "2024-08-05T10:00:00Z"),
+            (35.68, 139.69, "2024-04-01T03:00:00Z"), (48.86, 2.35, "2023-06-10T12:00:00Z"), (-33.87, 151.21, "2022-12-24T01:00:00Z"),
+            (64.14, -21.94, "2021-07-01T12:00:00Z"), (-1.29, 36.82, "2020-02-02T09:00:00Z"), (19.43, -99.13, "2019-11-01T18:00:00Z"),
+            (-13.16, -72.54, "2018-05-05T15:00:00Z"), (30.0, -40.0, "2018-05-06T15:00:00Z")]
+        let s = empty ? [] : pts.compactMap { p in HistoryReader.date(p.2).map { HistoryReader.Sample(lat: p.0, lon: p.1, at: $0, offset: 0, end: nil, asset: nil) } }
+        found(s, from: .history, read: s.count)
+    }
+    #endif
+
+    /// the places, from the samples (in the borders view you chose: the map's own shapes), then each darkens as the
+    /// number rolls up: at most 10 steps a second, all within about 2 s
+    private func find(_ me: Int) {
+        guard let m = map, let world = m.world else { return }
+        let placeAt: (Double, Double) -> String? = { lat, lon in
+            world.place(at: EqualEarth.project(lon: lon, lat: lat)).map { world.places[$0].id }
+        }
+        let rows = HistoryReader.presence(samples, placeAt: placeAt)
+        let all = Finds.finds(rows, source: source)
+        finds = all
+        let index = Dictionary(world.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
+        let order = all.compactMap { index[$0.place] }
+        NSLog("wya upload found %d places from %d rows", order.count, rows.count)
+        if order.isEmpty { say("No places found"); return }
+        let per = max(1, Int((Double(order.count) / 20).rounded(.up)))
+        func step(_ k: Int) {
+            guard me == job, phase == .finding else { return }
+            let upto = min(order.count, k + per)
+            m.found.formUnion(order[k ..< upto])
+            withAnimation(Motion.quick) { count = upto }
+            if upto < order.count {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { step(upto) }
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in ready(me) }
+            }
+        }
+        step(0)
+    }
+
+    /// A9.7: the mark goes first; then the go circle grows from the ×'s centre behind it, the × giving way to the
+    /// stamp's place (the review, 9.5, starts here)
+    private func ready(_ me: Int) {
+        guard me == job, phase == .finding else { return }
+        withAnimation(Motion.quick) { markIn = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [self] in
+            guard me == job else { return }
+            phase = .review
+            withAnimation(Motion.quick) { goIn = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { Feel.land(speed: 0) }
+        }
+    }
+
+    /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls back
+    /// to your count and the tail to "of 263" (the sheet closes into the caption); the water stays at 25%
+    func cancel() {
+        guard let w = water, phase == .finding || phase == .review else { return }
+        Feel.tap()
+        job += 1
+        map?.found = []
+        withAnimation(Motion.quick) { markIn = false; xIn = false; goIn = false; captionIn = false }
+        let me = job
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            guard me == job else { return }
+            phase = .choosing; step = 0; count = 0
+            w.uploadFrom = .quarter
+            w.closeUpload()
+        }
+    }
+
+    /// A9.8: the mark goes, the number and tail roll out, the words roll in in the number's place; 1.5 s later step
+    /// 2's pair comes back
+    private func say(_ words: String) {
+        Feel.refuse()
+        let me = job
+        phase = .words
+        // the number and its lines roll out (and the mark goes) before the words come into their place
+        withAnimation(.smooth(duration: 0.15)) { markIn = false; captionIn = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+            guard me == job else { return }
+            message = words
+            withAnimation(Motion.quick) { captionIn = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38 + 1.5) { [self] in
+                guard me == job, phase == .words else { return }
+                endWords(close: false)
+            }
+        }
+    }
+    private func endWords(close: Bool) {
+        job += 1
+        let me = job
+        withAnimation(.smooth(duration: 0.15)) { captionIn = false; xIn = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+            guard me == job else { return }
+            message = nil
+            phase = .choosing
+            if close { water?.closeUpload(); step = 0 } else { grow(after: 0, job: me) }
+        }
     }
 }
 
@@ -212,9 +351,13 @@ struct UploadSheet: View {
         let w = (L.W - 2 * L.sheetInset - 2 * 16 - 12) / 2
         let top = form.top + 20
         ZStack(alignment: .topLeading) {
-            ForEach(0 ..< 2, id: \.self) { side in
-                choice(side, width: w)
-                    .position(x: L.sheetInset + 16 + w / 2 + CGFloat(side) * (w + 12), y: top + 48)
+            if u.phase == .choosing {
+                ForEach(0 ..< 2, id: \.self) { side in
+                    choice(side, width: w)
+                        .position(x: L.sheetInset + 16 + w / 2 + CGFloat(side) * (w + 12), y: top + 48)
+                }
+            } else {
+                finding(L)
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
@@ -239,6 +382,50 @@ struct UploadSheet: View {
             if case .success(let urls) = r { u.imported(urls) }
         }
         .accessibilityAction(named: "Back") { u.back() }
+    }
+
+    /// FINDING'S ROW (9.4): the caption in its own place reading World / n / found (or A9.8's words in the number's
+    /// place); the working mark 36 pt in from the water's left on the number's line; the × 44 pt in from its right
+    /// (at the review the lime go circle, 44 pt, grows from the ×'s centre behind it)
+    @ViewBuilder
+    private func finding(_ L: Layout) -> some View {
+        let y = max(L.headBottom + 12 + 52, form.top + 72)
+        let name = u.map?.continent ?? "World"
+        if let words = u.message {
+            Text(u.captionIn ? words : Caption.blank(words, "\u{2002}"))
+                .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center).lineLimit(2)
+                .contentTransition(.numericText(value: u.captionIn ? 1 : 0))
+                .frame(width: L.W - 2 * L.sheetInset - 2 * 72)
+                .position(x: L.W / 2, y: y)
+                .transition(.identity)
+        } else {
+            Caption(name: name, count: u.count, tail: "found", night: false, visible: u.captionIn)
+                .position(x: L.W / 2, y: y)
+                .transition(.identity)
+        }
+        WorkingMark(size: 20, running: u.markIn)
+            .scaleEffect(u.markIn ? 1 : 0)
+            .position(x: L.sheetInset + 36, y: y)
+        ZStack {
+            Circle().fill(Palette.lime).frame(width: 44, height: 44).scaleEffect(u.goIn ? 1 : 0)
+            // the stamp's glyph is a bare ring until its icon is picked (as every unpicked icon); the × until the review
+            if u.goIn {
+                ToolRing(width: 2).fill(Palette.ink, style: FillStyle(eoFill: true)).frame(width: 22, height: 22)
+                    .transition(.scale)
+            } else {
+                Image(systemName: "xmark").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink)
+                    .scaleEffect(u.xIn ? 1 : 0)
+                    .transition(.scale)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { if u.phase == .finding || u.phase == .review { u.cancel() } }
+        .position(x: L.W - L.sheetInset - 44, y: y)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(u.phase == .review ? "Stamp them" : "Stop")
+        .accessibilityAddTraits(.isButton)
     }
 
     private func choice(_ side: Int, width w: CGFloat) -> some View {

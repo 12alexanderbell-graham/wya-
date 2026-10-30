@@ -462,6 +462,15 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         if controller.showsStamped { group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV) }
         if controller.showsWished { group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV) }
+        // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade); a
+        // stamped place is never a find (its row reads "+n trips" instead)
+        if !controller.found.isEmpty {
+            let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
+            let f = controller.found.subtracting(controller.stamped).filter { $0 != pressed }
+            let blue = controller.showsWished ? f.intersection(controller.wished) : []
+            group(f.subtracting(blue).sorted(), kind: 2, tint: Palette.whiteV * shade)
+            group(blue.sorted(), kind: 2, tint: Palette.blueV * shade)
+        }
         // the press darkens the relief under your finger, keeping the country's own colour (A1.1): the whole place at
         // once
         func mark(_ i: Int) -> Bool {
@@ -537,7 +546,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     : controller.wished.contains(i) && controller.showsWished ? Palette.blueV
                     // unmarked: a territory pure white, everything else cream
                     : pl.k == "territory" ? Palette.whiteV : Palette.creamV
-                if i == pressed { c *= SIMD4<Float>(0.80, 0.79, 0.77, 1) }
+                if i == pressed || (controller.found.contains(i) && !controller.stamped.contains(i)) { c *= SIMD4<Float>(0.80, 0.79, 0.77, 1) }
                 // away from the continent you're on, the diamond shrinks into its own point at its own colour (A1.15:
                 // 0.72 of its size at a quarter of the blend, gone at its end, its place drawn under it), and grows back
                 // from it coming out; never blended into the blue
