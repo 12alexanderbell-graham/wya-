@@ -223,6 +223,30 @@ struct SheetContent: View {
                     .accessibilityLabel("Stamped list")
                     .accessibilityAddTraits(.isButton)
             }
+            // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, a continent by name; on a
+            // continent, its stamped list or back to the world. The ring follows (the front planet is the map's)
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList {
+                let here = map.continent
+                Color.clear
+                    .frame(width: 180, height: 26)
+                    .contentShape(Rectangle())
+                    .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
+                    .contextMenu {
+                        if here != nil {
+                            Button("Its stamped list") { if count > 0 { water.openList() } else { Feel.refuse() } }
+                            Button("The world") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.goHome() } }
+                        } else {
+                            ForEach(["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"], id: \.self) { k in
+                                Button(k) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.show(continent: k) } }
+                            }
+                        }
+                    }
+                    .position(x: L.W / 2, y: captionY - 44)
+                    .onTapGesture {
+                        if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() } else { Feel.refuse() }
+                    }
+                    .accessibilityHidden(true)
+            }
         }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
