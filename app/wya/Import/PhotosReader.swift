@@ -1,13 +1,15 @@
 import Foundation
 import Photos
 import ImageIO
+import AVFoundation
 
 /// THE PHOTOS READ (Part 9.7: "Photos", steps 1 and 8; Part 10 Step 7's reading core, no screens): every image and
 /// video's place and time, read in batches of 1,000 inside an autorelease pool, yielding between batches; only
 /// `location` and `creationDate` are read (no picture is decoded). Each becomes a history sample carrying its asset id,
 /// so the rows it makes can keep their photo links (Verify's "your photos", Books).
 ///
-/// Not here yet (logged): Pick without Photos access (each file's own metadata), the next scan reading only what
+/// Pick without Photos access reads each file's own metadata (`sample(imageData:)`, `sample(movie:)`).
+/// Not here yet (logged): the next scan reading only what
 /// changed (`fetchPersistentChanges(since:)`), the UI's 10-a-second updates (no screen yet).
 nonisolated enum PhotosReader {
     struct Link: Equatable, Sendable {
@@ -75,6 +77,36 @@ nonisolated enum PhotosReader {
         // makes is the day on the camera's clock (the day where it was taken, Part 9.9); its instant is off by the
         // zone, which nothing here uses
         return (lat, lon, local, off ?? 0)
+    }
+
+    /// A PICKED VIDEO'S OWN PLACE AND TIME: the QuickTime location (ISO 6709, "+37.5665+126.9780+012.000/") and its
+    /// creation date (which carries its offset when the camera wrote one); nil without either
+    static func sample(movie url: URL) async -> (lat: Double, lon: Double, at: Date, offset: Int?)? {
+        let a = AVURLAsset(url: url)
+        guard let items = try? await a.load(.metadata) else { return nil }
+        var loc: String?, made: String?
+        for it in items {
+            if it.identifier == .quickTimeMetadataLocationISO6709 || it.identifier == .commonIdentifierLocation {
+                if loc == nil { loc = try? await it.load(.stringValue) }
+            }
+            if it.identifier == .quickTimeMetadataCreationDate || it.identifier == .commonIdentifierCreationDate {
+                if made == nil { made = try? await it.load(.stringValue) }
+            }
+        }
+        guard let loc, let made, let (lat, lon) = iso6709(loc), let at = HistoryReader.date(made) else { return nil }
+        return (lat, lon, at, HistoryReader.offsetOf(made) ?? 0)
+    }
+    /// "+37.5665+126.9780+012.000/" to (37.5665, 126.978)
+    static func iso6709(_ s: String) -> (Double, Double)? {
+        var nums: [Double] = []
+        var cur = ""
+        for ch in s {
+            if (ch == "+" || ch == "-" || ch == "/") && !cur.isEmpty { if let v = Double(cur) { nums.append(v) }; cur = "" }
+            if ch != "/" { cur.append(ch) }
+        }
+        if !cur.isEmpty, let v = Double(cur) { nums.append(v) }
+        guard nums.count >= 2, abs(nums[0]) <= 90, abs(nums[1]) <= 180, !(nums[0] == 0 && nums[1] == 0) else { return nil }
+        return (nums[0], nums[1])
     }
 
     /// each photo that made a presence row, as a link (asset, the day where it was taken, its place)

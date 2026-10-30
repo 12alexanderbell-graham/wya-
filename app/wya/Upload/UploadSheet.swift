@@ -25,7 +25,7 @@ import UniformTypeIdentifiers
 /// beside the store (`waiting-finds.json`; the book's Proposal records wait for a store version); a tap on one, or
 /// the Upload tool, opens the review again (the caption rolls to "found", the go circle grows at its place).
 /// Not here yet (logged): a row's swipe and hold, the mode
-/// wheel turning to Countries, the file's progress line, Add more, the second round, videos picked with Pick.
+/// wheel turning to Countries, the file's progress line, Add more, the second round.
 @MainActor
 @Observable
 final class UploadState {
@@ -166,13 +166,21 @@ final class UploadState {
 
     // MARK: the four sources
 
-    /// Pick: Apple's picker, no permission; when it closes with photos, their own place and time are read
+    /// Pick: Apple's picker, no permission; when it closes with photos or videos, their own place and time are read
     private func pick() { picking = true }
     func picked(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         Task {
             var out: [HistoryReader.Sample] = []
             for it in items {
+                // a video: a copy of its file read for its place and time, then the copy goes
+                if it.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+                    guard let m = try? await it.loadTransferable(type: PickedMovie.self) else { continue }
+                    let s = await PhotosReader.sample(movie: m.url)
+                    try? FileManager.default.removeItem(at: m.url)
+                    if let s { out.append(HistoryReader.Sample(lat: s.lat, lon: s.lon, at: s.at, offset: s.offset, end: nil, asset: it.itemIdentifier)) }
+                    continue
+                }
                 guard let d = try? await it.loadTransferable(type: Data.self), let s = PhotosReader.sample(imageData: d) else { continue }
                 out.append(HistoryReader.Sample(lat: s.lat, lon: s.lon, at: s.at, offset: s.offset, end: nil, asset: it.itemIdentifier))
             }
@@ -307,6 +315,7 @@ final class UploadState {
     /// stamp's place (the review, 9.5, starts here)
     private func ready(_ me: Int) {
         guard me == job, phase == .finding else { return }
+        UIAccessibility.post(notification: .announcement, argument: "Done, \(count) \(count == 1 ? "place" : "places") found")
         withAnimation(Motion.quick) { markIn = false; if stampAtOnce { xIn = false } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [self] in
             guard me == job else { return }
@@ -513,6 +522,7 @@ final class UploadState {
     /// 2's pair comes back
     private func say(_ words: String) {
         Feel.refuse()
+        UIAccessibility.post(notification: .announcement, argument: words)
         let me = job
         phase = .words
         // the number and its lines roll out (and the mark goes) before the words come into their place
@@ -576,7 +586,7 @@ struct UploadSheet: View {
                abs(g.translation.width) > abs(g.translation.height) { u.back() }
         })
         .photosPicker(isPresented: $u.picking, selection: $u.picked, maxSelectionCount: 0, selectionBehavior: .ordered,
-                      matching: .any(of: [.images, .livePhotos]), photoLibrary: .shared())
+                      matching: .any(of: [.images, .livePhotos, .videos]), photoLibrary: .shared())
         .onChange(of: u.picked) { _, items in
             u.picked(items)
             if !items.isEmpty { u.picked = [] }
@@ -716,6 +726,18 @@ struct UploadSheet: View {
         .accessibilityLabel(u.note[u.step * 2 + side] ?? UploadState.spoken[u.step][side])
         .accessibilityAddTraits(.isButton)
         .accessibilityHidden(!u.words)
+    }
+}
+
+/// A PICKED VIDEO, copied out of Photos into the app's temporary folder for reading (the copy is removed after)
+struct PickedMovie: Transferable {
+    let url: URL
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { m in SentTransferredFile(m.url) } importing: { f in
+            let to = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "." + f.file.pathExtension)
+            try FileManager.default.copyItem(at: f.file, to: to)
+            return PickedMovie(url: to)
+        }
     }
 }
 

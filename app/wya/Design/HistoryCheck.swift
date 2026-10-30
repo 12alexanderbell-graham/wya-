@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import Photos
+import ImageIO
 
 /// THE HISTORY READER'S CHECKS (Part 9.12's fixtures for shapes A to D, the time model's offsets; Part 10 Step 7), run
 /// inside the app by the test driver's `historycheck`, against the map's own world shapes. Results into
@@ -161,6 +162,27 @@ enum HistoryCheck {
         let lived = ["2024-01-05", "2024-02-05", "2024-03-05", "2024-04-05", "2024-06-05"].map { row($0, "ch") } + [row("2024-05-10", "it")]
         let fl = Finds.finds(lived, source: .history)
         check("home kept out of the trips", spans(fl) == "it: 2024-05-10..2024-05-10; ch home: ", spans(fl))
+
+        // Pick's own readers: a JPEG written here with GPS south and west and a +05:45 offset; a video's ISO 6709 place
+        let px = CGContext(data: nil, width: 4, height: 4, bitsPerComponent: 8, bytesPerRow: 16, space: CGColorSpaceCreateDeviceRGB(),
+                           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!.makeImage()!
+        let jpg = NSMutableData()
+        if let dst = CGImageDestinationCreateWithData(jpg, "public.jpeg" as CFString, 1, nil) {
+            let props: [CFString: Any] = [
+                kCGImagePropertyGPSDictionary: [kCGImagePropertyGPSLatitude: 13.16, kCGImagePropertyGPSLatitudeRef: "S",
+                                                kCGImagePropertyGPSLongitude: 72.54, kCGImagePropertyGPSLongitudeRef: "W"],
+                kCGImagePropertyExifDictionary: [kCGImagePropertyExifDateTimeOriginal: "2018:05:05 23:30:00",
+                                                 kCGImagePropertyExifOffsetTimeOriginal: "+05:45"]]
+            CGImageDestinationAddImage(dst, px, props as CFDictionary)
+            CGImageDestinationFinalize(dst)
+        }
+        let ps = PhotosReader.sample(imageData: jpg as Data)
+        let want = HistoryReader.date("2018-05-05T23:30:00+05:45")
+        check("Pick: a photo's own GPS and time", ps.map { abs($0.lat + 13.16) < 1e-6 && abs($0.lon + 72.54) < 1e-6 && $0.at == want && $0.offset == 345 } ?? false,
+              ps.map { "\($0.lat), \($0.lon), \($0.at), offset \($0.offset ?? -1)" } ?? "nothing read")
+        let v = PhotosReader.iso6709("+37.5665+126.9780+012.000/"), v2 = PhotosReader.iso6709("-33.8688+151.2093/")
+        check("Pick: a video's ISO 6709 place", v.map { $0 == (37.5665, 126.978) } == true && v2.map { $0 == (-33.8688, 151.2093) } == true,
+              "\(String(describing: v)) \(String(describing: v2))")
 
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
