@@ -364,6 +364,23 @@ struct HeadView: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
+            // THE SEARCH CIRCLE'S HOLD MENU (11.5): your last searches (one flies there, as a result does) · Clear
+            // recent; closed only (open, the circle is the field's glyph)
+            .contextMenu {
+                if !head.searching, let w = map.world {
+                    let recent = SearchResults.recent.compactMap { w.placeIndex[$0] }.prefix(5)
+                    Section {
+                        ForEach(Array(recent), id: \.self) { i in
+                            Button(w.places[i].n) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pick(i) } }
+                        }
+                    }
+                    Button("Clear recent", role: .destructive) {
+                        MapSettingsStore.shared.change { $0.recent = [] }
+                        UserDefaults.standard.removeObject(forKey: "wya.search.recent")
+                    }
+                        .disabled(recent.isEmpty)
+                }
+            }
             .accessibilityLabel("Search")
         }
     }
