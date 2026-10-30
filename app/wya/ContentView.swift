@@ -139,6 +139,8 @@ struct ContentView: View {
             UploadState.shared.restoreWaiting(map: map)
             // the time zones' shapes read once in the background, so the first upload's days don't wait for them (D13)
             Task.detached(priority: .utility) { _ = ZoneShapes.shared.zone(lat: 0, lon: 0) }
+            // the flags of the places you have stamped or wished, drawn ahead for the rows that show them (D14)
+            if let w = map.world { Flags.prewarm(map.stamped.union(map.wished).map { w.places[$0].id.lowercased() }) }
             // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
             if let url = DeepLink.waiting {
                 DeepLink.waiting = nil
