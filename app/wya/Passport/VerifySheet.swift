@@ -127,7 +127,7 @@ struct VerifySheet: View {
     private var removeRow: some View {
         Text("Remove the stamp")
             .font(.body)
-            .foregroundStyle(Color(hex: 0xd94f3d))
+            .foregroundStyle(Palette.red)
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {

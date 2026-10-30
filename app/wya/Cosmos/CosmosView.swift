@@ -603,62 +603,6 @@ struct Tween: Equatable {
     }
 }
 
-/// The night that the water darkens into past half: the galaxy picture (the cosmos-126 colours) and a star for every
-/// place you haven't stamped, in three layers drifting slowly, some twinkling. It never fades in: it rises up through
-/// the water from under the bottom edge, a curved tide whose top catches the water's own top edge just as the page
-/// fills the screen; going back it sinks the same way.
-struct NightSky: View {
-    let page: CGFloat
-    var stars: Int = 0
-    /// the water's top edge now (0 at full)
-    var edge: CGFloat = 0
-    @State private var start = Date()
-
-    var body: some View {
-        GeometryReader { geo in
-            if page > 0.001 {
-                let H = geo.size.height
-                let s = Flow.smooth(0, 1, page)
-                // the curve's middle starts just under the screen and ends far enough over the edge that its sides
-                // (lower by the curve's depth) are past the edge too
-                let tide = Flow.lerp(H + 8, edge - NightTide.depth - 8, s)
-                ZStack {
-                    Color(red: 0.075, green: 0.094, blue: 0.165)
-                    Textures.image("space-night")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                    TimelineView(.animation(minimumInterval: 1.0 / 20)) { ctx in
-                        Stars(count: stars, time: ctx.date.timeIntervalSince(start))
-                    }
-                }
-                .clipShape(NightTide(top: tide))
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-
-/// The night's top: a curve, the middle a little ahead of the sides like the water's own top, never a straight line.
-nonisolated struct NightTide: Shape {
-    static let depth: CGFloat = 56
-    var top: CGFloat
-    var animatableData: CGFloat { get { top } set { top = newValue } }
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        let side = top + Self.depth
-        p.move(to: CGPoint(x: rect.minX - 1, y: side))
-        p.addCurve(to: CGPoint(x: rect.maxX + 1, y: side),
-                   control1: CGPoint(x: rect.minX + rect.width * 0.25, y: top - Self.depth * 0.33),
-                   control2: CGPoint(x: rect.maxX - rect.width * 0.25, y: top - Self.depth * 0.33))
-        p.addLine(to: CGPoint(x: rect.maxX + 1, y: rect.maxY + 400))
-        p.addLine(to: CGPoint(x: rect.minX - 1, y: rect.maxY + 400))
-        p.closeSubpath()
-        return p
-    }
-}
-
 /// The stars: one per place left, placed once (the same sky every time), drifting left in three layers.
 struct Stars: View {
     let count: Int

@@ -105,7 +105,7 @@ final class FieldView: UIView {
             metalLayer.isOpaque = true
             // the drawable is a third of the view's points, stretched smoothly: v's canvas was 0.34 of its size
             metalLayer.magnificationFilter = .linear
-            backgroundColor = UIColor(red: 0.984, green: 0.965, blue: 0.949, alpha: 1)
+            backgroundColor = UIColor(Palette.cream)
         } else {
             want = cs
         }
