@@ -129,7 +129,9 @@ struct RegionCard: View {
                 Task {
                     // with every parent above it (A6.12)
                     if key.kind == .town {
-                        await TownStamps.stamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" }), source: .hand)
+                        let cc = String(key.id.prefix { $0 != "/" })
+                        let at = map.townScenes[cc].flatMap { s in s.index[key.id].map { s.at[$0] } }
+                        await TownStamps.stamp(key, name: card.name, cc: cc, source: .hand, place: card.place, at: at)
                     } else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
                         await RegionStamps.stamp(u, in: sc, source: .hand)
                     } else {
