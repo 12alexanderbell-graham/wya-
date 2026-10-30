@@ -18,8 +18,9 @@ import Foundation
 ///   start: fixed).
 /// A visit (B, C, D) covers every day from its start to its end; points are single instants.
 ///
-/// Not here yet (logged): the streaming scanner for files over 50 MB (the book's: only coordinate and time keys,
-/// memory-mapped; today a big file is read whole), the level-1 region (step 3's second half). Photos: PhotosReader.
+/// A Records.json over 50 MB is scanned byte by byte from a memory-mapped file (only each location's coordinate,
+/// accuracy and time keys), never parsed whole. Not here yet (logged): the same scanner for C and D (their files are
+/// smaller; today read whole), the level-1 region (step 3's second half). Photos: PhotosReader.
 nonisolated enum HistoryReader {
     enum Shape: String, Sendable { case records = "A", semantic = "B", android = "C", iphone = "D" }
 
@@ -44,6 +45,8 @@ nonisolated enum HistoryReader {
 
     /// the file's samples, or nil when it is not a location history in any of the four shapes
     static func read(_ data: Data) -> Result? {
+        // a big Records.json (years of points, hundreds of MB) is scanned, never parsed whole
+        if data.count > streamOver, isRecords(data) { return scanRecords(data) }
         guard let j = try? JSONSerialization.jsonObject(with: data) else { return nil }
         var r: Result
         if let o = j as? [String: Any], let locs = o["locations"] as? [[String: Any]] {
@@ -83,6 +86,95 @@ nonisolated enum HistoryReader {
             segments(a, &r)
         } else {
             return nil
+        }
+        return r
+    }
+
+    /// a file read from Files: memory-mapped, so a big one is never all in memory
+    static func read(url: URL) -> Result? {
+        guard let d = try? Data(contentsOf: url, options: .alwaysMapped) else { return nil }
+        return read(d)
+    }
+
+    // MARK: the streaming scanner (files over 50 MB)
+
+    /// above this a Records.json is scanned instead of parsed (Part 9.7)
+    nonisolated(unsafe) static var streamOver = 50 * 1024 * 1024
+
+    /// A's top-level "locations" key within the file's first 4 KB
+    static func isRecords(_ d: Data) -> Bool {
+        let head = d.prefix(4096)
+        return head.range(of: Data("\"locations\"".utf8)) != nil
+    }
+
+    /// A RECORDS.JSON READ WITHOUT PARSING IT: one pass over the bytes, keeping only each location's own latitudeE7,
+    /// longitudeE7, accuracy and timestamp / timestampMs (the keys inside its nested objects, an activity's timestamp,
+    /// are not its own and are skipped); strings are stepped over whole, so a brace inside one never counts.
+    static func scanRecords(_ d: Data) -> Result {
+        var r = Result(shape: .records, samples: [], dropped: 0)
+        d.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let b = raw.bindMemory(to: UInt8.self)
+            let n = b.count
+            var i = 0
+            var depth = 0            // braces and brackets
+            var entryDepth = -1      // the depth inside one location object, once "locations" has been seen
+            var sawLocations = false
+            var lastKey: [UInt8] = []
+            var lat: Double?, lon: Double?, acc: Double?, ts: Date?
+            func reset() { lat = nil; lon = nil; acc = nil; ts = nil }
+            while i < n {
+                let c = b[i]
+                if c == 0x22 { // a string: a key when a ':' follows it
+                    var j = i + 1
+                    while j < n && b[j] != 0x22 { if b[j] == 0x5C { j += 1 }; j += 1 }
+                    let s = Array(b[(i + 1) ..< min(j, n)])
+                    var k = j + 1
+                    while k < n && (b[k] == 0x20 || b[k] == 0x0A || b[k] == 0x0D || b[k] == 0x09) { k += 1 }
+                    if k < n && b[k] == 0x3A { // ':' : a key
+                        lastKey = s
+                        if !sawLocations && depth == 1 && s == Array("locations".utf8) { sawLocations = true }
+                        i = k + 1
+                        continue
+                    }
+                    // a string value: the time, when it belongs to the location itself
+                    if depth == entryDepth && lastKey == Array("timestamp".utf8) {
+                        ts = date(String(decoding: s, as: UTF8.self))
+                    } else if depth == entryDepth && lastKey == Array("timestampMs".utf8) {
+                        ts = Double(String(decoding: s, as: UTF8.self)).map { Date(timeIntervalSince1970: $0 / 1000) }
+                    }
+                    i = j + 1
+                    continue
+                }
+                switch c {
+                case 0x7B, 0x5B: // { [
+                    depth += 1
+                    if sawLocations && entryDepth < 0 && c == 0x7B && depth == 3 { entryDepth = 3 }
+                case 0x7D, 0x5D: // } ]
+                    if c == 0x7D && depth == entryDepth {
+                        if let la = lat, let lo = lon, let at = ts {
+                            if let a = acc, a >= 2000 { r.dropped += 1 } else { add(&r, la / 1e7, lo / 1e7, at, nil, nil) }
+                        } else { r.dropped += 1 }
+                        reset()
+                    }
+                    depth -= 1
+                case 0x2D, 0x30 ... 0x39: // a number value: kept when it is the location's own
+                    guard depth == entryDepth else { break }
+                    var j = i
+                    while j < n, (b[j] >= 0x30 && b[j] <= 0x39) || b[j] == 0x2D || b[j] == 0x2E || b[j] == 0x65 || b[j] == 0x45 || b[j] == 0x2B { j += 1 }
+                    let v = Double(String(decoding: UnsafeBufferPointer(rebasing: b[i ..< j]), as: UTF8.self))
+                    switch lastKey {
+                    case Array("latitudeE7".utf8): lat = v
+                    case Array("longitudeE7".utf8): lon = v
+                    case Array("accuracy".utf8): acc = v
+                    case Array("timestampMs".utf8): ts = v.map { Date(timeIntervalSince1970: $0 / 1000) }
+                    default: break
+                    }
+                    i = j
+                    continue
+                default: break
+                }
+                i += 1
+            }
         }
         return r
     }

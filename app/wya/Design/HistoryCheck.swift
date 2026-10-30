@@ -72,6 +72,34 @@ enum HistoryCheck {
         check("D shape", rd?.shape == .iphone, "shape \(rd?.shape.rawValue ?? "none")")
         check("D path offsets", days == ["2024-12-31", "2025-01-01"] && pd.allSatisfy { $0.place == "ch" }, show(pd))
 
+        // the streaming scanner gives exactly what the parser gives (a nested activity's own timestamp ignored, a
+        // string holding a brace, accuracy drops), then a 60 MB file: scanned, timed
+        var pts: [String] = []
+        for k in 0 ..< 2000 {
+            let acc = k % 7 == 0 ? 2500 : 30
+            let t = k % 2 == 0 ? "\"timestamp\":\"2024-05-\(String(format: "%02d", 1 + k % 28))T12:00:00Z\""
+                                : "\"timestampMs\":\"\(1714564800000 + k * 3_600_000)\""
+            pts.append("{\"latitudeE7\":\(470000000 + k * 1000),\"longitudeE7\":\(80000000 + k * 1000),\"accuracy\":\(acc),"
+                       + "\"activity\":[{\"timestamp\":\"1999-01-01T00:00:00Z\",\"activity\":[{\"type\":\"STILL}{\",\"confidence\":90}]}],\(t)}")
+        }
+        let big = Data(("{\"locations\":[" + pts.joined(separator: ",") + "]}").utf8)
+        let parsed = HistoryReader.read(big)
+        let saved = HistoryReader.streamOver
+        HistoryReader.streamOver = 0
+        let scanned = HistoryReader.read(big)
+        HistoryReader.streamOver = saved
+        check("A scanner = parser", parsed?.samples == scanned?.samples && parsed?.dropped == scanned?.dropped && (parsed?.samples.count ?? 0) > 1500,
+              "parsed \(parsed?.samples.count ?? -1)/\(parsed?.dropped ?? -1), scanned \(scanned?.samples.count ?? -1)/\(scanned?.dropped ?? -1)")
+        var huge = Data("{\"locations\":[".utf8)
+        let one = Data(pts[1].utf8), comma = Data(",".utf8)
+        var copies = 0
+        while huge.count < 60 * 1024 * 1024 { if copies > 0 { huge.append(comma) }; huge.append(one); copies += 1 }
+        huge.append(Data("]}".utf8))
+        let t0 = Date()
+        let hr = HistoryReader.read(huge)
+        let ms = Int(Date().timeIntervalSince(t0) * 1000)
+        check("A 60 MB scanned", hr?.samples.count == copies, "\(copies) points, \(hr?.samples.count ?? -1) read in \(ms) ms (debug build)")
+
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
         return out
