@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 /// The Map tab: the world edge to edge under everything, the head on top, the zoom column on the right, and the
 /// water (the tab capsule and its sheet) at the bottom. Everything is placed from this phone's own screen (Layout).
@@ -471,6 +472,17 @@ struct ContentView: View {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
         let now = CACurrentMediaTime()
         if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
+        // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
+        // (30 Oct 23:55: "You're long pressing Frankfurt, so you get the page for Frankfurt"); empty land of the open
+        // country: no menu yet (its land rows, Add a place here · What's here? · Copy coordinates, wait for 7.8)
+        if map.placesMode, let open = map.placeOpen {
+            if let t = map.townHit(at: p), let sc = map.townScenes[t.cc], t.i < sc.towns.count {
+                map.townPressed = t
+                return townMenu(sc.towns[t.i], cc: t.cc, place: open, at: p, map: map, water: water, head: head)
+            }
+            map.townPressed = nil
+            return nil
+        }
         // the region map: the region's own menu (11.5's Regions menu)
         if let sc = map.regionScene {
             guard let u = map.regionUnit(at: p), u < sc.unitIDs.count else { return nil }
@@ -574,6 +586,67 @@ struct ContentView: View {
             }]))
         }
         return UIMenu(title: pl.n, children: sections)
+    }
+
+    /// A TOWN'S HOLD MENU (11.5, Places mode): Apple's menu with the town's own name (29 Oct 22:13, 11.2), every row
+    /// about the town: Stamp or Unstamp, Wish or Unwish | Details, Verify (its card, then that sheet) | Directions (Apple
+    /// Maps) | Share. Its page, Drop a pin here, Add to a list, Add to a plan and Report a wrong place wait for their parts
+    /// (16, 8, 20); they are left out rather than shown dead.
+    @MainActor static func townMenu(_ town: Town, cc: String, place: Int, at p: CGPoint, map: MapController, water: Water,
+                                    head: HeadState) -> UIMenu {
+        let key = town.key
+        let st = MarkStore.shared.state(key)
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let country = map.world.map { $0.places[place].n } ?? ""
+        let parents = town.region.isEmpty ? country : "\(town.region), \(country)"
+        let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
+            if st.stamped { Feel.lift() } else { Feel.stamp() }
+            Task {
+                if st.stamped { await TownStamps.unstamp(key, name: town.name, cc: cc) }
+                else { await TownStamps.stamp(key, name: town.name, cc: cc, source: .hand) }
+            }
+        }
+        let wish = UIAction(title: st.wished ? "Unwish" : "Wish", attributes: st.stamped ? .disabled : []) { _ in
+            Feel.tap()
+            Task {
+                if st.wished { await MarkStore.shared.unwish(key, name: town.name) }
+                else { await MarkStore.shared.wish(key, name: town.name, cc: cc) }
+            }
+        }
+        let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: town.name, parents: parents, place: place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: town.name, water: water) }
+            }
+        }
+        let verify = UIAction(title: "Verify", attributes: st.stamped ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: town.name, parents: parents, place: place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    VerifyState.shared.open(key, name: town.name, place: place, water: water)
+                }
+            }
+        }
+        let directions = UIAction(title: "Directions") { _ in
+            let item = MKMapItem(location: CLLocation(latitude: town.lat, longitude: town.lon), address: nil)
+            item.name = town.name
+            item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault])
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                let vc = UIActivityViewController(activityItems: ["\(town.name), \(country)"], applicationActivities: nil)
+                let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                var top = root
+                while let n = top?.presentedViewController { top = n }
+                top?.present(vc, animated: true)
+            }
+        }
+        return UIMenu(title: town.name, children: [
+            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [details, verify]),
+            UIMenu(options: .displayInline, children: [directions]),
+            UIMenu(options: .displayInline, children: [share]),
+        ])
     }
 
     /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish | Details, Verify | Go one level down |
