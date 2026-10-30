@@ -199,6 +199,18 @@ enum HistoryCheck {
 
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
+
+        // rough words sort (Part 9.9): each to its sort day; "Summer 2019" between May and September 2019
+        let rough: [(String, Bool, String?)] = [("2019", false, "2019-01-01"), ("Aug 2026", false, "2026-08-01"),
+            ("August 2026", false, "2026-08-01"), ("12 Aug 2024", false, "2024-08-12"), ("Aug 12th, 2024", false, "2024-08-12"),
+            ("2023-04", false, "2023-04-01"), ("Summer 2019", false, "2019-06-01"), ("summer 2019", true, "2019-12-01"),
+            ("Winter 2020", false, "2020-12-01"), ("Fall 2018", false, "2018-09-01"), ("a few days", false, nil),
+            ("", false, nil)]
+        let rbad = rough.filter { RoughDay.sortDay($0.0, southern: $0.1)?.description != $0.2 }
+            .map { "\($0.0) -> \(RoughDay.sortDay($0.0, southern: $0.1)?.description ?? "none")" }
+        let summer = RoughDay.sortDay("Summer 2019")!
+        check("rough words sort", rbad.isEmpty && RoughDay.sortDay("May 2019")! < summer && summer < RoughDay.sortDay("Sep 2019")!,
+              rbad.isEmpty ? "\(rough.count) right" : "wrong: \(rbad.joined(separator: ", "))")
         return out
     }
 
