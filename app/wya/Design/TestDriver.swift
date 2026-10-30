@@ -281,6 +281,8 @@ final class TestDriver {
                         RegionsMenuModel.shared.load(r.flag)
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
+                // regionslow 8: the region borders' change at 1/8 speed (frame checks)
+                case "regionslow": RegionLines.slow = Double(a) ?? 1
                 // regionlevel 2: the open country's level from that row of its table (the level line's pick)
                 case "regionlevel":
                     if let m = map, let sc = m.regionScene, let r = Int(a) { m.openRegions(sc.place, row: r) }

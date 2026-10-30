@@ -189,6 +189,47 @@ vertex LineV lineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     o.dashed = fmod(g[9], 2.0);
     return o;
 }
+// THE BORDERS BETWEEN REGIONS (A6.9): ten floats a segment, its ends and where they lie along their border (0 to 1).
+// `q` is how much of each border shows: the parts within q/2 of either end, so a border draws in from both ends at
+// once (q 0 to 1) and undraws back into them (1 to 0). A segment across the cut is cut there.
+vertex LineV regionLineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                              const device float* segs [[buffer(0)]],
+                              constant Cam& cam [[buffer(1)]],
+                              constant LineStyle& ls [[buffer(2)]],
+                              constant float& q [[buffer(3)]]) {
+    const device float* g = segs + iid * 10;
+    float2 A = float2(g[0], g[1]), B = float2(g[2], g[3]);
+    float s0 = min(g[4], g[5]), s1 = max(g[4], g[5]);
+    bool flip = g[4] > g[5];
+    float h = q * 0.5;
+    float lo = s0, hi = s1;
+    if (q < 0.999) {
+        float lo1 = s0, hi1 = min(s1, h);
+        float lo2 = max(s0, 1.0 - h), hi2 = s1;
+        if (hi1 - lo1 >= hi2 - lo2) { lo = lo1; hi = hi1; } else { lo = lo2; hi = hi2; }
+    }
+    float span = max(s1 - s0, 1e-9);
+    float ta = (lo - s0) / span, tb = (hi - s0) / span;
+    if (flip) { ta = 1.0 - ta; tb = 1.0 - tb; }
+    float2 a = toScreen(mix(A, B, ta), cam);
+    float2 b = toScreen(mix(A, B, tb), cam);
+    float2 d = b - a;
+    float len = length(d);
+    float2 dir = len > 1e-5 ? d / len : float2(1.0, 0.0);
+    float2 nrm = float2(-dir.y, dir.x);
+    float hw = ls.width * 0.5 + ls.feather;
+    float t = (vid == 1 || vid == 3 || vid == 4) ? 1.0 : 0.0;
+    float side = (vid == 2 || vid == 4 || vid == 5) ? 1.0 : -1.0;
+    float2 p = mix(a, b, t) + nrm * side * hw + dir * (t * 2.0 - 1.0) * ls.feather;
+    // nothing of it shows yet (or any more): no dot
+    if (hi <= lo || len < 0.001) p = a;
+    LineV o;
+    o.position = toClip(p, cam);
+    o.across = (hi <= lo) ? 1e4 : side * hw;
+    o.along = 0.0;
+    o.dashed = 0.0;
+    return o;
+}
 struct FullV { float4 position [[position]]; float2 s; };
 // ONE LINE, ONE STRENGTH: every segment was its own quad, laid over the last, so where a detailed coast has many short
 // segments their ends piled up into a darker, thicker line than a border of a few long ones. Now the lines' coverage is

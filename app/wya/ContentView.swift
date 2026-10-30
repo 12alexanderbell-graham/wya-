@@ -314,8 +314,8 @@ struct ContentView: View {
         let stamped = MarkStore.shared.state(key).stamped
         if stamped { Feel.lift() } else { Feel.stamp() }
         Task {
-            // stamped with every parent above it (A6.12); unstamped alone (parents stay)
-            if stamped { await MarkStore.shared.unstamp(key, name: name) }
+            // stamped with every parent above it (A6.12); unstamped with the parents stamped only through it
+            if stamped { await RegionStamps.unstamp(u, in: sc) }
             else { await RegionStamps.stamp(u, in: sc, source: .quick) }
             UIAccessibility.post(notification: .announcement, argument: "\(name) \(stamped ? "unstamped" : "stamped")")
         }
@@ -515,7 +515,7 @@ struct ContentView: View {
         let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
             if st.stamped { Feel.lift() } else { Feel.stamp() }
             Task {
-                if st.stamped { await MarkStore.shared.unstamp(key, name: name) }
+                if st.stamped { await RegionStamps.unstamp(u, in: sc) }
                 else { await RegionStamps.stamp(u, in: sc, source: .hand) }
             }
         }
