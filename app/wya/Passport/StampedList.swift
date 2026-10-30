@@ -8,8 +8,9 @@ import SwiftUI
 /// A4.19: the rows arrive each in its own place, top down, 0.025 s apart (the first 15; the rest are simply there),
 /// once the water is 80% of the way up: the flag grows about its own centre (smooth 0.26 s) and the words roll in once
 /// the flag is past 60%; closing is the reverse, bottom row first, while the water goes down.
-/// Not here yet (logged): A4.20 / A4.21 motion (a removed row goes by List's own animation; Details from a row just
-/// swaps), regions / towns / things scopes, Show in passport.
+/// A4.20: an unstamped row's words roll out and its flag shrinks, then the rows below move up.
+/// Not here yet (logged): A4.21 motion (Details from a row just swaps), regions / towns / things scopes, Show in
+/// passport.
 struct StampedList: View {
     let water: Water
     let map: MapController
@@ -28,6 +29,9 @@ struct StampedList: View {
     @State private var startTop: CGFloat?
     @State private var arrived = false
     @State private var openedAt = Date()
+    /// A4.20: the rows as they were last, and the ones gone from the store still leaving
+    @State private var last: [Row] = []
+    @State private var kept: [Row] = []
     static let each = 0.26, gap = 0.025, animated = 15
 
     struct Row: Identifiable {
@@ -60,7 +64,7 @@ struct StampedList: View {
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - y0)
         List {
-            ForEach(rows) { r in
+            ForEach(listed) { r in
                 row(r)
                     .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                     .listRowBackground(Color.clear)
@@ -69,7 +73,9 @@ struct StampedList: View {
                         Button { details(r) } label: { Text("Details") }.tint(Palette.ink)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) { unstamp(r) } label: { Text("Unstamp") }
+                        // not the destructive role: that slides the row away at once; the row leaves by A4.20 (the
+                        // same red as the destructive button)
+                        Button { unstamp(r) } label: { Text("Unstamp") }.tint(.red)
                     }
                     .contextMenu {
                         Button("Show on the map") { open(r) }
@@ -80,6 +86,8 @@ struct StampedList: View {
             }
         }
         .listStyle(.plain)
+        // a row going or coming: the rows below move by its height (A4.20; A4.19's own motion does the row itself)
+        .animation(Motion.quick, value: listed.map(\.id))
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
         .environment(\.defaultMinListRowHeight, 56)
@@ -96,12 +104,38 @@ struct StampedList: View {
         .onChange(of: water.stampedList) { _, open in
             if open { startTop = form.top; openedAt = Date(); arrived = false } else { leave() }
         }
-        // a row that comes while the list is up (an undo, a stamp elsewhere) arrives the same way
+        // a row that comes while the list is up (an undo, a stamp elsewhere) arrives the same way; one that goes
+        // (unstamped here or anywhere) leaves by A4.20: it stays on screen while its words roll out and its flag
+        // shrinks, then the rows below move up (List's own removal would fade it)
         .onChange(of: rows.map(\.id)) { old, new in
+            let gone = last.filter { !new.contains($0.id) }
+            last = rows
             guard arrived else { return }
             let added = new.filter { !old.contains($0) }
-            for (k, id) in added.enumerated() { show(id, after: Self.gap * Double(k)) }
+            // the space opens first (List's insertion fades a row in: it must be blank then), then the row arrives
+            for (k, id) in added.enumerated() {
+                kept.removeAll { $0.id == id }
+                flagOut.remove(id); wordsOut.remove(id)
+                show(id, after: Self.each + Self.gap * Double(k))
+            }
+            for r in gone where flagOut.contains(r.id) || wordsOut.contains(r.id) || onScreen.contains(r.id) {
+                kept.append(r)
+                withAnimation(Motion.quick) { _ = wordsOut.remove(r.id) }
+                withAnimation(.smooth(duration: Self.each)) { _ = flagOut.remove(r.id) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.each) { kept.removeAll { $0.id == r.id } }
+            }
         }
+        .onAppear { last = rows }
+    }
+
+    /// the rows as shown: the store's, plus any still leaving
+    /// (`last` too: on the first frame after the store drops a row, before onChange has put it in `kept`, it is still
+    /// there, so List never removes it and puts it back)
+    private var listed: [Row] {
+        var ids = Set(rows.map(\.id))
+        var out = rows
+        for r in last + kept where !ids.contains(r.id) { out.append(r); ids.insert(r.id) }
+        return out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     /// A4.19: top down, 0.025 s apart, the first 15 animated and the rest simply there; never before the solar
@@ -189,6 +223,8 @@ struct StampedList: View {
         DetailsState.shared.open(.country(r.id), name: r.name, water: water)
     }
 
+    /// A4.20: the row's words roll out and its flag shrinks into its own centre (0.26 s), then the stamp lifts and the
+    /// rows below move up into its place
     private func unstamp(_ r: Row) {
         Feel.lift()
         Task { await MarkStore.shared.unstamp(.country(r.id), name: r.name) }
