@@ -258,6 +258,7 @@ struct PlacePageView: View {
                 if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
+                if MarkStore.shared.state(key).stamped { record(key) }
                 Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
@@ -332,6 +333,37 @@ struct PlacePageView: View {
     /// flag, its name and one line; its plus stamps it; a tap opens its page
     private func insideList(_ title: String, _ all: [PlacePageState.Inside]) -> some View {
         InsideList(title: title, all: all, country: page.country, countryName: page.name, map: map)
+    }
+
+    /// YOUR RECORD (16.4.10, only when stamped): big numbers in the Profile's style (64 pt rounded over 15 pt labels):
+    /// the times; on a country its regions ("12 of 16") and cities. The month waits for the visits' dates (Part 9.9)
+    private func record(_ key: PlaceKey) -> some View {
+        let st = MarkStore.shared.state(key)
+        var items: [(String, String)] = []
+        if st.visits > 0 { items.append(("\(st.visits)", st.visits == 1 ? "time" : "times")) }
+        if key.kind == .country, let f = page.facts {
+            if !f.regions.isEmpty {
+                let n = f.regions.filter { MarkStore.shared.state($0.key).stamped }.count
+                items.append(("\(n)", "of \(f.regions.count) regions"))
+            }
+            let cc = page.country + "/"
+            let towns = MarkStore.shared.marks.filter { $0.key.kind == .town && $0.value.stamped && $0.key.id.hasPrefix(cc) }.count
+            items.append(("\(towns)", towns == 1 ? "city" : "cities"))
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Your record").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            HStack(alignment: .top, spacing: 24) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, it in
+                    VStack(spacing: 0) {
+                        Text(it.0).font(.system(size: 64, weight: .semibold, design: .rounded)).monospacedDigit()
+                            .foregroundStyle(Palette.ink).contentTransition(.numericText())
+                        Text(it.1).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// FOR YOU (16.4.9): the visa line first, then each government's advice with who says it and when it was checked
