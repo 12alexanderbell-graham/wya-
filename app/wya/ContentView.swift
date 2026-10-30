@@ -168,8 +168,9 @@ struct ContentView: View {
                 guard !map.locked else { return }
                 // the tap that closed search opens nothing (one press, one job)
                 guard CACurrentMediaTime() - head.mapClosedSearchAt > 0.6 else { return }
-                // the region map: its regions answer (6.5)
+                // the region map: its regions answer (6.5); while the list is up or a country is still loading, nothing
                 if map.regionScene != nil { regionTapped(); return }
+                if head.mode == .regions { return }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
                 if Sideways.shared.on {
                     if head.quickStamp { Self.quickStamp(i, map: map) } else { Feel.refuse() }
@@ -287,8 +288,9 @@ struct ContentView: View {
             map.regionsMenu = true
             // A6.14: straight into a country (a country's "Open its region map"), never through the list or the world
             if let i = Self.directRegion {
-                Self.directRegion = nil
-                openRegion(i)
+                let row = Self.directRow
+                Self.directRegion = nil; Self.directRow = nil
+                openRegion(i, row: row)
                 return
             }
             water.openMenu()
@@ -340,6 +342,7 @@ struct ContentView: View {
 
     /// a country to open in Regions without the list (A6.14), set just before the wheel turns there
     @MainActor static var directRegion: Int?
+    @MainActor static var directRow: Int?
     /// A6.14 from anywhere: the wheel turns to Regions and the country opens; already in Regions, it opens from there
     @MainActor static func openRegionMap(_ i: Int, head: HeadState) {
         if head.mode == .regions { RegionsMenuModel.shared.openDirect?(i); return }
@@ -393,14 +396,15 @@ struct ContentView: View {
     private func restoreSession() {
         guard !session.isEmpty, let s = try? JSONDecoder().decode(Session.self, from: Data(session.utf8)) else { return }
         tab = s.tab
+        // Regions with a country open: the mode opens that country at its level straight (6.1.1), not the list
+        if s.mode == HeadState.Mode.regions.rawValue, let rp = s.rp, let i = map.world?.placeIndex[rp] {
+            Self.directRegion = i; Self.directRow = s.rr
+        }
         head.mode = HeadState.Mode(rawValue: s.mode) ?? .countries
         map.locked = s.lock
         if let c = s.cont { map.show(continent: c) } else { map.restore(c: SIMD2(s.x, s.y), k: s.k) }
         if let st = SheetStop(rawValue: s.stop), st != water.stop { water.go(st) }
-        // Regions with a country open: the country at its level again, once the mode has set up its list (6.1.1)
-        if head.mode == .regions, let rp = s.rp, let i = map.world?.placeIndex[rp] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { openRegion(i, row: s.rr) }
-        }
+
         #if DEBUG
         NSLog("wya session restored: tab %d mode %d continent %@ k %.2f stop %d lock %d", s.tab, s.mode, s.cont ?? "none", s.k, s.stop, s.lock ? 1 : 0)
         #endif

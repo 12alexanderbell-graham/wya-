@@ -72,6 +72,9 @@ nonisolated final class RegionScene: @unchecked Sendable {
         }
         guard !rn.isEmpty, all.x < all.z else { return nil }
         unitIDs = ids; unitNames = names; unitParents = parents; entryUnit = eu
+        var ue = [[Int]](repeating: [], count: ids.count)
+        for (e, u) in eu.enumerated() { ue[u].append(e) }
+        unitEntries = ue
         points = pts; fans = fan; runs = rn; segs = sg
         boxes = bx; rings = rs; box = all
     }
@@ -117,8 +120,10 @@ nonisolated final class RegionScene: @unchecked Sendable {
         return b
     }
 
+    /// each region's entries
+    let unitEntries: [[Int]]
     /// the entries of a set of regions (what the renderer fills for them)
-    func entries(of units: Set<Int>) -> [Int] { entryUnit.indices.filter { units.contains(entryUnit[$0]) } }
+    func entries(of units: Set<Int>) -> [Int] { units.sorted().flatMap { unitEntries[$0] } }
 }
 
 /// WHAT A CHANGE OF REGION MAP DRAWS (A6.9, the yes of 23 Oct 15:58 to "shared borders stay and new ones draw along their

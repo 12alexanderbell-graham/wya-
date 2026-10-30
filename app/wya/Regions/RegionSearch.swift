@@ -16,9 +16,19 @@ enum RegionSearch {
     /// each level's names folded once (key "fr-2")
     private static var names: [String: [(folded: String, id: String, name: String)]] = [:]
 
+    /// the last answer, so the results' every redraw (their slots move on their own clock) doesn't search again
+    private static var last: (q: String, id: String, hits: [Hit])?
+
     static func hits(_ query: String, place id: String) -> [Hit] {
         let q = SearchResults.fold(query.trimmingCharacters(in: .whitespaces))
         guard !q.isEmpty else { return [] }
+        if let l = last, l.q == q, l.id == id { return l.hits }
+        let h = search(q, place: id)
+        last = (q, id, h)
+        return h
+    }
+
+    private static func search(_ q: String, place id: String) -> [Hit] {
         var starts: [Hit] = [], inside: [Hit] = []
         for (row, level) in RegionCatalog.shared.used(id) {
             let key = "\(id)-\(row)"

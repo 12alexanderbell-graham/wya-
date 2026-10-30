@@ -91,8 +91,13 @@ final class Water {
     /// list's bottom soft edge; they are kept on screen until the water is down
     func closeMenu(to s: Stop = .quarter) {
         guard regions else { return }
+        // the rows leave only if they were showing (not from under settings or the upload sheet)
+        if menuShown { leaveMenuRows() }
         regions = false
-        leaveMenuRows()
+        // what settings or the upload go back to when they close: never the list's stop
+        if settingsFrom == .half { settingsFrom = .quarter }
+        if uploadFrom == .half { uploadFrom = .quarter }
+        if settings || upload { return }
         go(s)
     }
     /// the rows stay on screen while the water takes them down through the list's bottom edge

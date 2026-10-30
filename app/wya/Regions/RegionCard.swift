@@ -163,7 +163,9 @@ struct RegionCard: View {
             if blocked { Feel.refuse(); return }
             Task {
                 if s.stamped {
-                    await MarkStore.shared.unstamp(key, name: card.name)
+                    // with the parents stamped only through it (the unstamp rule, 6.5)
+                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
+                    else { await MarkStore.shared.unstamp(key, name: card.name) }
                     card.stampedHere = false
                     Feel.lift()
                     await MarkStore.shared.wish(key, name: card.name)

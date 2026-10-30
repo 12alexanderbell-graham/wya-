@@ -197,16 +197,18 @@ vertex LineV regionLineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                               constant Cam& cam [[buffer(1)]],
                               constant LineStyle& ls [[buffer(2)]],
                               constant float& q [[buffer(3)]]) {
-    const device float* g = segs + iid * 10;
+    // two instances a segment: its part near the border's first end, and its part near the other end
+    const device float* g = segs + (iid >> 1) * 10;
+    bool second = (iid & 1u) == 1u;
     float2 A = float2(g[0], g[1]), B = float2(g[2], g[3]);
     float s0 = min(g[4], g[5]), s1 = max(g[4], g[5]);
     bool flip = g[4] > g[5];
     float h = q * 0.5;
     float lo = s0, hi = s1;
     if (q < 0.999) {
-        float lo1 = s0, hi1 = min(s1, h);
-        float lo2 = max(s0, 1.0 - h), hi2 = s1;
-        if (hi1 - lo1 >= hi2 - lo2) { lo = lo1; hi = hi1; } else { lo = lo2; hi = hi2; }
+        if (second) { lo = max(s0, 1.0 - h); hi = s1; } else { lo = s0; hi = min(s1, h); }
+    } else if (second) {
+        hi = lo;
     }
     float span = max(s1 - s0, 1e-9);
     float ta = (lo - s0) / span, tb = (hi - s0) / span;
