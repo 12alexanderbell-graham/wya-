@@ -21,8 +21,10 @@ import UniformTypeIdentifiers
 /// undo step (the colours change in one frame; the undo drop says what came in).
 /// Pulled to 50% (or full) the review shows its finds as rows under the caption (flag, name, found dates), newest trip
 /// first, dropped ones at the end in black 50%; a tap on a row drops or keeps it as a tap on its country does.
-/// Not here yet (logged): a row's swipe and hold, waiting finds (9.6: a pull down leaves the review and lets the finds
-/// go, as × does), the mode
+/// WAITING FINDS (9.6): a pull down leaves the review and the finds wait, darkened on the map, kept in a small file
+/// beside the store (`waiting-finds.json`; the book's Proposal records wait for a store version); a tap on one, or
+/// the Upload tool, opens the review again (the caption rolls to "found", the go circle grows at its place).
+/// Not here yet (logged): a row's swipe and hold, the mode
 /// wheel turning to Countries, the file's progress line, Add more, the second round, videos picked with Pick.
 @MainActor
 @Observable
@@ -71,6 +73,8 @@ final class UploadState {
     /// A9.1 and A9.2: the water to 25% (it stays if it is there), the caption's words out, then the pair in
     func open(water w: Water, map m: MapController) {
         guard !w.upload else { return }
+        // finds waiting: the Upload tool opens straight on their review (9.2)
+        if !order.isEmpty { openReview(water: w, map: m); return }
         water = w; map = m
         phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
         step = 0; note = [:]; locating = false
@@ -143,8 +147,8 @@ final class UploadState {
     /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in (while
     /// finding, neither closes: finding holds the 25% and owns the map's presses; × cancels)
     func close() {
-        // leaving the review (a pull down): the finds are let go, as × does (waiting finds, 9.6, are not built)
-        if phase == .review { cancel(); return }
+        // leaving the review (a pull down): the finds wait (9.6)
+        if phase == .review { leave(); return }
         guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
         if phase == .words { endWords(close: true); return }
         job += 1
@@ -338,6 +342,96 @@ final class UploadState {
         return "\(a.d) \(mon[a.m - 1]) \(a.y) – \(b.d) \(mon[b.m - 1]) \(b.y)"
     }
 
+    // MARK: waiting finds (9.6)
+
+    /// a waiting find (not stamped since) at this place
+    func waits(_ i: Int) -> Bool { phase == .choosing && order.contains(i) && !dropped.contains(i) }
+
+    /// THE REVIEW AGAIN (a tap on a waiting find, or the Upload tool): the water to 25%, the caption's number rolls to
+    /// the waiting finds and its tail to "found", then the go circle grows at its place (A9.7's last half)
+    func openReview(water w: Water, map m: MapController) {
+        guard !w.upload, !order.isEmpty else { return }
+        Feel.tap()
+        water = w; map = m
+        let at25 = w.stop == .quarter
+        w.openUpload()
+        phase = .review
+        captionIn = false; markIn = false; xIn = false; goIn = false; message = nil
+        count = order.count - dropped.count
+        job += 1
+        let me = job
+        DispatchQueue.main.asyncAfter(deadline: .now() + (at25 ? 0.36 : 0.45)) { [self] in
+            guard me == job else { return }
+            withAnimation(Motion.quick) { captionIn = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
+                guard me == job else { return }
+                withAnimation(Motion.quick) { goIn = true }
+            }
+        }
+    }
+
+    /// LEAVING THE REVIEW (A9.13: a pull down): the go circle shrinks into its centre and the caption rolls back to
+    /// your count; the finds stay darkened on the map, waiting, and are kept for the next launch
+    private func leave() {
+        guard let w = water, phase == .review else { return }
+        Feel.land(speed: 0)
+        job += 1
+        let me = job
+        withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        save()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            guard me == job else { return }
+            phase = .choosing; step = 0
+            w.uploadFrom = nil
+            w.closeUpload()
+        }
+    }
+
+    /// the waiting finds' file, beside the store (in the app's own Application Support)
+    private static var waitingURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("waiting-finds.json")
+    }
+    private struct Waiting: Codable {
+        struct Find: Codable { var place: String; var visits: [[String]]; var home: Bool }
+        var source: String
+        var finds: [Find]
+        var dropped: [String]
+    }
+    private func save() {
+        guard let url = Self.waitingURL, let w = map?.world else { return }
+        let ids = Set(order.map { w.places[$0].id })
+        let out = Waiting(source: source.rawValue,
+                          finds: finds.filter { ids.contains($0.place) }.map { f in
+                              .init(place: f.place, visits: f.visits.map { [$0.from.description, $0.to.description] }, home: f.home) },
+                          dropped: dropped.map { w.places[$0].id })
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
+    }
+    /// nothing waits any more (go, ×): the file goes too
+    private func forget() {
+        order = []; dropped = []; finds = []
+        if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
+    }
+    /// at launch, once the map is loaded: the waiting finds back, darkened (those stamped since are left out)
+    func restoreWaiting(map m: MapController) {
+        guard let url = Self.waitingURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(Waiting.self, from: d),
+              let w = m.world else { return }
+        map = m
+        source = MarkSource(rawValue: x.source) ?? .history
+        let index = Dictionary(w.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
+        finds = x.finds.compactMap { f in
+            let v = f.visits.compactMap { p -> Finds.Visit? in
+                guard p.count == 2, let a = LocalDay(p[0]), let b = LocalDay(p[1]) else { return nil }
+                return Finds.Visit(from: a, to: b, count: 1)
+            }
+            return Finds.Find(place: f.place, visits: v, home: f.home)
+        }
+        order = finds.compactMap { index[$0.place] }
+        dropped = Set(x.dropped.compactMap { index[$0] })
+        m.found = Set(order).subtracting(dropped)
+        NSLog("wya upload: %d finds waiting", order.count)
+    }
+
     /// THE REVIEW: a found country tapped is dropped (its darkening goes in one frame, the number rolls down) or kept
     /// again; true when the tap was the review's
     func tap(_ i: Int) -> Bool {
@@ -376,7 +470,8 @@ final class UploadState {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
                 guard me == job else { return }
                 Feel.land(speed: 0)
-                phase = .choosing; step = 0; count = 0; order = []; dropped = []; finds = []
+                phase = .choosing; step = 0; count = 0
+                forget()
                 w.uploadFrom = .quarter
                 w.closeUpload()
             }
@@ -390,6 +485,7 @@ final class UploadState {
         Feel.tap()
         job += 1
         map?.found = []
+        forget()
         withAnimation(Motion.quick) { markIn = false; xIn = false; goIn = false; captionIn = false }
         let me = job
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
