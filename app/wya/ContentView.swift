@@ -111,6 +111,8 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 Hints.shared.touched()
+                // search open: the touch closes it only (a drag still pans), keeping the typed text 10 s (1.10)
+                if head.searching { head.closeSearchFromMap(); return }
                 head.putAway(); water.hideCredit()
                 // the upload sheet while choosing closes (and that touch does nothing else, 9.3); while finding or at the
                 // review the touch is the map's (a pan, or a tap that drops or keeps a find)
@@ -138,6 +140,8 @@ struct ContentView: View {
                 // at the review a found country's tap drops or keeps it (9.5)
                 if water.upload { _ = UploadState.shared.tap(i); return }
                 guard !map.locked else { return }
+                // the tap that closed search opens nothing (one press, one job)
+                guard CACurrentMediaTime() - head.mapClosedSearchAt > 0.6 else { return }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
                 if Sideways.shared.on {
                     if head.quickStamp { Self.quickStamp(i, map: map) } else { Feel.refuse() }

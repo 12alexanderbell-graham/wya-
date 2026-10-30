@@ -24,8 +24,7 @@ import UniformTypeIdentifiers
 /// WAITING FINDS (9.6): a pull down leaves the review and the finds wait, darkened on the map, kept in a small file
 /// beside the store (`waiting-finds.json`; the book's Proposal records wait for a store version); a tap on one, or
 /// the Upload tool, opens the review again (the caption rolls to "found", the go circle grows at its place).
-/// Not here yet (logged): a row's swipe and hold, the mode
-/// wheel turning to Countries, the file's progress line, Add more, the second round.
+/// Not here yet (logged): the mode wheel turning to Countries (no other modes yet), the second round.
 @MainActor
 @Observable
 final class UploadState {

@@ -12,6 +12,16 @@ final class HeadState {
     var mode: Mode = .countries
     var searching = false
     var query = ""
+    /// search closed by a touch on the map (1.10): the typed text comes back if search opens again within 10 s, and that
+    /// touch opens nothing else
+    @ObservationIgnored var mapClosedSearchAt: CFTimeInterval = 0
+    /// a touch on the map with search open closes search only, keeping what was typed for 10 s
+    func closeSearchFromMap() {
+        guard searching else { return }
+        Feel.tap()
+        mapClosedSearchAt = CACurrentMediaTime()
+        searching = false
+    }
     var toolsOpen = false
     var quickStamp = false
     var history = false
@@ -362,7 +372,8 @@ struct HeadView: View {
     private func openSearch() {
         Feel.tap(); Sound.tap()
         head.toolsOpen = false
-        head.query = ""
+        // closed by a touch on the map less than 10 s ago: what was typed comes back (1.10)
+        if CACurrentMediaTime() - head.mapClosedSearchAt > 10 { head.query = "" }
         head.searching = true
         // the keyboard comes the moment search opens; the field exists from the first frame of the opening
         DispatchQueue.main.async { typing = true }
@@ -948,11 +959,11 @@ struct SearchResults: View {
             pick(i)
         } label: {
             HStack(spacing: 12) {
+                // square detailed flags, never rounded (0.8.8)
                 Group {
-                    if let f = pl.flatMap({ Flags.round($0.id) }) { f.resizable() } else { Circle().fill(Palette.grey) }
+                    if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
                 .frame(width: 22, height: 22)
-                .clipShape(Circle())
                 Text(pl?.n ?? "")
                     .font(.body)
                     .foregroundStyle(Palette.ink)

@@ -9,8 +9,8 @@ import SwiftUI
 /// once the water is 80% of the way up: the flag grows about its own centre (smooth 0.26 s) and the words roll in once
 /// the flag is past 60%; closing is the reverse, bottom row first, while the water goes down.
 /// A4.20: an unstamped row's words roll out and its flag shrinks, then the rows below move up.
-/// Not here yet (logged): A4.21 motion (Details from a row just swaps), regions / towns / things scopes, Show in
-/// passport.
+/// A4.21: Details from a row, the list leaving as one block through its bottom edge. Not here yet (logged): regions /
+/// towns / things scopes, Show in passport.
 struct StampedList: View {
     let water: Water
     let map: MapController
