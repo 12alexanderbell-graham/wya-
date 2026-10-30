@@ -177,6 +177,12 @@ final class MapController {
     }
     func hit(at p: CGPoint) -> Int? {
         guard let w = world else { return nil }
+        // PLACES (7.4): a town under the finger answers (its country is the press's place; the town darkens)
+        // (outside the open country, or on the world, a country answers as ever: the tap opens it)
+        if placesMode, let open = placeOpen {
+            townPressed = townHit(at: p)
+            if townPressed != nil { return open }
+        }
         // THE REGION MAP (6.5): only the open country's regions answer a finger (the faded world does nothing); the
         // region found is kept for the press's darkening and the tap
         if let sc = regionScene {
@@ -307,7 +313,7 @@ final class MapController {
         await marks.load()
         takeMarks(marks)
         recount()
-        marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared); self?.takeRegionMarks() }
+        marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared); self?.takeRegionMarks(); self?.takeTownMarks() }
         homeX = Self.homeLongitudeX(w)
         takeShapes(w)
         goHome(animated: false)
@@ -340,6 +346,24 @@ final class MapController {
     }
     /// the territories (drawn white when unmarked on Style Simple), worked out with the shapes
     @ObservationIgnored private(set) var territories: [Int] = []
+    // MARK: PLACES (Part 7): our map's towns (PlacesMap.swift)
+    /// Places is the mode: countries' fills drained; a country tapped opens with its towns
+    var placesMode = false {
+        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace() } } }
+    }
+    /// the country open in Places (its towns drawn), or the world
+    var placeOpen: Int?
+    @ObservationIgnored var townScenes: [String: TownScene] = [:]
+    @ObservationIgnored var townLoading: Set<String> = []
+    /// the town under the finger (or held by its card)
+    @ObservationIgnored var townPressed: (cc: String, i: Int)? { didSet { needsFrame = true } }
+    @ObservationIgnored var townStamped: [String: Set<Int>] = [:]
+    @ObservationIgnored var townWished: [String: Set<Int>] = [:]
+    /// how many towns you have stamped anywhere (the Places caption)
+    var townCount = 0
+    /// bumped when a country's towns arrive or its marks change (the caption reads the ignored scenes and sets)
+    var townsVersion = 0
+
     // MARK: REGIONS (Part 6)
     /// THE REGION MAP (6.5): the country whose regions are drawn, its scene, the region under the finger, and which
     /// regions are yours (from MarkStore's `r:` keys)

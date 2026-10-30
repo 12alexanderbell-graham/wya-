@@ -354,6 +354,29 @@ fragment float4 auroraFragment(FullV in [[stage_in]], constant Cam& cam [[buffer
     return float4((rgb + grain) * alpha, alpha);
 }
 
+// MARK: TOWN DOTS (7.4): a round dot of the town's grey (or lime, or blue), its radius in points, grown from its
+// point by the zoom (never faded in)
+struct TownDot { float2 p; float r; float pad; float4 colour; };
+struct TownDotV { float4 position [[position]]; float2 local; float r; float4 colour; };
+vertex TownDotV townDotVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                              const device TownDot* ds [[buffer(0)]],
+                              constant Cam& cam [[buffer(1)]]) {
+    TownDot d = ds[iid];
+    float2 corner = float2((vid == 1 || vid == 3 || vid == 4) ? 1.0 : -1.0, (vid == 2 || vid == 4 || vid == 5) ? 1.0 : -1.0);
+    float e = d.r + 1.0;
+    TownDotV o;
+    o.position = toClip(toScreen(d.p, cam) + corner * e, cam);
+    o.local = corner * e;
+    o.r = d.r;
+    o.colour = d.colour;
+    return o;
+}
+fragment float4 townDotFragment(TownDotV in [[stage_in]]) {
+    float a = clamp(in.r - length(in.local) + 0.5, 0.0, 1.0);
+    if (a <= 0.0) discard_fragment();
+    return float4(in.colour.rgb * a, a);
+}
+
 // MARK: small places as diamonds, so they can be seen and tapped; all of them turn into their real shape at the same
 // zoom
 struct Diamond { float2 p; float2 pad; float4 colour; };

@@ -1,0 +1,110 @@
+import Foundation
+import CoreGraphics
+import simd
+
+/// PLACES ON OUR MAP (7.4), the old native app's system (30 Oct 23:38: the old native app's system, followed;
+/// old MapPlaces.openPlaceCountry): the world plain in Places; a country tapped is opened, framed as
+/// a region map is (the rest of the world into its continent's blue) and its towns come in as their built-up shapes,
+/// every shape at once, solid in our grey (old encodeTownShapes: "solid, so neighbours are one colour"), yours lime,
+/// wished blue, the one under the finger the darker grey. No circles for towns with no shape (30 Oct 23:38: no circles
+/// on the towns map); dots only with Map settings' Town dots on.
+extension MapController {
+    /// the open country's towns shown now (all of them: the old app showed every shape of the country at once)
+    func townsShown(_ s: TownScene) -> Int { s.cc == placeOpenID ? s.towns.count : 0 }
+    /// the open country's id, lowercased ("de")
+    var placeOpenID: String? { placeOpen.flatMap { world?.places[$0].id.lowercased() } }
+
+    /// A COUNTRY OPENED IN PLACES: framed as a region map (6.5's room), the rest of the world fading into its
+    /// continent's blue, its towns read (from the data server, kept for the session)
+    func openPlace(_ i: Int) {
+        guard placesMode, let w = world, i >= 0, i < w.places.count, placeOpen != i else { return }
+        townPressed = nil
+        placeOpen = i
+        frameRegion(i)
+        let cc = w.places[i].id.lowercased()
+        guard townScenes[cc] == nil, !townLoading.contains(cc) else { takeTownMarks(); return }
+        townLoading.insert(cc)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let towns = await TownStore.shared.towns(cc)
+            let shapes = await TownStore.shared.shapes(cc)
+            let scene = towns.map { TownScene(cc: cc, towns: $0, shapes: shapes) }
+            await MainActor.run {
+                guard let self else { return }
+                self.townLoading.remove(cc)
+                guard let scene, !scene.towns.isEmpty else { return }
+                self.townScenes[cc] = scene
+                self.takeTownMarks()
+                self.needsFrame = true
+                #if DEBUG
+                NSLog("wya towns %@: %d towns, %d shaped", cc, scene.towns.count, scene.runs.filter { $0 != nil }.count)
+                #endif
+            }
+        }
+    }
+    /// back to the world: the towns go, the world comes back (the camera stays where it is)
+    func closePlace() {
+        guard placeOpen != nil else { return }
+        placeOpen = nil
+        townPressed = nil
+        closeRegions()
+    }
+
+    /// the town under a screen point (only towns showing now)
+    func townHit(at p: CGPoint) -> (cc: String, i: Int)? {
+        guard placesMode else { return nil }
+        let m = mapPoint(p)
+        let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(12 / k)
+        let dots = MapSettingsStore.shared.value.townDots
+        guard let cc = placeOpenID, let s = townScenes[cc] else { return nil }
+        return s.town(at: mp, reach: reach, upTo: s.towns.count, dots: dots).map { (cc, $0) }
+    }
+
+    /// which towns of the loaded places are yours, from the store (`t:` keys)
+    func takeTownMarks() {
+        var st: [String: Set<Int>] = [:], wi: [String: Set<Int>] = [:]
+        var count = 0
+        for (k, s) in MarkStore.shared.marks where k.kind == .town {
+            if s.stamped { count += 1 }
+            let cc = String(k.id.prefix { $0 != "/" })
+            guard let sc = townScenes[cc], let i = sc.index[k.id] else { continue }
+            if s.stamped { st[cc, default: []].insert(i) } else if s.wished { wi[cc, default: []].insert(i) }
+        }
+        townStamped = st; townWished = wi
+        if townCount != count { townCount = count }
+        townsVersion += 1
+        needsFrame = true
+    }
+}
+
+/// STAMPING A TOWN STAMPS ITS COUNTRY (7.4's quick add: "stamped (with its region chain and country)"): the country is
+/// stamped too unless it already is, and remembered as stamped only through a town; unstamping the town takes the
+/// country back only when it was stamped through a town and no other stamped town of it holds it. The region chain is
+/// not stamped yet (a town names its region by name, not by the region files' ids).
+enum TownStamps {
+    @MainActor
+    static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource) async {
+        await MarkStore.shared.stamp(key, name: name, cc: cc, source: source)
+        let country = PlaceKey.country(cc)
+        guard !MarkStore.shared.state(country).stamped else { return }
+        await MarkStore.shared.stamp(country, source: source)
+        through.insert(cc)
+    }
+
+    @MainActor
+    static func unstamp(_ key: PlaceKey, name: String, cc: String) async {
+        await MarkStore.shared.unstamp(key, name: name)
+        guard through.contains(cc) else { return }
+        let held = MarkStore.shared.marks.contains { $0.key.kind == .town && $0.value.stamped && $0.key.id.hasPrefix(cc + "/") }
+        guard !held else { return }
+        through.remove(cc)
+        let country = PlaceKey.country(cc)
+        if MarkStore.shared.state(country).stamped { await MarkStore.shared.unstamp(country) }
+    }
+
+    /// the countries stamped only through a town
+    private static let throughKey = "wya.towns.through"
+    @MainActor private static var through: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: throughKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: throughKey) }
+    }
+}
