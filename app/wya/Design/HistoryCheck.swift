@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import Photos
 
 /// THE HISTORY READER'S CHECKS (Part 9.12's fixtures for shapes A to D, the time model's offsets; Part 10 Step 7), run
 /// inside the app by the test driver's `historycheck`, against the map's own world shapes. Results into
@@ -73,6 +74,26 @@ enum HistoryCheck {
 
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
+        return out
+    }
+
+    /// the simulator's photo library read (Part 9.13's library): asks for access the first time (the system's question),
+    /// then every photo's place and day, the presence rows and the photo links; counts and the rows into the log
+    static func photos(map: MapController) async -> [String] {
+        guard let w = map.world else { return ["FAIL world: not loaded"] }
+        let placeAt: (Double, Double) -> String? = { lat, lon in
+            w.place(at: EqualEarth.project(lon: lon, lat: lat)).map { w.places[$0].id }
+        }
+        guard await PhotosReader.ask() else { return ["FAIL photos: no access (\(PhotosReader.access.rawValue))"] }
+        let t0 = Date()
+        let (samples, skipped) = await PhotosReader.samples()
+        let rows = HistoryReader.presence(samples, placeAt: placeAt)
+        let links = PhotosReader.links(samples, placeAt: placeAt)
+        var out = ["photos: \(samples.count) with a place, \(skipped) without, read in \(Int(Date().timeIntervalSince(t0) * 1000)) ms",
+                   "rows: \(rows.count); links: \(links.count)"]
+        out += rows.prefix(30).map { "  \($0.day) \($0.place) x\($0.count)" }
+        out.append((samples.count == links.count + samples.filter { placeAt($0.lat, $0.lon) == nil }.count ? "PASS" : "FAIL")
+                   + " every photo in a place has its link")
         return out
     }
 }
