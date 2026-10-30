@@ -128,8 +128,16 @@ struct ContentView: View {
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
-            // Details pulled down below 50% close and keep (4.4.1)
-            if DetailsState.shared.isOpen, s == .quarter || s == .closed { DetailsState.shared.close(water: water) }
+            if DetailsState.shared.isOpen, water.stampedList {
+                // Details opened from the list: a pull down closes them, back to the list at full (A4.21 reversed)
+                if s != .full { DetailsState.shared.close(water: water); water.go(.full) }
+            } else if water.stampedList, s != .full {
+                // the list pulled down: it goes, the water stays where the pull left it (4.6.3)
+                water.closeList(back: false)
+            } else if DetailsState.shared.isOpen, s == .quarter || s == .closed {
+                // Details pulled down below 50% close and keep (4.4.1)
+                DetailsState.shared.close(water: water)
+            }
         }
     }
 

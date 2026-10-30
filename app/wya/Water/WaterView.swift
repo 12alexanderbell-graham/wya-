@@ -142,13 +142,18 @@ struct SheetContent: View {
             // water's bottom, under the tabs, its own motion untouched (asked him; default), and back up on close
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
-                    .offset(y: water.settings || water.details ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: water.settings || water.details)
+                    .offset(y: water.settings || water.details || water.stampedList ? water.layout.H - form.top : 0)
+                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
             // (its contents are there in one frame once the water has risen; no fade, no words rolling yet)
             if water.details && water.detailsWords { DetailsSheet(water: water, form: form).transition(.identity) }
+            // THE STAMPED LIST (Part 4.6) under the caption, which stays; hidden while Details from a row is up
+            let captionY = max(L.headBottom + 12 + 52, form.top + 72)
+            if water.stampedList && !water.details {
+                StampedList(water: water, map: map, form: form, top: captionY + 56).transition(.identity)
+            }
 
             // the name and number: at full they stay under the head
             if !Perf.shared.off.contains("caption") { Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
@@ -164,6 +169,21 @@ struct SheetContent: View {
                 // last of a roll out is under the capsule's top (author's call, A2.5)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
+            // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
+            // (at 0 it refuses); with the list up the same tap closes it
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details {
+                Color.clear
+                    .frame(width: 180, height: 76)
+                    .contentShape(Rectangle())
+                    .position(x: L.W / 2, y: captionY + 4)
+                    .onTapGesture {
+                        if water.stampedList { Feel.tap(); water.closeList() }
+                        else if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
+                        else { Feel.refuse() }
+                    }
+                    .accessibilityLabel("Stamped list")
+                    .accessibilityAddTraits(.isButton)
+            }
         }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs

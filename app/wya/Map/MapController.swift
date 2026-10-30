@@ -342,6 +342,11 @@ final class MapController {
     func mapPoint(_ s: CGPoint) -> SIMD2<Double> {
         c + (SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2) / k
     }
+    /// where a map point is on screen now (mapPoint's reverse)
+    func screenPoint(_ m: SIMD2<Double>) -> CGPoint {
+        let s = (m - c) * k + SIMD2(Double(view.width), Double(view.height)) / 2
+        return CGPoint(x: s.x, y: s.y)
+    }
 
     // MARK: fingers (from the Metal view, which owns the touches: one owner, so nothing ever jumps) The old app's rule:
     // the camera is held inside the world on every touch, even with a pinch held; there is no rubber band past the
