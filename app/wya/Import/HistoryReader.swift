@@ -355,6 +355,8 @@ nonisolated enum HistoryReader {
     /// the zone a sample happened in: its own offset, else its place's zone, else the phone's (Part 9.9)
     static func zone(_ s: Sample, _ place: String) -> TimeZone {
         s.offset.flatMap { TimeZone(secondsFromGMT: $0 * 60) }
+            // the zone whose shape holds the point (D13), then the country's nearest zone point, then the phone's
+            ?? ZoneShapes.shared.zone(lat: s.lat, lon: s.lon).flatMap(TimeZone.init(identifier:))
             ?? TimeZones.zone(cc: place.count == 2 ? place : nil, lat: s.lat, lon: s.lon).flatMap(TimeZone.init(identifier:))
             ?? .current
     }

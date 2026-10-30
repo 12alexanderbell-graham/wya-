@@ -4,6 +4,7 @@
 
 - **World shapes, the places and their disputes**: Natural Earth (public domain), with wya?!'s own fixes for the places and pieces it shows separately.
 - **De facto and disputed lines in detail** (Ukraine's four regions and Crimea, Transnistria, Abkhazia and South Ossetia, Northern Cyprus and the UN buffer zone, Akrotiri and Dhekelia, Mount Athos, Somaliland and Sool, Western Sahara, Guantánamo Bay, Kashmir, Arunachal Pradesh, the Golan Heights, the UNDOF zone, Gaza, the West Bank's Areas A and B, the Halayib triangle, Abyei, the Essequibo, Olivenza): OpenStreetMap, © OpenStreetMap contributors, available under the Open Database License (ODbL), openstreetmap.org/copyright. The boundaries used are in `data/sources/osm`, fetched through polygons.openstreetmap.fr. Place names were looked up with Nominatim.
+- **Time zones by point** (`timezones.wytz`, built by `data/pipeline/tz-pack.py`): [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) release 2025b, from OpenStreetMap, © OpenStreetMap contributors, Open Database License (ODbL).
 
 ## Flags
 

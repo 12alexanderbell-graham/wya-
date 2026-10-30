@@ -184,6 +184,19 @@ enum HistoryCheck {
         check("Pick: a video's ISO 6709 place", v.map { $0 == (37.5665, 126.978) } == true && v2.map { $0 == (-33.8688, 151.2093) } == true,
               "\(String(describing: v)) \(String(describing: v2))")
 
+        // time zones by point (D13): border towns get their own side's zone; the 1 am Tokyo photo (no offset of its
+        // own, as the library gives it) is on the Tokyo day
+        let zs: [(String, Double, Double, String)] = [("Tijuana", 32.525, -117.03, "America/Tijuana"), ("San Diego", 32.72, -117.16, "America/Los_Angeles"),
+            ("Baarle-Hertog", 51.4378, 4.9306, "Europe/Brussels"), ("Baarle-Nassau", 51.4456, 4.9278, "Europe/Amsterdam"),
+            ("El Paso", 31.76, -106.49, "America/Denver"), ("Kathmandu", 27.7172, 85.324, "Asia/Kathmandu")]
+        let t0z = Date()
+        let zbad = zs.filter { ZoneShapes.shared.zone(lat: $0.1, lon: $0.2) != $0.3 }.map(\.0)
+        let zms = Int(Date().timeIntervalSince(t0z) * 1000)
+        check("zones by point", zbad.isEmpty, zbad.isEmpty ? "\(zs.count) towns right (first read and lookups \(zms) ms)" : "wrong: \(zbad.joined(separator: ", "))")
+        let tokyo = HistoryReader.Sample(lat: 35.68, lon: 139.69, at: HistoryReader.date("2024-02-29T16:00:00Z")!, offset: nil, end: nil, asset: "x")
+        let tp = HistoryReader.presence([tokyo], placeAt: placeAt)
+        check("the 1 am Tokyo photo", tp.first?.day.description == "2024-03-01" && tp.first?.place == "jp", show(tp))
+
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
         return out
