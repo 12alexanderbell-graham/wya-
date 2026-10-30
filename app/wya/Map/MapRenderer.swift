@@ -271,6 +271,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
 
     /// THE REGION MAP'S BUFFERS (6.5), made once per scene
     private weak var regionBuilt: RegionScene?
+    private var regionMarksBuilt = -1
+    private weak var regionMarksScene: RegionScene?
+    private var regionStampedIndex: (MTLBuffer, Int)?, regionWishedIndex: (MTLBuffer, Int)?
     private var regionPoints: MTLBuffer?
     private var regionFans: MTLBuffer?
     /// the three sets of the borders' change and the change they were made for
@@ -422,7 +425,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                         var q = q
                         ce.setVertexBytes(&q, length: 4, index: 3)
                         ce.setVertexBuffer(b, offset: 0, index: 0)
-                        ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count)
+                        ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count * 2)
                     }
                     set(linesShared, l.shared.count / 10, 1)
                     set(linesNew, l.new.count / 10, Float(Motion.camera(max(0, tIn))))
@@ -602,7 +605,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             func regionGroup(_ units: Set<Int>, kind: Float, tint: SIMD4<Float>, pattern: Float = 0) {
                 guard !units.isEmpty else { return }
                 enc.setDepthStencilState(markGroup)
-                guard regionFan(sc.entries(of: units)) else { return }
+                guard regionFan(units.flatMap { sc.unitEntries[$0] }) else { return }
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
                 relief(kind, tint, pattern: pattern)
             }
@@ -629,16 +632,42 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
                 relief(1)
             }
+            // yours: lime and blue, each one draw from an index made once per change of marks
+            if regionMarksBuilt != controller.regionMarksVersion || regionMarksScene !== sc {
+                regionMarksBuilt = controller.regionMarksVersion
+                regionMarksScene = sc
+                func index(_ entries: [Int]) -> (MTLBuffer, Int)? {
+                    var idx: [UInt32] = []
+                    for e in entries { let r = sc.runs[e]; idx += sc.fans[r.start ..< r.start + r.count] }
+                    guard !idx.isEmpty, let b = device.makeBuffer(bytes: idx, length: idx.count * 4) else { return nil }
+                    return (b, idx.count)
+                }
+                regionStampedIndex = index(controller.regionStampedEntries)
+                regionWishedIndex = index(controller.regionWishedEntries)
+            }
+            func marked(_ ix: (MTLBuffer, Int)?, tint: SIMD4<Float>, pattern: Float) {
+                guard let (b, n) = ix else { return }
+                enc.setDepthStencilState(markGroup)
+                enc.setRenderPipelineState(fanPipe)
+                enc.setVertexBuffer(rp, offset: 0, index: 0)
+                enc.setVertexBuffer(rp, offset: 0, index: 2)
+                var one: Float = 1
+                enc.setVertexBytes(&one, length: 4, index: 3)
+                enc.drawIndexedPrimitives(type: .triangle, indexCount: n, indexType: .uint32, indexBuffer: b, indexBufferOffset: 0)
+                enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                relief(2, tint, pattern: pattern)
+            }
+            if controller.showsStamped { marked(regionStampedIndex, tint: Palette.limeV, pattern: hatch) }
+            if controller.showsWished { marked(regionWishedIndex, tint: Palette.blueV, pattern: dots) }
             let rpress = pressed == sc.place ? controller.regionPressed : nil
-            let st = controller.showsStamped ? controller.regionStamped : []
-            let wi = controller.showsWished ? controller.regionWished : []
-            regionGroup(st.subtracting([rpress ?? -1]), kind: 2, tint: Palette.limeV, pattern: hatch)
-            regionGroup(wi.subtracting([rpress ?? -1]), kind: 2, tint: Palette.blueV, pattern: dots)
             if let u = rpress {
-                let base = st.contains(u) ? Palette.limeV : wi.contains(u) ? Palette.blueV : Palette.whiteV
+                let st = controller.showsStamped && controller.regionStamped.contains(u)
+                let wi = controller.showsWished && controller.regionWished.contains(u)
+                let base = st ? Palette.limeV : wi ? Palette.blueV : Palette.whiteV
                 regionGroup([u], kind: 2, tint: base * SIMD4<Float>(0.80, 0.79, 0.77, 1))
             }
         }
+
         // 4. the lakes (the slices carry their own, as holes in the land through which the sea's relief shows): drawn
         // with the same sea relief, so a lake is the same colour at every level and nothing changes when a level comes in
         if tiles == nil {
@@ -659,6 +688,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // blue has it, so nothing pops); drawn over the lines, so their borders go into the blue with them
         if flat > 0.001, let k = awayKey {
             let aw = away(k, w)
+            let focusAway = Self.focus(k)
             let st = controller.showsStamped ? controller.stamped : []
             let wi = controller.showsWished ? controller.wished : []
             func colourOf(_ p: Int) -> Int { p >= 0 && st.contains(p) ? 0 : p >= 0 && wi.contains(p) ? 1 : 2 }
@@ -670,7 +700,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 if let tiles {
                     for t in tiles {
                         for it in t.items {
-                            let isAway = Self.focus(k).map { it.place != $0 }
+                            let isAway = focusAway.map { it.place != $0 }
                                 ?? it.cont.map { $0 != k } ?? (it.place < 0 || aw.places.contains(it.place))
                             if isAway && colourOf(it.place) == g { tileFans(t, start: it.start, count: it.count); any = true }
                         }

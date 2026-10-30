@@ -196,14 +196,19 @@ struct SheetContent: View {
             }
 
             // the name and number: at full they stay under the head
-            if !Perf.shared.off.contains("caption") { Group {
-                if let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) { rl } else {
+            // THE REGION MAP'S LINE fills the 25% water from the top where the Countries caption's name sits (its first
+            // line 28 pt under the water's edge), not a small block in its middle
+            if !Perf.shared.off.contains("caption"), let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) {
+                rl
+                    .padding(.top, form.top + 18)
+                    .frame(width: L.W, height: L.H, alignment: .top)
+                    .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
+            }
+            if !Perf.shared.off.contains("caption"), map.regionScene == nil {
                     Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
                             count: map.sunPicked ? map.streakWeeks : count,
                             tail: map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
                             night: FullView.night(form.page), visible: captionShown)
-                }
-            }
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full

@@ -16,16 +16,17 @@ struct RegionLevels: View {
     let pick: (Int) -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            // the old app's sizes exactly (its band row): the name and the levels at subheadline, the shown one bold
-            roll(name).font(.subheadline.weight(.bold))
+        VStack(spacing: 12) {
+            // the name at the Countries caption's name size, the levels at the size of its tail (17 pt), set to use the
+            // water: lines 10 pt apart, words 18 pt apart
+            roll(name).font(.title2.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
             if levels.count > 1 {
-                CentredFlow(spacing: 12, lineSpacing: 4) {
+                CentredFlow(spacing: 18, lineSpacing: 10) {
                     ForEach(levels) { l in
                         let here = l.row == current
                         roll(l.row == notReady ? "Not ready" : l.word)
-                            .font(.subheadline.weight(here ? .bold : .regular))
+                            .font(.body.weight(here ? .semibold : .regular))
                             .multilineTextAlignment(.center)
                             .frame(minHeight: 20)
                             .contentShape(Rectangle())

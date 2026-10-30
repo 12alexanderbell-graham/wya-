@@ -353,6 +353,10 @@ final class MapController {
     @ObservationIgnored private(set) var regionLines: RegionLines?
     private(set) var regionStamped: Set<Int> = []
     private(set) var regionWished: Set<Int> = []
+    @ObservationIgnored private(set) var regionStampedEntries: [Int] = []
+    /// changes each time the region marks are worked out again (the renderer rebuilds their index then)
+    @ObservationIgnored private(set) var regionMarksVersion = 0
+    @ObservationIgnored private(set) var regionWishedEntries: [Int] = []
     /// your number at the open level (the Regions caption)
     var regionCount: Int { regionStamped.count }
     /// the level asked for (the level line's centre), and a level that could not be had (offline, 6.6)
@@ -367,13 +371,20 @@ final class MapController {
         guard let w = world, i >= 0, i < w.places.count else { return }
         // the level already drawn: only the region asked for is shown
         if let focus, let sc = regionScene, sc.place == i, row == nil || row == sc.row {
+            // (a level still loading is dropped: this one is the one asked for now)
+            regionJob += 1
+            regionRow = sc.row; regionNotReady = nil
             showRegion(focus, in: sc); return
         }
         regionJob += 1
         let job = regionJob
         let id = w.places[i].id.lowercased()
         guard let r = row ?? RegionCatalog.shared.first(id)?.row else { return }
-        if regionScene?.place != i { regionScene = nil; regionPressed = nil; frameRegion(i) }
+        if regionScene?.place != i {
+            // another country's borders go back into its outline as this one comes (never left drawn)
+            if let old = regionScene { regionLines = RegionLines(shared: [], new: [], old: old.segs, start: CACurrentMediaTime(), delay: 0) }
+            regionScene = nil; regionPressed = nil; frameRegion(i)
+        }
         regionRow = r
         regionNotReady = nil
         // the level drawn now, for the borders both share (A6.9)
@@ -384,8 +395,18 @@ final class MapController {
             let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {
                 guard let self, self.regionJob == job, self.focusPlace == i else { return }
-                // a level that can't be had now: the one shown stays, its word says so (6.6)
-                guard let scene else { self.regionNotReady = r; self.regionRow = self.regionScene?.row ?? r; return }
+                // a level that can't be had now: the one shown stays, its word says so (6.6); with nothing shown yet
+                // (a finer level asked for at launch, offline), the country's bundled first level instead
+                guard let scene else {
+                    if self.regionScene == nil, let first = RegionCatalog.shared.first(id)?.row, first != r {
+                        self.openRegions(i, row: first, focus: focus); return
+                    }
+                    self.regionNotReady = r; self.regionRow = self.regionScene?.row ?? r; return
+                }
+                // the region under the finger or held by its card, carried to the new level by its id (or let go)
+                if let old = self.regionScene, let u = self.regionPressed, u < old.unitIDs.count {
+                    self.regionPressed = scene.unitIDs.firstIndex(of: old.unitIDs[u])
+                }
                 self.regionScene = scene
                 self.regionSince = CACurrentMediaTime()
                 lines?.start = self.regionSince
@@ -407,7 +428,7 @@ final class MapController {
         if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }
         regionScene = nil
         regionPressed = nil
-        regionStamped = []; regionWished = []
+        regionStamped = []; regionWished = []; regionStampedEntries = []; regionWishedEntries = []
         if focusPlace != nil {
             focusPlace = nil
             // the camera is free of the country again (it stays where it is)
@@ -483,6 +504,10 @@ final class MapController {
         }
         if st != regionStamped { regionStamped = st }
         if wi != regionWished { regionWished = wi }
+        // the entries the renderer fills for them, worked out here once, not every frame
+        regionStampedEntries = s.entries(of: st)
+        regionWishedEntries = s.entries(of: wi)
+        regionMarksVersion &+= 1
         needsFrame = true
     }
 
