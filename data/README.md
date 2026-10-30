@@ -68,3 +68,7 @@ A region level is one file: "WYAR", a JSON head (the quantization, the units wit
     python3 pipeline/d2_parents.py fr-5.wyar fr-4.wyar                                                    # each unit's parent, by the larger share of its area
 
 Each shared arc is simplified once, so neighbouring units keep one border.
+
+France's coarser levels on the communes' borders: each commune's arrondissement, department and region from INSEE's official code tables (v_commune, v_arrondissement, v_departement), then each level built from the finer one's arcs (a unit's border is the arcs its members use once), so every level shares the same lines:
+
+    python3 pipeline/d2_insee.py fr-5.wyar fr-3.wyar fr-2.wyar fr-1.wyar <INSEE folder> <out>
