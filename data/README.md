@@ -72,3 +72,15 @@ Each shared arc is simplified once, so neighbouring units keep one border.
 France's coarser levels on the communes' borders: each commune's arrondissement, department and region from INSEE's official code tables (v_commune, v_arrondissement, v_departement), then each level built from the finer one's arcs (a unit's border is the arcs its members use once), so every level shares the same lines:
 
     python3 pipeline/d2_insee.py fr-5.wyar fr-3.wyar fr-2.wyar fr-1.wyar <INSEE folder> <out>
+
+## Region units on the piece lines (D1b)
+
+    python3 pipeline/nepieces.py <original detail-100m.wyad>      # nepieces.pkl
+    python3 pipeline/truth.py                                     # truth.pkl
+    python3 pipeline/d1b_pieces.py <old Regions folder> <original detail-100m.wyad> disputes.json truth.pkl nepieces.pkl <out>
+
+Every region file of a piece's possible holders is cut along the piece's line (the fine OpenStreetMap shape where
+`truth.py` has one). Parts keep their unit's `id`; a part inside a piece carries `q`, the piece key (`p:<id>`). For a
+piece held by H in the chosen view, a region map draws the parts tagged with it from H's own file when H's file has
+any, otherwise from the file of the place the piece is drawn with. `<out>/d1b-report.json` lists every file changed,
+the units cut and the pieces found. Only changed files are written; the rest stay as they are.
