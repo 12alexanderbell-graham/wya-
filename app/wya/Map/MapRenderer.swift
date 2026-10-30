@@ -618,6 +618,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                                           indexBufferOffset: 0)
                 return true
             }
+            // the country's own colour goes first (its stamp or wish is the regions' now): where its outline and its
+            // regions' differ by a hair, no sliver of the country's lime shows
+            if mark(sc.place) {
+                enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                relief(1)
+            }
             enc.setDepthStencilState(markGroup)
             if allRegions() {
                 enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)

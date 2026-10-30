@@ -428,7 +428,10 @@ final class MapController {
         let room = layout.room(sheetTop: layout.top(.quarter))
         let top = Double(room.lowerBound), bottom = Double(room.upperBound)
         let fw = max(0.05, f.z - f.x), fh = max(0.05, f.w - f.y)
-        let nk = min(kMax, max(worldKMin, min((W - 32) / fw, max(80, bottom - top) / fh)))
+        // centred, never shifted for the zoom column (20 Oct answer 16) and never under it: the same room kept clear
+        // on both sides (the column's 44 pt and its 16 pt margin, and 4 pt more)
+        let side: CGFloat = 16 + 44 + 4
+        let nk = min(kMax, max(worldKMin, min((W - 2 * Double(side)) / fw, max(80, bottom - top) / fh)))
         let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
         let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
         focusPlace = i

@@ -165,6 +165,8 @@ final class RegionsMenuModel {
     @ObservationIgnored private var builtFor: ObjectIdentifier?
     /// what a picked row does (the flight, 6.4)
     @ObservationIgnored var onPick: ((Row) -> Void)?
+    /// a country opened in Regions without the list (A6.14)
+    @ObservationIgnored var openDirect: ((Int) -> Void)?
 
     /// every place the borders view draws that has a bundled first level, by name
     func build(map: MapController) {
