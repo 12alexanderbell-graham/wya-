@@ -404,8 +404,12 @@ struct ContentView: View {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
         let now = CACurrentMediaTime()
         if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
-        // the region map has its own hold menu (11.5's Regions menu, not built): no country menu there
-        if map.regionScene != nil { return nil }
+        // the region map: the region's own menu (11.5's Regions menu)
+        if let sc = map.regionScene {
+            guard let u = map.regionUnit(at: p), u < sc.unitIDs.count else { return nil }
+            map.regionPressed = u
+            return regionMenu(u, in: sc, at: p, map: map, water: water)
+        }
         // still up (the press's touch may not have reached the map yet): this press only closes it
         if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
             || head.settingsOpen { return nil }
@@ -497,6 +501,59 @@ struct ContentView: View {
             }]))
         }
         return UIMenu(title: pl.n, children: sections)
+    }
+
+    /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish | Details, Verify | Go one level down |
+    /// Share. Stamping stamps its parents too (A6.12). Details: the region card rises, then Details (6.7). Verify waits
+    /// for its region test (shown, unavailable). Its places, its page, Add to a list and Add to a plan wait for their parts.
+    @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water) -> UIMenu {
+        let key = PlaceKey(.region, sc.unitIDs[u])
+        let name = sc.unitNames[u]
+        let st = MarkStore.shared.state(key)
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let country = map.world.map { $0.places[sc.place].n } ?? ""
+        let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
+            if st.stamped { Feel.lift() } else { Feel.stamp() }
+            Task {
+                if st.stamped { await MarkStore.shared.unstamp(key, name: name) }
+                else { await RegionStamps.stamp(u, in: sc, source: .hand) }
+            }
+        }
+        let wish = UIAction(title: st.wished ? "Unwish" : "Wish", attributes: st.stamped ? .disabled : []) { _ in
+            Feel.tap()
+            Task {
+                if st.wished { await MarkStore.shared.unwish(key, name: name) }
+                else { await MarkStore.shared.wish(key, name: name, cc: sc.id, level: sc.row) }
+            }
+        }
+        let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }
+            }
+        }
+        let verify = UIAction(title: "Verify", attributes: .disabled) { _ in }
+        // the next finer level in use, if there is one
+        let used = RegionCatalog.shared.used(sc.id).map(\.row)
+        let next = used.firstIndex(of: sc.row).flatMap { $0 + 1 < used.count ? used[$0 + 1] : nil }
+        let down = UIAction(title: "Go one level down", attributes: next == nil ? .disabled : []) { _ in
+            if let next { after { map.openRegions(sc.place, row: next) } }
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                let vc = UIActivityViewController(activityItems: ["\(name), \(country)"], applicationActivities: nil)
+                let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                var top = root
+                while let n = top?.presentedViewController { top = n }
+                top?.present(vc, animated: true)
+            }
+        }
+        return UIMenu(title: name, children: [
+            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [details, verify]),
+            UIMenu(options: .displayInline, children: [down]),
+            UIMenu(options: .displayInline, children: [share]),
+        ])
     }
 
     /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one

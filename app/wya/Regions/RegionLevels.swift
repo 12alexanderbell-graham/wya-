@@ -16,15 +16,16 @@ struct RegionLevels: View {
     let pick: (Int) -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            roll(name).font(.subheadline.weight(.bold))
+        VStack(spacing: 8) {
+            // the name at the Countries caption's name size, the levels at body size (the 25% water's own type)
+            roll(name).font(.title2.weight(.semibold))
                 .accessibilityAddTraits(.isHeader)
             if levels.count > 1 {
-                CentredFlow(spacing: 12, lineSpacing: 4) {
+                CentredFlow(spacing: 14, lineSpacing: 6) {
                     ForEach(levels) { l in
                         let here = l.row == current
                         roll(l.row == notReady ? "Not ready" : l.word)
-                            .font(.subheadline.weight(here ? .bold : .regular))
+                            .font(.body.weight(here ? .semibold : .regular))
                             .multilineTextAlignment(.center)
                             .frame(minHeight: 20)
                             .contentShape(Rectangle())

@@ -43,7 +43,11 @@ struct ZoomColumn: View {
                 .overlay { if map.atHome { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
                 .offset(x: slide(1))
                 .allowsHitTesting(slide(1) < 30)
-            cell("reset", label: "Back to the world", ink: ink, dim: map.atRest) { map.goHome() }
+            // on a region map: back to the country's frame (6.5)
+            cell("reset", label: map.regionScene != nil ? "Back to the country" : "Back to the world", ink: ink,
+                 dim: map.regionScene == nil && map.atRest) {
+                if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.goHome() }
+            }
                 .disabled(map.atRest)
                 // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)
                 .overlay { if map.atRest { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
