@@ -256,6 +256,12 @@ final class TestDriver {
                         let lines = HistoryCheck.run(map: m)
                         try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/historycheck.log", atomically: true, encoding: .utf8)
                     }
+                // photocheck: the photo library read (asks for access the first time)
+                case "photocheck":
+                    if let m = map {
+                        let lines = await HistoryCheck.photos(map: m)
+                        try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/photocheck.log", atomically: true, encoding: .utf8)
+                    }
                 case "storecheck":
                     let lines = await StoreCheck.run()
                     try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)

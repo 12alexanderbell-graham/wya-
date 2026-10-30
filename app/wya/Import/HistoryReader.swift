@@ -19,7 +19,7 @@ import Foundation
 /// A visit (B, C, D) covers every day from its start to its end; points are single instants.
 ///
 /// Not here yet (logged): the streaming scanner for files over 50 MB (the book's: only coordinate and time keys,
-/// memory-mapped; today a big file is read whole), the level-1 region (step 3's second half), photos (step 8).
+/// memory-mapped; today a big file is read whole), the level-1 region (step 3's second half). Photos: PhotosReader.
 nonisolated enum HistoryReader {
     enum Shape: String, Sendable { case records = "A", semantic = "B", android = "C", iphone = "D" }
 
@@ -31,6 +31,8 @@ nonisolated enum HistoryReader {
         var at: Date
         var offset: Int?
         var end: Date?
+        /// a photo's asset id when the sample came from the library (PhotosReader)
+        var asset: String? = nil
     }
 
     struct Result: Sendable {
@@ -138,13 +140,11 @@ nonisolated enum HistoryReader {
         var rows: [String: Presence] = [:]
         var order: [String] = []
         for s in samples {
-            let cell = Int64((s.lat * 100).rounded(.down)) * 100_000 + Int64((s.lon * 100).rounded(.down))
+            let cell = Self.cell(s.lat, s.lon)
             let place: String?
             if let p = cellPlace[cell] { place = p } else { place = placeAt(s.lat, s.lon); cellPlace[cell] = place }
             guard let place else { continue }
-            let zone = s.offset.flatMap { TimeZone(secondsFromGMT: $0 * 60) }
-                ?? TimeZones.zone(cc: place.count == 2 ? place : nil, lat: s.lat, lon: s.lon).flatMap(TimeZone.init(identifier:))
-                ?? .current
+            let zone = Self.zone(s, place)
             let d0 = LocalDay(s.at, in: zone)
             let d1 = s.end.map { LocalDay($0, in: zone) } ?? d0
             var d = d0
@@ -165,6 +165,17 @@ nonisolated enum HistoryReader {
             }
         }
         return order.compactMap { rows[$0] }
+    }
+
+    /// the 0.01 degree cell (about 1 km) a point is in
+    static func cell(_ lat: Double, _ lon: Double) -> Int64 {
+        Int64((lat * 100).rounded(.down)) * 100_000 + Int64((lon * 100).rounded(.down))
+    }
+    /// the zone a sample happened in: its own offset, else its place's zone, else the phone's (Part 9.9)
+    static func zone(_ s: Sample, _ place: String) -> TimeZone {
+        s.offset.flatMap { TimeZone(secondsFromGMT: $0 * 60) }
+            ?? TimeZones.zone(cc: place.count == 2 ? place : nil, lat: s.lat, lon: s.lon).flatMap(TimeZone.init(identifier:))
+            ?? .current
     }
 
     // MARK: reading values
