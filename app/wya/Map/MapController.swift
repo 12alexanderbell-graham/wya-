@@ -16,7 +16,7 @@ final class MapController {
     @ObservationIgnored private(set) var relief: Relief?
     private(set) var ready = false
 
-    // MARK: what's on the map (a demo account for now: see DemoAccount)
+    // MARK: what's on the map (your marks, from MarkStore; debug builds seed the demo account there)
     var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter); recount(was: oldValue) } }
     /// YOUR COUNT for the world and each continent (the Count service, Store/Count.swift), worked out again when your
     /// stamps or the Count setting change, never per frame
@@ -32,7 +32,14 @@ final class MapController {
     // MARK: A STAR FALLS INTO ITS PLANET (A2.20)
     /// a stamp whose star has not yet fallen: the place, the planet it falls into (CosmosView.planets' index), and the
     /// counts whose share it holds back until it lands (the planets' night grows only then)
-    struct Fall: Equatable { let place: Int; let into: Int; let held: [String] }
+    /// `seen`: the planets were seen at 50% since the stamp, so their night has already changed (Part 9's rule: the
+    /// night sides change the next time 50% is seen, the stars fall the next time the full view is seen)
+    struct Fall: Equatable { let place: Int; let into: Int; let held: [String]; var seen = false }
+    /// the system is seen at 50%: every waiting stamp's share shows in its planets' night now
+    func fallsSeen() {
+        guard falls.contains(where: { !$0.seen }) else { return }
+        for i in falls.indices { falls[i].seen = true }
+    }
     /// waiting to fall, oldest first; star `placesLeft + j` is fall j's, so the star stays where it was until it goes
     private(set) var falls: [Fall] = []
     /// when the falls began (the full view seen); nil while they wait
