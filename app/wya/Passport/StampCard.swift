@@ -86,7 +86,6 @@ final class CardState {
         // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water
         // goes to the highest stop that leaves it 300 or more, and the card starts 0.1 s after the water starts. The
         // card never shrinks to fit a high sheet
-        var delay = 0.0
         if let water {
             let L = water.layout
             let fits: (Water.Stop) -> Bool = { StampCard.Geometry(L: L, sheetTop: water.y($0)).bookH >= 300 }
