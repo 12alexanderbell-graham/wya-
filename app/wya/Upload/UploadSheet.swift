@@ -987,7 +987,7 @@ struct UploadSheet: View {
                     // slides the row away; a dropped row stays, at the end, in black 50%
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button { _ = u.tap(r.place) } label: { Text(r.dropped ? "Keep" : "Drop") }
-                            .tint(r.dropped ? Palette.ink : Color(red: 0xd9 / 255, green: 0x4f / 255, blue: 0x3d / 255))
+                            .tint(r.dropped ? Palette.ink : Palette.red)
                     }
                     .contextMenu {
                         Button("Show on the map") { u.show(r.place) }

@@ -842,7 +842,7 @@ struct MonthField: View {
         }))
         .keyboardType(.numberPad)
         .font(.body)
-        .foregroundStyle(bad ? Color(hex: 0xd94f3d) : Palette.ink)
+        .foregroundStyle(bad ? Palette.red : Palette.ink)
         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
         .focused(focus, equals: id)
         .id(id)
