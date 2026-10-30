@@ -23,6 +23,9 @@ final class Launch {
     /// the logo's planet across, on this screen: big, a little over a third of the width (the old first page's was a
     /// third, up to 140 pt; this page has nothing else on it)
     static func planet(_ W: CGFloat) -> CGFloat { min(W * 0.4, 190) }
+    /// when this launch began (for the launch's timing in the log)
+    static let startTime = CACurrentMediaTime()
+    init() { _ = Self.startTime }
 }
 
 /// THE LOADING SCREEN: lifted by `reveal` x its height

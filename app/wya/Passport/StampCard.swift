@@ -19,31 +19,44 @@ final class CardState {
     var press: CGFloat = 1.25
     var landing = false
 
-    /// stamp it: the stamp travels from the button and presses onto the page; the stamp haptic on the real contact
+    /// the test driver's slow motion for frame checks (1 = real speed; simulator only)
+    static var slow: Double = 1
+    /// stamp it: the stamp travels from the button and presses onto the page; the stamp haptic on the real contact.
+    /// The flying stamp is put in place at the button first and moves from the next frame: started in the same update
+    /// it was inserted in, SwiftUI drew it already landed and there was no flight at all (burst 30 Oct 12:28)
     func land() {
         flying = true
         travel = 0
         press = 1.25
-        withAnimation(.spring(response: 0.30, dampingFraction: 1)) { travel = 1 } completion: { [weak self] in
+        let k = Self.slow
+        DispatchQueue.main.async { [weak self] in
             guard let self, self.flying else { return }
-            withAnimation(.spring(response: 0.12, dampingFraction: 1)) { self.press = 1 } completion: { [weak self] in
+            withAnimation(.spring(response: 0.30 * k, dampingFraction: 1)) { self.travel = 1 } completion: { [weak self] in
                 guard let self, self.flying else { return }
-                Feel.stamp()
-                self.flying = false
+                withAnimation(.spring(response: 0.12 * k, dampingFraction: 1)) { self.press = 1 } completion: { [weak self] in
+                    guard let self, self.flying else { return }
+                    Feel.stamp()
+                    self.flying = false
+                }
             }
         }
     }
     /// lift it back (Stamped tapped on the card that made it): up to 1.25, then back along the arc into the button
+    /// (put in place on the page first, moving from the next frame, as land)
     func lift(then done: @escaping () -> Void) {
         flying = true
         travel = 1
         press = 1
         Feel.lift()
-        withAnimation(.spring(response: 0.12, dampingFraction: 1)) { press = 1.25 } completion: { [weak self] in
+        let k = Self.slow
+        DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            withAnimation(.spring(response: 0.26, dampingFraction: 1)) { self.travel = 0 } completion: { [weak self] in
-                self?.flying = false
-                done()
+            withAnimation(.spring(response: 0.12 * k, dampingFraction: 1)) { self.press = 1.25 } completion: { [weak self] in
+                guard let self else { return }
+                withAnimation(.spring(response: 0.26 * k, dampingFraction: 1)) { self.travel = 0 } completion: { [weak self] in
+                    self?.flying = false
+                    done()
+                }
             }
         }
     }
