@@ -101,3 +101,31 @@ nonisolated struct Moment: Hashable, Codable, Sendable {
     /// the day where it happened
     var day: LocalDay { LocalDay(at, in: TimeZone(identifier: zone) ?? .current) }
 }
+
+/// ROUGH WORDS TO A SORT DAY (Part 9.9's time model): a time typed in words sorts by a small fixed parser, no AI.
+/// "2019" -> 2019-01-01, "Aug 2026" -> 2026-08-01, "12 Aug 2024" -> 2024-08-12, "Summer 2019" -> 2019-06-01 (seasons
+/// start on their first meteorological month, flipped for a southern-hemisphere home base). Words with no year
+/// ("a few days") have no sort day and stay out of the history lines.
+nonisolated enum RoughDay {
+    static func sortDay(_ words: String, southern: Bool = false) -> LocalDay? {
+        let t = words.lowercased().replacingOccurrences(of: ",", with: " ").replacingOccurrences(of: ".", with: " ")
+        if let p = PartialDate(t.trimmingCharacters(in: .whitespaces)), (1000 ... 2999).contains(p.y) { return p.first }
+        let words = t.split(whereSeparator: { $0 == " " || $0 == "/" }).map(String.init)
+        guard let y = words.compactMap({ Int($0) }).first(where: { (1900 ... 2100).contains($0) }) else { return nil }
+        // a season: its first month (north: spring Mar, summer Jun, autumn Sep, winter Dec; south: six months on)
+        let seasons: [String: Int] = ["spring": 3, "summer": 6, "autumn": 9, "fall": 9, "winter": 12]
+        if let m = words.compactMap({ seasons[$0] }).first {
+            return LocalDay(y: y, m: southern ? (m + 5) % 12 + 1 : m, d: 1)
+        }
+        let months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        guard let m = words.compactMap({ w in months.firstIndex(where: { w.hasPrefix($0) }) }).first.map({ $0 + 1 }) else {
+            return LocalDay(y: y, m: 1, d: 1)
+        }
+        // a day: a number from 1 to 31 that is not the year ("12", "12th")
+        let d = words.compactMap { w -> Int? in
+            let n = Int(w.filter(\.isNumber)) ?? 0
+            return w.first?.isNumber == true && (1 ... 31).contains(n) && n != y ? n : nil
+        }.first ?? 1
+        return LocalDay(y: y, m: m, d: d)
+    }
+}
