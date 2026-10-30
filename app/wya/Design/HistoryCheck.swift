@@ -100,6 +100,21 @@ enum HistoryCheck {
         let ms = Int(Date().timeIntervalSince(t0) * 1000)
         check("A 60 MB scanned", hr?.samples.count == copies, "\(copies) points, \(hr?.samples.count ?? -1) read in \(ms) ms (debug build)")
 
+        // visits (step 5): photos allow 4 days between, history 1; home (step 6): the place in over 40% of the months
+        func row(_ day: String, _ place: String) -> HistoryReader.Presence {
+            HistoryReader.Presence(day: LocalDay(day)!, place: place, count: 1, first: .now, last: .now, cell: 0)
+        }
+        let jp = ["2024-03-01", "2024-03-02", "2024-03-07", "2024-03-13"].map { row($0, "jp") }
+        func spans(_ f: [Finds.Find]) -> String {
+            f.map { "\($0.place)\($0.home ? " home" : ""): " + $0.visits.map { "\($0.from)..\($0.to)" }.joined(separator: " ") }.joined(separator: "; ")
+        }
+        let fp = Finds.finds(jp, source: .photos), fh = Finds.finds(jp, source: .history)
+        check("visits from photos", spans(fp) == "jp: 2024-03-01..2024-03-07 2024-03-13..2024-03-13", spans(fp))
+        check("visits from history", spans(fh) == "jp: 2024-03-01..2024-03-02 2024-03-07..2024-03-07 2024-03-13..2024-03-13", spans(fh))
+        let lived = ["2024-01-05", "2024-02-05", "2024-03-05", "2024-04-05", "2024-06-05"].map { row($0, "ch") } + [row("2024-05-10", "it")]
+        let fl = Finds.finds(lived, source: .history)
+        check("home kept out of the trips", spans(fl) == "it: 2024-05-10..2024-05-10; ch home: ", spans(fl))
+
         // not a history: refused
         check("not a history", HistoryReader.read(Data(#"{"hello":[1,2,3]}"#.utf8)) == nil, "refused")
         return out
