@@ -269,6 +269,11 @@ struct CosmosView: View {
         .onChange(of: form.page < 0.001 && form.top <= L.top(.half) + 40 && map.falls.contains { !$0.seen }, initial: true) { _, v in
             if v { map.fallsSeen() }
         }
+        // the planet at the front is always the map's continent (Earth for the world)
+        .onChange(of: map.continent) { _, c in
+            let k = c ?? "World"
+            if Self.planets[chosen].k != k, let j = Self.planets.firstIndex(where: { $0.k == k }) { turnRing(to: j) }
+        }
         .onChange(of: form.page < 0.001) { _, half in
             // back at 50%: the orbits' own turns ease home with the ring, so the chosen planet is at the front again
             if half { withAnimation(Motion.chrome) { orbitFrozen = orbitFrozen.map { $0 - ($0 / (2 * .pi)).rounded() * 2 * .pi } } }
@@ -310,6 +315,15 @@ struct CosmosView: View {
 
     /// choosing a planet turns the ring the short way, carrying on from however it is moving now
     private func select(_ i: Int) {
+        turnRing(to: i)
+        map.sunPicked = false
+        Feel.tap(); Sound.tap()
+        map.show(continent: Self.planets[i].k)
+    }
+
+    /// the ring turned so planet i is at the front (a pick here, or the map's continent changed elsewhere: the Map tab
+    /// again, a search result, the caption's menu)
+    private func turnRing(to i: Int) {
         let now = Date()
         let (th, _) = theta(now)
         let v = thetaVelocity(now)
@@ -321,9 +335,6 @@ struct CosmosView: View {
         spinSince = now
         ringFrom = th; ringTo = to; ringV = v; ringStart = now
         chosen = i
-        map.sunPicked = false
-        Feel.tap(); Sound.tap()
-        map.show(continent: Self.planets[i].k)
     }
 
     /// A PLANET'S HOLD MENU (11.5): Open the continent (as its tap) · Its stamped list (the list scoped to it). Earth:
