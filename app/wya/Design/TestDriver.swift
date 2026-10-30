@@ -286,6 +286,12 @@ final class TestDriver {
                 case "placeopen":
                     if a == "off" { map?.closePlace(); map?.goHome() }
                     else if let m = map, let i = m.world?.placeIndex[a] { m.openPlace(i) }
+                // page ru: a country's page opened from its box (Part 16); page off: closed
+                case "page":
+                    if a == "off" { PlacePageState.shared.close() }
+                    else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
+                        PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
+                    }
                 // regionfind bavar: search's first region found from Countries, opened (as its row's tap)
                 case "regionfind":
                     RegionIndex.shared.load()
