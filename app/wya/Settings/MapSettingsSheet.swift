@@ -47,6 +47,8 @@ private struct RowWords: View {
     var band = false
     var dim = false
     var height: CGFloat = 48
+    /// a place's square flag before its name (the Borders page's countries), 28 pt, never rounded, never in a box
+    var flag: String? = nil
     @State private var inList = false
     @Environment(\.settingsWordsOn) private var wordsOn
 
@@ -54,6 +56,10 @@ private struct RowWords: View {
         let shown = inList && wordsOn
         let ink = band ? Color.white : Palette.ink
         HStack(spacing: 8) {
+            if let flag, let img = Flags.square(flag) {
+                // shown with the row's words (in one frame: a flag is not a word to roll)
+                img.resizable().frame(width: 28, height: 28).opacity(shown ? 1 : 0).padding(.trailing, 4)
+            }
             Text(shown ? name : blank(name))
                 .foregroundStyle(dim ? Palette.ink.opacity(0.5) : ink)
             Spacer(minLength: 12)
@@ -271,7 +277,7 @@ private struct SettingsPage: View {
         viewRow("United Nations", "un", current)
         viewRow("De facto", "deFacto", current)
         Color.clear.frame(height: 24)
-        ForEach(countries, id: \.key) { c in viewRow(c.name, c.key, current).id("view:" + c.key) }
+        ForEach(countries, id: \.key) { c in viewRow(c.name, c.key, current, flag: BordersNames.placeId(c.key)).id("view:" + c.key) }
     }
     private var countries: [(key: String, name: String)] {
         (Bundle.main.url(forResource: "disputes", withExtension: "json").flatMap { try? Data(contentsOf: $0) }
@@ -279,8 +285,8 @@ private struct SettingsPage: View {
             .map { ($0, BordersNames.name($0, map)) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
-    private func viewRow(_ name: String, _ key: String, _ current: String) -> some View {
-        RowWords(name: name, value: "", band: key == current)
+    private func viewRow(_ name: String, _ key: String, _ current: String, flag: String? = nil) -> some View {
+        RowWords(name: name, value: "", band: key == current, flag: flag)
             .onTapGesture {
                 Feel.tap()
                 Task { await MapSettingsRows.set("borders", key, map: map) }

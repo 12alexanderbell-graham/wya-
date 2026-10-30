@@ -13,8 +13,25 @@ import UIKit
 /// length]}}, then the PNGs.
 @MainActor
 enum Flags {
-    private static let pack: (index: [String: [Int]], data: Data, base: Int)? = {
-        guard let url = Bundle.main.url(forResource: "flags-round", withExtension: "wyaf"),
+    private static let pack = load("flags-round")
+    /// THE SQUARE FLAGS (Part 17.4 D14; rows such as the Borders page and the Stamped list): the same sources uncut,
+    /// the same pack format (tools/flags-square-render.py); never rounded, never in a box
+    private static let squarePack = load("flags-square")
+    private static var squareCache: [String: Image] = [:]
+
+    /// the place's square flag, or nil if there is none
+    static func square(_ id: String) -> Image? {
+        if let i = squareCache[id] { return i }
+        guard let p = squarePack, let e = p.index[id], e.count == 2 else { return nil }
+        let s = p.base + e[0]
+        guard s + e[1] <= p.data.count, let ui = UIImage(data: p.data.subdata(in: s ..< s + e[1]), scale: 3) else { return nil }
+        let img = Image(uiImage: ui)
+        squareCache[id] = img
+        return img
+    }
+
+    private static func load(_ name: String) -> (index: [String: [Int]], data: Data, base: Int)? {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "wyaf"),
               let d = try? Data(contentsOf: url, options: .alwaysMapped), d.count > 12,
               d.prefix(4) == Data("WYAF".utf8) else { return nil }
         let hl = Int(d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 8, as: UInt32.self) })
@@ -22,7 +39,7 @@ enum Flags {
               let head = try? JSONSerialization.jsonObject(with: d.subdata(in: 12 ..< 12 + hl)) as? [String: Any],
               let flags = head["flags"] as? [String: [Int]] else { return nil }
         return (flags, d, 12 + hl)
-    }()
+    }
     private static var cache: [String: Image] = [:]
     /// every flag in the pack (for the review sheet)
     static var ids: [String] { pack.map { Array($0.index.keys) } ?? [] }
