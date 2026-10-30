@@ -171,7 +171,7 @@ final class MapController {
     func load() async {
         guard world == nil else { return }
         // the saved Map settings set the borders view, your dispute picks and the count before the world is read
-        _ = MapSettingsStore.shared
+        diamondsOff = MapSettingsStore.shared.value.diamonds == "nowhere"
         let loaded: (World, Relief)? = await Task.detached(priority: .userInitiated) {
             guard let w = try? World.load(), let r = try? Relief.load() else { return nil }
             return (w, r)
@@ -206,6 +206,11 @@ final class MapController {
         // the size you actually see when close: the detailed map's (the world file's Vatican is a fifth of its true
         // 1 km, so its diamond went on while its own shape was already showing beside it)
         tinyBig = w.places.indices.map { i in w.places[i].dsz ?? (big[i] > 0 ? big[i] : 0.028) }
+    }
+
+    /// Map settings' Diamonds is Nowhere (read from the settings at load and at each change of the row)
+    @ObservationIgnored var diamondsOff = false {
+        didSet { if diamondsOff != oldValue { needsFrame = true } }
     }
 
     // MARK: the borders view (Map settings, Part 5.6 and 5.7)
@@ -264,6 +269,8 @@ final class MapController {
     /// zoom (0.75 of their size a quarter of the way, gone at 6 x kMin, back the same way out); a kept one shrinks
     /// while its own shape grows from 5 to 6 points across. Never a pop.
     func diamondSize(_ i: Int) -> Double {
+        // Map settings' Diamonds: Nowhere draws none (Main map and Everywhere differ only on region maps, Part 6)
+        if diamondsOff { return 0 }
         if i < tinyBig.count, tinyBig[i] * kMin * 6 < 6 { return min(1, max(0, 6 - tinyBig[i] * k)) }
         return min(1, max(0, 6 - k / kMin))
     }

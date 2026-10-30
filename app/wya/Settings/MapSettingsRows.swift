@@ -118,6 +118,7 @@ enum MapSettingsRows {
         } else if a.count != b.count {
             map.recount()
         }
+        map.diamondsOff = b.diamonds == "nowhere"
     }
 
     /// every row as an action the AI, Siri and links can call ("setting.count" with "countries")

@@ -158,6 +158,8 @@ struct HeadView: View {
     /// the wheel's dot is away in the Dynamic Island for search (from the moment search starts opening until it is
     /// back in its place after search has closed)
     @State private var dotInIsland = false
+    /// the gear turning back into the dot as search opens with Map settings open (it stays drawn until it is the dot)
+    @State private var gearLeaving = false
 
     var body: some View {
         let L = water.layout
@@ -229,7 +231,8 @@ struct HeadView: View {
             // first tool; it goes into the hub only for search. While the dot is becoming the AI or the gear its top
             // glyph is hidden and the morph is drawn in its place, the same dot at the start (it keeps its touches, so
             // a hold that turns it into the gear is never lost halfway)
-            let morphing = head.pull > 0.01 || head.pullStop > 0 || head.gear > 0.001 || head.settingsOpen
+            let morphing = head.pull > 0.01 || head.pullStop > 0 || head.gear > 0.001
+                || (head.settingsOpen && (!head.searching || gearLeaving))
             ModeWheel(head: head, ink: ink, tools: tools, toolsP: toolsP, hideDot: morphing || dotInIsland)
                 .position(x: L.W / 2, y: L.headY)
                 .allowsHitTesting(!head.searching && !aiOut)
@@ -257,9 +260,29 @@ struct HeadView: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         .onChange(of: tools) { _, v in withAnimation(Motion.chrome) { toolsP = v ? 1 : 0 } }
         .onChange(of: head.searching) { _, v in
-            if v { putAIBack(); dotInIsland = true }
+            if v {
+                // the AI goes back into the dot; MAP SETTINGS STAY OPEN (search searches them, Part 3.4): the gear first
+                // turns back into the dot (the hold's morph reversed), and only then does the dot rise into the island
+                // and the field grow, so the gear is never under the field and never vanishes
+                if head.pullStop > 0 || head.pull > 0 { head.pullStop = 0; withAnimation(Motion.settle) { head.pull = 0 } }
+                if head.settingsOpen {
+                    gearLeaving = true
+                    withAnimation(Motion.quick) { head.gear = 0 } completion: {
+                        gearLeaving = false
+                        guard head.searching else { return }
+                        dotInIsland = true
+                        withAnimation(Motion.chrome) { searchP = 1 }
+                    }
+                    return
+                }
+                dotInIsland = true
+            }
             withAnimation(Motion.chrome) { searchP = v ? 1 : 0 } completion: {
-                if !head.searching { dotInIsland = false }
+                if !head.searching {
+                    dotInIsland = false
+                    // settings still open: the dot out of the island becomes the gear again
+                    if head.settingsOpen { withAnimation(Motion.quick) { head.gear = 1 } }
+                }
             }
         }
         .onChange(of: head.toolsOpen) { _, v in
@@ -726,7 +749,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss }
+enum ResultKey: Hashable { case place(Int), miss, setting(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -766,7 +789,11 @@ struct SearchResults: View {
         let guess = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
         // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so "Fra"
         // to "Frnace" keeps the France row and only its note rolls to
-        let keys: [ResultKey] = hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
+        // with Map settings open, the field searches the settings (Part 3.4, 5.11)
+        let settingHits = head.settingsOpen ? SettingsSearch.hits(head.query, map: map) : []
+        let keys: [ResultKey] = head.settingsOpen
+            ? (typed ? (settingHits.isEmpty ? [.miss] : settingHits.map { .setting($0.id) }) : [])
+            : hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
         let w = width > 0 ? width : fullWidth
         // a stack that is always there (an empty Group is no view, so its onChange never ran and the first list never
         // came)
@@ -787,6 +814,7 @@ struct SearchResults: View {
                                 switch k {
                                 case .place(let i): row(i, note: i == guess ? "Did you mean?" : nil)
                                 case .miss: missRow()
+                                case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 }
                             }
                             .frame(height: 44 * open[n], alignment: .top)
@@ -858,6 +886,26 @@ struct SearchResults: View {
             shown.removeAll { slots[$0]?.to == 0 }
             until = 0   // the clock stops (a new value makes the view look again and pause its timeline)
         }
+    }
+
+    /// a setting found (settings open): its name and where it is or what matched; a tap opens it in the sheet
+    private func settingRow(_ h: SettingsSearch.Hit?) -> some View {
+        Button {
+            Feel.tap()
+            if let h { SettingsSearch.go(h.id) }
+            head.searching = false
+        } label: {
+            HStack(spacing: 12) {
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(h?.note ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
     }
 
     /// one row: the flag, the name, and what it is in the one low-opacity black (BUILD-BOOK 1.10), in the borders view:
