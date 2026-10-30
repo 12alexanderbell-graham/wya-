@@ -559,6 +559,18 @@ final class UploadState {
 
     /// a waiting find (not stamped since) at this place
     func waits(_ i: Int) -> Bool { phase == .choosing && order.contains(i) && !dropped.contains(i) }
+    /// a find of the review on screen (kept or dropped): its hold menu is the review's (11.7)
+    func reviewing(_ i: Int) -> Bool { phase == .review && order.contains(i) }
+    /// Show in the list (the found country's hold menu): the water to 50%, where the rows are, with its dates opened
+    func showInList(_ id: String) {
+        guard phase == .review, let w = water else { return }
+        if w.stop == .quarter || w.stop == .closed { w.go(.half) }
+        if !opened.contains(id) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+                if !opened.contains(id) { toggleDates(id) }
+            }
+        }
+    }
 
     /// THE REVIEW AGAIN (a tap on a waiting find, or the Upload tool): the water to 25%, the caption's number rolls to
     /// the waiting finds and its tail to "found", then the go circle grows at its place (A9.7's last half)
