@@ -454,6 +454,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // the place being pressed: drawn by the press below, not by its group
         // under a finger, or held while its stamping card is up
         let pressed = controller.pressed ?? controller.kept
+        // Style Simple (Part 1.4): an unmarked territory is white with its full lines, every other unmarked land cream
+        // (the diamonds' rule, the old MapStyle.fill); Detailed draws all land by its relief
+        if controller.simple {
+            let marked = (controller.showsStamped ? controller.stamped : []).union(controller.showsWished ? controller.wished : [])
+            group(controller.territories.filter { !marked.contains($0) && $0 != pressed }, kind: 2, tint: Palette.whiteV)
+        }
         if controller.showsStamped { group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV) }
         if controller.showsWished { group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV) }
         // the press darkens the relief under your finger, keeping the country's own colour (A1.1): the whole place at
