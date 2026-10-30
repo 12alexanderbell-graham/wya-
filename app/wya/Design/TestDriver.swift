@@ -273,6 +273,26 @@ final class TestDriver {
                         DetailsState.shared.open(.country(w.places[i].id), name: w.places[i].n, water: water)
                     }
                 // book [n]: the passport tool pressed (the book out or back); with n, open on page n (1-based)
+                // regionpick fr: the Regions list's row for that place tapped (A6.7)
+                // regiontap x y: a tap at that screen point on the region map, as a confirmed map tap
+                case "regionpick":
+                    if let m = map { RegionsMenuModel.shared.build(map: m) }
+                    if let r = RegionsMenuModel.shared.rows.first(where: { $0.flag == a.lowercased() }) {
+                        RegionsMenuModel.shared.load(r.flag)
+                        RegionsMenuModel.shared.onPick?(r)
+                    } else { NSLog("wya regionpick %@: not in the list", a) }
+                case "regiontap":
+                    if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
+                        let pt = CGPoint(x: x, y: y)
+                        let mp = m.mapPoint(pt)
+                        if let w = m.world, let wi = m.details?.place(at: SIMD2(Float(mp.x), Float(mp.y)), reach: 0, tiny: 0) ?? w.place(at: SIMD2(Float(mp.x), Float(mp.y))) {
+                            NSLog("wya regiontap world place there: %@", w.places[wi].id)
+                        }
+                        if let i = m.hit(at: pt) {
+                            NSLog("wya regiontap %.0f %.0f: region %d", x, y, m.regionPressed ?? -1)
+                            m.onPlaceTap?(i, pt)
+                        } else { NSLog("wya regiontap %.0f %.0f: nothing", x, y) }
+                    }
                 // regionfile fr: the place's bundled region level read back (D10), logged
                 case "regionfile":
                     let cat = RegionCatalog.shared

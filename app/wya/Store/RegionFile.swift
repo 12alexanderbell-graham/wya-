@@ -17,6 +17,9 @@ nonisolated struct RegionFile: Sendable {
         let rings: [[SIMD2<Double>]]
     }
     let units: [Unit]
+    /// the lines between two different regions (each arc used by units of two ids), in longitude and latitude: the
+    /// borders drawn inside the country (its outline is the world's own line)
+    let inner: [[SIMD2<Double>]]
 
     /// the distinct regions (a unit cut by a piece line counts once)
     var ids: [String] {
@@ -66,6 +69,11 @@ nonisolated struct RegionFile: Sendable {
             let s = pts[starts[i] ..< starts[i + 1]]
             return r >= 0 ? s : ArraySlice(s.reversed())
         }
+        var users = [Set<String>](repeating: [], count: n)
+        for (u, rings) in zip(head.u, head.o) {
+            for ring in rings { for r in ring { let i = r >= 0 ? r : ~r; if i < n { users[i].insert(u.id) } } }
+        }
+        inner = (0 ..< n).compactMap { i in users[i].count >= 2 ? Array(arc(i)) : nil }
         units = zip(head.u, head.o).map { u, rings in
             let rs: [[SIMD2<Double>]] = rings.map { ring in
                 var p: [SIMD2<Double>] = []

@@ -38,6 +38,9 @@ struct ContentView: View {
                 if !Perf.shared.off.contains("zoom") {
                     ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
                         .offset(x: side.chromeOut ? 90 : 0)
+                        // no zoom column under Regions' menu (6.3): it slides off the right edge and back
+                        .offset(x: water.regions ? 90 : 0)
+                        .animation(Motion.chrome, value: water.regions)
                 }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)
@@ -105,6 +108,8 @@ struct ContentView: View {
             Task { await DeepLink.open(url, map: map) { putAwayForLink() } }
         }
         .onAppear {
+            water.head = head
+            RegionsMenuModel.shared.onPick = { r in openRegion(r.place) }
             TestDriver.shared.start(map: map, water: water, head: head)
             #if DEBUG
             TestDriver.shared.restoreSession = { restoreSession() }
@@ -152,6 +157,8 @@ struct ContentView: View {
                 guard !map.locked else { return }
                 // the tap that closed search opens nothing (one press, one job)
                 guard CACurrentMediaTime() - head.mapClosedSearchAt > 0.6 else { return }
+                // the region map: its regions answer (6.5)
+                if map.regionScene != nil { regionTapped(); return }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
                 if Sideways.shared.on {
                     if head.quickStamp { Self.quickStamp(i, map: map) } else { Feel.refuse() }
@@ -178,6 +185,7 @@ struct ContentView: View {
                 Feel.notch()
             }
             water.onMapAgain = { [head] in
+                if head.mode == .regions { backToRegionsList() }
                 UploadState.shared.close()
                 head.searching = false
                 head.toolsOpen = false
@@ -230,6 +238,10 @@ struct ContentView: View {
         .onChange(of: water.stop) { _, _ in saveSession(after: 0) }
         .onChange(of: map.locked) { _, _ in saveSession(after: 0) }
         .onChange(of: head.mode) { _, _ in saveSession(after: 0) }
+        // THE MODES (6.1): Regions always restarts at its selection menu (2 Oct: "it should restart"), the camera
+        // flying to the world home under it; leaving it, the water goes to 25%
+        .onChange(of: head.mode) { old, new in modeChanged(from: old, to: new) }
+        .onChange(of: water.menuShown, initial: true) { _, v in head.filtersMenu = v }
         .onChange(of: map.continent) { _, _ in saveSession(after: 0.5) }
         .onChange(of: tab) { _, _ in saveSession(after: 0) }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } else { BookState.shared.close() } }
@@ -251,6 +263,52 @@ struct ContentView: View {
                 // Verify pulled down: back to the card (4.5.1)
                 VerifyState.shared.close(water: water)
             }
+        }
+    }
+
+    /// A6.5 entering Regions' menu (Regions always restarts there), and leaving Regions for another mode: the regions
+    /// go, the camera stays where it is (6.1 rule 4)
+    private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
+        if new == .regions {
+            closeCard()
+            water.closeList(back: false)
+            map.closeRegions()
+            map.regionsMenu = true
+            water.openMenu()
+            map.goHome()
+        } else if old == .regions {
+            map.regionsMenu = false
+            map.closeRegions()
+            water.closeMenu(to: .quarter)
+        }
+    }
+    /// A6.7 A COUNTRY PICKED FROM THE LIST: the list goes down with the water to 25% while the camera flies into the
+    /// country and its regions draw in
+    private func openRegion(_ i: Int) {
+        head.searching = false
+        head.toolsOpen = false
+        water.closeMenu(to: .quarter)
+        map.openRegions(i)
+    }
+    /// THE MAP TAB IN REGIONS (20 Oct answer 15): back to the list, the regions folding away, the world under it
+    private func backToRegionsList() {
+        map.closeRegions()
+        water.openMenu()
+        map.goHome()
+    }
+    /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7, not
+    /// built yet: the tap only darkens it)
+    private func regionTapped() {
+        guard let sc = map.regionScene, let u = map.regionPressed, u < sc.unitIDs.count else { return }
+        let key = PlaceKey(.region, sc.unitIDs[u])
+        let name = sc.unitNames[u]
+        guard head.quickStamp else { Feel.tap(); return }
+        let stamped = MarkStore.shared.state(key).stamped
+        if stamped { Feel.lift() } else { Feel.stamp() }
+        Task {
+            if stamped { await MarkStore.shared.unstamp(key, name: name) }
+            else { await MarkStore.shared.stamp(key, name: name, cc: sc.id, level: 1, source: .quick) }
+            UIAccessibility.post(notification: .announcement, argument: "\(name) \(stamped ? "unstamped" : "stamped")")
         }
     }
 
@@ -336,6 +394,8 @@ struct ContentView: View {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
         let now = CACurrentMediaTime()
         if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
+        // the region map has its own hold menu (11.5's Regions menu, not built): no country menu there
+        if map.regionScene != nil { return nil }
         // still up (the press's touch may not have reached the map yet): this press only closes it
         if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
             || head.settingsOpen { return nil }

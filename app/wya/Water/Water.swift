@@ -40,8 +40,10 @@ final class Water {
     func openSettings() {
         guard !settings else { return }
         settingsFrom = stop
+        // over the menu (6.3): from the menu stop down to 50% while the rows leave; closing brings the menu back
+        if regions { leaveMenuRows() }
         settings = true
-        if stop == .closed || stop == .quarter { go(.half) }
+        if stop == .closed || stop == .quarter || regions { go(.half) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             guard let self, self.settings else { return }
             withAnimation(Motion.quick) { self.settingsWords = true }
@@ -57,9 +59,52 @@ final class Water {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
             guard let self, !self.settingsWords else { return }
             self.settings = false
+            if self.regions { self.go(.half); return }
             if let back, self.stop == .half, back != .half, self.grab == nil { self.go(back) }
         }
     }
+    /// REGIONS' SELECTION MENU is the water's content (6.3): the water is at full, and a drag on it scrolls the list and
+    /// never moves it.
+    /// `regions` is on from the wheel landing on Regions until a country is picked or another mode comes; while
+    /// settings or the upload sheet are up over it the water goes where they need it, and back to the menu after.
+    var regions = false
+    /// the menu's rows are still on screen, leaving through the list's bottom edge as the water goes down
+    var menuLeaving = false
+    @ObservationIgnored private var menuJob = 0
+    var menuShown: Bool { regions && !settings && !details && !upload }
+    /// the head, for the menu's search (set once by the screen)
+    @ObservationIgnored weak var head: HeadState?
+    /// the menu is the whole screen, as the old native app's Regions list was ("the list comes out of the tab bar ... to
+    /// the whole screen", clear glass with the world under it); never a height between half and full (30 Oct 22:35:
+    /// "never should a sheet go that fucking high its either FULL SCREEN 50 percent or lower")
+    var menuTop: CGFloat { layout.top(.full) }
+    /// where the water rests for a stop (the menu's own place while it shows)
+    func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : layout.top(s) }
+    /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
+    func openMenu() {
+        menuJob += 1
+        menuLeaving = false
+        regions = true
+        go(.half)
+    }
+    /// leaving the menu (another mode, or a country picked): the water goes to `to` while the rows leave through the
+    /// list's bottom soft edge; they are kept on screen until the water is down
+    func closeMenu(to s: Stop = .quarter) {
+        guard regions else { return }
+        regions = false
+        leaveMenuRows()
+        go(s)
+    }
+    /// the rows stay on screen while the water takes them down through the list's bottom edge
+    private func leaveMenuRows() {
+        menuLeaving = true
+        menuJob += 1
+        let job = menuJob
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            if self?.menuJob == job { self?.menuLeaving = false }
+        }
+    }
+
     /// DETAILS are the water's content (Part 4.4): the water rises to 50% (or stays if higher); `detailsFrom` is the
     /// stop it goes back to when they close; `detailsWords` as settingsWords
     var details = false
@@ -96,6 +141,7 @@ final class Water {
     func openUpload() {
         guard !upload else { return }
         uploadFrom = stop
+        if regions { leaveMenuRows() }
         upload = true
         if stop != .quarter { go(.quarter) }
     }
@@ -104,6 +150,7 @@ final class Water {
         upload = false
         let back = uploadFrom
         uploadFrom = nil
+        if regions { go(.half); return }
         if let back, back != stop, grab == nil { go(back) }
     }
 
@@ -200,6 +247,7 @@ final class Water {
     // MARK: touch
     @ObservationIgnored private var body = Spring1(Layout.placeholder.top(.quarter), response: 0.42, damping: 1)
     @ObservationIgnored private var dropSpring = Spring1(0, response: 0.3, damping: 1)
+
     @ObservationIgnored private var grab: (level: CGFloat, y: CGFloat, from: Stop)?
     @ObservationIgnored private var fingerTop: CGFloat = 0
     @ObservationIgnored private var lastPassed: Stop?
@@ -221,6 +269,8 @@ final class Water {
     @ObservationIgnored var currentMode: (() -> Int)?
 
     func begin(at p: CGPoint) {
+        // the menu stop: a drag scrolls the list, the water stays (6.3)
+        if menuShown { return }
         // caught before a waiting move into the capsule started: it is still where it was
         if pendingGo != nil {
             pendingGo = nil
@@ -333,14 +383,14 @@ final class Water {
     /// itself; a finger takes it from wherever it is
     func hint() {
         guard grab == nil else { return }
-        body.target = layout.top(stop) - 24
+        body.target = restTop(stop) - 24
         // the water's own spring (one step per frame of the Clock, as its feel was tuned): about half way up at 0.2 s
         body.response = 0.38
         body.damping = 1
         run()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self, self.grab == nil else { return }
-            self.body.target = self.layout.top(self.stop)
+            self.body.target = self.restTop(self.stop)
             self.body.response = 0.42
             self.run()
         }
@@ -365,7 +415,7 @@ final class Water {
         }
         pendingGo = nil
         stop = s
-        body.target = layout.top(s)
+        body.target = restTop(s)
         // Reduce Motion: the same settle, shorter (Part 19)
         body.response = (s == .full ? 0.5 : 0.42) * (Motion.reduce ? 0.65 : 1)
         body.damping = (released && s != .full && abs(speed) > 900) ? 0.9 : 1
@@ -376,7 +426,7 @@ final class Water {
 
     private func relayout() {
         // a new screen (the first layout, or the phone turned): sit at the same height, no movement
-        body.target = layout.top(stop)
+        body.target = restTop(stop)
         body.snap()
         level = body.value
         drop = 0

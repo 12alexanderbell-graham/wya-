@@ -46,6 +46,8 @@ struct WaterView: View {
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         .contentShape(shape)
+        // at Regions' menu stop a drag scrolls the list and never moves the water (6.3): the water's own drag is off
+        // there, the list's scroll and the tabs keep theirs
         .gesture(
             DragGesture(minimumDistance: 4, coordinateSpace: .global)
                 .updating($dragLive) { _, live, _ in live = true }
@@ -56,7 +58,8 @@ struct WaterView: View {
                 .onEnded { g in
                     dragging = false
                     water.end(velocity: g.velocity.height)
-                }
+                },
+            including: water.menuShown ? .subviews : .all
         )
         // a drag cancelled with no end (a hold menu on the caption or a tab took the touch): the water lets go there
         .onChange(of: dragLive) { _, live in
@@ -153,7 +156,8 @@ struct SheetContent: View {
             // the full view's space: the mist and the stars over the map (light), or the old night; either leaves the
             // capsule's place as the water's own clear glass
             Group {
-                if Perf.shared.off.contains("stars") {
+                // no stars under Regions' list (the whole screen is the list there)
+                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving {
                     Color.clear
                 } else {
                     PlasmaStars(page: form.page, top: form.top, stars: map.placesLeft, sun: CGPoint(x: L.W / 2, y: L.H / 2), map: map,
@@ -168,10 +172,14 @@ struct SheetContent: View {
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
                     // (back only once the list's rows have left: never both at once)
-                    .offset(y: water.settings || water.details || water.stampedList || water.listLeaving || water.upload ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList || water.listLeaving || water.upload)
+                    .offset(y: cosmosOut ? water.layout.H - form.top : 0)
+                    .animation(Motion.chrome, value: cosmosOut)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
+            // REGIONS' SELECTION MENU (6.3), riding the water's top; kept while its rows leave
+            if water.menuShown || water.menuLeaving, let head = water.head {
+                RegionsMenu(water: water, map: map, head: head, form: form).transition(.identity)
+            }
             // THE UPLOAD SHEET (Part 9.3) at 25%, the caption's words out while it is up
             if water.upload { UploadSheet(water: water, form: form).transition(.identity) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
@@ -188,10 +196,10 @@ struct SheetContent: View {
             }
 
             // the name and number: at full they stay under the head
-            if !Perf.shared.off.contains("caption") { Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
-                    count: map.sunPicked ? map.streakWeeks : count,
-                    tail: map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
-                    night: FullView.night(form.page), visible: captionShown)
+            if !Perf.shared.off.contains("caption") { Caption(name: region.map { $0.name } ?? (map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
+                    count: region != nil ? map.regionCount : map.sunPicked ? map.streakWeeks : count,
+                    tail: region.map { $0.tail } ?? (map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
+                    night: FullView.night(form.page), visible: captionShown, flag: region?.flag)
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -203,7 +211,7 @@ struct SheetContent: View {
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload {
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
@@ -231,7 +239,8 @@ struct SheetContent: View {
             }
             // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, a continent by name; on a
             // continent, its stamped list or back to the world. The ring follows (the front planet is the map's)
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList {
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList,
+               region == nil {
                 let here = map.continent
                 Color.clear
                     .frame(width: 180, height: 26)
@@ -260,11 +269,23 @@ struct SheetContent: View {
         }
     }
 
+    /// THE REGIONS CAPTION (6.5): the country's flag and name, your number at the level, "of 101 departments"
+    private var region: (name: String, tail: String, flag: Image?)? {
+        guard let sc = map.regionScene, let w = map.world, sc.place < w.places.count else { return nil }
+        let n = sc.unitIDs.count
+        let word = RegionsMenuModel.word(n == 1 ? sc.level.one : sc.level.many)
+        return (w.places[sc.place].n, "of \(n.formatted()) \(word)", Flags.square(sc.id))
+    }
+
     /// A2.5: the top at or above the capsule's top less 134 pt (PM 739, 17e 627: 10 pt under the 25% stop); and not
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
     private var captionFits: Bool {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
-            && !water.upload
+            && !water.upload && !water.regions && !water.menuLeaving
+    }
+    /// the solar system is down out of the water while something else is the water's content
+    private var cosmosOut: Bool {
+        water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
     }
     @State private var captionShown = false
 }
@@ -435,6 +456,8 @@ struct Caption: View {
     /// A2.5: the words there (rolled in) or not (each line a placeholder of spaces of about its width, never an empty
     /// string, which SwiftUI would insert with a blur and a fade); in rises, out goes down
     var visible = true
+    /// the Regions caption's country flag, 22 pt square, 8 pt before the name (6.5)
+    var flag: Image? = nil
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
 
     var body: some View {
@@ -442,11 +465,19 @@ struct Caption: View {
         let way = visible ? 1.0 : 0.0
         VStack(spacing: 0) {
             // a new name rolls in letter by letter, the way the number does, never swapped in place
-            Text(visible ? name : Self.blank(name, "\u{2002}"))
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(ink)
-                .contentTransition(.numericText(value: way))
-                .animation(Motion.quick, value: name)
+            HStack(spacing: 8) {
+                if let flag {
+                    // a flag is a picture, not a word: it grows about its own centre with the words' roll
+                    flag.resizable().interpolation(.high).frame(width: 22, height: 22)
+                        .scaleEffect(visible ? 1 : 0.01)
+                        .animation(Motion.quick, value: visible)
+                }
+                Text(visible ? name : Self.blank(name, "\u{2002}"))
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(ink)
+                    .contentTransition(.numericText(value: way))
+                    .animation(Motion.quick, value: name)
+            }
             Text(visible ? "\(count)" : Self.blank("\(count)", "\u{2007}"))
                 .font(.system(size: big, weight: .semibold, design: .rounded))
                 .monospacedDigit()
