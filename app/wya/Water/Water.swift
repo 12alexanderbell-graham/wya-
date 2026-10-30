@@ -75,12 +75,13 @@ final class Water {
             withAnimation(Motion.quick) { self.detailsWords = true }
         }
     }
-    func closeDetails() {
+    /// `rolled`: the sheet's words have already rolled out (back to the Stamped list, A4.21), so no wait for them
+    func closeDetails(rolled: Bool = false) {
         guard details else { return }
         withAnimation(.smooth(duration: 0.15)) { detailsWords = false }
         let back = detailsFrom
         detailsFrom = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + (rolled ? 0 : 0.18)) { [weak self] in
             guard let self, !self.detailsWords else { return }
             self.details = false
             // back to where it was, unless a pull's release already took it somewhere below 50%

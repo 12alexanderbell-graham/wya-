@@ -19,6 +19,8 @@ final class DetailsState {
     @ObservationIgnored private var opening = false
 
     var isOpen: Bool { key != nil }
+    /// closing back to the Stamped list (A4.21 reversed): the sheet's words roll out for 0.26 s before it closes
+    private(set) var rollingOut = false
 
     func open(_ key: PlaceKey, name: String, water: Water) {
         // one thing in the water at a time: not over Verify
@@ -43,15 +45,27 @@ final class DetailsState {
     }
 
     /// closed (pulled down, a tap off): kept, written once; nothing changed, nothing written (no undo drop)
-    func close(water: Water) {
+    func close(water: Water, now: Bool = false) {
         guard let key else { return }
+        let rolled = rollingOut
+        if !now {
+            guard !rollingOut else { return }
+            if StampedList.backFromDetails && water.stampedList {
+                withAnimation(.smooth(duration: 0.26)) { rollingOut = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [weak self] in
+                    self?.close(water: water, now: true)
+                    self?.rollingOut = false
+                }
+                return
+            }
+        }
         let n = name
         if wish {
             let changed = wishStart.map { $0.0 != wd || $0.1 != want } ?? false
             let (w, k) = (wd, want)
             self.key = nil
             wishStart = nil
-            water.closeDetails()
+            water.closeDetails(rolled: rolled)
             if changed { Task { await MarkStore.shared.setWishDetails(key, name: n, details: w, want: k) } }
             return
         }
@@ -61,7 +75,7 @@ final class DetailsState {
         let (t, l) = (times, lived)
         self.key = nil
         start = nil
-        water.closeDetails()
+        water.closeDetails(rolled: rolled)
         if changed { Task { await MarkStore.shared.setDetails(key, name: n, details: dd, times: t, lived: l) } }
     }
 }
@@ -72,7 +86,7 @@ final class DetailsState {
 /// one a black capsule with white words that just appears; section
 /// names 17 pt semibold black; every word lines up on one 16 pt edge. Haptics only.
 /// Not here yet (logged): a visit's exact dates (they wait for our own calendar), Photos,
-/// the Lived block swap and the stars' rows by A4.14, the letters rolling at a limit. (A lived time and a place you
+/// the letters rolling at a limit. (A lived time and a place you
 /// went come and go by A4.14 / A4.15 as built: see `arrive`, `removeRow`.)
 struct DetailsSheet: View {
     let water: Water
@@ -91,6 +105,11 @@ struct DetailsSheet: View {
     /// the block on screen while a Lived swap runs (nil: the one Lived says); `blockGone`: its words blank, its shapes 0
     @State private var shownLived: Bool?
     @State private var blockGone = false
+    /// A4.21's Details end: opened from a Stamped list row, the sheet's words start as blanks and roll in (its shapes
+    /// grow); closing back to the list they roll out first (`DetailsState.rollingOut`), then the list rises
+    @State private var sheetGone = StampedList.backFromDetails
+    /// every word blank and every shape at 0: the Lived block swapping, or the whole sheet coming from / going to the list
+    private var out: Bool { blockGone || sheetGone || s.rollingOut }
     @State private var swapJob = 0
     @State private var placeIDs: [String] = []
     @State private var arriving: Set<String> = []
@@ -119,14 +138,15 @@ struct DetailsSheet: View {
                 VStack(alignment: .leading, spacing: 28) {
                     // the place's name heads the sheet only when no card shows above it (at full the card has gone)
                     if form.page > 0.5 || !CardState.shared.isOpen {
-                        Text(s.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                        Text(sheetGone || s.rollingOut ? Caption.blank(s.name, "\u{2002}") : s.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                            .contentTransition(.numericText(value: sheetGone || s.rollingOut ? 0 : 1))
                             .accessibilityAddTraits(.isHeader)
                     }
                     if s.wish {
                         wishBlock
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
-                            band("Lived here", on: s.lived) { Feel.notch(); swapBlock() }
+                            band("Lived here", on: s.lived, blank: sheetGone || s.rollingOut) { Feel.notch(); swapBlock() }
                             // A4.14's block swap, one thing at a time: the old block's words roll out and its shapes
                             // shrink; then the rows below move to the new block's height; then its words roll in
                             // (never a fade: both blocks come and go with no transition of their own)
@@ -136,14 +156,20 @@ struct DetailsSheet: View {
                             .transition(.identity)
                         }
                         placesBlock
-                        section("Notes") {
-                            field("What you did", id: "did", max: 600, lines: true, \.did)
-                            field("Anything else", id: "note", max: 600, lines: true, \.note)
+                        section("Notes", blank: out) {
+                            if out || shownLived != nil {
+                                fieldWords("What you did", s.d.did, gone: out)
+                                fieldWords("Anything else", s.d.note, gone: out)
+                            } else {
+                                field("What you did", id: "did", max: 600, lines: true, \.did)
+                                field("Anything else", id: "note", max: 600, lines: true, \.note)
+                            }
                         }
                         VStack(alignment: .leading, spacing: 0) {
-                            row("Rating") { stars }
-                            row("With") {
-                                field("Names", id: "with", max: 120, trailing: true, \.with)
+                            row("Rating", blank: out) { stars.scaleEffect(out ? 0 : 1) }
+                            row("With", blank: out) {
+                                if out { fieldWords("Names", s.d.with, gone: out, trailing: true) }
+                                else { field("Names", id: "with", max: 120, trailing: true, \.with) }
                             }
                         }
                     }
@@ -184,6 +210,13 @@ struct DetailsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kb = 0 }
         // the rows' identities follow the stored rows (a change from outside, an undo, makes them fresh)
         .onChange(of: livedTimes.count, initial: true) { _, n in livedIDs = Self.synced(livedIDs, n) }
+        .onAppear {
+            // from the list: the words roll in once the list has gone (they start as blanks, see `sheetGone`)
+            guard sheetGone else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                withAnimation(.smooth(duration: 0.26)) { sheetGone = false }
+            }
+        }
         .onChange(of: 1 + (s.d.trips?.count ?? 0), initial: true) { _, n in tripIDs = Self.synced(tripIDs, n) }
         .onAppear { Self.test = { driver($0) } }
         .onChange(of: s.d.places?.count ?? 0, initial: true) { _, n in placeIDs = Self.synced(placeIDs, n) }
@@ -245,14 +278,14 @@ struct DetailsSheet: View {
     private var visitsBlock: some View {
         let n = 1 + (s.d.trips?.count ?? 0)
         return VStack(alignment: .leading, spacing: 0) {
-            row("Times", blank: blockGone) { stepper }
+            row("Times", blank: out) { stepper }
             // one row per trip (4.4.3): each visit its time in words (until our own calendar
             // exists), how and why; the × only when there is more than one
             ForEach(0 ..< n, id: \.self) { i in
                 visitRows(i, key: Self.key(tripIDs, i, "trip"), count: n)
                     .padding(.top, i == 0 ? 0 : 12)   // a little air between one trip and the next
             }
-            row("Add a visit", blank: blockGone) { EmptyView() }
+            row("Add a visit", blank: out) { EmptyView() }
                 .contentShape(Rectangle())
                 .onTapGesture { addTrip() }
                 .accessibilityAddTraits(.isButton)
@@ -266,8 +299,8 @@ struct DetailsSheet: View {
     }
     @ViewBuilder
     private func visitRows(_ i: Int, key k: String, count n: Int) -> some View {
-        let gone = blockGone || arriving.contains(k) || leaving.contains(k)
-        let plain = blockGone || shownLived != nil || rolling.contains(k)
+        let gone = out || arriving.contains(k) || leaving.contains(k)
+        let plain = out || shownLived != nil || rolling.contains(k)
         let rough = tk(i, \.whenRough), mode = tk(i, \.mode), purpose = tk(i, \.purpose)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
@@ -385,8 +418,8 @@ struct DetailsSheet: View {
                 let stay = row.1
                 let k = row.0
                 let last = i == t.count - 1
-                let gone = blockGone || arriving.contains(k) || leaving.contains(k)
-                let plain = blockGone || shownLived != nil || rolling.contains(k)
+                let gone = out || arriving.contains(k) || leaving.contains(k)
+                let plain = out || shownLived != nil || rolling.contains(k)
                 HStack(spacing: 12) {
                     if plain {
                         monthWords(stay.from, empty: "Moved in", gone: gone)
@@ -418,33 +451,33 @@ struct DetailsSheet: View {
                     }
                 }
             }
-            band("I still live here", on: now, blank: blockGone) {
+            band("I still live here", on: now, blank: out) {
                 Feel.tap()
                 s.d.livesNow = now ? nil : true
                 if !now { var x = livedTimes; x[x.count - 1].to = ""; setLived(x) }
             }
             if !now {
-                row("Add time", blank: blockGone) { EmptyView() }
+                row("Add time", blank: out) { EmptyView() }
                     .contentShape(Rectangle())
                     .onTapGesture { addLived() }
                     .accessibilityAddTraits(.isButton)
             }
             // (here "family" is Family, not the trip's "Family and friends")
             choiceWords("Why", Self.whys.map { ($0, $0 == "family" ? "Family" : Self.word($0)) }, chosen: s.d.livedWhy,
-                        blank: blockGone) {
+                        blank: out) {
                 s.d.livedWhy = $0
             }
             if s.d.livedWhy == "other" {
-                if blockGone || shownLived != nil { fieldWords("Why, in your words", s.d.livedWhyOther, gone: blockGone) }
+                if out || shownLived != nil { fieldWords("Why, in your words", s.d.livedWhyOther, gone: out) }
                 else { field("Why, in your words", id: "whyOther", max: 60, \.livedWhyOther) }
             }
         }
     }
 
     private var placesBlock: some View {
-        section("Places") {
+        section("Places", blank: out) {
             ForEach(Array((s.d.places ?? []).enumerated()).map { (Self.key(placeIDs, $0.offset, "place"), $0.element) }, id: \.0) { k, p in
-                let gone = arriving.contains(k) || leaving.contains(k)
+                let gone = out || arriving.contains(k) || leaving.contains(k)
                 HStack(spacing: 12) {
                     Text(gone ? Caption.blank(p.n, "\u{2002}") : p.n).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                         .contentTransition(.numericText(value: gone ? 0 : 1))
@@ -458,6 +491,7 @@ struct DetailsSheet: View {
                 .frame(minHeight: 52)
             }
             HStack(spacing: 12) {
+                if out { fieldWords("Add a place", placeName, gone: true) } else {
                 TextField("Add a place", text: Binding(get: { placeName }, set: { v in
                     if v.count > 60 { Feel.refuse() }
                     placeName = String(v.prefix(60))
@@ -466,6 +500,7 @@ struct DetailsSheet: View {
                 .focused($typing, equals: "place").id("place")
                 .submitLabel(.done)
                 .onSubmit { addPlace() }
+                }
                 // Add only once there is something to add (a name and its kind); no greyed-out button
                 if canAdd {
                     Text("Add").font(.body.weight(.semibold)).foregroundStyle(.white)
@@ -574,9 +609,10 @@ struct DetailsSheet: View {
     // MARK: the parts
 
     /// a section: its name (17 pt semibold, black), then its rows
-    private func section<C: View>(_ name: String, @ViewBuilder _ c: () -> C) -> some View {
+    private func section<C: View>(_ name: String, blank: Bool = false, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(name).font(.headline).foregroundStyle(Palette.ink)
+            Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.headline).foregroundStyle(Palette.ink)
+                .contentTransition(.numericText(value: blank ? 0 : 1))
                 .frame(minHeight: 32, alignment: .bottom)
                 .accessibilityAddTraits(.isHeader)
             c()
@@ -657,9 +693,9 @@ struct DetailsSheet: View {
     private var stepper: some View {
         HStack(spacing: 4) {
             // the floor is the number of visit rows
-            circle("minus", blank: blockGone) { if s.times > timesFloor { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
-            Text(blockGone ? Caption.blank("\(s.times)", "\u{2002}") : "\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                .contentTransition(.numericText(value: blockGone ? -1 : Double(s.times)))
+            circle("minus", blank: out) { if s.times > timesFloor { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
+            Text(out ? Caption.blank("\(s.times)", "\u{2002}") : "\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                .contentTransition(.numericText(value: out ? -1 : Double(s.times)))
                 .animation(Motion.quick, value: s.times)
                 .frame(minWidth: 36, minHeight: 44)
                 .contentShape(Rectangle())
@@ -675,7 +711,7 @@ struct DetailsSheet: View {
                     dragFrom = nil
                     atFloor = false
                 })
-            circle("plus", blank: blockGone) { s.times += 1; Feel.tap() }
+            circle("plus", blank: out) { s.times += 1; Feel.tap() }
         }
         .padding(.trailing, -4)
         .accessibilityElement(children: .ignore)
