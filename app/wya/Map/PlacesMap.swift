@@ -79,6 +79,18 @@ extension MapController {
         }
     }
 
+    /// a map box's frame on screen now (where a page grows from, A16.1)
+    func screenRect(_ b: SIMD4<Float>) -> CGRect {
+        let a = screenPoint(SIMD2(Double(b.x), Double(b.y))), c = screenPoint(SIMD2(Double(b.z), Double(b.w)))
+        let r = CGRect(x: min(a.x, c.x), y: min(a.y, c.y), width: abs(c.x - a.x), height: abs(c.y - a.y))
+        return r.width < 24 || r.height < 24 ? CGRect(x: r.midX - 22, y: r.midY - 22, width: 44, height: 44) : r
+    }
+    /// a place's frame on screen now
+    func screenRect(of i: Int) -> CGRect {
+        guard let f = world?.frame(of: i) else { return CGRect(x: view.width / 2 - 22, y: view.height / 2 - 22, width: 44, height: 44) }
+        return screenRect(f)
+    }
+
     /// back to the world: the towns go, the world comes back (the camera stays where it is)
     func closePlace() {
         guard placeOpen != nil else { return }

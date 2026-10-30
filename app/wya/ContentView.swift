@@ -58,6 +58,9 @@ struct ContentView: View {
                 WaterView(water: water, map: map, tab: $tab)
                     .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
 
+                // a place's page (Part 16): over the map and the water, under the head (A16.1)
+                PlacePageView(map: map, water: water)
+
                 if !Perf.shared.off.contains("head") {
                     HeadView(map: map, water: water, head: head)
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
@@ -548,6 +551,10 @@ struct ContentView: View {
                 }
             }
         }
+        // OPEN ITS PAGE (11.5, Part 16): the page grows from the country's box on screen (A16.1)
+        let page = UIAction(title: "Open its page") { _ in
+            after { PlacePageState.shared.open(key, name: pl.n, country: pl.id, from: map.screenRect(of: i)) }
+        }
         // OPEN ITS REGION MAP (11.5, A6.14): unavailable where the place has no regions
         let regionMap = UIAction(title: "Open its region map",
                                  attributes: RegionCatalog.shared.first(pl.id.lowercased()) == nil ? .disabled : []) { _ in
@@ -578,7 +585,7 @@ struct ContentView: View {
         sections += [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [regionMap]),
+            UIMenu(options: .displayInline, children: [page, regionMap]),
             UIMenu(options: .displayInline, children: [passport, share]),
         ]
         // A DISPUTED PIECE (Crimea, the Kashmir pieces) or a disputed place (Taiwan, Kosovo): Whose borders here? opens Map settings at 50% on the Disputes
@@ -637,6 +644,11 @@ struct ContentView: View {
                 }
             }
         }
+        // OPEN ITS PAGE (16): the town's own page, growing from its shape on screen (A16.1)
+        let page = UIAction(title: "Open its page") { _ in
+            let from = map.townScenes[cc].flatMap { s in s.index[key.id].map { map.screenRect(s.box($0)) } } ?? map.screenRect(of: place)
+            after { PlacePageState.shared.open(key, name: town.name, what: "Town in \(parents)", country: cc, from: from) }
+        }
         let directions = UIAction(title: "Directions") { _ in
             let item = MKMapItem(location: CLLocation(latitude: town.lat, longitude: town.lon), address: nil)
             item.name = town.name
@@ -654,7 +666,7 @@ struct ContentView: View {
         return UIMenu(title: town.name, children: [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [directions]),
+            UIMenu(options: .displayInline, children: [page, directions]),
             UIMenu(options: .displayInline, children: [share]),
         ])
     }

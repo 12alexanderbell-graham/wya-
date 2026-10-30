@@ -60,6 +60,12 @@ enum Flags {
         return img
     }
 
+    /// the place's 4:3 flag as a picture (a page's ground reads its colours from it)
+    static func wideImage(_ id: String) -> UIImage? {
+        guard let v = vectorPack, let e = v.wide[id] else { return nil }
+        return draw(v.data, v.base, e, CGSize(width: 64, height: 48))
+    }
+
     /// rows draw flags at 28 pt; drawn at 32 so they stay sharp a little above that
     private static let side = CGSize(width: 32, height: 32)
 
