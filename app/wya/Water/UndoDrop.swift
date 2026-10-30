@@ -38,14 +38,20 @@ struct UndoDrop: View {
             .glassEffect(.clear, in: .capsule)
         }
         .buttonStyle(.plain)
-        // rises out of the edge: from inside it (where the glass merges with the water's) to 30 pt above it
-        .position(x: L.W / 2, y: up ? edge - 30 : edge + 4)
+        // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at
+        // edge + 4 its top stuck 14 pt out as a bump on every sheet) to 30 pt above it
+        .position(x: L.W / 2, y: up ? edge - 30 : edge + 22)
         .opacity(atFull ? 0 : 1)
         .allowsHitTesting(up && !atFull)
         .accessibilityLabel("Undo \(words)")
         .accessibilityHidden(!up)
-        .onChange(of: marks.changes) { _, _ in rise() }
+        // with a stamping card up the drop waits and rises as the card closes (4.2.3: the card closes keeping every
+        // change, then the drop rises), so it never sits on the card's Details | Verify?
+        .onChange(of: marks.changes) { _, _ in if card.isOpen { pending = true } else { rise() } }
+        .onChange(of: card.isOpen) { _, open in if !open, pending { pending = false; rise() } }
     }
+    @State private var card = CardState.shared
+    @State private var pending = false
 
     private func rise() {
         words = marks.lastWords ?? ""

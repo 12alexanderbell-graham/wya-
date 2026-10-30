@@ -48,6 +48,9 @@ final class CardState {
         }
     }
     @ObservationIgnored var closedAt: CFTimeInterval = 0
+    /// A4.8: while Details (or Verify) is up the card keeps the size and place it had (nothing gets smaller): the
+    /// water's top when it rose, which the geometry keeps using
+    var heldTop: CGFloat?
 
     var isOpen: Bool { place != nil }
 
@@ -73,6 +76,7 @@ final class CardState {
         withAnimation(.spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: { [weak self] in
             guard let self, self.closedAt > 0, self.p < 0.01 else { return }
             self.place = nil
+            self.heldTop = nil
             map.kept = nil
         }
     }
@@ -86,11 +90,24 @@ struct StampCard: View {
     let water: Water
     @State private var card = CardState.shared
     @State private var marks = MarkStore.shared
+    @State private var details = DetailsState.shared
 
     var body: some View {
         if let i = card.place, let w = map.world {
             let L = water.layout
-            let g = Geometry(L: L, sheetTop: water.form().top)
+            let waterTop = water.form().top
+            let g = Geometry(L: L, sheetTop: card.heldTop ?? waterTop)
+            // A4.8: the water rising from where it was to the book's bottom edge takes Details | Verify? into their
+            // edge points on that edge (r 0 to 1): centre up 34 pt, scale 1 - r; their bottom never under the water
+            let bookBottom = g.mid.y + g.bookH / 2 + 28
+            let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
+            let detailsUp = details.isOpen
+            // THE CARD GOES BACK (replacing A4.8's first version): once the bottom pair has
+            // gone, the name, Stamp | Wishlist and the book shrink as one about their top centre, Apple's way with the
+            // screen behind a sheet, so the book's bottom stays 12 pt above the water every frame; at full it has gone
+            let colTop = g.mid.y - (168 + g.bookH) / 2
+            let back: CGFloat = card.heldTop == nil ? 1
+                : max(0, min(1, (waterTop - 12 - colTop) / max(1, bookBottom - colTop)))
             let id = w.places[i].id
             let key = PlaceKey.country(id)
             let state = marks.state(key)
@@ -109,11 +126,25 @@ struct StampCard: View {
                 PassportPage(id: id, order: card.order, hidden: card.flying ? id : nil,
                              size: CGSize(width: g.bookW, height: g.bookH))
                 HStack(spacing: 12) {
-                    notYet("Details", w: half, live: false)
-                    notYet("Verify?", w: half, live: false, dim: !state.stamped)
+                    detailsButton(state, key: key, name: w.places[i].n, w: half, words: !detailsUp && r < 0.4)
+                    notYet("Verify?", w: half, live: false, dim: !state.stamped, words: !detailsUp && r < 0.4)
                 }
+                .scaleEffect(max(0.001, 1 - r))
+                .offset(y: -34 * r)
+                .allowsHitTesting(r < 0.01 && !detailsUp)
             }
             .frame(width: g.bookW)
+            // Details closed and the water back where it was: the card follows the water again
+            .onChange(of: !water.details && abs(waterTop - (card.heldTop ?? waterTop)) < 0.5) { _, back in
+                if back { card.heldTop = nil }
+            }
+            // with Details up, a tap on the card closes Details only, back to the card (4.4.1)
+            .overlay {
+                if detailsUp {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { details.close(water: water) }
+                }
+            }
             // A4.4: the stamp comes out of the Stamp button's centre, travels on one arc to above its slot growing to
             // 1.25, then presses down to 1 (no dip below 1); drawn in front of the button and the page
             .overlay(alignment: .topLeading) {
@@ -131,8 +162,9 @@ struct StampCard: View {
                         .allowsHitTesting(false)
                 }
             }
+            .scaleEffect(max(0.001, back), anchor: .top)
             .modifier(ArcPlace(t: p, from: card.at, ctrl: ctrl, to: c))
-            .allowsHitTesting(p > 0.98)
+            .allowsHitTesting(p > 0.98 && back > 0.1)
         }
     }
 
@@ -211,11 +243,32 @@ struct StampCard: View {
     }
 
     /// a button whose sheet is not built yet keeps its place in the "not yet" look and refuses
-    private func notYet(_ word: String, w: CGFloat, live: Bool, dim: Bool = true) -> some View {
+    private func notYet(_ word: String, w: CGFloat, live: Bool, dim: Bool = true, words: Bool = true) -> some View {
         Button { Feel.refuse() } label: {
-            Text(word)
+            Text(words ? word : " ")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Palette.ink.opacity(dim || !live ? 0.5 : 1))
+                .contentTransition(.numericText())
+                .animation(Motion.quick, value: words)
+                .frame(width: w, height: 44)
+                .glassEffect(.clear, in: .capsule)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// DETAILS (4.4): live once the place is stamped (a wished place's details come with 4.4.5); the card stays as it
+    /// is and the water rises over the book's lower part (A4.8)
+    private func detailsButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat, words: Bool) -> some View {
+        Button {
+            guard s.stamped, !card.flying else { Feel.refuse(); return }
+            card.heldTop = water.form().top
+            details.open(key, name: name, water: water)
+        } label: {
+            Text(words ? "Details" : " ")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
+                .contentTransition(.numericText())
+                .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(.clear, in: .capsule)
         }

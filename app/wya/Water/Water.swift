@@ -60,6 +60,34 @@ final class Water {
             if let back, self.stop == .half, back != .half, self.grab == nil { self.go(back) }
         }
     }
+    /// DETAILS are the water's content (Part 4.4): the water rises to 50% (or stays if higher); `detailsFrom` is the
+    /// stop it goes back to when they close; `detailsWords` as settingsWords
+    var details = false
+    var detailsWords = false
+    @ObservationIgnored var detailsFrom: Stop?
+    func openDetails() {
+        guard !details else { return }
+        detailsFrom = stop
+        details = true
+        if stop == .closed || stop == .quarter { go(.half) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.details else { return }
+            withAnimation(Motion.quick) { self.detailsWords = true }
+        }
+    }
+    func closeDetails() {
+        guard details else { return }
+        withAnimation(.smooth(duration: 0.15)) { detailsWords = false }
+        let back = detailsFrom
+        detailsFrom = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard let self, !self.detailsWords else { return }
+            self.details = false
+            // back to where it was, unless a pull's release already took it somewhere below 50%
+            if let back, self.stop != back, self.stop.rawValue >= Stop.half.rawValue, self.grab == nil, !self.settings { self.go(back) }
+        }
+    }
+
     /// THE START CREDIT (BUILD-BOOK 1.4, A1.20): the OpenStreetMap words on the water; once at every cold launch, for
     /// 5 s or until the first touch on the map
     var credit = false
