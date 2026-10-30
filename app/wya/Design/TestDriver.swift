@@ -216,6 +216,16 @@ final class TestDriver {
                 case "list": if a == "off" { water?.closeList() } else { water?.openList() }
                 // listdetails <id>: a row of the Stamped list swiped right (Details from the list, A4.21)
                 case "listdetails": StampedList.testDetails?(a)
+                // upload open | close | choose 0|1 | back: the upload sheet (9.3) as the Upload tool, a tap off, a tap on a
+                // choice and the swipe right would
+                case "upload":
+                    switch a {
+                    case "open": if let water { UploadState.shared.open(water: water) }
+                    case "close": UploadState.shared.close()
+                    case "back": UploadState.shared.back()
+                    case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
+                    default: break
+                    }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
                 case "details":

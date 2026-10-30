@@ -89,6 +89,24 @@ final class Water {
         }
     }
 
+    /// THE UPLOAD SHEET is the water's content (Part 9.3): at 25% (the water comes there from where it was);
+    /// `uploadFrom` is the stop it goes back to when it closes
+    var upload = false
+    @ObservationIgnored var uploadFrom: Stop?
+    func openUpload() {
+        guard !upload else { return }
+        uploadFrom = stop
+        upload = true
+        if stop != .quarter { go(.quarter) }
+    }
+    func closeUpload() {
+        guard upload else { return }
+        upload = false
+        let back = uploadFrom
+        uploadFrom = nil
+        if let back, back != stop, grab == nil { go(back) }
+    }
+
     /// THE STAMPED LIST is the water's content (Part 4.6): opened by the caption's number, at full; `listFrom` is the
     /// stop it goes back to
     var stampedList = false
@@ -223,6 +241,8 @@ final class Water {
         let lo = L.top(.full), hi = L.top(.closed)
         // past full it does not go at all: no give and no spring back at the top
         if t < lo { t = lo }
+        // the upload sheet has no 50% while choosing: pulled up, the water gives 12 pt and no more (9.3)
+        if upload, t < L.top(.quarter) { t = L.top(.quarter) - Flow.rubber(L.top(.quarter) - t, 12) }
         // under the capsule it does not go either
         if t > hi { t = hi + Flow.rubber(t - hi, 10) }
         // from 50% up to full it is harder: above half the water follows at 0.75 for the first 60 points, then 1:1,
@@ -257,6 +277,19 @@ final class Water {
         guard let g = grab else { return }
         grab = nil
         held = false
+        // the upload sheet: pulled down (past 40 pt or flicked) it closes and the water goes back to where it was;
+        // pulled up it settles back to 25% with a refuse (9.3)
+        if upload {
+            let q = layout.top(.quarter)
+            if fingerTop > q + 40 || v > 300 {
+                go(.quarter, speed: v, released: true)
+                UploadState.shared.close()
+            } else {
+                if fingerTop < q - 4 { Feel.refuse() }
+                go(.quarter, speed: v, released: true)
+            }
+            return
+        }
         // a flick goes on to the next height its way, otherwise the nearest; never more than one height from where
         // it was picked up
         let order = Stop.allCases
