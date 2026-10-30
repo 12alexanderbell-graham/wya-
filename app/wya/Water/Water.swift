@@ -88,6 +88,25 @@ final class Water {
         }
     }
 
+    /// THE STAMPED LIST is the water's content (Part 4.6): opened by the caption's number, at full; `listFrom` is the
+    /// stop it goes back to
+    var stampedList = false
+    @ObservationIgnored var listFrom: Stop?
+    func openList() {
+        guard !stampedList else { return }
+        listFrom = stop
+        stampedList = true
+        if stop != .full { go(.full) }
+    }
+    /// closed by the number again or a pull (`to` nil: stay where the pull left it)
+    func closeList(to: Stop? = nil, back: Bool = true) {
+        guard stampedList else { return }
+        stampedList = false
+        let s = to ?? (back ? listFrom : nil)
+        listFrom = nil
+        if let s, s != stop { go(s) }
+    }
+
     /// THE START CREDIT (BUILD-BOOK 1.4, A1.20): the OpenStreetMap words on the water; once at every cold launch, for
     /// 5 s or until the first touch on the map
     var credit = false
