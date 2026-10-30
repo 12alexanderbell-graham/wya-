@@ -10,8 +10,11 @@ async def main():
     os.makedirs('png',exist_ok=True)
     async with async_playwright() as p:
         b=await p.chromium.launch(); pg=await b.new_page(device_scale_factor=1)
-        for f in sorted(glob.glob('Stamps/stamp-*.svg')   # the earlier app's Resources/Stamps):
-            k=os.path.basename(f)[6:-4]; t=open(f).read()
+        for f in sorted(glob.glob('Stamps/stamp-*.svg')):   # the earlier app's Resources/Stamps
+            k=os.path.basename(f)[6:-4]
+            # a stamp whose words overlapped is drawn from its corrected copy in fixed/ (stamps-fix.py)
+            if os.path.exists('fixed/'+os.path.basename(f)): f='fixed/'+os.path.basename(f)
+            t=open(f).read()
             vb=[float(x) for x in re.search(r'viewBox="([^"]+)"',t).group(1).replace(',',' ').split()]
             w,h=vb[2],vb[3]; s=L/max(w,h); W,H=round(w*s),round(h*s)
             await pg.set_viewport_size({'width':W,'height':H})
