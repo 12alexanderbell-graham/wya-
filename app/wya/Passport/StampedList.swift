@@ -32,6 +32,8 @@ struct StampedList: View {
     /// A4.20: the rows as they were last, and the ones gone from the store still leaving
     @State private var last: [Row] = []
     @State private var kept: [Row] = []
+    /// A4.21: how far the rows have dropped through the list's bottom edge
+    @State private var listDrop: CGFloat = 0
     static let each = 0.26, gap = 0.025, animated = 15
 
     struct Row: Identifiable {
@@ -86,6 +88,16 @@ struct StampedList: View {
             }
         }
         .listStyle(.plain)
+        // A4.21: the rows drop as one block down through the bottom edge (first tried row by row with a stagger:
+        // List's own cell layout moved the rows over each other on the way)
+        .offset(y: listDrop)
+        // the list's bottom soft edge (P3): rows scrolling and leaving go out through it, never cut by a hard line
+        .mask {
+            VStack(spacing: 0) {
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
+            }
+        }
         // a row going or coming: the rows below move by its height (A4.20; A4.19's own motion does the row itself)
         .animation(Motion.quick, value: listed.map(\.id))
         .scrollContentBackground(.hidden)
@@ -95,7 +107,10 @@ struct StampedList: View {
         .frame(width: L.W - 2 * L.sheetInset, height: h)
         .position(x: L.W / 2, y: y0 + h / 2)
         .allowsHitTesting(water.stampedList)
-        .onAppear { startTop = form.top; openedAt = Date() }
+        .onAppear {
+            startTop = form.top; openedAt = Date()
+            Self.testDetails = { id in if let r = rows.first(where: { $0.id == id }) { details(r) } }
+        }
         // the rows come once the water is 80% of the way up (from wherever it was when the list opened)
         .onChange(of: water.stampedList && form.top <= L.top(.full) + 0.2 * max(0, (startTop ?? form.top) - L.top(.full))
                   && !rows.isEmpty, initial: true) { _, go in
@@ -142,6 +157,7 @@ struct StampedList: View {
     /// system has gone down out of the water (Motion.chrome, 0.38 s from the list opening): one out, then the other in
     private func arrive() {
         arrived = true
+        if Self.backFromDetails { Self.backFromDetails = false; rise(); return }
         let wait = max(0, 0.38 - Date().timeIntervalSince(openedAt))
         for (i, r) in rows.enumerated() {
             if i < Self.animated { show(r.id, after: wait + Self.gap * Double(i)) }
@@ -218,10 +234,33 @@ struct StampedList: View {
         }
     }
 
-    /// Details over the list, in the same water; closing them comes back to the list
+    /// A4.21: Details over the list, in the same water. The rows go down and out through the list's bottom soft edge
+    /// together (quick curve; the book's 0.025 s stagger is not kept, see `listDrop`), and only then Details come;
+    /// closing them, the rows come back up through the edge (`rise`). (Details' own rows arriving from the swiped row's centre,
+    /// A4.14, are not built: they are there in one frame once the list has gone.)
     private func details(_ r: Row) {
-        DetailsState.shared.open(.country(r.id), name: r.name, water: water)
+        Feel.tick()
+        Self.backFromDetails = true
+        withAnimation(Motion.quick) { listDrop = listHeight + 8 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.each) {
+            DetailsState.shared.open(.country(r.id), name: r.name, water: water)
+        }
     }
+    /// back from Details: every row in, the ones on screen (the list starts at its top again) coming up through the
+    /// bottom edge, nearest it first
+    private func rise() {
+        let ids = rows.map(\.id)
+        flagOut = Set(ids); wordsOut = Set(ids)
+        listDrop = listHeight + 8
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+            withAnimation(Motion.quick) { listDrop = 0 }
+        }
+    }
+    private var listHeight: CGFloat { max(60, water.layout.capsule.minY - 24 - (top + 12)) }
+    /// Details were opened from a row: the list coming back rises instead of arriving (A4.21)
+    @MainActor static var backFromDetails = false
+    /// the test driver's way to swipe a row right (simulator checks: a synthesized drag does not trigger List swipes)
+    @MainActor static var testDetails: ((String) -> Void)?
 
     /// A4.20: the row's words roll out and its flag shrinks into its own centre (0.26 s), then the stamp lifts and the
     /// rows below move up into its place
