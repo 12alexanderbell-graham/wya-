@@ -189,6 +189,20 @@ final class TestDriver {
                     line += "\nregistered: \(Actions.shared.all.keys.sorted().joined(separator: ", "))"
                     line += "\nfeatures: " + Feature.allCases.map { "\($0.rawValue) \($0.isOn)" }.joined(separator: ", ")
                     try? line.write(toFile: Snap.dir + "/action.log", atomically: true, encoding: .utf8)
+                case "borders":
+                    // borders defacto|un|<KEY> [piece=owner,...] [fallback un]: the map in another borders view; the time
+                    // it took and the caption after, into snaps/borders.log
+                    let v: Borders.View = a == "defacto" ? .deFacto : a == "un" ? .unitedNations : .country(a)
+                    var picks: [String: String] = [:]
+                    if p.count > 2, p[2] != "-" {
+                        for kv in p[2].split(separator: ",") { let x = kv.split(separator: "="); if x.count == 2 { picks[String(x[0])] = String(x[1]) } }
+                    }
+                    let fb: Borders.View = p.count > 3 && p[3] == "un" ? .unitedNations : .deFacto
+                    let t0 = CACurrentMediaTime()
+                    let ok = await map?.setBorders(v, picks: picks, fallback: fb) ?? false
+                    let ms = Int((CACurrentMediaTime() - t0) * 1000)
+                    let line = "borders \(a) picks \(picks) -> \(ok) in \(ms) ms; caption \(map?.count.n ?? -1) of \(map?.count.of ?? -1); dotted \(Borders.dottedPlaces.count)"
+                    try? line.write(toFile: Snap.dir + "/borders.log", atomically: true, encoding: .utf8)
                 case "storecheck":
                     let lines = await StoreCheck.run()
                     try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)

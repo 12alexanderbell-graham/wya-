@@ -170,6 +170,8 @@ final class MapController {
     // MARK: loading
     func load() async {
         guard world == nil else { return }
+        // the saved Map settings set the borders view, your dispute picks and the count before the world is read
+        _ = MapSettingsStore.shared
         let loaded: (World, Relief)? = await Task.detached(priority: .userInitiated) {
             guard let w = try? World.load(), let r = try? Relief.load() else { return nil }
             return (w, r)
@@ -184,6 +186,14 @@ final class MapController {
         recount()
         marksListener = marks.listen { [weak self] _ in self?.takeMarks(MarkStore.shared) }
         homeX = Self.homeLongitudeX(w)
+        takeShapes(w)
+        goHome(animated: false)
+        ready = true
+        needsFrame = true
+    }
+
+    /// what the map works out from whose each piece is (again after a borders view change)
+    private func takeShapes(_ w: World) {
         tinyPlaces = w.places.indices.filter { w.places[$0].tiny && !w.places[$0].junk }
         // each tiny place's biggest piece across, in map units (the Vatican's is a speck)
         var big = [Double](repeating: 0, count: w.places.count)
@@ -196,9 +206,26 @@ final class MapController {
         // the size you actually see when close: the detailed map's (the world file's Vatican is a fifth of its true
         // 1 km, so its diamond went on while its own shape was already showing beside it)
         tinyBig = w.places.indices.map { i in w.places[i].dsz ?? (big[i] > 0 ? big[i] : 0.028) }
-        goHome(animated: false)
-        ready = true
+    }
+
+    // MARK: the borders view (Map settings, Part 5.6 and 5.7)
+    @ObservationIgnored private var bordersJob = 0
+    /// DRAW THE WORLD IN ANOTHER BORDERS VIEW, with your own dispute picks and the "No stated position" view. The new
+    /// world is read off the main thread while the old map stays on screen; when it is complete the map, the counts and
+    /// the planets change in one frame (colour changes just appear). Rapid changes: only the last one lands.
+    @discardableResult
+    func setBorders(_ view: Borders.View, picks: [String: String] = [:], fallback: Borders.View = .deFacto) async -> Bool {
+        bordersJob += 1
+        let job = bordersJob
+        Borders.view = view; Borders.picks = picks; Borders.fallback = fallback
+        let made: World? = await Task.detached(priority: .userInitiated) { try? World.load() }.value
+        guard job == bordersJob, let w = made else { return false }
+        world = w
+        takeShapes(w)
+        takeMarks(MarkStore.shared)
+        recount()
         needsFrame = true
+        return true
     }
 
     /// Home is centred on where you are when your location is shared with the app; when it is not, on your passport's

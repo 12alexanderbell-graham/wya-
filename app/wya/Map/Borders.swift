@@ -16,6 +16,9 @@ enum Borders {
 
     /// the view the map is drawn in (Map settings will set it; De facto until then)
     nonisolated(unsafe) static var view: View = .deFacto
+    /// your own picks, dispute by dispute (piece id -> place id or "none"), and the "No stated position" view
+    nonisolated(unsafe) static var picks: [String: String] = [:]
+    nonisolated(unsafe) static var fallback: View = .deFacto
 
     /// the places (indices into World.places) drawn dotted in the current view, set when the world is loaded
     nonisolated(unsafe) static var dottedPlaces: Set<Int> = []
@@ -65,8 +68,14 @@ nonisolated final class Positions: @unchecked Sendable {
     /// a place's short name → its id (the UN field names places by it)
     let byShort: [String: String]
     let view: Borders.View
+    /// one dispute at a time given to a side by hand (Map settings' Disputes page): piece id -> place id or "none"
+    let picks: [String: String]
+    /// where the view states no position: the ground's answer (De facto) or the UN's (De jure); the "No stated
+    /// position" row
+    let fallback: Borders.View
 
-    init(file: DisputeFile, places: [(id: String, short: String, kind: String)], view: Borders.View) {
+    init(file: DisputeFile, places: [(id: String, short: String, kind: String)], view: Borders.View,
+         picks: [String: String] = [:], fallback: Borders.View = .deFacto) {
         disputes = file.list
         unrecognised = file.unrecognised ?? [:]
         jure = file.jure ?? [:]
@@ -74,6 +83,8 @@ nonisolated final class Positions: @unchecked Sendable {
         for p in places { k[p.id] = p.kind; s[p.short] = p.id }
         kind = k; byShort = s
         self.view = view
+        self.picks = picks
+        self.fallback = fallback
     }
 
     @inline(__always) private static func some(_ s: String?) -> String? { (s?.isEmpty ?? true) ? nil : s }
@@ -103,9 +114,11 @@ nonisolated final class Positions: @unchecked Sendable {
         }
     }
 
-    /// whose a disputed piece is: the view's answer, else the ground's, else the data's own default (assign/baseOf)
+    /// whose a disputed piece is: your own pick for it, else the view's answer, else the "No stated position" view's,
+    /// else the ground's, else the data's own default (the old WorldGeometry.assign/baseOf)
     func assign(_ d: Dispute) -> String {
-        says(d, view) ?? says(d, .deFacto) ?? (Self.some(d.pref) ?? d.default)
+        if let p = Self.some(picks[d.id]), p == "none" || d.options.contains(p) { return p }
+        return says(d, view) ?? says(d, fallback) ?? says(d, .deFacto) ?? (Self.some(d.pref) ?? d.default)
     }
 
     /// an entity assigned away (Western Sahara to Morocco on the ground) is not drawn on its own

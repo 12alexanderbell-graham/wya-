@@ -135,7 +135,7 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     float hazeL = giant * exp(-d * 2.2) * 0.55 * outside * edgeFade;
     float glowL = whiteHot * exp(-d * 3.0) * 0.6 * outside * edgeFade;
 
-    float er = 0.0;   // no loops: they read as rings (his 19:10)
+    float er = 0.0;   // no loops: they read as rings
     float period = mix(10.0, 5.0, smoothstep(0.15, 0.4, heat));
     float k = floor(t / period);
     float ph = fract(t / period);
