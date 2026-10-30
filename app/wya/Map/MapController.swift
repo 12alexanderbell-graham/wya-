@@ -844,6 +844,18 @@ final class MapController {
     /// room for), or the continent you are on, its land whole; then `then`
     func frameSideways(then: (() -> Void)? = nil) {
         let W = Double(view.width), H = Double(view.height)
+        // a region map: the country whole, 16 pt in from the screen's edges, still the country's map (6.5)
+        if let sc = regionScene, let w = world, let f0 = w.frame(of: sc.place) {
+            let f = SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w))
+            let nk = min(kMax, max(worldKMin, min((W - 32) / max(0.05, f.z - f.x), (H - 32) / max(0.05, f.w - f.y))))
+            let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
+            let hw = W / 2 / nk, hh = H / 2 / nk
+            continentFrame = SIMD4(f.x - hw, f.y - hh, f.z + hw, f.w + hh); continentK = nk; continentY = mid.y
+            followMid = nil
+            updateHome()
+            fly(to: clamped(mid, nk), k: nk, dur: Self.flight, then: then)
+            return
+        }
         let k = continent ?? drawnContinent
         if let k, k == "Antarctica" || drawnContinent != k {
             // Antarctica (its polar map is not built), or halfway to another continent: kept as it is, the world framed

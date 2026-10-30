@@ -170,7 +170,8 @@ final class Sideways {
             // where portrait puts it: a continent framed again for portrait (its room above the sheet); the world home if
             // it was zoomed out further than portrait allows, else the place you were looking at
             let to = m.target(for: portrait) {
-                if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
+                if let sc = m.regionScene { m.frameRegion(sc.place) }
+                else if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
                 else if m.k < m.worldKMin { m.goHome() } else { m.holdInside() }
             } ?? from
             square = true
@@ -228,7 +229,9 @@ struct SidewaysMarks: View {
         ZStack(alignment: .topLeading) {
             mark(0, "plus", "Zoom in", dim: map.atMax) { map.zoomIn() }.position(x: x, y: ys[0])
             mark(1, "minus", "Zoom out", dim: map.atHome) { map.zoomOut() }.position(x: x, y: ys[1])
-            mark(2, "reset", "Back to the world", dim: map.atRest) { map.goHome() }.position(x: x, y: ys[2])
+            mark(2, "reset", map.regionScene != nil ? "Back to the country" : "Back to the world", dim: map.regionScene == nil && map.atRest) {
+                if map.regionScene != nil { map.frameSideways() } else { map.goHome() }
+            }.position(x: x, y: ys[2])
             mark(3, "unfullscreen", "Out of full screen", dim: false) { side.leave(feel: false) }.position(x: x, y: ys[3])
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
