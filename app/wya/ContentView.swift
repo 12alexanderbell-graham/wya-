@@ -36,7 +36,7 @@ struct ContentView: View {
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
                 // the passport book from the plus's passport tool (Part 4.3)
-                PassportBook(water: water)
+                PassportBook(water: water, map: map)
 
                 WaterView(water: water, map: map, tab: $tab)
 

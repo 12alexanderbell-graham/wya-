@@ -412,6 +412,28 @@ struct StampCard: View {
     }
 }
 
+/// one row of a stamp's hold menu
+struct StampMenuItem: Identifiable {
+    let title: String
+    var destructive = false
+    let act: () -> Void
+    var id: String { title }
+}
+
+/// Apple's menu on a stamp, only where it has one (the book; never the card's page)
+struct StampHold: ViewModifier {
+    let items: [StampMenuItem]?
+    func body(content: Content) -> some View {
+        if let items {
+            content.contextMenu {
+                ForEach(items) { m in Button(m.title, role: m.destructive ? .destructive : nil, action: m.act) }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// a rectangle drawn from the middle of its top edge clockwise, so a trim draws it from the top (A4.7)
 struct TopFirstRect: Shape {
     func path(in r: CGRect) -> Path {
@@ -460,6 +482,8 @@ struct PassportPage: View {
     let size: CGSize
     /// a page given by number (the passport book's pages, 4.3); nil: the page of `id`
     var pageIndex: Int? = nil
+    /// the book's stamps answer a hold with Apple's menu (4.3.3); the card's page does not
+    var menu: ((String) -> [StampMenuItem])? = nil
 
     static let fill: [(col: Int, row: Int)] = [(0, 0), (1, 1), (0, 2), (1, 0), (0, 1), (1, 2)]
 
@@ -496,6 +520,7 @@ struct PassportPage: View {
                         .resizable()
                         .frame(width: at.size.width, height: at.size.height)
                         .rotationEffect(.degrees(at.turn))
+                        .modifier(StampHold(items: menu?(pid)))
                         .position(at.center)
                 }
             }
