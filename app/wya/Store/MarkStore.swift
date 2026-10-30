@@ -125,6 +125,21 @@ final class MarkStore {
         return r.changed.count
     }
 
+    /// DETAILS (Part 4.4): read a stamped place's, and write them back once when Details closes (one undo step;
+    /// nothing changed, nothing written and no undo drop)
+    func details(_ key: PlaceKey) async -> (details: StampDetails, times: Int, lived: Bool)? {
+        guard let store else { return nil }
+        let acc = account
+        guard let d = try? await store.detailsOf(key, account: acc) else { return nil }
+        return (StampDetails(json: d.details), d.times, d.lived)
+    }
+    func setDetails(_ key: PlaceKey, name: String, details: StampDetails, times: Int, lived: Bool) async {
+        guard let store else { return }
+        let acc = account
+        guard let r = try? await store.setDetails(key, account: acc, details: details.json, times: times, lived: lived) else { return }
+        apply(r, words: "\(label(key, name)) details", origin: nil, who: .you)
+    }
+
     /// the passport's order of stamped countries (oldest first), read fresh from the store
     func passportOrder() async -> [String] {
         guard let store else { return [] }

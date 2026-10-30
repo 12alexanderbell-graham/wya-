@@ -84,6 +84,29 @@ actor TravelStore {
         return out
     }
 
+    /// A STAMPED PLACE'S DETAILS (Part 4.4), as one write and one undo step: the details JSON, the times you typed and
+    /// the lived flag; nothing is written when nothing changed
+    func setDetails(_ key: PlaceKey, account: String, details: Data?, times: Int, lived: Bool) throws -> Result {
+        var res = Result()
+        guard let r = try record(account, key), r.stamped else { return res }
+        guard r.details != details || r.times != times || r.lived != lived else { return res }
+        let v = try visitCount(account, key)
+        res.undo.append(snapshot(key, r))
+        let old = state(r, visits: v)
+        r.details = details
+        r.times = max(1, max(times, v))
+        r.lived = lived
+        res.changed[key] = (old, state(r, visits: v))
+        try modelContext.save()
+        return res
+    }
+
+    /// what a stamped place's record holds for Details: its details JSON, times and lived
+    func detailsOf(_ key: PlaceKey, account: String) throws -> (details: Data?, times: Int, lived: Bool)? {
+        guard let r = try record(account, key), r.stamped else { return nil }
+        return (r.details, r.times, r.lived)
+    }
+
     /// THE PASSPORT'S ORDER (the old StampBook's: by when, then by id): the countries stamped, oldest first; each takes
     /// the next slot of the book
     func passportOrder(account: String) throws -> [String] {

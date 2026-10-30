@@ -142,10 +142,13 @@ struct SheetContent: View {
             // water's bottom, under the tabs, its own motion untouched (asked him; default), and back up on close
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
-                    .offset(y: water.settings ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: water.settings)
+                    .offset(y: water.settings || water.details ? water.layout.H - form.top : 0)
+                    .animation(Motion.chrome, value: water.settings || water.details)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
+            // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
+            // (its contents are there in one frame once the water has risen; no fade, no words rolling yet)
+            if water.details && water.detailsWords { DetailsSheet(water: water, form: form).transition(.identity) }
 
             // the name and number: at full they stay under the head
             if !Perf.shared.off.contains("caption") { Caption(name: map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
@@ -171,7 +174,7 @@ struct SheetContent: View {
     /// A2.5: the top at or above the capsule's top less 134 pt (PM 739, 17e 627: 10 pt under the 25% stop); and not
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
     private var captionFits: Bool {
-        form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings
+        form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
     }
     @State private var captionShown = false
 }

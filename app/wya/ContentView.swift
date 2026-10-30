@@ -80,8 +80,16 @@ struct ContentView: View {
             Actions.shared.registerMap(map: map, water: water, head: head)
             MapSettingsRows.registerActions(map: map)
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
-            map.onTouch = { [head, water, map] in head.putAway(); water.hideCredit(); CardState.shared.close(map: map) }
-            water.onTouch = { [head, map] in head.putAwayAI(); CardState.shared.close(map: map) }
+            // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
+            map.onTouch = { [head, water, map] in
+                head.putAway(); water.hideCredit()
+                if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) } else { CardState.shared.close(map: map) }
+            }
+            // a finger in the water is using Details when they are up; otherwise it closes the card
+            water.onTouch = { [head, map] in
+                head.putAwayAI()
+                if !DetailsState.shared.isOpen { CardState.shared.close(map: map) }
+            }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map] i, p in
                 guard !head.quickStamp, !map.locked else { return }
@@ -111,15 +119,22 @@ struct ContentView: View {
         // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
-            if open { CardState.shared.close(map: map); water.openSettings() } else { water.closeSettings() }
+            if open { closeCard(); water.openSettings() } else { water.closeSettings() }
         }
-        // any control of the head closes the card first, keeping its changes (Part 4.2.3)
-        .onChange(of: head.searching) { _, v in if v { CardState.shared.close(map: map) } }
+        // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
+        .onChange(of: head.searching) { _, v in if v { closeCard() } }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
-        .onChange(of: head.toolsOpen) { _, v in if v { CardState.shared.close(map: map) } }
+        .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
+            // Details pulled down below 50% close and keep (4.4.1)
+            if DetailsState.shared.isOpen, s == .quarter || s == .closed { DetailsState.shared.close(water: water) }
         }
+    }
+
+    private func closeCard() {
+        DetailsState.shared.close(water: water)
+        CardState.shared.close(map: map)
     }
 }
