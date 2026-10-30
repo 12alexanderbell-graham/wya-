@@ -15,7 +15,11 @@ final class PlacePageState {
         /// For you (16.4.9): the visa line for each of your nationalities first, then each government's advice
         var visa: [String] = []
         var advice: [(who: String, text: String, when: String)] = []
+        /// What is in it (16.4.8): a country's regions (first level) and its cities, most peopled first
+        var regions: [Inside] = []
+        var cities: [Inside] = []
     }
+    struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil }
     private(set) var key: PlaceKey?
     private(set) var name = ""
     /// one line of what it is ("City in Hessen, Germany"); empty for a country
@@ -43,6 +47,14 @@ final class PlacePageState {
             withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.5, dampingFraction: 1)) { self?.p = 1 }
         }
         if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
+        if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
+        if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
+    }
+    /// another place's page in this one's place (a row tapped on a page; a pushed page waits for its navigation)
+    func replace(_ key: PlaceKey, name: String, what: String, country: String, code: String?) {
+        self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
+        facts = nil
+        Feel.tap()
         if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
         if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
     }
@@ -95,6 +107,32 @@ final class PlacePageState {
         if let uk = adv["uk"] as? [String: Any], let a = uk["alert"] as? String, !a.isEmpty {
             let t = a.replacingOccurrences(of: "_", with: " ")
             out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), Self.day(uk["updated"] as? String)))
+        }
+        // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
+        if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
+            var pop: [String: Double] = [:]
+            if case .ok(let rd) = await Servers.data.file("regions/\(cc).json"),
+               let all = try? JSONSerialization.jsonObject(with: rd) as? [String: Any] {
+                for (k, v) in all { pop[k] = ((v as? [String: Any])?["pop"] as? NSNumber)?.doubleValue }
+            }
+            var seen = Set<String>()
+            let word = RegionsMenuModel.word(first.level.one)
+            out.regions = file.units.filter { seen.insert($0.id).inserted }
+                .sorted { (pop[$0.code ?? ""] ?? 0) > (pop[$1.code ?? ""] ?? 0) }
+                .map { u in Inside(key: PlaceKey(.region, u.id), name: u.name,
+                                   line: pop[u.code ?? ""].map { "\(word.prefix(1).uppercased() + word.dropFirst()) · \(Self.big($0)) people" }
+                                       ?? word.prefix(1).uppercased() + word.dropFirst(),
+                                   code: u.code) }
+        }
+        if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
+           let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+            out.cities = all.compactMap { t in
+                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue else { return nil }
+                let r = t["r"] as? String ?? ""
+                let ll = t["ll"] as? [NSNumber]
+                return Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
+                              at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil })
+            }
         }
         facts = out
         // the visa lines: for each of your nationalities (Profile), what its passport needs here
@@ -217,6 +255,8 @@ struct PlacePageView: View {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
+                if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
+                if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
                 Color.clear.frame(height: 140).id("end")
             }
@@ -286,6 +326,12 @@ struct PlacePageView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// WHAT IS IN IT (16.4.8): a list with its own search field, five rows (the most peopled), then Show more; a row is a
+    /// flag, its name and one line; its plus stamps it; a tap opens its page
+    private func insideList(_ title: String, _ all: [PlacePageState.Inside]) -> some View {
+        InsideList(title: title, all: all, country: page.country, countryName: page.name, map: map)
     }
 
     /// FOR YOU (16.4.9): the visa line first, then each government's advice with who says it and when it was checked
@@ -368,5 +414,83 @@ struct PlacePageView: View {
         let coloured = order.filter { !plain.contains(entries[$0].key) }
         let use = coloured.isEmpty ? order : coloured
         return use.prefix(3).map { names[$0].0 }
+    }
+}
+
+/// one of a page's "What is in it" lists (16.4.8)
+private struct InsideList: View {
+    let title: String
+    let all: [PlacePageState.Inside]
+    let country: String
+    let countryName: String
+    let map: MapController
+    @State private var query = ""
+    @State private var shown = 5
+
+    var body: some View {
+        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let rows = q.isEmpty ? all : all.filter { $0.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).contains(q) }
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            HStack(spacing: 8) {
+                Icon5(key: "search", ink: Palette.ink, size: 22)
+                TextField("Search \(title.lowercased())", text: $query).font(.body)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+            }
+            .padding(.horizontal, 14).frame(height: 44)
+            .glassEffect(.clear, in: .capsule)
+            ForEach(rows.prefix(shown), id: \.self) { r in row(r) }
+            if rows.count > shown {
+                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
+                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func row(_ r: PlacePageState.Inside) -> some View {
+        let s = MarkStore.shared.state(r.key)
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                if !r.line.isEmpty { Text(r.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
+            }
+            Spacer(minLength: 8)
+            Button {
+                Task {
+                    if r.key.kind == .town {
+                        // a town with its region chain and its country (A16.7, the unstamp rule)
+                        if s.stamped { Feel.lift(); await TownStamps.unstamp(r.key, name: r.name, cc: country) }
+                        else {
+                            Feel.stamp()
+                            await TownStamps.stamp(r.key, name: r.name, cc: country, source: .hand,
+                                                   place: map.world?.placeIndex[country], at: r.at)
+                        }
+                    } else if s.stamped { Feel.lift(); await MarkStore.shared.unstamp(r.key, name: r.name) }
+                    else { Feel.stamp(); await MarkStore.shared.stamp(r.key, name: r.name, cc: country) }
+                }
+            } label: {
+                // the plus; stamped, the card's own "Stamped" capsule (no tick, 0.8.4; no lone lime circle, 30 Oct 21:42)
+                if s.stamped {
+                    Text("Stamped").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 14).frame(height: 44)
+                        .glassEffect(.clear.tint(Palette.lime), in: .capsule)
+                } else {
+                    Icon5(key: "plus", ink: Palette.ink, size: 22)
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.clear, in: .circle)
+                }
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(height: 52)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // its page (pushed pages wait: this one turns into it)
+            let page = PlacePageState.shared
+            page.replace(r.key, name: r.name, what: r.key.kind == .town ? "Town in \(r.line), \(countryName)" : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
+                         country: country, code: r.code)
+        }
     }
 }
