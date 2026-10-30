@@ -60,6 +60,13 @@ final class UploadState {
     /// the found places (map indices) in the order found, and the ones dropped at the review
     @ObservationIgnored private var order: [Int] = []
     private(set) var dropped: Set<Int> = []
+    /// trips dropped alone from a kept find (Its dates), by place id and the trip's index in its visits
+    private(set) var droppedTrips: [String: Set<Int>] = [:]
+    /// rows opened by Its dates (one row per found trip under them)
+    private(set) var opened: Set<String> = []
+    /// of those, the ones whose trip rows have their words in (the space opens blank first, then the words roll in;
+    /// closing, the words roll out first, then the space closes: List's own insert would fade a row with words in it)
+    private(set) var datesIn: Set<String> = []
     @ObservationIgnored weak var map: MapController?
     /// what A9.8 says when a file gave nothing (not a history, unreadable); nil: "No places found"
     @ObservationIgnored private var failed: String?
@@ -341,7 +348,7 @@ final class UploadState {
     /// the test driver's read: a few dated points in eight countries, as if a history file had given them (none in
     /// a place you have stamped twice, one at sea), or none at all
     func testRead(empty: Bool = false) {
-        let pts: [(Double, Double, String)] = [(38.72, -9.14, "2024-08-03T10:00:00Z"), (38.72, -9.14, "2024-08-05T10:00:00Z"),
+        let pts: [(Double, Double, String)] = [(38.72, -9.14, "2024-08-03T10:00:00Z"), (38.72, -9.14, "2024-08-05T10:00:00Z"), (38.72, -9.14, "2023-01-10T10:00:00Z"), (38.72, -9.14, "2022-05-20T10:00:00Z"),
             (35.68, 139.69, "2024-04-01T03:00:00Z"), (48.86, 2.35, "2023-06-10T12:00:00Z"), (-33.87, 151.21, "2022-12-24T01:00:00Z"),
             (64.14, -21.94, "2021-07-01T12:00:00Z"), (-1.29, 36.82, "2020-02-02T09:00:00Z"), (19.43, -99.13, "2019-11-01T18:00:00Z"),
             (-13.16, -72.54, "2018-05-05T15:00:00Z"), (30.0, -40.0, "2018-05-06T15:00:00Z")]
@@ -362,7 +369,7 @@ final class UploadState {
         finds = all
         let index = Dictionary(world.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
         order = all.compactMap { index[$0.place] }
-        dropped = []
+        dropped = []; droppedTrips = [:]; opened = []; datesIn = []
         let order = self.order
         NSLog("wya upload found %d places from %d rows", order.count, rows.count)
         if order.isEmpty { say(failed ?? "No places found"); return }
@@ -406,6 +413,11 @@ final class UploadState {
         var name: String
         var line: String
         var dropped: Bool
+        /// each found trip's dates (Its dates), and the ones dropped alone
+        var trips: [String]
+        var tripsDropped: Set<Int>
+        var open: Bool
+        var datesIn: Bool
     }
     var rows: [Row] {
         guard let w = map?.world else { return [] }
@@ -414,7 +426,12 @@ final class UploadState {
             let p = w.places[i]
             guard let f = byPlace[p.id] else { return nil }
             let stamped = MarkStore.shared.state(.country(p.id)).stamped
-            return Row(id: p.id, place: i, name: p.n, line: Self.line(f, stamped: stamped), dropped: dropped.contains(i))
+            let off = droppedTrips[p.id] ?? []
+            var kept = f
+            kept.visits = f.visits.enumerated().filter { !off.contains($0.offset) }.map(\.element)
+            return Row(id: p.id, place: i, name: p.n, line: Self.line(off.count < f.visits.count ? kept : f, stamped: stamped),
+                       dropped: dropped.contains(i), trips: f.visits.map(Self.range), tripsDropped: off, open: opened.contains(p.id),
+                       datesIn: datesIn.contains(p.id))
         }
         func last(_ r: Row) -> LocalDay { byPlace[r.id]?.visits.last?.to ?? LocalDay(y: 0, m: 1, d: 1) }
         return all.filter { !$0.dropped }.sorted { last($0) > last($1) } + all.filter(\.dropped).sorted { last($0) > last($1) }
@@ -426,7 +443,11 @@ final class UploadState {
         let n = f.visits.count
         if stamped { return "+\(n) \(n == 1 ? "trip" : "trips")" }
         if n != 1 { return "\(n) trips" }
-        let a = f.visits[0].from, b = f.visits[0].to
+        return range(f.visits[0])
+    }
+    /// one trip's dates, arrived to left: "24 Dec 2022", "12–18 Aug 2024", "30 Dec 2023 – 2 Jan 2024"
+    static func range(_ v: Finds.Visit) -> String {
+        let a = v.from, b = v.to
         let mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         if a == b { return "\(a.d) \(mon[a.m - 1]) \(a.y)" }
         if a.y == b.y && a.m == b.m { return "\(a.d)–\(b.d) \(mon[a.m - 1]) \(a.y)" }
@@ -491,6 +512,8 @@ final class UploadState {
         var source: String
         var finds: [Find]
         var dropped: [String]
+        /// trips dropped alone (older files have none)
+        var droppedTrips: [String: [Int]]?
     }
     private func save() {
         guard let url = Self.waitingURL, let w = map?.world else { return }
@@ -498,7 +521,8 @@ final class UploadState {
         let out = Waiting(source: source.rawValue,
                           finds: finds.filter { ids.contains($0.place) }.map { f in
                               .init(place: f.place, visits: f.visits.map { [$0.from.description, $0.to.description] }, home: f.home) },
-                          dropped: dropped.map { w.places[$0].id })
+                          dropped: dropped.map { w.places[$0].id },
+                          droppedTrips: droppedTrips.mapValues { Array($0).sorted() })
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
     }
@@ -510,7 +534,7 @@ final class UploadState {
     }
     /// nothing waits any more (go, ×): the file goes too
     private func forget() {
-        order = []; dropped = []; finds = []
+        order = []; dropped = []; finds = []; droppedTrips = [:]; opened = []; datesIn = []
         if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
     }
     /// at launch, once the map is loaded: the waiting finds back, darkened (a place stamped since is not drawn darkened;
@@ -530,6 +554,8 @@ final class UploadState {
         }
         order = finds.compactMap { index[$0.place] }
         dropped = Set(x.dropped.compactMap { index[$0] })
+        droppedTrips = (x.droppedTrips ?? [:]).mapValues(Set.init)
+        opened = []; datesIn = []
         m.found = Set(order).subtracting(dropped)
         NSLog("wya upload: %d finds waiting", order.count)
     }
@@ -539,9 +565,59 @@ final class UploadState {
     func tap(_ i: Int) -> Bool {
         guard phase == .review, !busy, let m = map, order.contains(i) else { return false }
         Feel.tap()
-        if dropped.contains(i) { dropped.remove(i); m.found.insert(i) } else { dropped.insert(i); m.found.remove(i) }
+        if dropped.contains(i) {
+            dropped.remove(i); m.found.insert(i)
+            // kept again with every trip dropped alone: its trips come back with it (a find is never kept with none)
+            if let w = m.world, let f = finds.first(where: { $0.place == w.places[i].id }),
+               (droppedTrips[f.place]?.count ?? 0) >= f.visits.count { droppedTrips[f.place] = nil }
+        } else { dropped.insert(i); m.found.remove(i) }
         withAnimation(Motion.quick) { count = order.count - dropped.count }
         return true
+    }
+
+    /// ITS DATES (the row's hold menu): the row opens under itself to one row per found trip, or closes again
+    func toggleDates(_ id: String) {
+        guard phase == .review, !busy else { return }
+        Feel.tap()
+        job += 1
+        let me = job
+        if opened.contains(id) {
+            withAnimation(Motion.quick) { _ = datesIn.remove(id) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) { [self] in
+                guard me == job else { return }
+                withAnimation(Motion.chrome) { _ = opened.remove(id) }
+            }
+        } else {
+            withAnimation(Motion.chrome) { _ = opened.insert(id) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.38) { [self] in
+                guard me == job, opened.contains(id) else { return }
+                withAnimation(Motion.quick) { _ = datesIn.insert(id) }
+            }
+        }
+    }
+
+    /// A TRIP'S ×: that trip alone is dropped (an import can find a weekend you were not there), or kept again; with
+    /// every trip dropped the place is dropped, and keeping one keeps the place again
+    func tapTrip(_ id: String, _ k: Int) {
+        guard phase == .review, !busy, let m = map, let i = m.world?.placeIndex[id],
+              let f = finds.first(where: { $0.place == id }), f.visits.indices.contains(k) else { return }
+        Feel.tap()
+        var off = droppedTrips[id] ?? []
+        if off.contains(k) { off.remove(k) } else { off.insert(k) }
+        droppedTrips[id] = off.isEmpty ? nil : off
+        let none = off.count >= f.visits.count
+        if none && !dropped.contains(i) { dropped.insert(i); m.found.remove(i) }
+        if !none && dropped.contains(i) { dropped.remove(i); m.found.insert(i) }
+        withAnimation(Motion.quick) { count = order.count - dropped.count }
+    }
+
+    /// SHOW ON THE MAP (the row's hold menu): the water comes down to 25% (the rows roll out as it passes 50%) and the
+    /// camera frames the place, which darkens for a moment
+    func show(_ i: Int) {
+        guard phase == .review, !busy, let m = map, let w = water else { return }
+        Feel.tap()
+        if w.stop != .quarter { w.go(.quarter) }
+        m.show(place: i, sheetTop: w.y(.quarter))
     }
 
     /// GO (A9.10): every kept find becomes a stamp with its found trips, in one write and one undo step; the go circle
@@ -560,8 +636,10 @@ final class UploadState {
         let rows: [TravelStore.Found] = kept.compactMap { i in
             let p = world.places[i]
             guard let f = byPlace[p.id] else { return nil }
+            let off = droppedTrips[p.id] ?? []
             return TravelStore.Found(key: .country(p.id), name: p.n, cc: p.id.uppercased(),
-                                     trips: f.visits.map { ($0.from.description, $0.to.description) })
+                                     trips: f.visits.enumerated().filter { !off.contains($0.offset) }
+                                        .map { ($0.element.from.description, $0.element.to.description) })
         }
         let src = source
         let n = rows.count
@@ -752,52 +830,117 @@ struct UploadSheet: View {
         let y0 = max(L.headBottom + 12 + 52, form.top + 72) + 56
         let h = max(0, L.capsule.minY - 24 - y0)
         let shown = rowsShown
-        ScrollView(.vertical) {
-            VStack(spacing: 0) {
-                ForEach(u.rows) { r in
-                    HStack(spacing: 12) {
-                        Group {
-                            if let f = Flags.square(r.id) { f.resizable().interpolation(.high) } else { Color.clear }
-                        }
-                        .frame(width: 28, height: 28)
-                        .scaleEffect(shown ? 1 : 0)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
-                                .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
-                                .contentTransition(.numericText(value: shown ? 1 : 0))
-                            Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
-                                .foregroundStyle(Palette.ink.opacity(0.5))
-                                .contentTransition(.numericText(value: shown ? 1 : 0))
-                        }
-                        Spacer(minLength: 0)
+        // a List for Apple's swipe actions and hold menu, styled as the Stamped list's (Part 4.6, 11.9). Every row,
+        // a find's or one of its trips', is 56 pt, the list shows whole rows only (its height ends between two rows,
+        // the soft edge over their empty margins) and a scroll stops on a row boundary (0.7: nothing sits cut off)
+        let n = max(1, Int((h - 8) / 56))
+        let vh = CGFloat(n) * 56 + 8
+        List {
+            ForEach(u.rows) { r in
+                findRow(r, shown: shown)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    // swipe left: Drop (the palette red), or Keep on a dropped row. Not the destructive role, which
+                    // slides the row away; a dropped row stays, at the end, in black 50%
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button { _ = u.tap(r.place) } label: { Text(r.dropped ? "Keep" : "Drop") }
+                            .tint(r.dropped ? Palette.ink : Color(red: 0xd9 / 255, green: 0x4f / 255, blue: 0x3d / 255))
                     }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 56)
-                    .contentShape(Rectangle())
-                    .onTapGesture { _ = u.tap(r.place) }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(r.name), \(r.line)\(r.dropped ? ", dropped" : "")")
-                    .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { _ = u.tap(r.place) }
+                    .contextMenu {
+                        Button("Show on the map") { u.show(r.place) }
+                        if !r.trips.isEmpty {
+                            Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                        }
+                        Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
+                    }
+                if r.open {
+                    ForEach(Array(r.trips.enumerated()), id: \.offset) { k, t in
+                        tripRow(r, k, t, shown: shown && r.datesIn)
+                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
                 }
             }
-            .animation(Motion.chrome, value: u.rows.map(\.id))
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 56)
+        .contentMargins(.top, 0, for: .scrollContent)
+        .contentMargins(.bottom, 8, for: .scrollContent)
+        .scrollTargetBehavior(RowSnap(row: 56))
+        .animation(Motion.chrome, value: u.rows.map(\.id))
         .scrollIndicators(.hidden)
-        // the soft bottom edge (no word cut sharply), as Details' and the Stamped list's
+        // the soft bottom edge, 16 pt over the last whole row's empty bottom margin and the next row's empty top one
         .mask(alignment: .top) {
             VStack(spacing: 0) {
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 20)
+                Color.black.frame(height: vh - 16)
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
         }
-        .frame(width: L.W - 2 * L.sheetInset, height: h)
-        .position(x: L.W / 2, y: y0 + h / 2)
+        .frame(width: L.W - 2 * L.sheetInset, height: vh)
+        .position(x: L.W / 2, y: y0 + vh / 2)
         .allowsHitTesting(shown)
         .onChange(of: form.top <= L.top(.half) + 12, initial: true) { _, v in
             withAnimation(v ? Motion.quick : .smooth(duration: 0.15)) { rowsShown = v }
         }
     }
     @State private var rowsShown = false
+
+    /// one find: its flag, its name, its dates
+    private func findRow(_ r: UploadState.Row, shown: Bool) -> some View {
+        HStack(spacing: 12) {
+            Group {
+                if let f = Flags.square(r.id) { f.resizable().interpolation(.high) } else { Color.clear }
+            }
+            .frame(width: 28, height: 28)
+            .scaleEffect(shown ? 1 : 0)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
+                    .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
+                    .contentTransition(.numericText(value: shown ? 1 : 0))
+                Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
+                    .foregroundStyle(Palette.ink.opacity(0.5))
+                    .contentTransition(.numericText(value: shown ? 1 : 0))
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 56)
+        .contentShape(Rectangle())
+        .onTapGesture { _ = u.tap(r.place) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(r.name), \(r.line)\(r.dropped ? ", dropped" : "")")
+        .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { _ = u.tap(r.place) }
+        .accessibilityAction(named: "Show on the map") { u.show(r.place) }
+        .accessibilityAction(named: r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+    }
+
+    /// one found trip under its find (Its dates): arrived to left, 15 pt, under the name; its own × (a dropped trip in
+    /// black 50%)
+    private func tripRow(_ r: UploadState.Row, _ k: Int, _ t: String, shown: Bool) -> some View {
+        let off = r.tripsDropped.contains(k)
+        return HStack(spacing: 12) {
+            Text(shown ? t : Caption.blank(t, "\u{2002}")).font(.subheadline)
+                .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
+                .contentTransition(.numericText(value: shown ? 1 : 0))
+            Spacer(minLength: 0)
+            Image(systemName: "xmark").font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
+                // grows about its centre with the words, as the flags do
+                .scaleEffect(shown ? 1 : 0)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .onTapGesture { u.tapTrip(r.id, k) }
+        }
+        // 40 pt in: under the name, past the flag
+        .padding(.leading, 40)
+        .frame(height: 56)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Trip, \(t)\(off ? ", dropped" : "")")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { u.tapTrip(r.id, k) }
+    }
 
     private func choice(_ side: Int, width w: CGFloat) -> some View {
         let name = u.note[u.step * 2 + side] ?? UploadState.names[u.step][side]
@@ -891,5 +1034,15 @@ final class OneFix: NSObject, CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         // a passing failure (no fix yet) keeps waiting until the 15 s are up; a refusal ends it
         if (error as? CLError)?.code == .denied { Task { @MainActor in self.finish(.refused) } }
+    }
+}
+
+/// A SCROLL STOPS ON A ROW BOUNDARY (0.7: nothing sits cut off at rest): for lists whose rows are all one height
+struct RowSnap: ScrollTargetBehavior {
+    var row: CGFloat
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        let top = max(0, context.contentSize.height - context.containerSize.height)
+        let y = (target.rect.minY / row).rounded() * row
+        target.rect.origin.y = min(max(0, y), top)
     }
 }
