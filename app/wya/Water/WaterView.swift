@@ -418,7 +418,8 @@ struct StartCredit: View {
     @State private var shown = false
     var body: some View {
         let L = water.layout
-        let fits = form.top <= L.capsule.minY - 134 && !(water.stop == .closed && !water.held)
+        // (and not above 50%: higher, the water's top is under the head and the words would sit over the status bar)
+        let fits = form.top <= L.capsule.minY - 134 && form.top >= L.top(.half) - 2 && !(water.stop == .closed && !water.held)
         Text(shown ? "© OpenStreetMap" : "\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}")
             .font(.caption)
             .foregroundStyle(Palette.ink.opacity(0.5))
