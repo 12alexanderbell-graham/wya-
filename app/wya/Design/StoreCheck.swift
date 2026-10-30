@@ -86,6 +86,33 @@ enum StoreCheck {
         check("6 origin", got == CGPoint(x: 10, y: 20) && who == .undo && ms.state(aq).stamped == wasStamped,
               "origin \(got.map { "\($0)" } ?? "none"), the undo's change said who \(who.map { $0.rawValue } ?? "none"), Antarctica back as it was \(ms.state(aq).stamped == wasStamped)")
 
+        // 8. an upload's finds (9.5's go): one write stamps the new place (a wished one loses its wish) and adds the found
+        // trips as visits, a stamped place only gains its missing trips; one undo takes exactly that away; a redo puts it back
+        let pe = PlaceKey.country("pe"), it = PlaceKey.country("it")
+        _ = try? await store.wish(pe, account: "imp")
+        _ = try? await store.stamp(it, account: "imp", source: .hand)
+        let ik = it.description, pk = pe.description
+        let ctx8 = ModelContext(box)
+        let v0 = VisitRecord(account: "imp", key: it); v0.arrived = "2023-05-01"; v0.left = "2023-05-04"
+        ctx8.insert(v0); try? ctx8.save()
+        func count(_ k: String) -> Int { (try? ModelContext(box).fetchCount(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == "imp" && $0.key == k }))) ?? -1 }
+        let imp = try? await store.importFinds([
+            .init(key: pe, name: "Peru", cc: "PE", trips: [("2018-05-05", "2018-05-09"), ("2019-01-02", "2019-01-02")]),
+            .init(key: it, name: "Italy", cc: "IT", trips: [("2023-05-01", "2023-05-04"), ("2024-06-10", "2024-06-12")])],
+            account: "imp", source: .history)
+        let mid = (try? await store.all(account: "imp")) ?? [:]
+        let peV = count(pk), itV = count(ik)
+        let back = try? await store.restore(imp?.undo ?? [], account: "imp")
+        let undone = (try? await store.all(account: "imp")) ?? [:]
+        let peV2 = count(pk), itV2 = count(ik)
+        _ = try? await store.restore(back?.undo ?? [], account: "imp")
+        let redone = (try? await store.all(account: "imp")) ?? [:]
+        check("8 import finds, one undo, redo",
+              mid[pe]?.stamped == true && mid[pe]?.wished == false && peV == 2 && itV == 2
+              && undone[pe]?.wished == true && undone[pe]?.stamped == false && peV2 == 0 && itV2 == 1 && undone[it]?.stamped == true
+              && redone[pe]?.stamped == true && count(pk) == 2 && count(ik) == 2,
+              "after: Peru stamped \(mid[pe]?.stamped ?? false) (wish gone \(mid[pe]?.wished == false)), visits Peru \(peV) Italy \(itV) (1 kept + 1 new); undo: Peru wished again \(undone[pe]?.wished ?? false), visits \(peV2)/\(itV2); redo: visits \(count(pk))/\(count(ik))")
+
         // 7. the old app's stamps.json, read into an empty store (the fixture in snaps)
         if let d = try? Data(contentsOf: URL(fileURLWithPath: Snap.dir + "/old-stamps-fixture.json")), let book = try? OldBook(json: d) {
             let r = try? await store.importOld(book, account: "old")

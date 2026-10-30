@@ -12,6 +12,8 @@ actor TravelStore {
         let values: Values?
         /// the place's visits as they were, when the write removed them (an unstamp)
         var visits: [Visit]? = nil
+        /// visits the write added (an import's found trips): undoing it takes them away again
+        var added: [UUID]? = nil
         struct Visit: Sendable {
             var id: UUID
             var arrived, left, rough: String?
@@ -292,13 +294,70 @@ actor TravelStore {
         return res
     }
 
+    /// AN UPLOAD'S FINDS STAMPED (Part 9.5's go), as one write and one undo step: each place stamped (source the
+    /// import; a wished one loses its wish) unless it already is, and each found trip added as a dated visit unless
+    /// the place has that trip already; times rise to the visits there are. Undo takes the stamps and these visits
+    /// away again (and nothing else).
+    struct Found: Sendable {
+        var key: PlaceKey
+        var name: String
+        var cc: String
+        /// each trip's first and last day ("2024-08-03")
+        var trips: [(String, String)]
+    }
+    func importFinds(_ finds: [Found], account: String, source: MarkSource, at: Date = Date()) throws -> Result {
+        var res = Result()
+        for f in finds {
+            let r0 = try record(account, f.key)
+            let k = f.key.description
+            let have = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.key == k }))
+            let new = f.trips.filter { t in !have.contains { $0.arrived == t.0 && $0.left == t.1 } }
+            if r0?.stamped == true && new.isEmpty { continue }
+            var snap = snapshot(f.key, r0)
+            let old = state(r0, visits: have.count)
+            let r = r0 ?? { let n = StampRecord(account: account, key: f.key); modelContext.insert(n); return n }()
+            if r.stamped != true {
+                if r.wished { r.came = r.at }
+                r.wished = false; r.want = 0; r.wishWhen = nil; r.wishDetails = nil
+                r.stamped = true; r.at = at; r.source = source.rawValue; r.via = nil
+                if !f.name.isEmpty { r.name = f.name }
+                if !f.cc.isEmpty { r.cc = f.cc }
+            }
+            var ids: [UUID] = []
+            for t in new {
+                let v = VisitRecord(account: account, key: f.key)
+                v.arrived = t.0; v.left = t.1; v.source = source.rawValue
+                modelContext.insert(v)
+                ids.append(v.id)
+            }
+            snap.added = ids
+            r.times = max(1, r.times, have.count + new.count)
+            res.undo.append(snap)
+            res.changed[f.key] = (old, state(r, visits: have.count + new.count))
+        }
+        try modelContext.save()
+        return res
+    }
+
     /// PUT BACK what a write changed (its snapshots), as one write
     func restore(_ snaps: [Snapshot], account: String) throws -> Result {
         var res = Result()
         for s in snaps.reversed() {
             let r0 = try record(account, s.key)
+            // the visits this write added go (kept in the redo's snapshot, so a redo puts them back)
+            var gone: [Snapshot.Visit] = []
+            for id in s.added ?? [] {
+                if let x = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.id == id })).first {
+                    gone.append(.init(id: x.id, arrived: x.arrived, left: x.left, rough: x.rough, lived: x.lived,
+                                      transit: x.transit, planId: x.planId, source: x.source))
+                    modelContext.delete(x)
+                }
+            }
             let v = try visitCount(account, s.key)
-            res.undo.append(snapshot(s.key, r0))
+            var redo = snapshot(s.key, r0)
+            if !gone.isEmpty { redo.visits = gone }
+            if let back = s.visits, !back.isEmpty { redo.added = back.map(\.id) }
+            res.undo.append(redo)
             let old = state(r0, visits: v)
             if let vals = s.values {
                 let r = r0 ?? { let n = StampRecord(account: account, key: s.key); modelContext.insert(n); return n }()

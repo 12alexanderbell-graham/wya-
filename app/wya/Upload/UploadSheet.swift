@@ -16,8 +16,12 @@ import UniformTypeIdentifiers
 /// working mark at its left and a × at its right, and each found country darkens (in one frame) as the number rolls
 /// up, at most 10 times a second; × cancels (the finds clear in one frame, the caption back to your count). With
 /// nothing found the words say so in the number's place, then the pair comes back.
-/// Not here yet (logged): the review (9.5; finding ends at its go circle), the mode wheel turning to Countries, the
-/// file's progress line, Add more, videos picked with Pick (their place needs the file's own metadata).
+/// THE REVIEW (9.5) is the go circle: a tap on a found country drops it (its darkening goes, the number rolls down)
+/// or keeps it again; the go circle stamps every kept find with its found trips as dated visits, in one write and one
+/// undo step (the colours change in one frame; the undo drop says what came in).
+/// Not here yet (logged): the review's rows at 50%, waiting finds (9.6: a pull down leaves the review and lets the finds
+/// go, as × does), the mode
+/// wheel turning to Countries, the file's progress line, Add more, the second round, videos picked with Pick.
 @MainActor
 @Observable
 final class UploadState {
@@ -49,6 +53,9 @@ final class UploadState {
     private(set) var count = 0
     private(set) var message: String?
     private(set) var finds: [Finds.Find] = []
+    /// the found places (map indices) in the order found, and the ones dropped at the review
+    @ObservationIgnored private var order: [Int] = []
+    private(set) var dropped: Set<Int> = []
     @ObservationIgnored weak var map: MapController?
     @ObservationIgnored private var job = 0
     @ObservationIgnored private var moving = false
@@ -134,6 +141,8 @@ final class UploadState {
     /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in (while
     /// finding, neither closes: finding holds the 25% and owns the map's presses; × cancels)
     func close() {
+        // leaving the review (a pull down): the finds are let go, as × does (waiting finds, 9.6, are not built)
+        if phase == .review { cancel(); return }
         guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
         if phase == .words { endWords(close: true); return }
         job += 1
@@ -259,7 +268,9 @@ final class UploadState {
         let all = Finds.finds(rows, source: source)
         finds = all
         let index = Dictionary(world.places.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { a, _ in a })
-        let order = all.compactMap { index[$0.place] }
+        order = all.compactMap { index[$0.place] }
+        dropped = []
+        let order = self.order
         NSLog("wya upload found %d places from %d rows", order.count, rows.count)
         if order.isEmpty { say("No places found"); return }
         let per = max(1, Int((Double(order.count) / 20).rounded(.up)))
@@ -287,6 +298,49 @@ final class UploadState {
             phase = .review
             withAnimation(Motion.quick) { goIn = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { Feel.land(speed: 0) }
+        }
+    }
+
+    /// THE REVIEW: a found country tapped is dropped (its darkening goes in one frame, the number rolls down) or kept
+    /// again; true when the tap was the review's
+    func tap(_ i: Int) -> Bool {
+        guard phase == .review, let m = map, order.contains(i) else { return false }
+        Feel.tap()
+        if dropped.contains(i) { dropped.remove(i); m.found.insert(i) } else { dropped.insert(i); m.found.remove(i) }
+        withAnimation(Motion.quick) { count = order.count - dropped.count }
+        return true
+    }
+
+    /// GO (A9.10): every kept find becomes a stamp with its found trips, in one write and one undo step; the go circle
+    /// shrinks into its centre, the caption's tail rolls back to "of 263" and the number to your count (the map's
+    /// colours change in one frame as the write lands); then the sheet gives the water back
+    func go() {
+        guard phase == .review, let m = map, let world = m.world, let w = water else { return }
+        let kept = order.filter { !dropped.contains($0) }
+        guard !kept.isEmpty else { Feel.refuse(); return }
+        Feel.stamp()
+        job += 1
+        let me = job
+        let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
+        let rows: [TravelStore.Found] = kept.compactMap { i in
+            let p = world.places[i]
+            guard let f = byPlace[p.id] else { return nil }
+            return TravelStore.Found(key: .country(p.id), name: p.n, cc: p.id.uppercased(),
+                                     trips: f.visits.map { ($0.from.description, $0.to.description) })
+        }
+        let src = source
+        let n = rows.count
+        withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        Task {
+            await MarkStore.shared.importFinds(rows, source: src, words: "\(n) \(n == 1 ? "place" : "places") from your \(src == .photos ? "photos" : "history")")
+            m.found = []
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                guard me == job else { return }
+                Feel.land(speed: 0)
+                phase = .choosing; step = 0; count = 0; order = []; dropped = []; finds = []
+                w.uploadFrom = .quarter
+                w.closeUpload()
+            }
         }
     }
 
@@ -421,10 +475,12 @@ struct UploadSheet: View {
         }
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
-        .onTapGesture { if u.phase == .finding || u.phase == .review { u.cancel() } }
+        .onTapGesture {
+            if u.phase == .review { u.go() } else if u.phase == .finding { u.cancel() }
+        }
         .position(x: L.W - L.sheetInset - 44, y: y)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(u.phase == .review ? "Stamp them" : "Stop")
+        .accessibilityLabel(u.phase == .review ? "Stamp \(u.count) \(u.count == 1 ? "place" : "places")" : "Stop")
         .accessibilityAddTraits(.isButton)
     }
 

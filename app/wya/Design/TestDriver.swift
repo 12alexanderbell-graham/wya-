@@ -226,6 +226,8 @@ final class TestDriver {
                     case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
                     case "read": UploadState.shared.testRead(empty: p.count > 2 && p[2] == "none")
                     case "cancel": UploadState.shared.cancel()
+                    case "go": UploadState.shared.go()
+                    case "drop": if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == (p.count > 2 ? p[2] : "") }) { _ = UploadState.shared.tap(i) }
                     default: break
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
