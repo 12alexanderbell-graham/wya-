@@ -103,8 +103,8 @@ def unit_geom(pts_rings):
     tree = shapely.STRtree(ps)
     land, holes = [], []
     for i, p in enumerate(ps):
-        pt = p.representative_point()
-        d = sum(1 for j in tree.query(pt, predicate='within') if j != i)
+        # held by another ring as a whole (a point of it could lie in a hole of its own outer ring)
+        d = sum(1 for j in tree.query(p, predicate='within') if j != i)
         (holes if d % 2 else land).append(p)
     g = shapely.union_all(land)
     return make_valid(g.difference(shapely.union_all(holes))) if holes else g
@@ -137,20 +137,20 @@ def faces_to_rings(pg, pu, crumb):
     owner = []
     for f in faces:
         rp = f.representative_point()
+        # a face inside two parts stays in both (the region data has a few overlapping units; they keep their shapes)
         c = [int(k) for k in tree.query(rp, predicate='intersects')]
-        if len(c) > 1: c = [max(c, key=lambda k: pg[k].intersection(f).area)]
         if not c and f.area < crumb:
             # a crumb between two parts (no one's): to the neighbour it borders longest
             nb = [int(k) for k in tree.query(f.buffer(1), predicate='intersects')]
             if nb: c = [max(nb, key=lambda k: f.boundary.intersection(pg[k].buffer(1)).length)]
-        owner.append(c[0] if c else None)
+        owner.append(c)
     segs = collections.defaultdict(collections.Counter)
-    for f, o in zip(faces, owner):
-        if o is None: continue
+    for f, os_ in zip(faces, owner):
         for r in [f.exterior] + list(f.interiors):
             cs = [(int(round(x)), int(round(y))) for x, y in r.coords]
             for a, b in zip(cs, cs[1:]):
-                if a != b: segs[o][(a, b) if a < b else (b, a)] += 1
+                if a != b:
+                    for o in os_: segs[o][(a, b) if a < b else (b, a)] += 1
     out_u, out_r = [], []
     for k, u in enumerate(pu):
         edges = [e for e, n in segs[k].items() if n % 2 == 1]
