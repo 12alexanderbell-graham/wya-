@@ -114,7 +114,8 @@ nonisolated final class World: @unchecked Sendable {
         var pos: Positions?
         if let disputes, keys.count == nu {
             let f = try JSONDecoder().decode(DisputeFile.self, from: disputes)
-            let p = Positions(file: f, places: m.places.map { ($0.id, $0.s ?? $0.n, $0.k) }, view: view)
+            let p = Positions(file: f, places: m.places.map { ($0.id, $0.s ?? $0.n, $0.k) }, view: view,
+                              picks: Borders.picks, fallback: Borders.fallback)
             pos = p
             owners = keys.map { k in p.unitOwner(k, objOwner: oo).flatMap { pi[$0] } ?? -1 }
             Borders.dottedPlaces = Set(m.places.indices.filter { p.dotted(m.places[$0].id) })

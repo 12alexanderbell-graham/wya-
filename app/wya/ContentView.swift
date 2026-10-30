@@ -75,6 +75,7 @@ struct ContentView: View {
             TestDriver.shared.start(map: map, water: water, head: head)
             // the Map's actions, by stable id (Part 20.12): the AI, Siri, links and hold menus call these
             Actions.shared.registerMap(map: map, water: water, head: head)
+            MapSettingsRows.registerActions(map: map)
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
             map.onTouch = { [head, water] in head.putAway(); water.hideCredit() }
             water.onTouch = { [head] in head.putAway() }

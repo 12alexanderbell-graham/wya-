@@ -145,6 +145,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     /// once the world is loaded: the buffers
     private func build() {
         guard let w = controller.world, let r = controller.relief else { return }
+        // a rebuild for another borders view starts from nothing of the old one's
+        placeUnits = [:]
+        awayCache = [:]
         points = device.makeBuffer(bytes: w.points, length: w.points.count * MemoryLayout<SIMD2<Float>>.stride)
         var idx: [UInt32] = []
         idx.reserveCapacity(w.points.count * 3)
@@ -218,8 +221,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         d.onReady = { [weak controller] in controller?.needsFrame = true }
         detail = d
         controller.details = d
+        builtWorld = w
         built = true
     }
+    /// the world the buffers were made from: a borders view change gives the controller a new one (made off the main
+    /// thread), and the next frame builds from it, so the old map stays on screen until the new one is complete
+    private weak var builtWorld: World?
 
     /// the slices: the detailed outlines for the zoom (nil until the world has loaded)
     private var detail: DetailMaps?
@@ -304,7 +311,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         controller.needsFrame = false
 
         guard controller.ready, fanPipe != nil, reliefPipe != nil, linePipe != nil, auroraPipe != nil, markLand != nil else { return }
-        if !built { build() }
+        if !built || (builtWorld !== controller.world && controller.world != nil) { build() }
         guard built, let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let cb = queue.makeCommandBuffer(), let w = controller.world else { return }
 
