@@ -72,7 +72,8 @@ final class DetailsState {
 /// one a black capsule with white words that just appears; section
 /// names 17 pt semibold black; every word lines up on one 16 pt edge. Haptics only.
 /// Not here yet (logged): a visit's exact dates (they wait for our own calendar), more than one visit, Photos,
-/// A4.14 / A4.15 (rows just appear and go), the letters rolling at a limit.
+/// the Lived block swap and the stars' rows by A4.14, the letters rolling at a limit. (A lived time and a place you
+/// went come and go by A4.14 / A4.15 as built: see `arrive`, `removeRow`.)
 struct DetailsSheet: View {
     let water: Water
     let form: Water.Form
@@ -82,6 +83,14 @@ struct DetailsSheet: View {
     @State private var kind: String?
     @State private var placeName = ""
     @State private var scrolled = false
+    /// A4.14 / A4.15: a lived row's identity (the stays carry none), and the rows whose space is open but whose
+    /// words and circle are not in yet (`arriving`), are on their way out (`leaving`), or are drawn as plain words
+    /// for the roll (`rolling`: a field cannot roll its words, so it is swapped for a Text that looks the same)
+    @State private var livedIDs: [String] = []
+    @State private var placeIDs: [String] = []
+    @State private var arriving: Set<String> = []
+    @State private var leaving: Set<String> = []
+    @State private var rolling: Set<String> = []
 
     static let modes = ["visit", "airport", "through", "other"]
     static let purposes = ["holiday", "work", "family", "study", "other"]
@@ -162,6 +171,10 @@ struct DetailsSheet: View {
             kb = f.minY >= L.H - 1 ? 0 : L.H - f.minY
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kb = 0 }
+        // the rows' identities follow the stored rows (a change from outside, an undo, makes them fresh)
+        .onChange(of: livedTimes.count, initial: true) { _, n in livedIDs = Self.synced(livedIDs, n) }
+        .onAppear { Self.test = { driver($0) } }
+        .onChange(of: s.d.places?.count ?? 0, initial: true) { _, n in placeIDs = Self.synced(placeIDs, n) }
     }
 
     // MARK: the blocks
@@ -242,28 +255,40 @@ struct DetailsSheet: View {
     }
 
     private var livedBlock: some View {
-        let t = livedTimes
+        let t = livedTimes.enumerated().map { (Self.key(livedIDs, $0.offset, "lived"), $0.element) }
         let now = s.d.livesNow == true
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(t.enumerated()), id: \.offset) { i, stay in
+            ForEach(Array(t.enumerated()), id: \.element.0) { i, row in
+                let stay = row.1
+                let k = row.0
                 let last = i == t.count - 1
+                let gone = arriving.contains(k) || leaving.contains(k)
+                let plain = rolling.contains(k)
                 HStack(spacing: 12) {
-                    MonthField(empty: "Moved in", value: stay.from, focus: $typing, id: "in\(i)") { v in
-                        var x = livedTimes; guard i < x.count else { return }; x[i].from = v; setLived(x)
+                    if plain {
+                        monthWords(stay.from, empty: "Moved in", gone: gone)
+                    } else {
+                        MonthField(empty: "Moved in", value: stay.from, focus: $typing, id: "in\(i)") { v in
+                            var x = livedTimes; guard i < x.count else { return }; x[i].from = v; setLived(x)
+                        }
                     }
                     if now && last {
                         Text("Now").font(.body).foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    } else if plain {
+                        monthWords(stay.to, empty: "Moved out", gone: gone)
                     } else {
                         MonthField(empty: "Moved out", value: stay.to, focus: $typing, id: "out\(i)") { v in
                             var x = livedTimes; guard i < x.count else { return }; x[i].to = v; setLived(x)
                         }
                     }
                     if let len = Self.length(stay.from, now && last ? nil : stay.to, toNow: now && last) {
-                        Text(len).font(.body).foregroundStyle(Palette.ink).fixedSize()
+                        Text(gone ? Caption.blank(len, "\u{2002}") : len).font(.body).foregroundStyle(Palette.ink).fixedSize()
+                            .contentTransition(.numericText(value: gone ? 0 : 1))
                     }
                     if t.count > 1 {
-                        xCircle { var x = livedTimes; x.remove(at: i); setLived(x); Feel.lift() }
+                        xCircle { removeLived(i) }
+                            .scaleEffect(gone ? 0 : 1)
                     }
                 }
             }
@@ -275,7 +300,7 @@ struct DetailsSheet: View {
             if !now {
                 row("Add time") { EmptyView() }
                     .contentShape(Rectangle())
-                    .onTapGesture { Feel.tap(); setLived(livedTimes + [StampDetails.Stay(from: "", to: "")]) }
+                    .onTapGesture { addLived() }
                     .accessibilityAddTraits(.isButton)
             }
             // (here "family" is Family, not the trip's "Family and friends")
@@ -288,15 +313,17 @@ struct DetailsSheet: View {
 
     private var placesBlock: some View {
         section("Places") {
-            ForEach(Array((s.d.places ?? []).enumerated()), id: \.offset) { i, p in
+            ForEach(Array((s.d.places ?? []).enumerated()).map { (Self.key(placeIDs, $0.offset, "place"), $0.element) }, id: \.0) { k, p in
+                let gone = arriving.contains(k) || leaving.contains(k)
                 HStack(spacing: 12) {
-                    Text(p.n).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                    Text(gone ? Caption.blank(p.n, "\u{2002}") : p.n).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                        .contentTransition(.numericText(value: gone ? 0 : 1))
                     Spacer(minLength: 8)
-                    Text(Self.word(p.k)).font(.body).foregroundStyle(Palette.ink)
-                    xCircle {
-                        Feel.lift()
-                        var x = s.d.places ?? []; x.remove(at: i); s.d.places = x.isEmpty ? nil : x
-                    }
+                    let w = Self.word(p.k)
+                    Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body).foregroundStyle(Palette.ink)
+                        .contentTransition(.numericText(value: gone ? 0 : 1))
+                    xCircle { removePlace(Int(placeIDs.firstIndex(of: k) ?? 0)) }
+                    .scaleEffect(gone ? 0 : 1)
                 }
                 .frame(minHeight: 52)
             }
@@ -329,9 +356,86 @@ struct DetailsSheet: View {
     private func addPlace() {
         guard canAdd, let k = kind else { Feel.refuse(); return }
         Feel.tap()
-        s.d.places = (s.d.places ?? []) + [StampDetails.Went(n: placeName.trimmingCharacters(in: .whitespaces), k: k)]
+        let id = UUID().uuidString
+        placeIDs = Self.synced(placeIDs, s.d.places?.count ?? 0)
+        arriving.insert(id)
+        let went = StampDetails.Went(n: placeName.trimmingCharacters(in: .whitespaces), k: k)
+        withAnimation(Motion.quick) { placeIDs.append(id); s.d.places = (s.d.places ?? []) + [went] }
+        arrive(id)
         placeName = ""
         kind = nil
+    }
+
+    // MARK: A4.14 / A4.15 a row comes and goes
+    // A row comes: its space opens first (the rows below move down, quick curve), then its words roll in and its
+    // circle grows about its own centre (0.26 s). A row goes: its words roll out and its circle shrinks into its centre
+    // (0.26 s), then the rows below move up. One after the other, never both at once (the book has them together and
+    // the shapes travelling from the Add control: not kept, so nothing crosses anything).
+    static func key(_ ids: [String], _ i: Int, _ p: String) -> String { i < ids.count ? ids[i] : "\(p)\(i)" }
+    /// identities lined up with the rows (the stored rows carry none: made fresh when the counts differ)
+    static func synced(_ ids: [String], _ n: Int) -> [String] { ids.count == n ? ids : (0 ..< n).map { _ in UUID().uuidString } }
+    private func arrive(_ k: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+            withAnimation(.smooth(duration: 0.26)) { _ = arriving.remove(k) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { _ = rolling.remove(k) }
+        }
+    }
+    private func addLived() {
+        Feel.tap()
+        let k = UUID().uuidString
+        livedIDs = Self.synced(livedIDs, livedTimes.count)
+        arriving.insert(k); rolling.insert(k)
+        withAnimation(Motion.quick) { livedIDs.append(k); setLived(livedTimes + [StampDetails.Stay(from: "", to: "")]) }
+        arrive(k)
+    }
+    private func removeLived(_ i: Int) {
+        livedIDs = Self.synced(livedIDs, livedTimes.count)
+        guard i < livedIDs.count, livedTimes.count > 1 else { return }
+        let k = livedIDs[i]
+        removeRow(k, index: { livedIDs.firstIndex(of: k) }) { j in
+            var x = livedTimes; x.remove(at: j); setLived(x); livedIDs.remove(at: j)
+        }
+    }
+    private func removePlace(_ i: Int) {
+        placeIDs = Self.synced(placeIDs, s.d.places?.count ?? 0)
+        guard i < placeIDs.count else { return }
+        let k = placeIDs[i]
+        removeRow(k, index: { placeIDs.firstIndex(of: k) }) { j in
+            var x = s.d.places ?? []; x.remove(at: j); s.d.places = x.isEmpty ? nil : x; placeIDs.remove(at: j)
+        }
+    }
+    /// the test driver's hands on the rows (simulator checks): addtime, removelived N, addplace <kind> <name>, removeplace N
+    @MainActor static var test: (([String]) -> Void)?
+    private func driver(_ p: [String]) {
+        switch p.first {
+        case "addtime": addLived()
+        case "removelived": removeLived(Int(p.count > 1 ? p[1] : "0") ?? 0)
+        case "addplace": kind = p.count > 1 ? p[1] : "city"; placeName = p.dropFirst(2).joined(separator: " "); addPlace()
+        case "removeplace": removePlace(Int(p.count > 1 ? p[1] : "0") ?? 0)
+        default: break
+        }
+    }
+
+    private func removeRow(_ k: String, index: @escaping () -> Int?, drop: @escaping (Int) -> Void) {
+        Feel.lift()
+        rolling.insert(k)
+        DispatchQueue.main.async {
+            withAnimation(.smooth(duration: 0.26)) { _ = leaving.insert(k) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
+                if let j = index() { withAnimation(Motion.quick) { drop(j) } }
+                leaving.remove(k); rolling.remove(k)
+            }
+        }
+    }
+    /// a month field drawn as plain words for the roll, looking as the field does (its value, or its placeholder)
+    private func monthWords(_ v: String, empty: String, gone: Bool) -> some View {
+        let p = v.split(separator: "-")
+        let shown: String? = p.count >= 2 ? "\(p[1]) / \(p[0])" : (p.count == 1 && p[0].count == 4 ? "00 / \(p[0])" : nil)
+        let w = shown ?? empty
+        return Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
+            .foregroundStyle(shown == nil ? Color(uiColor: .placeholderText) : Palette.ink)
+            .contentTransition(.numericText(value: gone ? 0 : 1))
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
     }
 
     // MARK: the parts
