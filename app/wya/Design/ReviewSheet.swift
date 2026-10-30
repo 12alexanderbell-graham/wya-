@@ -116,6 +116,19 @@ enum ReviewSheet {
         #endif
     }
 
+    /// D14: the 12 emblem flags as the circle cuts them, beside the same flag square (the vectors)
+    @MainActor static func emblems() {
+        let ids = ["om", "mt", "uy", "fj", "bm", "fk", "gs", "ms", "tc", "ky", "ai", "vg"]
+        let items = ids.map { id -> ReviewItem in
+            let v = HStack(spacing: 10) {
+                Group { if let f = Flags.square(id) { f.resizable() } else { Color.gray } }.frame(width: 44, height: 44)
+                Group { if let f = Flags.round(id) { f.resizable() } else { Color.gray } }.frame(width: 44, height: 44).clipShape(Circle())
+            }
+            return ReviewItem(id: id, name: id, view: AnyView(v))
+        }
+        save("emblems", title: "Emblem flags (D14)", items: items, cell: CGSize(width: 120, height: 90), columns: 6)
+    }
+
     /// 18.4 and 18.9: every drawn icon (T1 to T78) at 13, 17 and 22 pt in ink on white and white on ink, then at 3x;
     /// after them his existing Icons5 set the same way, so they are judged as one family
     @MainActor static func icons() {
