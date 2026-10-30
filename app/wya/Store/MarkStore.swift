@@ -32,6 +32,8 @@ final class MarkStore {
 
     @ObservationIgnored private var store: TravelStore?
     @ObservationIgnored private var undoStack: [(snaps: [TravelStore.Snapshot], words: String)] = []
+    /// what undo took back, for a three-finger swipe right (Part 3.10, proposal); any new change empties it
+    @ObservationIgnored private var redoStack: [(snaps: [TravelStore.Snapshot], words: String)] = []
     @ObservationIgnored private var listeners: [UUID: (MarksChanged) -> Void] = [:]
     @ObservationIgnored let container: ModelContainer?
 
@@ -155,7 +157,22 @@ final class MarkStore {
         let acc = account
         guard let r = try? await store.restore(last.snaps, account: acc) else { return }
         take(r)
+        redoStack.append((r.undo, last.words))
+        if redoStack.count > 20 { redoStack.removeFirst(redoStack.count - 20) }
         lastWords = undoStack.last?.words
+        emit(MarksChanged(changed: r.changed, origin: nil, who: .undo))
+    }
+
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    /// REDO the last undone write (a three-finger swipe right; Part 3.10, proposal)
+    func redo() async {
+        guard let store, let last = redoStack.popLast() else { return }
+        let acc = account
+        guard let r = try? await store.restore(last.snaps, account: acc) else { return }
+        take(r)
+        undoStack.append((r.undo, last.words))
+        lastWords = last.words
         emit(MarksChanged(changed: r.changed, origin: nil, who: .undo))
     }
 
@@ -167,6 +184,7 @@ final class MarkStore {
         let old = marks
         marks = [:]
         undoStack = []
+        redoStack = []
         var changed: [PlaceKey: (old: MarkState, new: MarkState)] = [:]
         for (k, s) in old { changed[k] = (s, .none) }
         emit(MarksChanged(changed: changed, origin: nil, who: .you))
@@ -178,6 +196,7 @@ final class MarkStore {
         guard !r.changed.isEmpty else { return }
         take(r)
         undoStack.append((r.undo, words))
+        redoStack = []
         markDates.append(Date())
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
         lastWords = words
