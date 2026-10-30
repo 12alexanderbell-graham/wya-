@@ -86,7 +86,7 @@ nonisolated final class GlassRender: NSObject, @unchecked Sendable {
     private var dirty = true, stopped = false, started = false
     // the thread's own
     private var lastDraw: CFTimeInterval = 0
-    /// his drawing's rest: sin(rest) = 1/phi^2 (LogoMark.rest)
+    /// the drawing's rest: sin(rest) = 1/phi^2 (LogoMark.rest)
     static let rest: Double = {
         let phi: Double = (1 + 5.0.squareRoot()) / 2
         return asin(1 / (phi * phi))
@@ -250,7 +250,7 @@ final class LogoGlassGPU {
     constant float3 kBlue   = float3(0.471, 0.682, 0.973);
     constant float3 kTeal   = float3(0.690, 0.878, 0.804);
 
-    // his line runs up and to the right (u); across it, towards the night, is down and to the right (n); y is down
+    // the line runs up and to the right (u); across it, towards the night, is down and to the right (n); y is down
     constant float2 kU = float2(0.70710678, -0.70710678);
     constant float2 kN = float2(0.70710678, 0.70710678);
 
@@ -280,7 +280,7 @@ final class LogoGlassGPU {
     }
 
     // where the light stands for the logo's phase, as (along the line, across it towards the night, towards the eye):
-    // a sphere lit from here has his day exactly (LogoMark.Geo.day: the curve an ellipse |sin phase| as wide)
+    // a sphere lit from here has the day exactly (LogoMark.Geo.day: the curve an ellipse |sin phase| as wide)
     static float3 lightDir(float phase) { return float3(0.0, -cos(phase), sin(phase)); }
 
     // THE LIGHT ON THE PAGE at x, and how much of it lies over the cream: the giant planet's day and night, the change

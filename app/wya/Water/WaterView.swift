@@ -72,7 +72,7 @@ struct WaterView: View {
     @AppStorage("tabIconsLogical2") private var logicalTabs = false
 
     private func tabs(_ L: Layout) -> some View {
-        // the logical icons while he tests them (TabIconsTest.swift); off = the circle, square and triangle
+        // the logical icons while they are tested (TabIconsTest.swift); off = the circle, square and triangle
         let keys = logicalTabs ? ["tab-map", "tab-lists-b", "tab-profile-b"] : ["tab-map", "tab-lists", "tab-profile"]
         let names = ["Map", "Lists", "Profile"]
         let spacing: CGFloat = (L.capsule.width - 8) / 3
@@ -139,7 +139,7 @@ struct SheetContent: View {
             .mask(CapsuleHole(capsule: L.capsule).fill(style: FillStyle(eoFill: true)))
 
             // MAP SETTINGS OPEN (Part 5, A5.1): the solar system moves down as one piece out through the
-            // water's bottom, under the tabs, its own motion untouched (asked him; default), and back up on close
+            // water's bottom, under the tabs, its own motion untouched (default), and back up on close
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
                     // (back only once the list's rows have left: never both at once)

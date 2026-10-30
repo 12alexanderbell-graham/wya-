@@ -419,7 +419,7 @@ struct HeadView: View {
                 UploadState.shared.open(water: water, map: map)
             }
         } label: {
-            // bare circles until he picks their icons, filled when on: the ring thickens into the disc (and thins
+            // bare circles until their icons are picked, filled when on: the ring thickens into the disc (and thins
             // back), as the first tool on the dot does, never a one-frame swap
             ToolRing(width: on ? 8.5 : 1.6)
                 .fill(ink, style: FillStyle(eoFill: true))

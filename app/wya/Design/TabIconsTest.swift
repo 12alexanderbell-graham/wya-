@@ -7,7 +7,7 @@
 import SwiftUI
 
 enum TabIconsTest {
-    /// on while he tests the logical icons; off puts the circle, square and triangle back
+    /// on while the logical icons are tested; off puts the circle, square and triangle back
     static var on: Bool {
         get { UserDefaults.standard.object(forKey: "tabIconsLogical2") as? Bool ?? false }
         set { UserDefaults.standard.set(newValue, forKey: "tabIconsLogical2") }

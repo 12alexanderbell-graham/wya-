@@ -1,8 +1,8 @@
-// IconsDrawn.swift - THE ICONS PART 18.4 NEEDS (T1 to T78), drawn on his 8 by 8 grid in the Icons5 style: filled
+// IconsDrawn.swift - THE ICONS PART 18.4 NEEDS (T1 to T78), drawn on the 8 by 8 grid in the Icons5 style: filled
 // shapes, 1-unit strokes with straight-cut ends, sharp corners, curves only where a thing is round. Made by a tool in
 // Claude outputs (icons/draw.py), not by hand; one still frame each (a tool's "on" is the ink circle behind it,
-// 18.5, so no frames of their own). `reviewed` is empty until he has looked at each on the review sheet (18.9);
-// one he sends back is redrawn. Reuses: T28 is `share` turned back, T35 is `g-like`. T19 is drawn in case `g-save`
+// 18.5, so no frames of their own). `reviewed` is empty until each has been looked at on the review sheet (18.9);
+// one sent back is redrawn. Reuses: T28 is `share` turned back, T35 is `g-like`. T19 is drawn in case `g-save`
 // doesn't read as "saved". Keys are names (the T number is in each entry's "id").
 
 import SwiftUI

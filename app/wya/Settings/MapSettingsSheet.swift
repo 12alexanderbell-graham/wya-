@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// MAP SETTINGS IN THE WATER (Part 5.3, 5.4): the rows of MapSettingsRows in the water while the gear is out, with no
-/// title, no grabber and no words under any row; Borders, Disputes and Advanced pushed Apple's way with his back arrow.
+/// title, no grabber and no words under any row; Borders, Disputes and Advanced pushed Apple's way with the app's back arrow.
 ///
 /// As built: black and white only; the current choice is a black band the water's width with white
 /// words, and it just appears (no front, no circle); values change by Apple's text roll; a row's words are there only
@@ -39,7 +39,7 @@ extension EnvironmentValues {
 /// a line's placeholder for the text roll (en spaces), as the caption does it
 private func blank(_ s: String) -> String { String(repeating: "\u{2002}", count: max(1, s.count)) }
 
-/// ONE ROW: its name on the left, its value on the right (50% black), his chevron after a page's value
+/// ONE ROW: its name on the left, its value on the right (50% black), the app's chevron after a page's value
 private struct RowWords: View {
     let name: String
     let value: String
@@ -222,7 +222,7 @@ enum BordersNames {
     }
 }
 
-/// A PAGE (Borders, Disputes, Advanced), pushed Apple's way inside the water, his back arrow on its top row
+/// A PAGE (Borders, Disputes, Advanced), pushed Apple's way inside the water, the app's back arrow on its top row
 private struct SettingsPage: View {
     let page: String
     let map: MapController

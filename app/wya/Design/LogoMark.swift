@@ -2,13 +2,13 @@ import SwiftUI
 
 /// THE LOGO. A planet lit by one light, the day lime and the night blue, with the straight route drawn through it: four
 /// dashes a side shrinking by the golden ratio out of the dot at the centre, and off the planet a line tapering to a
-/// round tip. Drawn here from his construction, number for number, with his glass recipe, so it is sharp at every size.
-/// `phase` is where the light stands round the line (the line is the axis the light turns about): `rest` is his drawing
-/// (the day/night curve an ellipse 1/phi^2 as wide as the planet); a turn of 2 pi is his animation, the day sweeping
+/// round tip. Drawn here from the construction, number for number, with the glass recipe, so it is sharp at every size.
+/// `phase` is where the light stands round the line (the line is the axis the light turns about): `rest` is the drawing
+/// (the day/night curve an ellipse 1/phi^2 as wide as the planet); a turn of 2 pi is the animation, the day sweeping
 /// round to night and back.
 struct LogoMark: View, Animatable {
     var phase: Double = LogoMark.rest
-    /// his glass (the light below, the rims, the sheen); off draws the flat mark
+    /// the glass (the light below, the rims, the sheen); off draws the flat mark
     var glass = true
     /// the route through it; off for the planet alone
     var line = true
@@ -27,7 +27,7 @@ struct LogoMark: View, Animatable {
     static let gap: CGFloat = 20
     static let reach: CGFloat = 2.0.squareRoot() * 350
     static let tip: CGFloat = 22.0 / 3
-    /// his drawing: sin(rest) = k
+    /// the drawing: sin(rest) = k
     static let rest = asin(Double(1 / (phi * phi)))
 
     // HIS GLASS COLOURS (build_glass_svg.py COL, GLOW): body, light, deep
@@ -91,7 +91,7 @@ struct LogoMark: View, Animatable {
         .accessibilityAddTraits(.isImage)
     }
 
-    // MARK: his glass, piece by piece (build_glass_svg.py piece/band/glow)
+    // MARK: the glass, piece by piece (build_glass_svg.py piece/band/glow)
 
     /// a planet half: its body (a little lighter at the top), the rim a touch lighter, the top edge a touch deeper, a
     /// broad soft lift where it faces the light, and light leaving through its bottom edge
@@ -150,7 +150,7 @@ struct LogoMark: View, Animatable {
                      blue: Double(x.blue + (y.blue - x.blue) * Float(t)))
     }
 
-    // MARK: his geometry
+    // MARK: the geometry
 
     /// points `along` the line and `across` it, towards the night (lower right), at scale `s`
     struct Geo {
@@ -172,7 +172,7 @@ struct LogoMark: View, Animatable {
         /// THE DAY for the light at `phase`: the planet's edge on the lit side from one end of the line to the other,
         /// back along the day/night curve, half an ellipse R * |sin(phase)| wide
         func day(_ phase: Double) -> Path {
-            let side: CGFloat = cos(phase) >= 0 ? -1 : 1           // -1: the day on the top-left side (his)
+            let side: CGFloat = cos(phase) >= 0 ? -1 : 1           // -1: the day on the top-left side
             let bulge = CGFloat(sin(phase)) * -side                // + towards the night side at rest
             let R = LogoMark.R, steps = 96
             var p = Path()
@@ -233,7 +233,7 @@ struct LogoMark: View, Animatable {
     }
 }
 
-/// THE LOGO OPENING: the light goes once round the planet in about 2.7 seconds and comes to rest as his drawing; still
+/// THE LOGO OPENING: the light goes once round the planet in about 2.7 seconds and comes to rest as the drawing; still
 /// with Reduce Motion
 struct LogoMarkOpening: View {
     let still: Bool

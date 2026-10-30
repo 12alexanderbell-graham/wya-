@@ -5,7 +5,7 @@ import SwiftUI
 /// needle rests, the needle's white point grows out of its middle, and the lime glass circle grows out from behind it
 /// to its full size. Let go past half way and it settles there; pull back up or tap the map and it goes back into the
 /// dot the same way. Search and the plus stay exactly as they are. No bell, no gear, no notifications, no rank drop, no
-/// page. The same dot, held still, turns into his gear: its edge notches in between the teeth until it is the gear icon
+/// page. The same dot, held still, turns into the gear: its edge notches in between the teeth until it is the gear icon
 /// exactly, turning a little as it forms; it then rolls slowly for as long as settings are open (BUILD-BOOK 5: one turn
 /// in 6 s), and a tap on it turns it back into the dot.
 enum TopPull {
@@ -68,7 +68,7 @@ struct DotMorph: View, Animatable {
                 .frame(width: Self.aiSize, height: Self.aiSize)
                 .mask { Circle().frame(width: Self.aiSize + 7.2, height: Self.aiSize + 7.2) }
             } else {
-                // THE GEAR, THE SAME WAY: his gear icon, never bent out of the dot, is behind it from the start (its
+                // THE GEAR, THE SAME WAY: the gear icon, never bent out of the dot, is behind it from the start (its
                 // teeth reach exactly the dot's edge, so the dot covers it); the dot, a circle all the way, sinks into
                 // its middle and the teeth are there as it goes, the gear turning a little; then it rolls while open.
                 // Nothing gets smaller and then bigger again.
@@ -90,7 +90,7 @@ struct DotMorph: View, Animatable {
     }
 }
 
-/// The AI needle's two halves as his AIMark draws them (24-unit grid: the black point up to y -1.5, the white down to
+/// The AI needle's two halves as the AIMark draws them (24-unit grid: the black point up to y -1.5, the white down to
 /// 25.5, both on a base 5.14 wide through the middle, turned 45 degrees), in the 58-point box.
 private struct NeedleHalf: Shape {
     let black: Bool
@@ -109,7 +109,7 @@ private struct NeedleHalf: Shape {
     }
 }
 
-/// His gear (Icons5 "settings": one outline, eight teeth, no hole). Drawn at t 1, the icon exactly (DotMorph grows it
+/// The gear (Icons5 "settings": one outline, eight teeth, no hole). Drawn at t 1, the icon exactly (DotMorph grows it
 /// out of the dot by size; t below 1 bends the dot's edge into the teeth, which is no longer used).
 private struct GearMorph: Shape {
     var t: CGFloat

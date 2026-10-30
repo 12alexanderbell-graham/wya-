@@ -127,7 +127,7 @@ struct Icon5: View {
             }
         }
         .frame(width: size, height: size)
-        // his drawings are the same in every language: a right-to-left layout moves them, never flips them, except
+        // the drawings are the same in every language: a right-to-left layout moves them, never flips them, except
         // the two that say which way you go
         .environment(\.layoutDirection, .leftToRight)
         .scaleEffect(x: flips ? -1 : 1, y: 1)

@@ -127,7 +127,7 @@ final class Clock: NSObject {
         var moving: [ObjectIdentifier: Bool] = [:]
         while carry >= h {
             carry -= h
-            // as it was when he approved the water's feel: a body steps once per tick here (`||` skips the rest), and
+            // as it was when the water's feel was approved: a body steps once per tick here (`||` skips the rest), and
             // every spring was tuned so
             for (k, s) in bodies { moving[k] = (moving[k] ?? false) || s(CGFloat(h)) }
         }

@@ -75,7 +75,7 @@ nonisolated final class World: @unchecked Sendable {
     let contViews: [String: SIMD4<Double>]
     func inCont(_ place: Int, _ k: String) -> Bool { place >= 0 && place < placeConts.count && placeConts[place].contains(k) }
 
-    /// The places the count counts: everything but the three his data marks as not real places (Clipperton, the
+    /// The places the count counts: everything but the three the data marks as not real places (Clipperton, the
     /// Coral Sea Islands, Ashmore and Cartier): 263.
     var countable: Int { places.reduce(0) { $0 + ($1.junk ? 0 : 1) } }
 

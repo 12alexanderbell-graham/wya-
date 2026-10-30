@@ -9,7 +9,7 @@ import UIKit
 enum StampArt {
     typealias Pack = (index: [String: [Int]], data: Data, base: Int)
     /// the old app's art first, then the generator's (Step 6: `stamps-gen.wyaf`, made by tools/stamp-generator.py once
-    /// he has said yes to its first 10; until then there is no such file and only the 104 show)
+    /// its first 10 have been approved; until then there is no such file and only the 104 show)
     private static let packs: [Pack] = ["stamps", "stamps-gen"].compactMap(load)
     private static func load(_ name: String) -> Pack? {
         guard let url = Bundle.main.url(forResource: name, withExtension: "wyaf"),

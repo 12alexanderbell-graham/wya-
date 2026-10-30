@@ -2,7 +2,7 @@ import SwiftUI
 
 /// THE SYSTEM: the sun is your streak, the planets are the continents (Earth is the world), each planet's night side as
 /// wide as the share of that continent you've stamped. At 50% they sit on one ring under the name and the number;
-/// pulled to full the ring opens into eight orbits round the sun and they go round them. His rules it keeps: nothing
+/// pulled to full the ring opens into eight orbits round the sun and they go round them. The rules it keeps: nothing
 /// teleports, nothing flips places, nothing is cut. The ring is one body: the eight planets share one angle and keep
 /// their places on it, so choosing one turns the whole ring the short way on a spring with no bounce, every planet
 /// rolling as it travels. The orbits are drawn from the very numbers the planets sit on, so the lines open with them.
@@ -603,7 +603,7 @@ struct Tween: Equatable {
     }
 }
 
-/// The night that the water darkens into past half: his galaxy picture (the cosmos-126 colours) and a star for every
+/// The night that the water darkens into past half: the galaxy picture (the cosmos-126 colours) and a star for every
 /// place you haven't stamped, in three layers drifting slowly, some twinkling. It never fades in: it rises up through
 /// the water from under the bottom edge, a curved tide whose top catches the water's own top edge just as the page
 /// fills the screen; going back it sinks the same way.

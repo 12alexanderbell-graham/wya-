@@ -4,7 +4,7 @@ import UIKit
 import VideoToolbox
 
 /// HIS LOGO TURNING, FOR THE LOADING SCREEN, OFF THE MAIN THREAD. The map's loading keeps the main thread busy for up
-/// to a quarter of a second at a time, so a logo drawn there each frame stops. Here his logo is drawn once per frame of
+/// to a quarter of a second at a time, so a logo drawn there each frame stops. Here the logo is drawn once per frame of
 /// one turn, ahead of time, into a short film with a see-through ground (Resources/Launch/logo-turn.mov, made by
 /// `ReviewSheet.logoTurnMovie`), and the system plays it on a loop: the video hardware draws it, so nothing the app
 /// does can make it stutter. Until the film's first frame is up, the same first frame stands still in its place (the
@@ -70,7 +70,7 @@ final class LogoTurnUIView: UIView {
 
 #if DEBUG
 extension ReviewSheet {
-    /// MAKES THE FILM (driver `sheet logoturn`): his logo at every 1/60 s of one turn (Launch.turn), drawn by LogoMark at
+    /// MAKES THE FILM (driver `sheet logoturn`): the logo at every 1/60 s of one turn (Launch.turn), drawn by LogoMark at
     /// the loading screen's size at 3x, into snaps/logo-turn.mov (HEVC with a see-through ground)
     @MainActor static func logoTurnMovie() {
         let W = Launch.planet(440) * 1024 / 700

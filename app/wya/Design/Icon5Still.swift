@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One of his icons held at a point of its drawing: `progress` 0 is the first frame (unselected), 1 the last
+/// One of the icons held at a point of its drawing: `progress` 0 is the first frame (unselected), 1 the last
 /// (selected). Something that moves the icon by a finger (the mode wheel) sets the frame from where the finger has
 /// put it, so the drawing changes exactly as fast as it moves and never plays a little film of its own.
 struct Icon5Still: View {

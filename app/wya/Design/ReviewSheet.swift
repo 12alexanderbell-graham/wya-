@@ -47,7 +47,7 @@ enum ReviewSheet {
     }
 
     /// the launch picture (iOS shows it before the app runs; the loading screen's first frame is the same picture, so
-    /// nothing jumps): our cream, the logo's light at its start drawn by the same shader, and his logo at rest, on the
+    /// nothing jumps): our cream, the logo's light at its start drawn by the same shader, and the logo at rest, on the
     /// Pro Max's screen at 3x, into snaps/launch-screen@3x.jpg
     @MainActor static func launchPicture() {
         #if targetEnvironment(simulator) && DEBUG
@@ -153,7 +153,7 @@ enum ReviewSheet {
     }
 
     /// 18.4 and 18.9: every drawn icon (T1 to T78) at 13, 17 and 22 pt in ink on white and white on ink, then at 3x;
-    /// after them his existing Icons5 set the same way, so they are judged as one family
+    /// after them the existing Icons5 set the same way, so they are judged as one family
     @MainActor static func icons() {
         func cell(_ k: String) -> AnyView {
             AnyView(VStack(spacing: 6) {
@@ -161,14 +161,14 @@ enum ReviewSheet {
                     ForEach([13, 17, 22], id: \.self) { s in Icon5(key: k, ink: Palette.ink, size: CGFloat(s)) }
                     ZStack { Circle().fill(Palette.ink); Icon5(key: k, ink: .white, size: 17) }.frame(width: 36, height: 36)
                 }
-                // his g- set is drawn white, for photos: shown on ink so it can be seen
+                // the g- set is drawn white, for photos: shown on ink so it can be seen
                 Icon5(key: k, ink: Palette.ink, size: 54)
                     .padding(4).background(k.hasPrefix("g-") ? Palette.ink : .clear)
             })
         }
         var items = IconsDrawn.order.map { k in ReviewItem(id: IC5.drawnIds[k] ?? k, name: k, view: cell(k)) }
-        items += IC5.all.keys.sorted().map { k in ReviewItem(id: k, name: "his", view: cell(k)) }
-        save("icons", title: "Icons to review (18.4): the drawn set T1 to T78, then his Icons5 set",
+        items += IC5.all.keys.sorted().map { k in ReviewItem(id: k, name: "Icons5", view: cell(k)) }
+        save("icons", title: "Icons to review (18.4): the drawn set T1 to T78, then the existing Icons5 set",
              items: items, cell: CGSize(width: 150, height: 130), columns: 9)
     }
 }

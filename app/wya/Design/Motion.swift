@@ -7,7 +7,7 @@ import SwiftUI
 /// - settle: anything a finger lets go of (smooth 0.42 s)
 /// - tight: the Reduce Motion version of every move (0.2 s, "Part 0.4's tight spring")
 /// - camera: flights, the fill front, the border redraw (1 − e^(−wt)(1 + wt), w = 2π / 0.44, time scaled to the flight)
-/// - blend: the continent's away blend, his one allowed fade (bez(0.3, 0, 0.3, 1), 0.5 s)
+/// - blend: the continent's away blend, the one allowed fade (bez(0.3, 0, 0.3, 1), 0.5 s)
 /// The sheet's water has its own critically damped spring (Part 2.3, Water.swift).
 @MainActor
 enum Motion {

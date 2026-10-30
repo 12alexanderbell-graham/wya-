@@ -1,4 +1,4 @@
-"""Row 136, redone (16 Oct evening, after his "they all look glitched"): each photographed passport cover rebuilt as a
+"""Row 136, redone (16 Oct evening): each photographed passport cover rebuilt as a
 clean vector. The cover in its mixed colour; the country's arms as gold line art (emblem.py) where the photo has them;
 the cover's own words, read off the photo, typeset in Noto and turned into paths (textpath.py) in the boxes the photo
 shows them in (bands.json, measured from the photo); the chip symbol. Nothing traced except where a cover is plain

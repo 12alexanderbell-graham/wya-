@@ -2,7 +2,7 @@ import SwiftUI
 
 /// THE LAUNCH (Part 12.3, 12.4): a real loading screen, very simple, with no lag and no circles growing or shrinking.
 /// It is the old app's first page
-/// (OnboardingView.hello, SLICE 175), without its words and buttons: our cream, his logo big in the middle with its
+/// (OnboardingView.hello, SLICE 175), without its words and buttons: our cream, the logo big in the middle with its
 /// light going round and round, the planet turning, and the logo's light thrown over the whole page by the old app's
 /// own shader (LogoGlassSurface, the living field split by a giant planet's day and night). The light is drawn on its
 /// own thread. When the map is ready the whole screen lifts up and away in one piece, the map already in place under it
@@ -43,7 +43,7 @@ struct LoadingScreen: View {
                 // the logo's light over the whole page (the old first page's helloSpot, round the logo alone)
                 LogoGlassSurface(phase: GlassRender.rest, spot: Self.spot(c, planet: planet, size: g.size),
                                  still: Motion.reduce, turn: Launch.turn, turnStart: launch.turnStart)
-                // his logo at rest until its film is up, then the film turning on the video hardware (LogoTurn.swift)
+                // the logo at rest until its film is up, then the film turning on the video hardware (LogoTurn.swift)
                 ZStack {
                     if launch.turnStart == nil { LogoMark(phase: GlassRender.rest) }
                     LogoTurnView { launch.turnStart = CACurrentMediaTime() }

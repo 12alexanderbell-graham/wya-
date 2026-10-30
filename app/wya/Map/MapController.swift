@@ -3,7 +3,7 @@ import CoreLocation
 import simd
 
 /// What the map shows and where the camera is. The camera is a centre in map units and a scale in points per map unit;
-/// the Metal view reads it every frame. His rules it keeps: - the world's height fills the screen at home: the
+/// the Metal view reads it every frame. The rules it keeps: - the world's height fills the screen at home: the
 /// northernmost land (83.6°N) at the top edge, the South Pole at the bottom edge; no panning up or down at that zoom -
 /// the camera never shows past the world: not above the north edge, not under Antarctica, not zoomed out past the
 /// world's size, at any moment, a pinch held included - the map never moves on its own: only your fingers, the zoom
