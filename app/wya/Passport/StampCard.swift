@@ -47,6 +47,17 @@ final class CardState {
             }
         }
     }
+    /// A4.7 "STAMP GOES HERE": the outline of where this place's stamp would sit, drawn along its own length (0 to 1)
+    var ghost: CGFloat = 0
+    @ObservationIgnored private var ghostHide: DispatchWorkItem?
+    /// draw it (0.35 s), hold it 1.2 s after the tap, undraw it (0.3 s); a tap while it shows holds it again
+    func showGhost() {
+        ghostHide?.cancel()
+        withAnimation(.smooth(duration: 0.35)) { ghost = 1 }
+        let w = DispatchWorkItem { [weak self] in withAnimation(.smooth(duration: 0.3)) { self?.ghost = 0 } }
+        ghostHide = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35 + 1.2, execute: w)
+    }
     @ObservationIgnored var closedAt: CFTimeInterval = 0
     /// A4.8: while Details (or Verify) is up the card keeps the size and place it had (nothing gets smaller): the
     /// water's top when it rose, which the geometry keeps using
@@ -77,6 +88,7 @@ final class CardState {
             guard let self, self.closedAt > 0, self.p < 0.01 else { return }
             self.place = nil
             self.heldTop = nil
+            self.ghost = 0
             map.kept = nil
         }
     }
@@ -161,6 +173,19 @@ struct StampCard: View {
                         .modifier(ArcPlace(t: card.travel, from: from, ctrl: Self.control(from, to), to: to, scaleTo: 1.25))
                         .allowsHitTesting(false)
                 }
+                // A4.7: where the stamp would go, a solid 1.5 pt black 50% line round the stamp's own box at its slot
+                // and turn, drawn from its top clockwise; never saved, never shown in the book otherwise
+                if card.ghost > 0, !state.stamped,
+                   let at = PassportPage.placement(of: id, order: card.order + [id], size: CGSize(width: g.bookW, height: g.bookH)) {
+                    let top: CGFloat = 44 + 12 + 44 + 12
+                    TopFirstRect()
+                        .trim(from: 0, to: card.ghost)
+                        .stroke(Palette.ink.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+                        .frame(width: at.size.width, height: at.size.height)
+                        .rotationEffect(.degrees(at.turn))
+                        .position(x: at.center.x, y: top + at.center.y)
+                        .allowsHitTesting(false)
+                }
             }
             .scaleEffect(max(0.001, back), anchor: .top)
             .modifier(ArcPlace(t: p, from: card.at, ctrl: ctrl, to: c))
@@ -227,8 +252,10 @@ struct StampCard: View {
                     await MarkStore.shared.wish(key, name: name)
                     Feel.tap()
                 } else if s.wished {
+                    card.showGhost()
                     await MarkStore.shared.unwish(key, name: name); Feel.lift()
                 } else {
+                    card.showGhost()
                     await MarkStore.shared.wish(key, name: name); Feel.tap()
                 }
             }
@@ -306,6 +333,20 @@ struct StampCard: View {
     static func quad(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
         let u = 1 - t
         return CGPoint(x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y)
+    }
+}
+
+/// a rectangle drawn from the middle of its top edge clockwise, so a trim draws it from the top (A4.7)
+struct TopFirstRect: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.midX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY))
+        p.closeSubpath()
+        return p
     }
 }
 
