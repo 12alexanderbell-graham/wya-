@@ -32,3 +32,14 @@ Where no finer source exists, the data's own line stays: the Green Line around t
 
     python3 pipeline/flags-render.py   # draws every flag as a square with Chromium (Playwright)
     python3 pipeline/flags-pack.py     # cuts them to circles and packs them for the app
+
+## The reference data (`pipeline/reference/`)
+
+The scripts that built the earlier app's reference data: country facts, cities, climate, daylight, holidays, rates,
+advisories, UNESCO sites, Wikivoyage guides, region levels, image credits and the passport cover colours. They read
+public sources (Wikidata, Wikipedia, Wikivoyage, Wikimedia Commons, the World Bank, GeoNames and others) and write the
+JSON files the data server builds from (`server/build_api.py`). Set `WYA_CONTACT` to your contact address before running
+any script that calls a public API; it goes into the User-Agent, as those services ask.
+
+The earlier app's region, town, urban-area and things pipelines and its stamp builds are not in this repository; their
+output is what the app keeps using until each is rebuilt.
