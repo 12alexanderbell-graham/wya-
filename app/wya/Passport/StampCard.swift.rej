@@ -1,0 +1,10 @@
+--- Passport/StampCard.swift	2026-10-30 12:47:37.846000467 +0100
++++ Passport/StampCard.swift	2026-10-30 12:47:37.850237571 +0100
+@@ -86,7 +86,6 @@
+         // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water
+         // goes to the highest stop that leaves it 300 or more, and the card starts 0.1 s after the water starts. The
+         // card never shrinks to fit a high sheet (his 30 Oct 12:37 on Sudan's small book over the 50% water)
+-        var delay = 0.0
+         if let water {
+             let L = water.layout
+             let fits: (Water.Stop) -> Bool = { StampCard.Geometry(L: L, sheetTop: water.y($0)).bookH >= 300 }
