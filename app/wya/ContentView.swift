@@ -76,6 +76,10 @@ struct ContentView: View {
         // the keyboard comes up over the map; nothing moves out of its way (the results sit under the head)
         .ignoresSafeArea(.keyboard)
         .defersSystemGestures(on: .top)
+        // LINKS INTO THE MAP (19.6): whatever is out goes back first (keeping its changes), then the flight
+        .onOpenURL { url in
+            Task { await DeepLink.open(url, map: map) { putAwayForLink() } }
+        }
         .onAppear {
             TestDriver.shared.start(map: map, water: water, head: head)
             // the Map's actions, by stable id (Part 20.12): the AI, Siri, links and hold menus call these
@@ -118,6 +122,11 @@ struct ContentView: View {
         }
         .task {
             await map.load()
+            // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
+            if let url = DeepLink.waiting {
+                DeepLink.waiting = nil
+                if await DeepLink.open(url, map: map, close: {}) { try? await Task.sleep(for: .milliseconds(850)) }
+            }
             // the map's first frame drawn under the loading screen, then the screen lifts away
             try? await Task.sleep(for: .milliseconds(80))
             #if DEBUG
@@ -159,6 +168,15 @@ struct ContentView: View {
                 VerifyState.shared.close(water: water)
             }
         }
+    }
+
+    /// a link closes everything transient as a tab change does (the AI in use stays)
+    private func putAwayForLink() {
+        closeCard()
+        head.searching = false
+        head.toolsOpen = false
+        head.closeSettings()
+        water.closeList(back: false)
     }
 
     private func closeCard() {

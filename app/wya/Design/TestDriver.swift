@@ -262,6 +262,8 @@ final class TestDriver {
                         let lines = await HistoryCheck.photos(map: m)
                         try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/photocheck.log", atomically: true, encoding: .utf8)
                     }
+                // link <url>: a link into the Map opened as the system would hand it over (19.6)
+                case "link": if let m = map, let u = URL(string: a) { await DeepLink.open(u, map: m) {} }
                 case "storecheck":
                     let lines = await StoreCheck.run()
                     try? lines.joined(separator: "\n").write(toFile: Snap.dir + "/storecheck.log", atomically: true, encoding: .utf8)

@@ -11,9 +11,22 @@
 		063BADB9308AC6DD00D9B94A /* wya-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "wya-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		063BB04D3094D0B600D9B94A /* Exceptions for "wya" folder in "wya" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 063BAD84308AC58900D9B94A /* wya */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		063BAD87308AC58900D9B94A /* wya */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				063BB04D3094D0B600D9B94A /* Exceptions for "wya" folder in "wya" target */,
+			);
 			path = wya;
 			sourceTree = "<group>";
 		};
@@ -247,6 +260,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = wya/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "wya?!";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Only when you ask to verify a stamp: to check you are in that place right now.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To find the places you have been from where your photos were taken. Only each photo's place and date are read, on your phone.";
@@ -301,6 +315,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = wya/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "wya?!";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Only when you ask to verify a stamp: to check you are in that place right now.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "To find the places you have been from where your photos were taken. Only each photo's place and date are read, on your phone.";
