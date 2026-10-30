@@ -27,6 +27,8 @@ struct CosmosView: View {
     // the moon: its angle round the chosen planet, where you left it
     @State private var moonAngle: Double = CosmosView.stopAngle(0)
     @State private var moonHeld = false
+    /// the moon's drag is live (reset by the system on a cancel too, which calls no end)
+    @GestureState private var moonLive = false
     /// where the moon's tail ends: an angle that follows the moon's a little behind it, frame by frame
     @State private var trail = TrailFollower()
     /// how far the moon's ring and label are out (0 in the moon, 1 out), frame by frame inside the timeline
@@ -510,6 +512,7 @@ struct CosmosView: View {
             .onTapGesture { select(host.i) }
             .gesture(
                 DragGesture(minimumDistance: 6, coordinateSpace: .global)
+                    .updating($moonLive) { _, live, _ in live = true }
                     .onChanged { g in
                         let dx = Double(g.location.x - host.pos.x), dy = Double(g.location.y - host.pos.y) / 0.62
                         let ang = atan2(dy, dx)
@@ -525,6 +528,10 @@ struct CosmosView: View {
                         Feel.notch(); Sound.click()
                     }
             )
+            // cancelled with no end (the stops' hold menu took the touch mid drag): let go where it is
+            .onChange(of: moonLive) { _, live in
+                if !live, moonHeld, map.testMoon == nil { moonHeld = false }
+            }
             .accessibilityElement()
             .accessibilityLabel("Filter")
             .accessibilityValue(Self.stops[moonStop])

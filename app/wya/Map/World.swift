@@ -132,6 +132,13 @@ nonisolated final class World: @unchecked Sendable {
         madeNames = out
         return out
     }
+    /// the names above only once worked out: nil while the background task holds the lock or has not run (the main
+    /// thread never waits for the file)
+    var otherLanguageNamesIfReady: [[String]]? {
+        guard namesLock.try() else { return nil }
+        defer { namesLock.unlock() }
+        return madeNames
+    }
     private let namesLock = NSLock()
     private var madeNames: [[String]]?
 
