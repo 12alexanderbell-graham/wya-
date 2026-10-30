@@ -216,6 +216,8 @@ final class TestDriver {
                 case "list": if a == "off" { water?.closeList() } else { water?.openList() }
                 // listdetails <id>: a row of the Stamped list swiped right (Details from the list, A4.21)
                 case "listdetails": StampedList.testDetails?(a)
+                // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
+                case "drows": DetailsSheet.test?(Array(p.dropFirst()))
                 case "details":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top
