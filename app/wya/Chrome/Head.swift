@@ -412,7 +412,11 @@ struct HeadView: View {
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
             case 1: BookState.shared.toggle()
             case 2: head.history.toggle()
-            default: head.toolsOpen = false
+            // Upload (9.2): the tools go back into the plus as the upload sheet opens in the water (the two never cross:
+            // one is in the head, the other at the bottom)
+            default:
+                head.toolsOpen = false
+                UploadState.shared.open(water: water)
             }
         } label: {
             // bare circles until he picks their icons, filled when on: the ring thickens into the disc (and thins

@@ -143,10 +143,12 @@ struct SheetContent: View {
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
                     // (back only once the list's rows have left: never both at once)
-                    .offset(y: water.settings || water.details || water.stampedList || water.listLeaving ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList || water.listLeaving)
+                    .offset(y: water.settings || water.details || water.stampedList || water.listLeaving || water.upload ? water.layout.H - form.top : 0)
+                    .animation(Motion.chrome, value: water.settings || water.details || water.stampedList || water.listLeaving || water.upload)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
+            // THE UPLOAD SHEET (Part 9.3) at 25%, the caption's words out while it is up
+            if water.upload { UploadSheet(water: water, form: form).transition(.identity) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
             // (its contents are there in one frame once the water has risen; no fade, no words rolling yet)
             if water.details && water.detailsWords {
@@ -176,7 +178,7 @@ struct SheetContent: View {
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details {
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
@@ -200,6 +202,7 @@ struct SheetContent: View {
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
     private var captionFits: Bool {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
+            && !water.upload
     }
     @State private var captionShown = false
 }

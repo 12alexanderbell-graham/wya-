@@ -89,6 +89,8 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 head.putAway(); water.hideCredit()
+                // the upload sheet closes (and that touch does nothing else, 9.3)
+                if water.upload { UploadState.shared.close(); return }
                 // the passport book goes back into its tool (and that touch does nothing else)
                 if BookState.shared.isOpen { BookState.shared.close(); return }
                 if DetailsState.shared.isOpen { DetailsState.shared.close(water: water) }
@@ -113,6 +115,7 @@ struct ContentView: View {
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
+                UploadState.shared.close()
                 head.searching = false
                 head.toolsOpen = false
                 head.putAway()

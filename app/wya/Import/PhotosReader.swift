@@ -1,5 +1,6 @@
 import Foundation
 import Photos
+import ImageIO
 
 /// THE PHOTOS READ (Part 9.7: "Photos", steps 1 and 8; Part 10 Step 7's reading core, no screens): every image and
 /// video's place and time, read in batches of 1,000 inside an autorelease pool, yielding between batches; only
@@ -48,6 +49,32 @@ nonisolated enum PhotosReader {
             await Task.yield()
         }
         return (out, skipped)
+    }
+
+    /// A PICKED PHOTO'S OWN PLACE AND TIME (Pick needs no Photos access, so no PHAsset): the file's GPS and the time it
+    /// was taken, with the offset the camera wrote (OffsetTimeOriginal) when there is one; nil without a place or a time
+    static func sample(imageData d: Data) -> (lat: Double, lon: Double, at: Date, offset: Int?)? {
+        guard let src = CGImageSourceCreateWithData(d as CFData, nil),
+              let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let gps = p[kCGImagePropertyGPSDictionary] as? [CFString: Any],
+              var lat = gps[kCGImagePropertyGPSLatitude] as? Double, var lon = gps[kCGImagePropertyGPSLongitude] as? Double
+        else { return nil }
+        if (gps[kCGImagePropertyGPSLatitudeRef] as? String) == "S" { lat = -lat }
+        if (gps[kCGImagePropertyGPSLongitudeRef] as? String) == "W" { lon = -lon }
+        guard !(lat == 0 && lon == 0) else { return nil }
+        let exif = p[kCGImagePropertyExifDictionary] as? [CFString: Any]
+        guard let when = (exif?[kCGImagePropertyExifDateTimeOriginal] as? String)
+                ?? ((p[kCGImagePropertyTIFFDictionary] as? [CFString: Any])?[kCGImagePropertyTIFFDateTime] as? String) else { return nil }
+        // "2024:10:01 19:00:00" in the camera's own time; "+05:45" beside it when the camera wrote one
+        let offText = exif?[kCGImagePropertyExifOffsetTimeOriginal] as? String
+        let off = offText.flatMap { HistoryReader.offsetOf("0000-00-00T00:00:00" + $0) }
+        let iso = when.prefix(10).replacingOccurrences(of: ":", with: "-") + "T" + when.dropFirst(11).prefix(8)
+            + (offText ?? "Z")
+        guard let local = HistoryReader.date(iso) else { return nil }
+        // with no offset written, the camera's clock is the place's own: read as UTC and given offset 0, so the day it
+        // makes is the day on the camera's clock (the day where it was taken, Part 9.9); its instant is off by the
+        // zone, which nothing here uses
+        return (lat, lon, local, off ?? 0)
     }
 
     /// each photo that made a presence row, as a link (asset, the day where it was taken, its place)
