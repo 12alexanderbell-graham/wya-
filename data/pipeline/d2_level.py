@@ -4,7 +4,7 @@ n bytes of JSON {t: [sx, sy, tx, ty], u: [{id, n, c}], o: per unit its rings as 
 their starts, then every point as absolute quantized int32 x, y; raw DEFLATE). The arcs are shared, so simplifying
 each arc once (Douglas-Peucker, ends kept) keeps neighbours' borders on one line.
 
-usage: d2_level.py SOURCE.topojson CC LEVEL OUT.wyar TOLERANCE_DEG [lon0 lat0 lon1 lat1]
+usage: d2_level.py SOURCE.topojson CC LEVEL OUT.wyar TOLERANCE_DEG [lon0 lat0 lon1 lat1] [--code-ids]
   the box keeps only units whose middle is inside it (France's communes without its overseas places, which are
   places of their own on the map)
 """
@@ -12,6 +12,9 @@ import json, sys, math
 sys.path.insert(0, __import__('os').path.dirname(__file__))
 from wyar import write
 
+# --code-ids: each unit's id is the country, the level and its official code (Germany's AGS), stable across rebuilds
+code_ids = '--code-ids' in sys.argv
+if code_ids: sys.argv.remove('--code-ids')
 src, cc, lvl, out, tol = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], float(sys.argv[5])
 box = list(map(float, sys.argv[6:10])) if len(sys.argv) >= 10 else None
 t = json.load(open(src))
@@ -68,7 +71,8 @@ for i in used:
     new_index[i] = len(out_arcs); out_arcs.append(s)
 def remap(i): return new_index[i] if i >= 0 else ~new_index[~i]
 prefix = cc.upper() if len(cc) == 2 else cc
-units = [{'id': f'{"FRA" if cc == "fr" else prefix}{lvl}{k + 1}', 'n': n, 'c': c} for k, (n, c, _) in enumerate(keep)]
+units = [{'id': f'{prefix}{lvl}-{c}' if code_ids and c else f'{"FRA" if cc == "fr" else prefix}{lvl}{k + 1}', 'n': n, 'c': c}
+         for k, (n, c, _) in enumerate(keep)]
 o = [[[remap(i) for i in r] for r in rs] for _, _, rs in keep]
 write(out, {'t': [sx, sy, tx, ty], 'u': units, 'o': o, 'f': 1}, out_arcs)
 pts = sum(len(a) for a in out_arcs)

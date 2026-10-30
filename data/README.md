@@ -73,6 +73,18 @@ France's coarser levels on the communes' borders: each commune's arrondissement,
 
     python3 pipeline/d2_insee.py fr-5.wyar fr-3.wyar fr-2.wyar fr-1.wyar <INSEE folder> <out>
 
+Germany's levels on its municipalities' borders: the municipalities from BKG's VG250 (Verwaltungsgebiete 1:250 000,
+Gemeinden with GF 4; licence dl-de/by-2-0, credit "© GeoBasis-DE / BKG"), turned into TopoJSON with mapshaper, then
+each municipality's district, NUTS-2 region and Land from its official key (AGS) and NUTS code:
+
+    mapshaper VG250_GEM.shp encoding=utf8 -filter 'GF == 4' -each 'shapeName=GEN, shapeISO=AGS' -filter-fields shapeName,shapeISO -proj wgs84 -o format=topojson quantization=2000000 de-gem.topojson
+    mapshaper VG250_GEM.shp encoding=utf8 -filter 'GF == 4' -filter-fields AGS,NUTS -o gem.csv
+    mapshaper VG250_KRS.dbf encoding=utf8 -filter 'GF == 4' -filter-fields AGS,GEN,BEZ,NUTS -o krs.csv
+    python3 pipeline/d2_level.py de-gem.topojson de 4 de-4.wyar 0.002 --code-ids
+    python3 pipeline/d2_ags.py de-4.wyar gem.csv krs.csv <old de-3.wyar> <old de-2.wyar> <old de-1.wyar> <out>
+
+The districts are the current 401 (ids `DE3-<AGS>`); `de-3-moves.tsv` gives each earlier district id its new one.
+
 ## Region units on the piece lines (D1b)
 
     python3 pipeline/nepieces.py <original detail-100m.wyad>      # nepieces.pkl
