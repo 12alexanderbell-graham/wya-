@@ -31,6 +31,8 @@ struct CosmosView: View {
     @GestureState private var moonLive = false
     /// where the moon's tail ends: an angle that follows the moon's a little behind it, frame by frame
     @State private var trail = TrailFollower()
+    /// each planet's night as drawn, easing to its share (it sweeps in, never jumps)
+    @State private var sweep = NightSweep()
     /// how far the moon's ring and label are out (0 in the moon, 1 out), frame by frame inside the timeline
     @State private var heldTween = Tween(0)
     @State private var moonStop = 0
@@ -156,14 +158,14 @@ struct CosmosView: View {
         let r = room()
         let hidden = form.top > L.top(.quarter) - 20
         let busy = water.held || moonHeld || trail.moving(moonAngle) || heldTween.moving(Date()) || map.flying > 0
+            || sweep.moving(Self.shares(map))
             || (form.page > 0.001 && form.page < 0.999) || Date().timeIntervalSince(ringStart) < 1
         // full speed while anything moves; at rest the slow things (the spin, the sun's plasma) at 15 a second
         TimelineView(.animation(minimumInterval: busy || fullSince != nil ? 1.0 / 60 : 1.0 / 15, paused: hidden)) { ctx in
             let now = ctx.date
             // a planet's night grows by a stamp's share only once that stamp's star has landed in it (A2.20) or the
-            // system has been seen at 50% since; it changes in one frame, as it always has (the A2.14 sweep is the
-            // book's proposal, reverted with the other Cosmos changes on 30 Oct and not asked for again)
-            let shares = Self.shares(map, now: now)
+            // system has been seen at 50% since; it sweeps across to its new width (about 0.8 s), never a jump
+            let shares = sweep.step(Self.shares(map, now: now), now: now)
             let (th, _) = theta(now)
             let items = (0 ..< 8).map { place($0, th: th, now: now, r: r) }
             let host = items[chosen]
@@ -755,6 +757,26 @@ enum Textures {
 
 /// An angle that follows the moon a little behind it (an exponential follow, 0.12 s), read and moved once a frame from
 /// inside the timeline; a class so moving it never redraws anything by itself.
+/// A2.14: the night side's width eases to a new share, frame by frame (most of the way in 0.4 s, settled by 0.8 s)
+final class NightSweep {
+    private var shown: [CGFloat] = []
+    private var last: Date?
+    func step(_ target: [CGFloat], now: Date) -> [CGFloat] {
+        let dt = last.map { min(0.1, max(0, now.timeIntervalSince($0))) } ?? 0
+        last = now
+        if shown.count != target.count { shown = target; return shown }
+        let f = CGFloat(1 - exp(-dt / 0.18))
+        for i in shown.indices {
+            let d = target[i] - shown[i]
+            shown[i] = abs(d) < 0.0005 ? target[i] : shown[i] + d * f
+        }
+        return shown
+    }
+    func moving(_ target: [CGFloat]) -> Bool {
+        shown.count == target.count && zip(shown, target).contains { abs($0 - $1) >= 0.0005 }
+    }
+}
+
 final class TrailFollower {
     private var a: Double?
     private var last: Date?
