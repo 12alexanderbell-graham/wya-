@@ -188,6 +188,18 @@ struct SheetContent: View {
                         else if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
                         else { Feel.refuse() }
                     }
+                    // THE NUMBER'S HOLD MENU (11.5): count by Stamps or Countries (Map settings' Count row), Copy. Share
+                    // waits for its picture
+                    .contextMenu {
+                        let by = MapSettingsStore.shared.value.count
+                        Section("Count by") {
+                            Button("Stamps") { Task { await MapSettingsRows.set("count", "stamps", map: map) } }
+                                .disabled(by == "stamps")
+                            Button("Countries") { Task { await MapSettingsRows.set("count", "countries", map: map) } }
+                                .disabled(by == "countries")
+                        }
+                        Button("Copy") { UIPasteboard.general.string = "\(count) of \(total)" }
+                    }
                     .accessibilityLabel("Stamped list")
                     .accessibilityAddTraits(.isButton)
             }

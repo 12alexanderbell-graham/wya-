@@ -398,6 +398,16 @@ nonisolated final class World: @unchecked Sendable {
         return best?.place
     }
 
+    /// the disputed piece under a map point ("crimea"), the smallest if pieces overlap; nil off every piece
+    func piece(at p: SIMD2<Float>) -> String? {
+        var inside: [Int: (on: Bool, size: Float)] = [:]
+        for r in rings where r.unit >= 0 && r.unit < unitKeys.count && unitKeys[r.unit].hasPrefix("piece:") {
+            guard p.x >= r.box.x && p.x <= r.box.z && p.y >= r.box.y && p.y <= r.box.w, crosses(r, p) else { continue }
+            let cur = inside[r.unit] ?? (false, .greatestFiniteMagnitude)
+            inside[r.unit] = (!cur.on, min(cur.size, (r.box.z - r.box.x) * (r.box.w - r.box.y)))
+        }
+        return inside.filter { $0.value.on }.min { $0.value.size < $1.value.size }.map { String(unitKeys[$0.key].dropFirst(6)) }
+    }
     private func crosses(_ r: Ring, _ p: SIMD2<Float>) -> Bool {
         var c = false
         var j = r.start + r.count - 1

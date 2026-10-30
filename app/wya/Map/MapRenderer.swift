@@ -664,6 +664,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         if let k = c.drawnContinent, let w = c.world, !w.inCont(i, k) { return nil }
         // made now, once (making it changes nothing; its actions change things only when chosen), so what shows is
         // what was decided at the press
+        #if DEBUG
+        NSLog("wya hold menu on %@ piece %@", c.world?.places[i].id ?? "?", c.piece(at: location) ?? "none")
+        #endif
         guard let menu = c.menuFor?(i, location) else { return nil }
         menuTarget?.removeFromSuperview()
         let v = UIView(frame: CGRect(x: location.x - 22, y: location.y - 22, width: 44, height: 44))
