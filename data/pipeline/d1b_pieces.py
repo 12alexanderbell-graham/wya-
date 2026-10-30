@@ -11,12 +11,14 @@ the file of the place the piece is drawn with; untagged units are always their c
 Rules:
 - the files checked for a piece are those of its possible holders (options, host, controller in disputes.json);
 - smaller pieces are taken first, so a piece inside another (the Golan, the UNDOF zone) keeps its own parts;
-- when one side of a cut is under 3% of the unit and under about 200 km2 (a slip between the region data's outline
+- when one side of a cut is under 3% of the unit and under about 20 km2 (a slip between the region data's outline
   and the piece's), the unit is not cut: it goes whole to the larger side;
 - crumbs under about 1 km2 left by a cut, and leftovers outside every piece under 3% of the unit (gaps between two
   pieces' sources), join the largest part of the unit;
 - a piece that is a whole place (Kosovo, Taiwan) takes its own place's file whole, uncut;
-- a piece reaches 8 km out to sea (never onto other land), so the data's coarse coast never cuts a coastal unit.
+- a sliver inside a piece (under 3% of its unit) joins the part of the same piece it shares the longest border with,
+  so region borders follow the piece's line (the unit loses that sliver to its neighbour);
+- every cut is made on the file's own integer grid, so both sides of a seam share their points.
 
 usage: d1b_pieces.py <old Regions folder> <original detail-100m.wyad> <disputes.json> <truth.pkl> <nepieces.pkl> <out>
 """
@@ -73,29 +75,11 @@ for x in D['list']:
     pieces[key] = (s, {h for h in holders if h})
     if x['entity']: entity_of[key] = x['entity']
 
-# a piece's coast: the data's coastline is coarser than the region data's, so a piece reaches SEA km out to sea (never
-# onto another place's land); otherwise every coastal unit would be cut along the coarse coast
-SEA = 0.08
-import wyad, rebuild as R
-d_, hd_, b_ = wyad.pack(detail)
-reach = {k: s.buffer(SEA).bounds for k, (s, _) in pieces.items()}
-own = {}
-for x in D['list']:
-    own['p:' + x['id']] = {'p:' + x['id']} | ({'o:' + x['entity']} if x['entity'] else set())
-land = collections.defaultdict(list)
-for t in hd_['tiles']:
-    th, items, xl = wyad.tile(d_, b_, t)
-    for k, rs in items:
-        pts = [q for r in rs for q in r]
-        if not pts: continue
-        x0 = min(q[0] for q in pts); x1 = max(q[0] for q in pts); y0 = min(q[1] for q in pts); y1 = max(q[1] for q in pts)
-        hit = [pk for pk, bb in reach.items() if k not in own[pk] and x0 <= bb[2] and bb[0] <= x1 and y0 <= bb[3] and bb[1] <= y1]
-        if hit:
-            g = R.geo_of(rs)
-            for pk in hit: land[pk].append(g)
-for k, (s, holders) in list(pieces.items()):
-    others = unary_union(land[k]) if land[k] else Polygon()
-    pieces[k] = (make_valid(s.union(s.buffer(SEA).difference(others))), holders)
+# the part Morocco holds is drawn in truth.py as a box less the Polisario's land: only its part in Western Sahara
+# (within 7 km of the data's own outline) is the piece, never Morocco proper north of 27.67°N
+if 'p:w-sahara-morocco' in pieces and 'o:eh' in NE:
+    s_, h_ = pieces['p:w-sahara-morocco']
+    pieces['p:w-sahara-morocco'] = (make_valid(s_.intersection(NE['o:eh'].buffer(0.07))), h_)
 
 files = collections.defaultdict(list)
 for f in sorted(os.listdir(regdir)):
@@ -128,6 +112,11 @@ def polys(g):
     if g.is_empty: return []
     if isinstance(g, Polygon): return [g]
     return [q for p in getattr(g, 'geoms', []) for q in polys(p)]
+
+def area_only(g):
+    """the polygons of a result, without the lines or points an overlay or make_valid can leave"""
+    ps = polys(g)
+    return ps[0] if len(ps) == 1 else MultiPolygon(ps) if ps else Polygon()
 
 def rings_of(g):
     out_ = []
@@ -188,31 +177,35 @@ for cc in sorted(files):
         allx = [x for a in arcs for x, _ in a]; ally = [y for a in arcs for _, y in a]
         if not allx: continue
         fb = box(min(allx), min(ally), max(allx), max(ally))
-        loc = [(k, affine_transform(pieces[k][0], mat)) for k in mine]
+        # on the file's own integer grid, and every cut made on it, so both sides of a seam get the same points
+        loc = [(k, area_only(make_valid(shapely.set_precision(affine_transform(pieces[k][0], mat), 1.0)))) for k in mine]
         loc = [(k, s) for k, s in loc if s.intersects(fb)]
         if not loc: continue
         crumb = 1e-4 / (sx * sy)
-        slip = 0.02 / (sx * sy)
-        new_u, new_rings, changed, cut = [], [], 0, []
+        slip = 0.002 / (sx * sy)
+        new_u, new_rings, changed, cut, geoms, merged = [], [], 0, [], [], 0
+        own_file = cc in set(entity_of.values())
         lb = [s.bounds for _, s in loc]
         for ui, u in enumerate(h['u']):
             rings = h['o'][ui]
             pr = [ring_pts(arcs, r) for r in rings]
             xs = [x for r in pr for x, _ in r]; ys = [y for r in pr for _, y in r]
             near = xs and any(b[0] <= max(xs) and min(xs) <= b[2] and b[1] <= max(ys) and min(ys) <= b[3] for b in lb)
-            g = unit_geom(pr) if near else Polygon()
+            g = area_only(unit_geom(pr)) if near else Polygon()
             hits = [(k, s) for k, s in loc if s.intersects(g)] if not g.is_empty else []
             if not hits:
-                new_u.append(u); new_rings.append(pr); continue
+                new_u.append(u); new_rings.append(pr); geoms.append(None); continue
             area = g.area
-            rest = g; parts = []
+            rest = g; parts = []; whole_rest = None; rest_in = 1
             for k, s in hits:
                 if entity_of.get(k) == cc:
                     # the place's own file and the piece that is the whole place: what is left is the piece's, uncut
+                    whole_rest = rest
+                    rest_in = shapely.intersection(rest, s, grid_size=1).area / rest.area if rest.area else 1
                     parts.append((k, rest)); rest = Polygon(); break
-                inside = make_valid(rest.intersection(s))
+                inside = area_only(make_valid(shapely.intersection(rest, s, grid_size=1)))
                 if inside.area <= 0: continue
-                parts.append((k, inside)); rest = make_valid(rest.difference(s))
+                parts.append((k, inside)); rest = area_only(make_valid(shapely.difference(rest, s, grid_size=1)))
             parts.append((None, rest))
             parts = [(k, p) for k, p in parts if p.area > 0]
             big = max(parts, key=lambda kp: kp[1].area)
@@ -220,27 +213,50 @@ for cc in sorted(files):
                 # a slip, not a cut: the unit whole, to the larger side
                 uu = dict(u)
                 if big[0]: uu['q'] = big[0]; changed += 1
-                new_u.append(uu); new_rings.append(pr); continue
+                new_u.append(uu); new_rings.append(pr); geoms.append((g, area, True) if big[0] else None); continue
             # a leftover outside every piece under 3% of the unit is a gap between two pieces' sources, not land of
             # the country's own: it joins the largest part too
-            small = lambda k, p: p is not big[1] and (p.area < crumb or (k is None and p.area < 0.03 * area))
+            # the rest that goes to the whole place is a leftover too when it lies mostly outside the place's shape
+            # (the Golan district beyond the piece's line); in a disputed place's own file every leftover is a slip
+            small = lambda k, p: p is not big[1] and (p.area < crumb
+                                                      or (k is None and p.area < (0.10 if own_file else 0.03) * area)
+                                                      or (p is whole_rest and (p.area < 0.03 * area or rest_in < 0.5)))
             kept = [(k, p) for k, p in parts if not small(k, p)]
             crumbs = [p for k, p in parts if small(k, p)]
             if crumbs:
-                kept = [(k, make_valid(unary_union([p] + crumbs)) if p is big[1] else p) for k, p in kept]
+                kept = [(k, area_only(make_valid(shapely.union_all([p] + crumbs, grid_size=1))) if p is big[1] else p) for k, p in kept]
             for k, p in kept:
                 uu = dict(u)
                 if k: uu['q'] = k
-                rs = rings_of(p)
-                if rs: new_u.append(uu); new_rings.append(rs)
+                if p.area > 0: new_u.append(uu); new_rings.append(None); geoms.append((p, area, p is big[1]))
             changed += 1; cut.append([u.get('id'), [k or cc for k, _ in kept]])
         if not changed: continue
+        # a sliver inside a piece (under 3% of its unit, where the region data's line and the piece's differ) joins the
+        # part of the same piece it shares the longest border with, so the region borders follow the piece's line
+        alive = [True] * len(new_u)
+        for i, gi in enumerate(geoms):
+            if not gi or gi[2] or 'q' not in new_u[i] or gi[0].area >= 0.03 * gi[1]: continue
+            near_ = gi[0].buffer(2)
+            best_, bl = None, 0
+            for j, gj in enumerate(geoms):
+                if j == i or not gj or not alive[j] or new_u[j].get('q') != new_u[i]['q'] or new_u[j]['id'] == new_u[i]['id']: continue
+                if not gj[0].intersects(near_): continue
+                l = gi[0].boundary.intersection(gj[0].buffer(2)).length
+                if l > bl: best_, bl = j, l
+            if best_ is not None:
+                gj = geoms[best_]
+                geoms[best_] = (area_only(make_valid(shapely.union_all([gj[0], gi[0]], grid_size=1))), gj[1], gj[2])
+                alive[i] = False; merged += 1
+        keep_i = [i for i in range(len(new_u)) if alive[i]]
+        new_rings = [new_rings[i] if new_rings[i] is not None else rings_of(geoms[i][0]) for i in keep_i]
+        new_u = [new_u[i] for i in keep_i]
+        new_u = [u for u, r in zip(new_u, new_rings) if r]; new_rings = [r for r in new_rings if r]
         out_arcs, out_r = build_arcs(new_rings)
         h2 = dict(h); h2['u'] = new_u; h2['o'] = out_r
         write(os.path.join(out, f), h2, out_arcs)
         # check: an arc used once is an outer border; count those not on the old outer border's points
         uses = collections.Counter(i if i >= 0 else ~i for rs in out_r for ring in rs for i in ring)
-        report[f] = {'units': len(h['u']), 'now': len(new_u), 'tagged': sum(1 for u in new_u if 'q' in u),
+        report[f] = {'units': len(h['u']), 'now': len(new_u), 'tagged': sum(1 for u in new_u if 'q' in u), 'slivers joined': merged,
                      'cut': cut, 'arcs': [len(arcs), len(out_arcs)],
                      'pieces': sorted({u['q'] for u in new_u if 'q' in u})}
         print(f, report[f]['units'], '->', report[f]['now'], 'tagged', report[f]['tagged'], report[f]['pieces'])
