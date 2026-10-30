@@ -3,7 +3,7 @@
 cb_2024_us_cousub_500k, the 50 states and DC, as us-3 by d2_level.py --code-ids) carry their GEOID (state 2, county 3,
 subdivision 5 digits). The counties (us-2) are their GEOIDs' first five digits and the states (us-1) the first two;
 both are dissolved from the subdivisions' arcs (d2_dissolve), so all levels share the same lines. A county keeps its
-earlier id (with the Census name) when one earlier county and it are each other's best match by area; the others (Connecticut's
+earlier id (with the Census name) when one earlier county and it are each other's best match by area, or failing that the earlier county of the same name close by; the others (Connecticut's
 planning regions, which replaced its eight counties in 2022) are new, ids `US2-<GEOID>`, and `us-2-moves.tsv` gives
 each earlier id the new county holding most of its area. The states keep their earlier ids and names.
 
@@ -50,6 +50,19 @@ gl = list(gg.items()); glg = [g for _, g in gl]; tg = shapely.STRtree(glg)
 back = {j: gl[b][0] for j in range(len(go2)) if not go2[j].is_empty for b in [best_in(go2[j], glg, tg)] if b is not None}
 cname = {}
 for g_, r in cs.items(): cname.setdefault(g_[:5], r['NAMELSADCO'])
+# a county the area match missed (the earlier shapes are coarse: an independent city lies mostly in its old neighbour)
+# keeps the earlier county of its own name nearby, if no other county kept that one
+import re
+def plain(n): return re.sub(r"\s+(County|Parish|city|City|Borough|Census Area|City and Borough|Municipality)$", "", n).strip().lower()
+kept_j = {j for c, j in fwd.items() if j is not None and back.get(j) == c}
+oldname = collections.defaultdict(list)
+for j, u in enumerate(ho2['u']): oldname[plain(u['n'])].append(j)
+for c, g in gg.items():
+    j = fwd[c]
+    if j is not None and back.get(j) == c: continue
+    near = [k for k in oldname.get(plain(cname[c]), []) if k not in kept_j and not go2[k].is_empty
+            and go2[k].distance(g) < 0.5]
+    if len(near) == 1: fwd[c] = near[0]; back[near[0]] = c; kept_j.add(near[0])
 units2, newc = [], []
 for c in sorted(gg, key=lambda c: cname[c]):
     j = fwd[c]
