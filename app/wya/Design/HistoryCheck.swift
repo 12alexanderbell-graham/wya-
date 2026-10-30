@@ -211,6 +211,26 @@ enum HistoryCheck {
         let summer = RoughDay.sortDay("Summer 2019")!
         check("rough words sort", rbad.isEmpty && RoughDay.sortDay("May 2019")! < summer && summer < RoughDay.sortDay("Sep 2019")!,
               rbad.isEmpty ? "\(rough.count) right" : "wrong: \(rbad.joined(separator: ", "))")
+
+        // the calendar base (Part 9.9): visits, a stay still going, a month-only visit, words, a waiting find
+        let today = LocalDay(y: 2026, m: 10, d: 30)
+        let cal = CalendarIndex(rows: [
+            .init(key: .country("pt"), arrived: "2024-08-03", left: "2024-08-05", rough: nil, lived: false, source: "history"),
+            .init(key: .country("es"), arrived: "2024-08-06", left: "2024-08-07", rough: nil, lived: false, source: "history"),
+            .init(key: .country("ch"), arrived: "2019-09", left: nil, rough: nil, lived: true, source: "hand"),
+            .init(key: .country("jp"), arrived: "2023-04", left: nil, rough: nil, lived: false, source: "photos"),
+            .init(key: .country("is"), arrived: nil, left: nil, rough: "Summer 2019", lived: false, source: "hand")],
+            finds: [.init(kind: .find, key: .country("br"), from: LocalDay(y: 2023, m: 2, d: 18), to: LocalDay(y: 2023, m: 2, d: 18), source: "photos")],
+            today: today)
+        let on6 = cal.entries(on: LocalDay(y: 2024, m: 8, d: 6)).map { "\($0.kind.rawValue) \($0.key.id)" }.sorted()
+        let april = cal.month(2023, 4)
+        let trips = cal.trips(home: .country("ch"))
+        let feb = PartialDate(y: 2024, m: 2).last.description
+        check("calendar base", on6 == ["lived ch", "visit es"] && april.count == 30 && trips.count == 2
+              && trips.last?.places.map(\.id) == ["pt", "es"] && trips.last?.to == LocalDay(y: 2024, m: 8, d: 7)
+              && cal.earliest(.country("jp")) == LocalDay(y: 2023, m: 4, d: 1) && cal.earliest(.country("br")) == nil
+              && cal.entries(on: today).count == 1 && cal.undated.first?.sortDay == LocalDay(y: 2019, m: 6, d: 1) && feb == "2024-02-29",
+              "6 Aug: \(on6), April 2023: \(april.count) days, trips: \(trips.map { "\($0.from)..\($0.to) \($0.places.map(\.id))" }), Feb 2024 ends \(feb)")
         return out
     }
 

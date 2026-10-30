@@ -70,6 +70,21 @@ final class MarkStore {
         marks = (try? await store.all(account: account)) ?? [:]
         markDates = (try? await store.markDates(account: account)) ?? []
         loaded = true
+        await refreshCalendar()
+    }
+
+    /// THE CALENDAR BASE (Part 9.9), rebuilt after every change (a write, an undo, a sign out) and at launch; the
+    /// finds waiting for their review are on it too
+    private(set) var calendar = CalendarIndex()
+    @ObservationIgnored private var calendarJob = 0
+    func refreshCalendar() async {
+        guard let store else { return }
+        calendarJob += 1
+        let me = calendarJob
+        let acc = account
+        let rows = (try? await store.calendarRows(account: acc)) ?? []
+        guard me == calendarJob else { return }
+        calendar = CalendarIndex(rows: rows, finds: UploadState.shared.calendarFinds)
     }
 
     /// when each mark was made (the Streak counts weeks with one)
@@ -257,6 +272,7 @@ final class MarkStore {
 
     private func emit(_ c: MarksChanged) {
         for f in listeners.values { f(c) }
+        Task { await refreshCalendar() }
     }
 
     private func label(_ key: PlaceKey, _ name: String) -> String { name.isEmpty ? key.id.uppercased() : name }
