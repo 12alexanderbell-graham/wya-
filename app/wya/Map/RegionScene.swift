@@ -21,8 +21,7 @@ nonisolated final class RegionScene: @unchecked Sendable {
     let points: [SIMD2<Float>]
     let fans: [UInt32]
     let runs: [(start: Int, count: Int)]
-    /// the lines between regions in the lines' layout (ends, the ends at the draw's start, distance along, kind): each
-    /// segment starts as nothing at its first end and grows to its second, so the borders draw along their length
+    /// the lines between regions, ten floats a segment: its ends, where its ends lie along their border (0 to 1), unused
     let segs: [Float]
     /// each entry's box and rings in map units, for the finger
     private let boxes: [SIMD4<Float>]
@@ -58,12 +57,17 @@ nonisolated final class RegionScene: @unchecked Sendable {
             bx.append(b); rs.append(mine)
             if !mine.isEmpty { all = SIMD4(min(all.x, b.x), min(all.y, b.y), max(all.z, b.z), max(all.w, b.w)) }
         }
+        // each border between two regions as its segments, with where each lies along its border (0 at one end, 1 at
+        // the other), so a border can draw in from both its ends and undraw back into them (A6.9)
         var sg: [Float] = []
         for line in f.inner where line.count >= 2 {
             let m = Self.project(line)
+            var cum: [Float] = [0]
+            for i in 1 ..< m.count { cum.append(cum[i - 1] + simd_distance(m[i - 1], m[i])) }
+            let total = max(cum[m.count - 1], 1e-9)
             for i in 0 ..< m.count - 1 {
                 let a = m[i], c = m[i + 1]
-                sg += [a.x, a.y, c.x, c.y, a.x, a.y, a.x, a.y, 0, 0]
+                sg += [a.x, a.y, c.x, c.y, cum[i] / total, cum[i + 1] / total, 0, 0, 0, 0]
             }
         }
         guard !rn.isEmpty, all.x < all.z else { return nil }
@@ -115,4 +119,48 @@ nonisolated final class RegionScene: @unchecked Sendable {
 
     /// the entries of a set of regions (what the renderer fills for them)
     func entries(of units: Set<Int>) -> [Int] { entryUnit.indices.filter { units.contains(entryUnit[$0]) } }
+}
+
+/// WHAT A CHANGE OF REGION MAP DRAWS (A6.9, the yes of 23 Oct 15:58 to "shared borders stay and new ones draw along their
+/// length"): the borders both levels have stay as they are; borders only the new level has draw in from both their
+/// ends; borders only the old level had undraw back into their ends (0.4 s each). Opening a country, every border is
+/// new (drawing in from the outline, A6.7); leaving it, every border is old (undrawing into the outline, A6.13).
+nonisolated final class RegionLines: @unchecked Sendable {
+    let shared: [Float]
+    let new: [Float]
+    let old: [Float]
+    /// when it starts (the new borders after `delay`, the old ones at once)
+    var start: CFTimeInterval
+    let delay: Double
+    /// the test driver's slow motion for frame checks (1 = real speed)
+    nonisolated(unsafe) static var slow: Double = 1
+
+    init(shared: [Float], new: [Float], old: [Float], start: CFTimeInterval, delay: Double) {
+        self.shared = shared; self.new = new; self.old = old; self.start = start; self.delay = delay
+    }
+
+    /// from one scene to the next (either may be nil): segments matched by their two ends, either way round
+    static func between(_ a: RegionScene?, _ b: RegionScene?, start: CFTimeInterval, delay: Double) -> RegionLines {
+        let olds = a?.segs ?? [], news = b?.segs ?? []
+        func key(_ g: ArraySlice<Float>) -> SIMD4<Int32> {
+            let i = g.startIndex
+            let p = SIMD2(Int32((g[i] * 2e4).rounded()), Int32((g[i + 1] * 2e4).rounded()))
+            let q = SIMD2(Int32((g[i + 2] * 2e4).rounded()), Int32((g[i + 3] * 2e4).rounded()))
+            return (p.x, p.y) < (q.x, q.y) ? SIMD4(p.x, p.y, q.x, q.y) : SIMD4(q.x, q.y, p.x, p.y)
+        }
+        var oldKeys = Set<SIMD4<Int32>>()
+        oldKeys.reserveCapacity(olds.count / 10)
+        for i in stride(from: 0, to: olds.count, by: 10) { oldKeys.insert(key(olds[i ..< i + 10])) }
+        var shared: [Float] = [], new: [Float] = []
+        var used = Set<SIMD4<Int32>>()
+        for i in stride(from: 0, to: news.count, by: 10) {
+            let g = news[i ..< i + 10], k = key(g)
+            if oldKeys.contains(k) { shared += g; used.insert(k) } else { new += g }
+        }
+        var old: [Float] = []
+        if !used.isEmpty || a != nil {
+            for i in stride(from: 0, to: olds.count, by: 10) where !used.contains(key(olds[i ..< i + 10])) { old += olds[i ..< i + 10] }
+        }
+        return RegionLines(shared: shared, new: new, old: old, start: start, delay: delay)
+    }
 }

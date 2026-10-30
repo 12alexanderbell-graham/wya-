@@ -349,6 +349,8 @@ final class MapController {
     /// when the scene came (its borders draw in from then, the renderer)
     @ObservationIgnored private(set) var regionSince: CFTimeInterval = 0
     @ObservationIgnored var regionPressed: Int? { didSet { if regionPressed != oldValue { needsFrame = true } } }
+    /// the borders between regions as they change (drawn in, kept, undrawn: A6.9, A6.13)
+    @ObservationIgnored private(set) var regionLines: RegionLines?
     private(set) var regionStamped: Set<Int> = []
     private(set) var regionWished: Set<Int> = []
     /// your number at the open level (the Regions caption)
@@ -374,15 +376,20 @@ final class MapController {
         if regionScene?.place != i { regionScene = nil; regionPressed = nil; frameRegion(i) }
         regionRow = r
         regionNotReady = nil
+        // the level drawn now, for the borders both share (A6.9)
+        let prev = regionScene?.place == i ? regionScene : nil
         Task.detached(priority: .userInitiated) { [weak self] in
             let file = await RegionCatalog.shared.fetch(id, row: r)
             let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0) }
+            let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {
                 guard let self, self.regionJob == job, self.focusPlace == i else { return }
                 // a level that can't be had now: the one shown stays, its word says so (6.6)
                 guard let scene else { self.regionNotReady = r; self.regionRow = self.regionScene?.row ?? r; return }
                 self.regionScene = scene
                 self.regionSince = CACurrentMediaTime()
+                lines?.start = self.regionSince
+                self.regionLines = lines
                 self.takeRegionMarks()
                 self.needsFrame = true
                 if let focus { self.showRegion(focus, in: scene) }
@@ -396,6 +403,8 @@ final class MapController {
     /// out of the country (back to the menu, or out of Regions): the regions go, the world comes back
     func closeRegions() {
         regionJob += 1
+        // the inner borders undraw back into the country's outline (A6.13)
+        if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }
         regionScene = nil
         regionPressed = nil
         regionStamped = []; regionWished = []

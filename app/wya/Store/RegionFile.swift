@@ -73,7 +73,33 @@ nonisolated struct RegionFile: Sendable {
         for (u, rings) in zip(head.u, head.o) {
             for ring in rings { for r in ring { let i = r >= 0 ? r : ~r; if i < n { users[i].insert(u.id) } } }
         }
-        inner = (0 ..< n).compactMap { i in users[i].count >= 2 ? Array(arc(i)) : nil }
+        // one line per border between two regions: the arcs the same two regions share, joined end to end (a border
+        // built from many small arcs, as levels built on their communes' arcs are, draws as one line, A6.9)
+        var groups: [[String]: [Int]] = [:]
+        for i in 0 ..< n where users[i].count >= 2 { groups[users[i].sorted(), default: []].append(i) }
+        func q(_ p: SIMD2<Double>) -> SIMD2<Int64> { SIMD2(Int64((p.x * 1e6).rounded()), Int64((p.y * 1e6).rounded())) }
+        var lines: [[SIMD2<Double>]] = []
+        for (_, arcs) in groups.sorted(by: { $0.value[0] < $1.value[0] }) {
+            var pieces = arcs.map { Array(arc($0)) }.filter { $0.count >= 2 }
+            while !pieces.isEmpty {
+                var line = pieces.removeLast()
+                var grew = true
+                while grew {
+                    grew = false
+                    for (k, pc) in pieces.enumerated() {
+                        let a = q(pc.first!), b = q(pc.last!), s0 = q(line.first!), e0 = q(line.last!)
+                        if a == e0 { line += pc.dropFirst() }
+                        else if b == e0 { line += pc.reversed().dropFirst() }
+                        else if b == s0 { line = pc + line.dropFirst() }
+                        else if a == s0 { line = pc.reversed() + line.dropFirst() }
+                        else { continue }
+                        pieces.remove(at: k); grew = true; break
+                    }
+                }
+                lines.append(line)
+            }
+        }
+        inner = lines
         units = zip(head.u, head.o).map { u, rings in
             let rs: [[SIMD2<Double>]] = rings.map { ring in
                 var p: [SIMD2<Double>] = []

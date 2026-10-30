@@ -132,7 +132,11 @@ struct RegionCard: View {
                 }
             } else if card.stampedHere {
                 Feel.lift()
-                Task { await MarkStore.shared.unstamp(key, name: card.name); card.stampedHere = false }
+                Task {
+                    if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
+                    else { await MarkStore.shared.unstamp(key, name: card.name) }
+                    card.stampedHere = false
+                }
             } else {
                 Feel.refuse()
             }

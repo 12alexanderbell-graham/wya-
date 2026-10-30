@@ -22,6 +22,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var diamondPipe: MTLRenderPipelineState!
     /// the lines' coverage, drawn first into `coverage` (max at each pixel), then laid over the map once
     private var coveragePipe: MTLRenderPipelineState?
+    /// the borders between regions, drawn in and out along their length (A6.9)
+    private var regionCoveragePipe: MTLRenderPipelineState?
     private var compositePipe: MTLRenderPipelineState?
     private var coverage: MTLTexture?
     /// the relief laid over what is drawn at a strength (the land round a continent coming over its borders)
@@ -117,6 +119,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             c.sourceRGBBlendFactor = .one; c.destinationRGBBlendFactor = .one
             c.sourceAlphaBlendFactor = .one; c.destinationAlphaBlendFactor = .one
             coveragePipe = try? device.makeRenderPipelineState(descriptor: p)
+            if let rv = lib.makeFunction(name: "regionLineVertex") {
+                p.vertexFunction = rv
+                regionCoveragePipe = try? device.makeRenderPipelineState(descriptor: p)
+            }
         }
 
         let sd = MTLSamplerDescriptor()
@@ -267,12 +273,18 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private weak var regionBuilt: RegionScene?
     private var regionPoints: MTLBuffer?
     private var regionFans: MTLBuffer?
-    private var regionSegs: MTLBuffer?
+    /// the three sets of the borders' change and the change they were made for
+    private weak var linesBuilt: RegionLines?
+    private var linesShared: MTLBuffer?, linesNew: MTLBuffer?, linesOld: MTLBuffer?
+    private func buildLines(_ l: RegionLines) {
+        linesBuilt = l
+        func buf(_ a: [Float]) -> MTLBuffer? { a.isEmpty ? nil : device.makeBuffer(bytes: a, length: a.count * 4) }
+        linesShared = buf(l.shared); linesNew = buf(l.new); linesOld = buf(l.old)
+    }
     private func buildRegion(_ s: RegionScene) {
         regionBuilt = s
         regionPoints = s.points.isEmpty ? nil : device.makeBuffer(bytes: s.points, length: s.points.count * MemoryLayout<SIMD2<Float>>.stride)
         regionFans = s.fans.isEmpty ? nil : device.makeBuffer(bytes: s.fans, length: s.fans.count * 4)
-        regionSegs = s.segs.isEmpty ? nil : device.makeBuffer(bytes: s.segs, length: s.segs.count * 4)
     }
     /// the world's units away from continent k (a sliced country's other piece among them), and the places wholly away
     private func away(_ k: String, _ w: World) -> (units: [Int], places: Set<Int>) {
@@ -344,6 +356,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         guard built, let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let cb = queue.makeCommandBuffer(), let w = controller.world else { return }
         if let sc = controller.regionScene, regionBuilt !== sc { buildRegion(sc) }
+        if let l = controller.regionLines, linesBuilt !== l { buildLines(l) }
 
         var cam = Cam(c: SIMD2(Float(controller.c.x), Float(controller.c.y)), k: Float(controller.k),
                       time: Float(now - start), view: SIMD2(Float(view.bounds.width), Float(view.bounds.height)))
@@ -393,21 +406,27 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 } else {
                     lines(nil, morph: 1)
                 }
-                // the lines between regions, drawing along their length as they come (A6.7: 0.4 s on the camera curve,
-                // from 0.3 s after the regions are ready, so they start as the camera nears the country)
-                if let rs = regionSegs, let sc = controller.regionScene, regionBuilt === sc {
-                    let t = (now - controller.regionSince - 0.3) / 0.4
-                    if t < 1 { controller.needsFrame = true }
+                // THE BORDERS BETWEEN REGIONS (A6.7, A6.9, A6.13): shared ones as they are, new ones drawing in from both
+                // their ends, old ones undrawing back into them, 0.4 s on the camera curve
+                if let l = controller.regionLines, linesBuilt === l, let rp = regionCoveragePipe {
                     var st = ls
                     st.colour.w = 1
-                    var m = Float(Motion.camera(max(0, t)))
-                    if m > 0.001 {
-                        ce.setVertexBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 2)
-                        ce.setVertexBytes(&m, length: 4, index: 3)
-                        ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
-                        ce.setVertexBuffer(rs, offset: 0, index: 0)
-                        ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: sc.segs.count / 10)
+                    ce.setRenderPipelineState(rp)
+                    ce.setVertexBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 2)
+                    ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
+                    let dur = 0.4 * RegionLines.slow
+                    let tIn = (now - l.start - l.delay * RegionLines.slow) / dur, tOut = (now - l.start) / dur
+                    if tIn < 1 || tOut < 1 { controller.needsFrame = true }
+                    func set(_ b: MTLBuffer?, _ count: Int, _ q: Float) {
+                        guard let b, count > 0, q > 0.001 else { return }
+                        var q = q
+                        ce.setVertexBytes(&q, length: 4, index: 3)
+                        ce.setVertexBuffer(b, offset: 0, index: 0)
+                        ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count)
                     }
+                    set(linesShared, l.shared.count / 10, 1)
+                    set(linesNew, l.new.count / 10, Float(Motion.camera(max(0, tIn))))
+                    set(linesOld, l.old.count / 10, 1 - Float(Motion.camera(max(0, tOut))))
                 }
                 ce.endEncoding()
             }
