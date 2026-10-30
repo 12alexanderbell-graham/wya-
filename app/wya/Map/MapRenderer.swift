@@ -370,8 +370,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         enc.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
         enc.setFragmentBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
 
-        func relief(_ kind: Float, _ tint: SIMD4<Float> = .zero) {
+        func relief(_ kind: Float, _ tint: SIMD4<Float> = .zero, pattern: Float = 0) {
             var look = Look(tint: tint, kind: kind, texelU: texel.x, texelV: texel.y)
+            // Differentiate Without Colour (1.14): the pattern in screen points
+            if pattern > 0 { look.clip2.z = pattern; look.clip2.x = Float(view.contentScaleFactor) }
             // clip2.y: Map settings' Style Simple (flat cream land, blue 25% on cream sea)
             look.clip2.y = controller.simple ? 1 : 0
             enc.setRenderPipelineState(reliefPipe)
@@ -432,7 +434,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         enc.setDepthStencilState(insideLand); enc.setStencilReferenceValue(1)
         relief(1)
         // 3. the coloured groups
-        func group(_ places: [Int], kind: Float, tint: SIMD4<Float>) {
+        func group(_ places: [Int], kind: Float, tint: SIMD4<Float>, pattern: Float = 0) {
             guard !places.isEmpty else { return }
             if let tiles {
                 let set = Set(places)
@@ -449,8 +451,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 for u in units { fan(unitRun[u]) }
             }
             enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
-            relief(kind, tint)
+            relief(kind, tint, pattern: pattern)
         }
+        // Differentiate Without Colour (the system setting, 1.14): stamped hatched, wished dotted
+        let dwc = controller.withoutColour
+        let hatch: Float = dwc ? 1 : 0, dots: Float = dwc ? 2 : 0
         // the place being pressed: drawn by the press below, not by its group
         // under a finger, or held while its stamping card is up
         let pressed = controller.pressed ?? controller.kept
@@ -465,16 +470,16 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             let sp = controller.stampPasses
             let st = controller.stamped.filter { $0 != pressed }
             group(st.filter { sp[$0] == 0 }.sorted(), kind: 2, tint: Palette.inkV)
-            for n in 1 ... 5 { group(st.filter { (sp[$0] ?? 2) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.limeV, n)) }
+            for n in 1 ... 5 { group(st.filter { (sp[$0] ?? 2) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.limeV, n), pattern: hatch) }
         } else if controller.showsStamped {
-            group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV)
+            group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV, pattern: hatch)
         }
         if controller.filter == 3 {
             let wp = controller.wantPasses
             let wi = controller.wished.filter { $0 != pressed }
-            for n in 1 ... 5 { group(wi.filter { (wp[$0] ?? 1) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.blueV, n)) }
+            for n in 1 ... 5 { group(wi.filter { (wp[$0] ?? 1) == n }.sorted(), kind: 2, tint: Palette.passes(Palette.blueV, n), pattern: dots) }
         } else if controller.showsWished {
-            group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV)
+            group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV, pattern: dots)
         }
         // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade); a
         // stamped place is never a find (its row reads "+n trips" instead)

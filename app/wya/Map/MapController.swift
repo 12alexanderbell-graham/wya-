@@ -247,6 +247,16 @@ final class MapController {
     /// the filter's passes per place (1.14): stamped places for Stamped+ (0 = lived, ink), wished ones for Wishlist+
     @ObservationIgnored private(set) var stampPasses: [Int: Int] = [:]
     @ObservationIgnored private(set) var wantPasses: [Int: Int] = [:]
+    /// Differentiate Without Colour (the system setting): stamped land hatched, wished dotted (1.14)
+    var withoutColour: Bool {
+        #if DEBUG
+        if let t = testWithoutColour { return t }
+        #endif
+        return UIAccessibility.shouldDifferentiateWithoutColor
+    }
+    #if DEBUG
+    @ObservationIgnored var testWithoutColour: Bool? { didSet { needsFrame = true } }
+    #endif
     /// the test driver holding the streak at a number (simulator only)
     @ObservationIgnored var streakHeld = false
 
