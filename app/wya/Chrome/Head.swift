@@ -823,7 +823,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -880,7 +880,13 @@ struct SearchResults: View {
         let placesSearch = map.placesMode && map.regionScene == nil && !head.settingsOpen
         let _ = placesSearch ? TownIndex.shared.load() : ()
         let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
-        let keys: [ResultKey] = !placesSearch ? baseKeys
+        // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
+        let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
+        let _ = countriesSearch ? RegionIndex.shared.load() : ()
+        let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
+        let mapKeys: [ResultKey] = anyRegionHits.isEmpty ? baseKeys
+            : Array((hits.prefix(max(4, 8 - anyRegionHits.count)).map { ResultKey.place($0) } + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
+        let keys: [ResultKey] = !placesSearch ? mapKeys
             : typed ? { () -> [ResultKey] in
                 let k = townHits.map { ResultKey.town($0.key) } + hits.prefix(max(2, 8 - townHits.count)).map { ResultKey.place($0) }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
@@ -908,6 +914,7 @@ struct SearchResults: View {
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
                                 case .town(let k): townRow(townHits.first { $0.key == k })
+                                case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
                                 }
                             }
                             .frame(height: 44 * open[n], alignment: .top)
@@ -1066,6 +1073,29 @@ struct SearchResults: View {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// a region found from Countries: its name and its country; a tap closes search and opens its country's region map
+    /// on it (A6.14's straight route, then the region shown as on a region map)
+    private func anyRegionRow(_ h: RegionIndex.Hit?) -> some View {
+        let place = h.flatMap { h in map.world?.placeIndex[h.place] }
+        let country = place.flatMap { map.world?.places[$0].n } ?? ""
+        return Button {
+            Feel.tap()
+            head.searching = false
+            if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
+        } label: {
+            HStack(spacing: 12) {
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)

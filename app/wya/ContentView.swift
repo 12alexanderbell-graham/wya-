@@ -298,9 +298,9 @@ struct ContentView: View {
             map.regionsMenu = true
             // A6.14: straight into a country (a country's "Open its region map"), never through the list or the world
             if let i = Self.directRegion {
-                let row = Self.directRow
-                Self.directRegion = nil; Self.directRow = nil
-                openRegion(i, row: row)
+                let row = Self.directRow, focus = Self.directFocus
+                Self.directRegion = nil; Self.directRow = nil; Self.directFocus = nil
+                openRegion(i, row: row, focus: focus)
                 return
             }
             water.openMenu()
@@ -314,11 +314,11 @@ struct ContentView: View {
     }
     /// A6.7 A COUNTRY PICKED FROM THE LIST: the list goes down with the water to 25% while the camera flies into the
     /// country and its regions draw in
-    private func openRegion(_ i: Int, row: Int? = nil) {
+    private func openRegion(_ i: Int, row: Int? = nil, focus: String? = nil) {
         head.searching = false
         head.toolsOpen = false
         water.closeMenu(to: .quarter)
-        map.openRegions(i, row: row)
+        map.openRegions(i, row: row, focus: focus)
     }
     /// THE MAP TAB IN REGIONS (20 Oct answer 15): back to the list, the regions folding away, the world under it
     private func backToRegionsList() {
@@ -327,7 +327,6 @@ struct ContentView: View {
         water.openMenu()
         map.goHome()
     }
-    /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7)
     /// A TOWN TAPPED (7.4): quick add stamps it with its country (or unstamps it); otherwise its card from the water
     private func townTapped() {
         guard let t = map.townPressed, let sc = map.townScenes[t.cc], t.i < sc.towns.count,
@@ -348,6 +347,7 @@ struct ContentView: View {
         }
     }
 
+    /// A REGION TAPPED (6.5): with quick stamping on it is stamped or unstamped at once; otherwise its card (6.7)
     private func regionTapped() {
         guard let sc = map.regionScene, let u = map.regionPressed, u < sc.unitIDs.count else { return }
         let key = PlaceKey(.region, sc.unitIDs[u])
@@ -373,10 +373,16 @@ struct ContentView: View {
     /// a country to open in Regions without the list (A6.14), set just before the wheel turns there
     @MainActor static var directRegion: Int?
     @MainActor static var directRow: Int?
+    /// and the region to show there (a region found by search outside Regions)
+    @MainActor static var directFocus: String?
     /// A6.14 from anywhere: the wheel turns to Regions and the country opens; already in Regions, it opens from there
-    @MainActor static func openRegionMap(_ i: Int, head: HeadState) {
-        if head.mode == .regions { RegionsMenuModel.shared.openDirect?(i); return }
-        directRegion = i
+    @MainActor static func openRegionMap(_ i: Int, head: HeadState, row: Int? = nil, focus: String? = nil, map: MapController? = nil) {
+        if head.mode == .regions {
+            RegionsMenuModel.shared.openDirect?(i)
+            if let focus, let map { map.openRegions(i, row: row, focus: focus) }
+            return
+        }
+        directRegion = i; directRow = row; directFocus = focus
         head.quickStamp = false
         head.mode = .regions
         Feel.notch()
