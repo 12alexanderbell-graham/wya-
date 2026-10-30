@@ -78,7 +78,7 @@ struct ContentView: View {
             MapSettingsRows.registerActions(map: map)
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
             map.onTouch = { [head, water] in head.putAway(); water.hideCredit() }
-            water.onTouch = { [head] in head.putAway() }
+            water.onTouch = { [head] in head.putAwayAI() }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.onMapAgain = { [head] in
@@ -99,6 +99,14 @@ struct ContentView: View {
                 // the start credit once all is at rest (A1.20)
                 water.showCredit()
             }
+        }
+        // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
+        // that leaves the water below 50% closes them (A5.2)
+        .onChange(of: head.settingsOpen) { _, open in
+            if open { water.openSettings() } else { water.closeSettings() }
+        }
+        .onChange(of: water.stop) { _, s in
+            if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
         }
     }
 }
