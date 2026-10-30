@@ -258,6 +258,7 @@ final class MapController {
     /// what the map works out from whose each piece is (again after a borders view change)
     private func takeShapes(_ w: World) {
         tinyPlaces = w.places.indices.filter { w.places[$0].tiny && !w.places[$0].junk }
+        territories = w.places.indices.filter { w.places[$0].k == "territory" && !w.places[$0].junk }
         // each tiny place's biggest piece across, in map units (the Vatican's is a speck)
         var big = [Double](repeating: 0, count: w.places.count)
         for (u, owner) in w.unitOwner.enumerated() where owner >= 0 {
@@ -277,6 +278,8 @@ final class MapController {
     @ObservationIgnored var simple = false {
         didSet { if simple != oldValue { needsFrame = true } }
     }
+    /// the territories (drawn white when unmarked on Style Simple), worked out with the shapes
+    @ObservationIgnored private(set) var territories: [Int] = []
     @ObservationIgnored var diamondsOff = false {
         didSet { if diamondsOff != oldValue { needsFrame = true } }
     }
