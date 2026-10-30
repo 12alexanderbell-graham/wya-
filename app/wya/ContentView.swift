@@ -99,7 +99,9 @@ struct ContentView: View {
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
-                guard !head.quickStamp, !map.locked else { return }
+                guard !map.locked else { return }
+                // QUICK STAMPING (Part 4.7): the tap toggles the stamp at once, no card
+                if head.quickStamp { Self.quickStamp(i, map: map); return }
                 // the tap that put the book away opens no card (one press, one job)
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
@@ -164,5 +166,22 @@ struct ContentView: View {
         DetailsState.shared.close(water: water)
         VerifyState.shared.close(water: water)
         CardState.shared.close(map: map)
+    }
+
+    /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one
+    /// write); the colour changes in one frame as every colour does (his 30 Oct rule; the book's fill front is not
+    /// built); stamp or lift haptic (no sound); the undo drop rises each time (one tap, one undo step); VoiceOver
+    /// says what happened. The record's source is `quick`.
+    @MainActor static func quickStamp(_ i: Int, map: MapController) {
+        guard let w = map.world, i >= 0, i < w.places.count else { return }
+        let p = w.places[i]
+        let key = PlaceKey.country(p.id)
+        let stamped = MarkStore.shared.state(key).stamped
+        if stamped { Feel.lift() } else { Feel.stamp() }
+        Task {
+            if stamped { await MarkStore.shared.unstamp(key, name: p.n) }
+            else { await MarkStore.shared.stamp(key, name: p.n, source: .quick) }
+            UIAccessibility.post(notification: .announcement, argument: "\(p.n) \(stamped ? "unstamped" : "stamped")")
+        }
     }
 }
