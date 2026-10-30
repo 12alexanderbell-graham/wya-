@@ -59,5 +59,7 @@ T['abyei']=(['o:sd','o:ss'],[('p:abyei',SAFE('p:abyei',osm(13501064)))])
 # Venezuela's claim to the Essequibo, and Olivenza (with Taliga)
 T['gy']=(['o:gy'],[('p:west-of-essequibo-river',SAFE('p:west-of-essequibo-river',osm(16782944)))])
 T['es']=(['o:es'],[('p:olivenza',SAFE('p:olivenza',unary_union([osm(345593),osm(340013)])))])
+# Macau: the data drew its peninsula as China's and some sea islands as Macau's; OSM's Macau (1867188) is the line
+T['mo']=(['o:cn'],[('o:mo',osm(1867188))])
 pickle.dump({'groups':T},open('truth.pkl','wb'))
 for g,(ps,cs) in T.items(): print(g,ps,[(k,round(c.area,4),c.geom_type) for k,c in cs])
