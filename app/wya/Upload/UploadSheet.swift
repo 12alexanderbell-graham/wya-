@@ -64,6 +64,11 @@ final class UploadState {
     /// what A9.8 says when a file gave nothing (not a history, unreadable); nil: "No places found"
     @ObservationIgnored private var failed: String?
     @ObservationIgnored private var job = 0
+    /// which read a result belongs to: a read started on one sheet, step or session that has since gone (back, closed,
+    /// reopened) is dropped when it lands
+    @ObservationIgnored private var readToken = 0
+    /// the go's write or the leaving is under way: taps, pulls and a second go wait for it
+    @ObservationIgnored private var busy = false
     @ObservationIgnored private var moving = false
 
     var isOpen: Bool { water?.upload ?? false }
@@ -75,6 +80,7 @@ final class UploadState {
     /// A9.1 and A9.2: the water to 25% (it stays if it is there), the caption's words out, then the pair in
     func open(water w: Water, map m: MapController) {
         guard !w.upload else { return }
+        readToken += 1
         // finds waiting: the Upload tool opens straight on their review (9.2)
         if !order.isEmpty { openReview(water: w, map: m); return }
         water = w; map = m
@@ -129,6 +135,7 @@ final class UploadState {
     func back() {
         guard phase == .choosing, step != 0, !moving else { return }
         Feel.tick()
+        readToken += 1
         go(to: 0, lead: nil)
     }
     private func go(to s: Int, lead: Int?) {
@@ -149,9 +156,11 @@ final class UploadState {
     /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in (while
     /// finding, neither closes: finding holds the 25% and owns the map's presses; × cancels)
     func close() {
+        guard !busy else { return }
         // leaving the review (a pull down): the finds wait (9.6)
         if phase == .review { leave(); return }
         guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
+        readToken += 1
         if phase == .words { endWords(close: true); return }
         job += 1
         let me = job
@@ -170,6 +179,7 @@ final class UploadState {
     private func pick() { picking = true }
     func picked(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
+        let t = readToken
         Task {
             var out: [HistoryReader.Sample] = []
             for it in items {
@@ -184,22 +194,24 @@ final class UploadState {
                 guard let d = try? await it.loadTransferable(type: Data.self), let s = PhotosReader.sample(imageData: d) else { continue }
                 out.append(HistoryReader.Sample(lat: s.lat, lon: s.lon, at: s.at, offset: s.offset, end: nil, asset: it.itemIdentifier))
             }
-            found(out, from: .photos, read: items.count)
+            found(out, from: .photos, read: items.count, token: t)
         }
     }
     /// All: Photos access asked at this press only; refused, the word says so and leads to Settings
     private func all() {
         if note[2] != nil { openSettings(); return }
+        let t = readToken
         Task {
-            guard await PhotosReader.ask() else { refuse(2, "Allow Photos in Settings"); return }
+            guard await PhotosReader.ask() else { if t == readToken { refuse(2, "Allow Photos in Settings") }; return }
             let (s, skipped) = await PhotosReader.samples()
-            found(s, from: .photos, read: s.count + skipped)
+            found(s, from: .photos, read: s.count + skipped, token: t)
         }
     }
     /// File: the Files picker, JSON, several at once (Takeout's monthly files go in together)
     private func file() { importing = true }
     func imported(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
+        let t = readToken
         Task.detached(priority: .userInitiated) {
             var out: [HistoryReader.Sample] = []
             var unreadable = 0, notHistory = 0
@@ -214,7 +226,7 @@ final class UploadState {
             let why: String? = !got.isEmpty || urls.isEmpty ? nil
                 : unreadable == urls.count ? "Couldn't read this file"
                 : notHistory > 0 && unreadable == 0 ? "That file is not a location history" : nil
-            await MainActor.run { UploadState.shared.found(got, from: .history, read: urls.count, why: why) }
+            await MainActor.run { UploadState.shared.found(got, from: .history, read: urls.count, why: why, token: t) }
         }
     }
     /// Here: one fix, When In Use asked at this press only; the icon gives way to the working mark while it waits
@@ -222,14 +234,16 @@ final class UploadState {
         if note[5] == "Allow Location in Settings" { openSettings(); return }
         guard !locating else { return }
         withAnimation(Motion.quick) { note[5] = nil; locating = true }
+        let t = readToken
         Task {
             let r = await OneFix.shared.get()
+            guard t == readToken else { return }
             withAnimation(Motion.quick) { locating = false }
             switch r {
             case .fix(let l):
                 Feel.land(speed: 0)
                 found([HistoryReader.Sample(lat: l.coordinate.latitude, lon: l.coordinate.longitude, at: l.timestamp,
-                                            offset: nil, end: nil, asset: nil)], from: .history, read: 1)
+                                            offset: nil, end: nil, asset: nil)], from: .history, read: 1, token: t)
             case .refused: refuse(5, "Allow Location in Settings")
             case .none: refuse(5, "Can't find you")
             }
@@ -244,11 +258,12 @@ final class UploadState {
     }
 
     /// what was read: finding starts (A9.4): the pair out, then the caption (World / 0 / found), the mark and the ×
-    private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int, why: String? = nil) {
+    private func found(_ s: [HistoryReader.Sample], from src: MarkSource, read n: Int, why: String? = nil, token: Int? = nil) {
+        NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
+        // a read from a sheet or step that has gone since is dropped
+        guard token == nil || token == readToken, let w = water, w.upload, phase == .choosing, !moving else { return }
         samples = s; source = src
         failed = why
-        NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
-        guard let w = water, w.upload, phase == .choosing else { return }
         job += 1
         let me = job
         moving = true
@@ -395,13 +410,16 @@ final class UploadState {
     /// LEAVING THE REVIEW (A9.13: a pull down): the go circle shrinks into its centre and the caption rolls back to
     /// your count; the finds stay darkened on the map, waiting, and are kept for the next launch
     private func leave() {
-        guard let w = water, phase == .review else { return }
+        guard let w = water, phase == .review, !busy else { return }
         Feel.land(speed: 0)
+        busy = true
         job += 1
         let me = job
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
-        save()
+        // every find dropped: nothing is left waiting (the way to let a whole upload go)
+        if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            busy = false
             guard me == job else { return }
             phase = .choosing; step = 0
             w.uploadFrom = nil
@@ -429,12 +447,19 @@ final class UploadState {
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
     }
+    /// SIGN OUT: another account must never see these finds
+    func signedOut() {
+        job += 1
+        map?.found = []
+        forget()
+    }
     /// nothing waits any more (go, ×): the file goes too
     private func forget() {
         order = []; dropped = []; finds = []
         if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
     }
-    /// at launch, once the map is loaded: the waiting finds back, darkened (those stamped since are left out)
+    /// at launch, once the map is loaded: the waiting finds back, darkened (a place stamped since is not drawn darkened;
+/// at the review it reads "+n trips")
     func restoreWaiting(map m: MapController) {
         guard let url = Self.waitingURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(Waiting.self, from: d),
               let w = m.world else { return }
@@ -457,7 +482,7 @@ final class UploadState {
     /// THE REVIEW: a found country tapped is dropped (its darkening goes in one frame, the number rolls down) or kept
     /// again; true when the tap was the review's
     func tap(_ i: Int) -> Bool {
-        guard phase == .review, let m = map, order.contains(i) else { return false }
+        guard phase == .review, !busy, let m = map, order.contains(i) else { return false }
         Feel.tap()
         if dropped.contains(i) { dropped.remove(i); m.found.insert(i) } else { dropped.insert(i); m.found.remove(i) }
         withAnimation(Motion.quick) { count = order.count - dropped.count }
@@ -468,10 +493,12 @@ final class UploadState {
     /// shrinks into its centre, the caption's tail rolls back to "of 263" and the number to your count (the map's
     /// colours change in one frame as the write lands); then the sheet gives the water back
     func go() {
-        guard phase == .review, let m = map, let world = m.world, let w = water else { return }
+        guard phase == .review, !busy, let m = map, let world = m.world, let w = water else { return }
         let kept = order.filter { !dropped.contains($0) }
         guard !kept.isEmpty else { Feel.refuse(); return }
         Feel.stamp()
+        // from here until the write has landed, taps, pulls and a second go wait
+        busy = true
         job += 1
         let me = job
         let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
@@ -487,13 +514,21 @@ final class UploadState {
         // above 25% the water comes down first (the rows roll out as it passes 50%)
         if w.stop != .quarter { w.go(.quarter) }
         Task {
-            await MarkStore.shared.importFinds(rows, source: src, words: "\(n) \(n == 1 ? "place" : "places") from your \(src == .photos ? "photos" : "history")")
+            let ok = await MarkStore.shared.importFinds(rows, source: src, words: "\(n) \(n == 1 ? "place" : "places") from your \(src == .photos ? "photos" : "history")")
+            guard ok else {
+                // the store refused the write: nothing was stamped, the finds stay and the review comes back
+                Feel.refuse()
+                busy = false
+                withAnimation(Motion.quick) { captionIn = true; goIn = true }
+                return
+            }
             m.found = []
+            forget()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                busy = false
                 guard me == job else { return }
                 Feel.land(speed: 0)
                 phase = .choosing; step = 0; count = 0
-                forget()
                 w.uploadFrom = .quarter
                 w.closeUpload()
             }
@@ -503,7 +538,7 @@ final class UploadState {
     /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls back
     /// to your count and the tail to "of 263" (the sheet closes into the caption); the water stays at 25%
     func cancel() {
-        guard let w = water, phase == .finding || phase == .review else { return }
+        guard let w = water, phase == .finding || phase == .review, !busy else { return }
         Feel.tap()
         job += 1
         map?.found = []
