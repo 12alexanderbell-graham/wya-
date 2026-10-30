@@ -264,7 +264,7 @@ final class Water {
         let moving = grab != nil || !body.settled || !dropSpring.settled
         if !moving {
             body.snap(); dropSpring.snap()
-            if landingSpeed > 0 { Feel.land(speed: landingSpeed); Sound.land(landingSpeed / 2400); landingSpeed = 0 }
+            if landingSpeed > 0 { Feel.land(speed: landingSpeed); landingSpeed = 0 }
         }
         pubLevel = body.value
         pubDrop = dropSpring.value
@@ -274,8 +274,6 @@ final class Water {
     }
 
     private func publish() {
-        // the flow sound under the water's drag and settle (Part 2.3), by the body's speed
-        Sound.flow("water", speed: abs(body.velocity))
         if level != pubLevel { level = pubLevel }
         if drop != pubDrop { drop = pubDrop }
     }

@@ -138,6 +138,12 @@ nonisolated final class MorphIndex: @unchecked Sendable {
         return true
     }
 
+    /// whether the coarse level has anyone's land at a point (not in one of its lakes)
+    func anyLand(_ p: SIMD2<Float>) -> Bool {
+        for (k, _) in ringsOf where k >= 0 { if land(p, place: Int(k)) { return true } }
+        return false
+    }
+
     /// A LINE OF ITS OWN (not along a ring): the points that lie on the coarse outline are laid on it; each other point
     /// is held at the nearer of the anchors either side of it along the line (each laid on its own nearest place, one
     /// line drew a long double stroke across Norway at the band's start); a line with no point on the coarse outline
@@ -247,7 +253,8 @@ nonisolated final class MorphIndex: @unchecked Sendable {
                 ds.sort()
                 let median = ds.isEmpty ? 0 : ds[ds.count / 2]
                 let wide = simd_length(hi - lo)
-                let counterpart = own > 0 && median <= wide / 6
+                // and at least half its points found an outline of its place within reach at all
+                let counterpart = own > 0 && median <= wide / 6 && median < maxR
                 #if DEBUG
                 if let pr = Self.probe, pr.x >= lo.x - 0.05, pr.x <= hi.x + 0.05, pr.y >= lo.y - 0.05, pr.y <= hi.y + 0.05 {
                     Self.note(String(format: "probe ring place %d n %d cut %d median %.4f wide %.4f counterpart %d votes %@ box %.3f %.3f %.3f %.3f",
@@ -255,6 +262,10 @@ nonisolated final class MorphIndex: @unchecked Sendable {
                 }
                 #endif
                 if !counterpart {
+                    // land the coarser level has too, only drawn with another place (a border the finer level draws
+                    // differently: the Aouzou strip, Bir Tawil): it is there from the start and stays where it is; growing
+                    // it from a point showed the sea through a hole the shape of the tile
+                    if wide > 0.5 && anyLand((lo + hi) / 2) { continue }
                     if nCut > 0 {
                         // a ring the coarser level doesn't have, cut by the tile's edge (a lake across two tiles): the
                         // whole ring, its cut points too, goes to the middle of its points on the cut edge, the same
@@ -281,7 +292,9 @@ nonisolated final class MorphIndex: @unchecked Sendable {
                 // along the tile's side; sent to any shore, a lake became a triangle between three lakes)
                 let target = votes.max(by: { $0.value < $1.value })?.key ?? -1
                 for (k, i) in r.enumerated() where cut[i] {
-                    if pin[i] || place < 0 || land(points[i], place: place) { near[k] = (points[i], -1, 0, 0); continue }
+                    // (anyone's land: where the finer level draws a border the coarser one doesn't have, the land is
+                    // there in both, and the ring on the other side of the cut keeps its point there too)
+                    if pin[i] || place < 0 || land(points[i], place: place) || anyLand(points[i]) { near[k] = (points[i], -1, 0, 0); continue }
                     if let h = nearest(points[i], place: place, maxR: 3 * maxR, ring: target) { near[k] = (h.q, -1, 0, h.d) }
                     else { near[k] = (points[i], -1, 0, 0) }
                 }
@@ -398,6 +411,24 @@ nonisolated final class MorphIndex: @unchecked Sendable {
                         }
                     }
                 }
+            }
+        }
+        // NO RING IS EVER LAID OUT WIDER THAN IT IS: a ring whose morph start spreads far wider than the ring itself (a
+        // lake or a small island the rules above laid along a long stretch of a coarse outline, drawing its shore as a
+        // big triangle across the land half way through the band) grows out of its own centre instead, as a ring the
+        // coarser level doesn't have does
+        for rs in rings {
+            for r in rs where r.count >= 3 {
+                var a0 = SIMD2<Float>(repeating: .greatestFiniteMagnitude), a1 = -a0
+                var b0 = a0, b1 = -a0
+                for i in r { a0 = simd_min(a0, points[i]); a1 = simd_max(a1, points[i]); b0 = simd_min(b0, out[i]); b1 = simd_max(b1, out[i]) }
+                let w = simd_length(a1 - a0), fw = simd_length(b1 - b0)
+                // only a whole ring inside the tile: a piece cut by the tile's edge is laid by the cut-edge rule above
+                guard fw > 1.5 * w + 0.01, !r.contains(where: { cut[$0] }) else { continue }
+                var c = SIMD2<Float>(0, 0)
+                for i in r { c += points[i] }
+                c /= Float(r.count)
+                for i in r { out[i] = c }
             }
         }
         return out

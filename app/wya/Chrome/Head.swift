@@ -98,7 +98,6 @@ final class HeadState {
             if self.pullStop == 0 && self.pull < 0.5 { self.pullFromGear = false }
         }
         Feel.land(speed: speed)
-        Sound.land(speed / 2400)
     }
 
     /// the AI's part of the pull as the dot morph draws it (after the gear has gone, when the pull started from it)
@@ -268,7 +267,7 @@ struct HeadView: View {
         .onChange(of: head.dotHeld) { _, held in
             if held {
                 guard !head.settingsOpen else { return }
-                Feel.tick(); Sound.tick()
+                Feel.tick()
                 withAnimation(.timingCurve(0.3, 0, 0.2, 1, duration: TopPull.holdForm)) { head.gear = 1 } completion: {
                     guard head.dotHeld, !head.settingsOpen else { return }
                     head.openSettings()

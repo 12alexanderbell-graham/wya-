@@ -127,12 +127,9 @@ final class Clock: NSObject {
         var moving: [ObjectIdentifier: Bool] = [:]
         while carry >= h {
             carry -= h
-            // the step first: `moving[k] || s(h)` stopped stepping a body after its first step in a tick, so
-            // everything ran at one step per frame, not 240 a second (half speed at 120 Hz, a quarter at 52 Hz)
-            for (k, s) in bodies {
-                let m = s(CGFloat(h))
-                moving[k] = (moving[k] ?? false) || m
-            }
+            // as it was when he approved the water's feel: a body steps once per tick here (`||` skips the rest), and
+            // every spring was tuned so
+            for (k, s) in bodies { moving[k] = (moving[k] ?? false) || s(CGFloat(h)) }
         }
         for (k, f) in frames where bodies[k] != nil { f() }
         for (k, m) in moving where !m { bodies[k] = nil; frames[k] = nil }

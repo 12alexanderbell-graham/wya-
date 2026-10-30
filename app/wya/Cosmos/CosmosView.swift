@@ -33,17 +33,10 @@ struct CosmosView: View {
     @State private var heldTween = Tween(0)
     @State private var moonStop = 0
     @State private var start = Date()
-    /// A2.10: the planet the moon goes into on a turn (the old chosen one), and whether the moon was already in when
-    /// the turn began (then it stays in until the turn lands)
-    @State private var moonFrom = 2
-    @State private var moonStartsIn = false
-    /// A2.13 / A2.14: the streak (the sun's size) and each planet's share (its night) ease to a new value over 0.6 s
-    @State private var sunEase: Ease1?
-    @State private var shareEase: [Ease1]?
 
     static let step = 2 * Double.pi / 8
     static let front = Double.pi / 2
-    static var omega: Double { 2 * Double.pi / (Motion.reduce ? 0.28 : 0.44) }
+    static let omega = 2 * Double.pi / 0.44
 
     /// the moon's five stops: Both at the top
     static let stops = ["Both", "Stamped", "Stamped+", "Wishlist+", "Wishlist"]
@@ -90,11 +83,12 @@ struct CosmosView: View {
     private func room() -> Room {
         let L = water.layout
         let p = form.page
-        // at 50% the ring sits between the caption's foot (the top + 130) and the tabs; under 50% it stays there and
-        // goes into the sun (A2.12: `sink`), never down over the tabs
+        // at 50% the ring sits between the caption's foot (the top + 130) and the tabs; under 50% it sinks with the
+        // water and on down past the bottom, faster than the edge, so at 25% it is gone below the screen
         let halfTop = L.top(.half)
+        let below = max(0, form.top - halfTop)
         let lo = halfTop + 130, hi = L.capsule.minY - 20
-        let ringY = (lo + hi) / 2
+        let ringY = (lo + hi) / 2 + below * 1.7
         let cy = Flow.lerp(ringY, L.H * 0.5, p)
         let rx = min(L.W * 0.38, 178)
         let ry = min(rx * 0.5, (hi - lo) / 2 - 22)
@@ -132,13 +126,7 @@ struct CosmosView: View {
         let persp = Flow.lerp(0.56 + 0.64 * depth, 0.85 + 0.30 * depth, CGFloat(fk))
         let ringSize = 27 * pl.size
         let fullSize = CGFloat(13 * pow(pl.wide, 0.33))
-        // A2.9: the boost follows each planet's own place on the ring (1.3x at the front, none 45 degrees away), so it
-        // changes with the turn, never with the tap
-        var off = (th + Double(i) * Self.step - Self.front).truncatingRemainder(dividingBy: 2 * .pi)
-        if off > .pi { off -= 2 * .pi }
-        if off < -.pi { off += 2 * .pi }
-        let close = max(0, 1 - abs(off) / (Double.pi / 4))
-        let boost = 1 + 0.3 * CGFloat(close) * CGFloat(1 - fk)
+        let boost: CGFloat = i == chosen ? 1 + 0.3 * CGFloat(1 - fk) : 1
         let size = Flow.lerp(ringSize, fullSize, CGFloat(fk)) * CGFloat(persp) * boost
         // rolling as it travels: two turns a lap, the other way to its travel, and the chosen one turning by itself on
         // top of that
@@ -164,36 +152,24 @@ struct CosmosView: View {
     var body: some View {
         let L = water.layout
         let r = room()
-        let target = Self.shares(map)
+        let shares = Self.shares(map)
         let hidden = form.top > L.top(.quarter) - 20
         let busy = water.held || moonHeld || trail.moving(moonAngle) || heldTween.moving(Date())
             || (form.page > 0.001 && form.page < 0.999) || Date().timeIntervalSince(ringStart) < 1
-            || sunEase?.moving(Date()) == true || shareEase?.contains { $0.moving(Date()) } == true
-        // A2.12: under 50% the planets, the moon and the orbits go into the sun's centre as one (their top kept 12 pt
-        // under the caption's foot); then the sun goes under the caption's number as its line passes over it
-        let into = r.cy - 138
-        let sink = min(1, max(0, (into - form.top) / (r.ry + 15)))
-        let sunUnder = 1 - min(1, max(0, (form.top - into) / 58))
-        let anchor = UnitPoint(x: r.cx / L.W, y: r.cy / L.H)
-        // full speed while anything moves (120 a second on ProMotion phones, as the map runs: a ring at 60 judders
-        // against it, 2.10); at rest the slow things (the spin, the sun's plasma) at 15 a second
-        TimelineView(.animation(minimumInterval: busy || fullSince != nil ? 1.0 / 120 : 1.0 / 15, paused: hidden)) { ctx in
+        // full speed while anything moves; at rest the slow things (the spin, the sun's plasma) at 15 a second
+        TimelineView(.animation(minimumInterval: busy || fullSince != nil ? 1.0 / 60 : 1.0 / 15, paused: hidden)) { ctx in
             let now = ctx.date
             let (th, _) = theta(now)
             let items = (0 ..< 8).map { place($0, th: th, now: now, r: r) }
-            let shares = shareEase.map { e in e.map { CGFloat($0.at(now)) } } ?? target
+            let host = items[chosen]
             let sunC = CGPoint(x: r.cx, y: r.cy)
-            // A2.10: by the turn's progress rr: the moon goes into the old planet over the first 30%, its host changes
-            // while it is in, and it comes out of the new one over the last 30%
-            let span = abs(ringFrom - ringTo)
-            let rr = CGFloat(span < 1e-6 ? 1 : min(1, max(0, 1 - abs(th - ringTo) / span)))
-            let ringOut = max(moonStartsIn ? 0 : 1 - Flow.smooth(0, 0.3, rr), Flow.smooth(0.7, 1, rr))
-            let host = items[!moonStartsIn && rr < 0.3 ? moonFrom : chosen]
-            // the moon: only round the chosen planet, at 50%, while the ring stands still; it grows out of the planet
-            // and goes back into it (never fades). Every part follows something continuous, so it is seen whole on
-            // every frame: the ring's distance from where it is going (it goes in as the ring sets off and comes out as
-            // it lands) and the move to full the chosen planet's moon stays with it when the sun is picked too
-            let moonOut: CGFloat = ringOut * (1 - Flow.smooth(0, 0.25, form.page))
+            // the moon: only round the chosen planet, at 50%, while the ring stands still; it grows out of the
+            // planet and goes back into it (never fades). Every part follows something continuous, so it is seen
+            // whole on every frame: the ring's distance from where it is going (it goes in as the ring sets off and comes
+            // out as it lands) and the move to full
+            let settle = 1 - Flow.smooth(0.03, 0.30, CGFloat(abs(th - ringTo)))
+            // the chosen planet's moon stays with it when the sun is picked too
+            let moonOut: CGFloat = settle * (1 - Flow.smooth(0, 0.25, form.page))
             let held = CGFloat(heldTween.at(now))
             ZStack(alignment: .topLeading) {
                 // the orbits, from the planets' own numbers: at 50% all eight lie on the ring (so they read as one
@@ -206,20 +182,18 @@ struct CosmosView: View {
                         p.addEllipse(in: CGRect(x: sunC.x - rx, y: sunC.y - ry, width: rx * 2, height: ry * 2))
                     }
                 }
-                .stroke(FullView.night(form.page) ? Palette.white : Palette.ink.opacity(0.5), lineWidth: 0.7 / max(0.05, sink))
-                .scaleEffect(sink, anchor: anchor)
+                .stroke(FullView.night(form.page) ? Palette.white : Palette.ink.opacity(0.5), lineWidth: 0.7)
                 ForEach(items.filter { $0.depth < 0.5 }.sorted { $0.depth < $1.depth }, id: \.i) { it in
                     planetView(it, shares: shares, sun: sunC)
-                        .scaleEffect(sink, anchor: anchor)
                 }
                 // THE SUN IS THE STREAK'S SIZE, always, and only that: picking it only shows the number. From 0.8 of
                 // its size with no streak to 1.3 at 8 weeks, then on far more slowly, so two months, a year and ten
                 // years still differ
-                let w = CGFloat(max(0, sunEase?.at(now) ?? Double(map.streakWeeks)))
+                let w = CGFloat(max(0, map.streakWeeks))
                 let g = w <= 8 ? log(1 + w) / log(9) : min(1.3, 1 + 0.3 * log(w / 8) / log(65))
                 // at 50% the ring is close round it: it grows no further than the 8-week size there, opening up to the
                 // full growth as the ring opens into the orbits
-                let sunSize = Flow.lerp(46, 40, form.page) * (0.68 + 0.62 * min(g, Flow.lerp(1, 1.3, form.page))) * max(0.001, sunUnder)
+                let sunSize = Flow.lerp(46, 40, form.page) * (0.68 + 0.62 * min(g, Flow.lerp(1, 1.3, form.page)))
                 SunView(size: sunSize, time: now.timeIntervalSince(start), flare: min(1, g), glow: 0,
                         heat: SunView.heat(weeks: w), swell: Flow.lerp(0.35, 1, form.page))
                     .position(sunC)
@@ -238,21 +212,16 @@ struct CosmosView: View {
                 let tail = trail.follow(moonAngle, at: now)
                 if moonAngle.sin < 0 {
                     moonTrail(host, from: tail, out: moonOut, disc: moonDisc(host, out: moonOut, held: held))
-                        .scaleEffect(sink, anchor: anchor)
                     moon(host, out: moonOut, held: held, sun: sunC, now: now)
-                        .scaleEffect(sink, anchor: anchor)
                 }
                 ForEach(items.filter { $0.depth >= 0.5 }.sorted { $0.depth < $1.depth }, id: \.i) { it in
                     planetView(it, shares: shares, sun: sunC)
-                        .scaleEffect(sink, anchor: anchor)
                 }
                 if moonAngle.sin >= 0 {
                     moonTrail(host, from: tail, out: moonOut, disc: moonDisc(host, out: moonOut, held: held))
-                        .scaleEffect(sink, anchor: anchor)
                     moon(host, out: moonOut, held: held, sun: sunC, now: now)
-                        .scaleEffect(sink, anchor: anchor)
                 }
-                if moonOut > 0.5 && sink > 0.99 { moonHandle(host) }
+                if moonOut > 0.5 { moonHandle(host) }
             }
             .frame(width: L.W, height: L.H, alignment: .topLeading)
             // ONE GPU PASS FOR THE WHOLE SYSTEM (Step 1c): each planet's, ring's and the sun's shader was its own
@@ -277,26 +246,13 @@ struct CosmosView: View {
         .onChange(of: form.page >= 0.999) { _, full in
             let now = Date()
             if full { fullSince = now } else if let s = fullSince {
-                // A2.16: the moment it leaves full each orbit's turn is wrapped to within half a lap (the same point
-                // on the orbit), so on the way down each planet goes the short way back to its slot (its turn x p)
-                for i in 0 ..< 8 {
-                    let a = orbitFrozen[i] + Self.orbitSpeed(i) * now.timeIntervalSince(s)
-                    orbitFrozen[i] = remainder(a, 2 * .pi)
-                }
+                for i in 0 ..< 8 { orbitFrozen[i] += Self.orbitSpeed(i) * now.timeIntervalSince(s) }
                 fullSince = nil
-                // a planet chosen at full came to the front of its orbit; on the way down the ring turns so it is at
-                // the front of the ring again when the orbits have closed (A2.18)
-                aim(Self.front - Double(chosen) * Self.step, now: now)
             }
         }
-        .onChange(of: map.streakWeeks, initial: true) { old, w in
-            let now = Date()
-            if sunEase == nil || old == w { sunEase = Ease1(Double(w)) } else { sunEase?.go(Double(w), now: now) }
-        }
-        .onChange(of: target, initial: true) { old, v in
-            let now = Date()
-            if shareEase == nil || shareEase?.count != v.count || old == v { shareEase = v.map { Ease1(Double($0)) } }
-            else { for i in v.indices { shareEase?[i].go(Double(v[i]), now: now) } }
+        .onChange(of: form.page < 0.001) { _, half in
+            // back at 50%: the orbits' own turns ease home with the ring, so the chosen planet is at the front again
+            if half { withAnimation(Motion.chrome) { orbitFrozen = orbitFrozen.map { $0 - ($0 / (2 * .pi)).rounded() * 2 * .pi } } }
         }
     }
 
@@ -315,6 +271,7 @@ struct CosmosView: View {
             .position(it.pos)
             .contentShape(Circle().inset(by: -6))
             .onTapGesture { select(it.i) }
+            .allowsHitTesting(form.page < 0.5)
             .accessibilityElement()
             .accessibilityLabel("\(pl.k == "World" ? "The world" : pl.k), \(Int((share * 100).rounded())) percent")
             .accessibilityAddTraits(.isButton)
@@ -324,32 +281,18 @@ struct CosmosView: View {
     private func select(_ i: Int) {
         let now = Date()
         let (th, _) = theta(now)
-        // where the moon is now: out (it goes into the planet it is on) or not (it stays in until the turn lands)
-        let span = abs(ringFrom - ringTo)
-        let rr = CGFloat(span < 1e-6 ? 1 : min(1, max(0, 1 - abs(th - ringTo) / span)))
-        let out = max(moonStartsIn ? 0 : 1 - Flow.smooth(0, 0.3, rr), Flow.smooth(0.7, 1, rr))
-        let onNow = !moonStartsIn && rr < 0.3 ? moonFrom : chosen
-        moonStartsIn = out < 0.5
-        moonFrom = onNow
-        // at full the chosen one comes to the front of its own orbit (A2.18): the shared angle less its orbit's turn
-        aim(Self.front - Double(i) * Self.step - orbitAngle(i, now) * Double(form.page), now: now)
+        let v = thetaVelocity(now)
+        var to = Self.front - Double(i) * Self.step
+        while to - th > .pi { to -= 2 * .pi }
+        while to - th < -.pi { to += 2 * .pi }
         // the chosen one keeps the turn it had made by itself
         ownSpin[chosen] += now.timeIntervalSince(spinSince) / Self.planets[chosen].turn
         spinSince = now
+        ringFrom = th; ringTo = to; ringV = v; ringStart = now
         chosen = i
         map.sunPicked = false
         Feel.tap(); Sound.tap()
         map.show(continent: Self.planets[i].k)
-    }
-
-    /// turns the ring the short way to an angle, carrying on from however it is moving now
-    private func aim(_ angle: Double, now: Date) {
-        let (th, _) = theta(now)
-        let v = thetaVelocity(now)
-        var to = angle
-        while to - th > .pi { to -= 2 * .pi }
-        while to - th < -.pi { to += 2 * .pi }
-        ringFrom = th; ringTo = to; ringV = v; ringStart = now
     }
 
     private func pickSun() {
@@ -583,27 +526,6 @@ struct SunView: View {
 /// A value easing from one number to another over a time, read at any moment (so things drawn inside a timeline are
 /// seen whole on every frame, with no SwiftUI animation that a redraw could skip). The curve is a smoothstep: it
 /// starts and ends at rest, no bounce.
-/// A value easing to a new one on a critically damped spring of response 0.6 s (A2.13, A2.14: 47%, 82%, 95% of the
-/// way at a quarter, half and three quarters), retargeted from its value and speed
-struct Ease1: Equatable {
-    var from: Double, to: Double, v0: Double = 0, start = Date.distantPast
-    init(_ v: Double) { from = v; to = v }
-    static var w: Double { 2 * Double.pi / (Motion.reduce ? 0.35 : 0.6) }
-    func at(_ now: Date) -> Double {
-        let t = max(0, now.timeIntervalSince(start)), d = from - to
-        return to + (d + (v0 + Self.w * d) * t) * exp(-Self.w * t)
-    }
-    func speed(_ now: Date) -> Double {
-        let t = max(0, now.timeIntervalSince(start)), d = from - to, b = v0 + Self.w * d
-        return (b - Self.w * (d + b * t)) * exp(-Self.w * t)
-    }
-    func moving(_ now: Date) -> Bool { now.timeIntervalSince(start) < 1.2 }
-    mutating func go(_ v: Double, now: Date) {
-        let x = at(now), s = speed(now)
-        from = x; v0 = s; to = v; start = now
-    }
-}
-
 struct Tween: Equatable {
     var from: Double
     var to: Double
@@ -620,6 +542,89 @@ struct Tween: Equatable {
     mutating func go(_ v: Double, dur d: Double, delay: Double = 0) {
         let now = Date()
         from = at(now); to = v; dur = d; start = now.addingTimeInterval(delay)
+    }
+}
+
+/// The night that the water darkens into past half: his galaxy picture (the cosmos-126 colours) and a star for every
+/// place you haven't stamped, in three layers drifting slowly, some twinkling. It never fades in: it rises up through
+/// the water from under the bottom edge, a curved tide whose top catches the water's own top edge just as the page
+/// fills the screen; going back it sinks the same way.
+struct NightSky: View {
+    let page: CGFloat
+    var stars: Int = 0
+    /// the water's top edge now (0 at full)
+    var edge: CGFloat = 0
+    @State private var start = Date()
+
+    var body: some View {
+        GeometryReader { geo in
+            if page > 0.001 {
+                let H = geo.size.height
+                let s = Flow.smooth(0, 1, page)
+                // the curve's middle starts just under the screen and ends far enough over the edge that its sides
+                // (lower by the curve's depth) are past the edge too
+                let tide = Flow.lerp(H + 8, edge - NightTide.depth - 8, s)
+                ZStack {
+                    Color(red: 0.075, green: 0.094, blue: 0.165)
+                    Textures.image("space-night")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                    TimelineView(.animation(minimumInterval: 1.0 / 20)) { ctx in
+                        Stars(count: stars, time: ctx.date.timeIntervalSince(start))
+                    }
+                }
+                .clipShape(NightTide(top: tide))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// The night's top: a curve, the middle a little ahead of the sides like the water's own top, never a straight line.
+nonisolated struct NightTide: Shape {
+    static let depth: CGFloat = 56
+    var top: CGFloat
+    var animatableData: CGFloat { get { top } set { top = newValue } }
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let side = top + Self.depth
+        p.move(to: CGPoint(x: rect.minX - 1, y: side))
+        p.addCurve(to: CGPoint(x: rect.maxX + 1, y: side),
+                   control1: CGPoint(x: rect.minX + rect.width * 0.25, y: top - Self.depth * 0.33),
+                   control2: CGPoint(x: rect.maxX - rect.width * 0.25, y: top - Self.depth * 0.33))
+        p.addLine(to: CGPoint(x: rect.maxX + 1, y: rect.maxY + 400))
+        p.addLine(to: CGPoint(x: rect.minX - 1, y: rect.maxY + 400))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// The stars: one per place left, placed once (the same sky every time), drifting left in three layers.
+struct Stars: View {
+    let count: Int
+    let time: Double
+    var body: some View {
+        Canvas { ctx, size in
+            var g = SeededRandom(seed: 987654)
+            let speeds: [Double] = [0.8, 1.6, 2.8]
+            for i in 0 ..< count {
+                let u = g.next(), v = g.next(), s = g.next(), tw = g.next(), ph = g.next()
+                let layer = i % 3
+                var x = u * Double(size.width) - time * speeds[layer]
+                x = x.truncatingRemainder(dividingBy: Double(size.width)); if x < 0 { x += Double(size.width) }
+                let y = v * Double(size.height)
+                // a clear space round the sun in the middle
+                let dx = x - Double(size.width) / 2, dy = y - Double(size.height) / 2
+                if dx * dx + dy * dy < 62 * 62 { continue }
+                let r = 0.8 + s * 0.65 + (layer == 2 ? 0.35 : 0)
+                // three in ten twinkle, softly
+                let a = tw < 0.3 ? 0.3 + 0.6 * (0.5 - 0.5 * cos((time / 5.5 + ph) * 2 * .pi)) : 0.4 + s * 0.45
+                ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)),
+                         with: .color(Palette.white.opacity(a)))
+            }
+        }
     }
 }
 
