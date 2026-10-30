@@ -203,6 +203,7 @@ final class TestDriver {
                     let ms = Int((CACurrentMediaTime() - t0) * 1000)
                     let line = "borders \(a) picks \(picks) -> \(ok) in \(ms) ms; caption \(map?.count.n ?? -1) of \(map?.count.of ?? -1); dotted \(Borders.dottedPlaces.count)"
                     try? line.write(toFile: Snap.dir + "/borders.log", atomically: true, encoding: .utf8)
+                case "shake": NotificationCenter.default.post(name: .wyaShake, object: nil)
                 case "marks":
                     // every mark in the store (stamped, then wished), and the places not in the debug demo set
                     let ms = MarkStore.shared.marks
