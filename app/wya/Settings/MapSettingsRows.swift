@@ -21,7 +21,7 @@ struct SettingRow: Identifiable {
 
     func valueName(_ s: MapSettings) -> String {
         let v = get(s)
-        return choices?.first { $0.id == v }?.name ?? v
+        return MapSettingsRows.choices(self, s).first { $0.id == v }?.name ?? v
     }
 }
 

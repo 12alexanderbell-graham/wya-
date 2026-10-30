@@ -28,6 +28,38 @@ final class Water {
     private(set) var stop: Stop = .quarter
     /// true while a finger holds the water
     private(set) var held = false
+    /// MAP SETTINGS are the water's content (Part 5.2): set while the gear is out; `settingsFrom` is the stop the water
+    /// was at before, where it goes back to when they close
+    var settings = false
+    /// the rows' words are in (they roll in once the old content has gone, and out before it comes back)
+    var settingsWords = false
+    @ObservationIgnored var settingsFrom: Stop?
+
+    /// MAP SETTINGS OPEN (A5.1): the water rises to 50% if it is lower (at 50% or full it stays), the caption's words
+    /// roll out and the Cosmos moves down out of the water; then the rows' words roll in
+    func openSettings() {
+        guard !settings else { return }
+        settingsFrom = stop
+        settings = true
+        if stop == .closed || stop == .quarter { go(.half) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self, self.settings else { return }
+            withAnimation(Motion.quick) { self.settingsWords = true }
+        }
+    }
+    /// MAP SETTINGS CLOSE (A5.2): the rows' words roll out first; then the water goes back to the stop it was at (or
+    /// stays where a pull's release took it) and the Cosmos and the caption come back by their own rules
+    func closeSettings() {
+        guard settings else { return }
+        withAnimation(.smooth(duration: 0.15)) { settingsWords = false }
+        let back = settingsFrom
+        settingsFrom = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard let self, !self.settingsWords else { return }
+            self.settings = false
+            if let back, self.stop == .half, back != .half, self.grab == nil { self.go(back) }
+        }
+    }
     /// THE START CREDIT (BUILD-BOOK 1.4, A1.20): the OpenStreetMap words on the water; once at every cold launch, for
     /// 5 s or until the first touch on the map
     var credit = false

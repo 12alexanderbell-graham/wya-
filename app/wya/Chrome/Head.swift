@@ -57,6 +57,11 @@ final class HeadState {
         closeSettings()
         if pullStop > 0 || pull > 0.5 { settlePull(to: 0) }
     }
+    /// A TOUCH ON THE WATER (Part 3.9, with the Map settings sheet built): the AI goes back into the dot, settings stay
+    /// (the water is the settings: it scrolls, its rows are tapped, it is pulled)
+    func putAwayAI() {
+        if pullStop > 0 || pull > 0.5 { settlePull(to: 0) }
+    }
     // MARK: the top pull (TopPullView's finger, and the tests, run these)
     @ObservationIgnored private var pullStart: CGFloat = 0
     @ObservationIgnored private var pullGearStart: CGFloat = 0
