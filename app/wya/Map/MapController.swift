@@ -294,7 +294,7 @@ final class MapController {
         guard let (w, r) = loaded else { return }
         world = w
         // who borders whom (D19), worked out once in the background for search's suggestions
-        Task.detached(priority: .utility) { _ = w.neighbours }
+        Task.detached(priority: .utility) { _ = w.neighbours; _ = w.otherLanguageNames }
         relief = r
         // YOUR MARKS, from the store (Part 0.2.3: the map reads MarkState per place and listens to marksChanged)
         let marks = MarkStore.shared
@@ -352,7 +352,7 @@ final class MapController {
         guard job == bordersJob, let w = made else { return false }
         world = w
         // who borders whom (D19), worked out once in the background for search's suggestions
-        Task.detached(priority: .utility) { _ = w.neighbours }
+        Task.detached(priority: .utility) { _ = w.neighbours; _ = w.otherLanguageNames }
         takeShapes(w)
         takeMarks(MarkStore.shared)
         recount()

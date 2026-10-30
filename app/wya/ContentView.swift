@@ -319,6 +319,17 @@ struct ContentView: View {
     /// that can't be used now are unavailable (Apple greys them in place). With a card, the book, Details or Verify up,
     /// or Map settings open, the hold only closes them (one press, one job; MapController.touchClosedAt). Not here yet: Lived here, Open
     /// its page, Open its region map, Its places, Add to a list, Add to a plan (their parts are not built).
+    /// the disputes that are whole places (Taiwan, Kosovo, Abkhazia, Western Sahara ...): the place's id -> the dispute's
+    @MainActor static let placeDisputes: [String: String] = {
+        struct D: Decodable { let id: String; let entity: String? }
+        struct F: Decodable { let list: [D] }
+        guard let u = Bundle.main.url(forResource: "disputes", withExtension: "json"), let d = try? Data(contentsOf: u),
+              let f = try? JSONDecoder().decode(F.self, from: d) else { return [:] }
+        var out: [String: String] = [:]
+        for x in f.list { if let e = x.entity, out[e] == nil { out[e] = x.id } }
+        return out
+    }()
+
     /// Asked as the press starts, so it changes nothing itself (the press's own touch does the closing, onTouch).
     /// Sideways (1.11), with search open, or on the press that closed search: no menu.
     @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState) -> UIMenu? {
@@ -404,9 +415,9 @@ struct ContentView: View {
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [passport, share]),
         ]
-        // A DISPUTED PIECE (Crimea, the Kashmir pieces): Whose borders here? opens Map settings at 50% on the Disputes
+        // A DISPUTED PIECE (Crimea, the Kashmir pieces) or a disputed place (Taiwan, Kosovo): Whose borders here? opens Map settings at 50% on the Disputes
         // page at that piece's row; the map does not fly
-        if let piece = map.piece(at: p) {
+        if let piece = map.piece(at: p) ?? Self.placeDisputes[pl.id] {
             sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Whose borders here?") { _ in
                 after {
                     head.openSettings()
