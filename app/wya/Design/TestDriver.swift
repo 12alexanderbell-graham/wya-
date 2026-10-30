@@ -226,7 +226,8 @@ final class TestDriver {
                     case "close": UploadState.shared.close()
                     case "back": UploadState.shared.back()
                     case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
-                    case "read": UploadState.shared.testRead(empty: p.count > 2 && p[2] == "none")
+                    case "read": UploadState.shared.testRead(empty: p.count > 2 && p[2] == "none", more: p.count > 2 && p[2] == "more")
+                    case "more": UploadState.shared.addMore()
                     // upload file <name in snaps>: as Files would hand it over
                     case "file": if p.count > 2 { UploadState.shared.imported([URL(fileURLWithPath: Snap.dir + "/" + p[2])]) }
                     case "cancel": UploadState.shared.cancel()
