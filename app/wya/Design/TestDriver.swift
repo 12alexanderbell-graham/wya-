@@ -214,6 +214,8 @@ final class TestDriver {
                     }
                 // list on|off: the Stamped list, as the caption's number opens and closes it
                 case "list": if a == "off" { water?.closeList() } else { water?.openList() }
+                // listdetails <id>: a row of the Stamped list swiped right (Details from the list, A4.21)
+                case "listdetails": StampedList.testDetails?(a)
                 case "details":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top
