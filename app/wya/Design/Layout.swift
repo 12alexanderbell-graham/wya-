@@ -30,7 +30,7 @@ nonisolated struct Layout: Equatable, Sendable {
     // MARK: the sheet
     var sheetInset: CGFloat { 8 }
     /// the screen's own corner radius; the sheet's is that less its inset, so the two curves run parallel
-    var screenCorner: CGFloat { safeTop >= 47 ? 62 : 44 }
+    var screenCorner: CGFloat { Layout.device(model, safeTop).corner }
     var sheetCorner: CGFloat { screenCorner - sheetInset }
     /// the sheet's top edge at each height. 25% holds the name and number (Apple's 25% on the 18 Pro sits 227 over
     /// the bottom, and the caption is the same size on every phone); 50% is Apple's medium height, 47.5% of the screen
@@ -43,14 +43,51 @@ nonisolated struct Layout: Equatable, Sendable {
         }
     }
 
-    // MARK: the Dynamic Island
+    // MARK: the Dynamic Island or the notch, by the phone. Before this, any phone with a safe top of 47 or more was
+    // given an island, so the 17e (iPhone18,5, safe top 47) drew a fake one. / the island, or .zero on a phone without
+    // one
     var island: CGRect {
-        guard safeTop >= 47 else { return .zero }
+        guard Layout.device(model, safeTop).kind == .island else { return .zero }
         return CGRect(x: W / 2 - 46.85, y: 14.5, width: 93.7, height: 35.7)
+    }
+    /// the notch, or .zero on a phone without one. Its size is Apple's published one for the notch phones still sold
+    /// (the 13/14/16e family: about 162 x 32 points, top centre); the simulator's screenshots don't draw it, so it is
+    /// on the phone list to check against a real 17e
+    var notch: CGRect {
+        guard Layout.device(model, safeTop).kind == .notch else { return .zero }
+        return CGRect(x: W / 2 - 81, y: 0, width: 162, height: 32)
+    }
+
+    enum Cutout: Sendable { case island, notch, none }
+    struct Device: Sendable { let kind: Cutout; let corner: CGFloat }
+    /// the phones whose cutout or corner the safe area alone can't tell; anything else is read from its safe top
+    /// (Apple's island phones sit 59 or more under the top, the notch phones 44 to 50, home-button phones 20)
+    static let devices: [String: Device] = [
+        "iPhone18,5": Device(kind: .notch, corner: 47.33),   // iPhone 17e
+        "iPhone17,5": Device(kind: .notch, corner: 47.33),   // iPhone 16e
+        "iPhone14,7": Device(kind: .notch, corner: 47.33),   // iPhone 14
+        "iPhone14,8": Device(kind: .notch, corner: 53.33),   // iPhone 14 Plus
+        "iPhone14,5": Device(kind: .notch, corner: 47.33),   // iPhone 13
+        "iPhone14,4": Device(kind: .notch, corner: 44),      // iPhone 13 mini
+        "iPhone14,2": Device(kind: .notch, corner: 47.33),   // iPhone 13 Pro
+        "iPhone14,3": Device(kind: .notch, corner: 53.33),   // iPhone 13 Pro Max
+        "iPhone14,6": Device(kind: .none, corner: 0),        // iPhone SE (3rd generation)
+    ]
+    static func device(_ model: String, _ safeTop: CGFloat) -> Device {
+        if let d = devices[model] { return d }
+        if safeTop >= 54 { return Device(kind: .island, corner: 62) }
+        if safeTop >= 44 { return Device(kind: .notch, corner: 47.33) }
+        return Device(kind: .none, corner: 0)
     }
 
     // MARK: the open map, between the head and a sheet whose top is at `sheetTop`
-    func openMap(sheetTop: CGFloat) -> ClosedRange<CGFloat> { (headBottom + 8) ... max(headBottom + 9, sheetTop - 12) }
+    /// THE ROOM (Part 0.1, Part 1): the open map between the head and the sheet, or the keyboard when it is higher. One
+    /// room for every part: the zoom column, search's results and flights, the continent framing, the stamping card.
+    func room(sheetTop: CGFloat, keyboardTop: CGFloat? = nil) -> ClosedRange<CGFloat> {
+        let bottom = min(sheetTop, keyboardTop ?? .greatestFiniteMagnitude) - 12
+        return (headBottom + 8) ... max(headBottom + 9, bottom)
+    }
+    func openMap(sheetTop: CGFloat) -> ClosedRange<CGFloat> { room(sheetTop: sheetTop) }
 
     /// read from the window the app is in: its size and its safe areas
     @MainActor static func current(size: CGSize, insets: EdgeInsets) -> Layout {

@@ -1,15 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// THE TWELVE: there are no others. Anything else in the app is one of these mixed with black, white or another one of
-/// these. Lime is wya's colour: the chosen thing, the AI, stamped land.
+/// THE TWELVE: "There are no others. Anything else in the app is one of these mixed with black, white or another one of
+/// these." Lime is wya's colour: the chosen thing, the AI, stamped land.
 nonisolated enum Palette {
     static let cream     = Color(hex: 0xfbf6f2)
     static let beigeDark = Color(hex: 0xbcb8b6)
     static let white     = Color(hex: 0xffffff)
     static let ink       = Color(hex: 0x000000)
     static let grey      = Color(hex: 0xd7d2c7)
-    static let greyDark  = Color(hex: 0xa19e95)
     static let lime      = Color(hex: 0xd4e249)
     static let blue      = Color(hex: 0x78aef8)
     static let teal      = Color(hex: 0xb0e0cd)
@@ -22,8 +21,17 @@ nonisolated enum Palette {
         SIMD4(Float((v >> 16) & 0xff) / 255, Float((v >> 8) & 0xff) / 255, Float(v & 0xff) / 255, 1)
     }
     static let creamV = rgb(0xfbf6f2), beigeDarkV = rgb(0xbcb8b6), whiteV = rgb(0xffffff), inkV = rgb(0x000000)
-    static let greyV = rgb(0xd7d2c7), greyDarkV = rgb(0xa19e95), limeV = rgb(0xd4e249), blueV = rgb(0x78aef8)
+    static let greyV = rgb(0xd7d2c7), limeV = rgb(0xd4e249), blueV = rgb(0x78aef8)
     static let tealV = rgb(0xb0e0cd), yellowV = rgb(0xffe04a), redV = rgb(0xd94f3d), brownV = rgb(0xa9784f)
+    /// the same twelve by name, for the living field's shader (LivingField, from the old app); greyDark is retired
+    static let named: [String: SIMD3<Double>] = [
+        "cream": hex3(0xfbf6f2), "beige-dark": hex3(0xbcb8b6), "white": hex3(0xffffff), "ink": hex3(0x000000),
+        "grey": hex3(0xd7d2c7), "lime": hex3(0xd4e249), "blue": hex3(0x78aef8),
+        "teal": hex3(0xb0e0cd), "yellow": hex3(0xffe04a), "red": hex3(0xd94f3d), "brown": hex3(0xa9784f),
+    ]
+    static func hex3(_ v: UInt32) -> SIMD3<Double> {
+        SIMD3(Double((v >> 16) & 0xff) / 255, Double((v >> 8) & 0xff) / 255, Double(v & 0xff) / 255)
+    }
 }
 
 nonisolated extension Color {

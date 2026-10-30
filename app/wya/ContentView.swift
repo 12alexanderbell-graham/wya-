@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var water = Water()
     @State private var head = HeadState()
     @State private var tab = 0
+    @State private var launch = Launch.shared
 
     var body: some View {
         // THE SCREEN, pinned to its top left: everything inside is sized from the window (Layout), never from the room
@@ -26,13 +27,25 @@ struct ContentView: View {
             } else {
                 if !Perf.shared.off.contains("map") { MapLayer(controller: map) }
 
-                ZoomColumn(map: map, water: water, head: head)
+                if !Perf.shared.off.contains("zoom") { ZoomColumn(map: map, water: water, head: head) }
+
+                // under the water: the space's shaders set up once, unseen (Prewarm.swift)
+                ShaderPrewarm()
+                    .position(x: water.layout.W / 2, y: water.layout.capsule.midY)
 
                 WaterView(water: water, map: map, tab: $tab)
 
-                HeadView(map: map, water: water, head: head)
+                if !Perf.shared.off.contains("head") { HeadView(map: map, water: water, head: head) }
 
-                TopPullView(head: head, water: water)
+                if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
+            }
+            // THE LOADING SCREEN (12.3) over everything until the map is ready; then it lifts away in one piece, the
+            // map and all its chrome already in place under it; touches wait until it has gone
+            if !launch.done {
+                LoadingScreen(reveal: launch.reveal)
+            }
+            if !launch.settled {
+                Color.clear.contentShape(Rectangle()).ignoresSafeArea()
             }
         }
         .frame(width: water.layout.model.isEmpty ? nil : water.layout.W, height: water.layout.model.isEmpty ? nil : water.layout.H,
@@ -61,11 +74,28 @@ struct ContentView: View {
         .onAppear {
             TestDriver.shared.start(map: map, water: water, head: head)
             // a finger on the map or the sheet puts settings and the AI away (and goes on doing what it does)
-            map.onTouch = { [head] in head.putAway() }
+            map.onTouch = { [head, water] in head.putAway(); water.hideCredit() }
             water.onTouch = { [head] in head.putAway() }
+            // leaving a tab ends quick stamping too (3.6)
+            water.onTabChange = { [head] in head.quickStamp = false }
+            water.onMapAgain = { [head] in
+                head.searching = false
+                head.toolsOpen = false
+                head.putAway()
+            }
             // the text input system set up now, not on the first search (Prewarm)
             DispatchQueue.main.async { Prewarm.textInput() }
         }
-        .task { await map.load() }
+        .task {
+            await map.load()
+            // the map's first frame drawn under the loading screen, then the screen lifts away
+            try? await Task.sleep(for: .milliseconds(80))
+            withAnimation(Motion.chrome) { launch.reveal = 1 } completion: {
+                launch.done = true
+                launch.settled = true
+                // the start credit once all is at rest (A1.20)
+                water.showCredit()
+            }
+        }
     }
 }

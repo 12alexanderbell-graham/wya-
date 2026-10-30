@@ -89,7 +89,7 @@ struct Icon5: View {
     /// the gear's 18 frames are an eighth of a turn: 18 a second is one turn in 8 seconds
     private static func fps(_ key: String) -> Double { key == "settings-open" ? 18 : 30 }
 
-    private var icon: IC5Icon? { IC5.all[key] }
+    private var icon: IC5Icon? { IC5.all[key] ?? IC5.extra[key] }   // extra: TabIconsTest.swift (29 Oct)
 
     private func frameIndex(at date: Date) -> Int {
         guard let ic = icon, !ic.frames.isEmpty else { return 0 }
@@ -127,7 +127,7 @@ struct Icon5: View {
             }
         }
         .frame(width: size, height: size)
-        // the drawings are the same in every language: a right-to-left layout moves them, never flips them, except
+        // his drawings are the same in every language: a right-to-left layout moves them, never flips them, except
         // the two that say which way you go
         .environment(\.layoutDirection, .leftToRight)
         .scaleEffect(x: flips ? -1 : 1, y: 1)

@@ -75,7 +75,7 @@ nonisolated final class World: @unchecked Sendable {
     let contViews: [String: SIMD4<Double>]
     func inCont(_ place: Int, _ k: String) -> Bool { place >= 0 && place < placeConts.count && placeConts[place].contains(k) }
 
-    /// The places the count counts: everything but the three the data marks as not real places (Clipperton, the
+    /// The places the count counts: everything but the three his data marks as not real places (Clipperton, the
     /// Coral Sea Islands, Ashmore and Cartier): 263.
     var countable: Int { places.reduce(0) { $0 + ($1.junk ? 0 : 1) } }
 
@@ -326,7 +326,9 @@ nonisolated final class World: @unchecked Sendable {
         }
         if reach > 0 {
             var close: (place: Int, d: Float)?
-            for r in rings where r.unit >= 0 && unitOwner[r.unit] >= 0 {
+            for r in rings where r.unit >= 0 && unitOwner[r.unit] >= 0 && places[unitOwner[r.unit]].tiny {
+                // only a small place (smaller than a fingertip) is found by the reach, never a small piece of a big
+                // country (Step 1f: a press in Kaliningrad picked Lithuania's bit of the Curonian Spit)
                 let size = max(r.box.z - r.box.x, r.box.w - r.box.y)
                 guard size < tiny else { continue }
                 let dx = max(r.box.x - p.x, 0, p.x - r.box.z), dy = max(r.box.y - p.y, 0, p.y - r.box.w)

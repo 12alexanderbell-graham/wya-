@@ -3,7 +3,7 @@ import Foundation
 /// WHOSE EACH PIECE OF LAND IS, under the borders view you pick: the old app's WorldGeometry (positionSays, assign,
 /// pieceOwner, drawn, dotted, detailOwners), ported as it was, reading the old app's own disputes (world.json's
 /// `disputes`, carried over unchanged into disputes.json: each disputed piece's controller, its options, the UN's
-/// answer and every country's own map). The rule: - De facto: every place drawn as it is held (the controller of each
+/// answer and every country's own map). His rule: - De facto: every place drawn as it is held (the controller of each
 /// piece); nothing is dotted. - United Nations / de jure: a breakaway the UN doesn't recognise is dotted. - A country's
 /// own view: a place that country doesn't recognise and gives to nobody is dotted; one it gives to another country is
 /// drawn as part of that country.

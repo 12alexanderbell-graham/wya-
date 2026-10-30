@@ -20,14 +20,14 @@ inline float ridged(float2 p) {
     return v;
 }
 
-// MARK: THE SUN: a ball of plasma, realistic in the way Apple Maps is, warm like the real one (yellow-white at the centre, an
+// MARK: THE SUN: a ball of plasma, realistic as Apple Maps draws things, warm like the real one (yellow-white at the centre, an
 // orange surface that churns, orange prominences looping off the limb that grow, drift and fall back), never a flat
 // yellow fill, never a dark outline. It is your streak: - flare 0...1: the streak's length (8 weeks = 1, the cap); the
 // prominences reach further and rise higher with it - glow 0...1: the sun picked; a warm halo grows round it and the
 // corona brightens The plasma round the limb is always moving: tongues rise off the edge, swell and fall back. The
 // plasma itself, in any three colours (the sun's: cream, yellow, red; a star's: whites)
 static half4 plasma(float2 position, float2 size, float t, float discFraction, float flare, float glow,
-                    float3 core, float3 yel, float3 red) {
+                    float3 core, float3 yel, float3 red, float cellScale = 1.0) {
     float2 c = size * 0.5;
     float R = min(size.x, size.y) * 0.5 * discFraction;
     float2 q = (position - c) / R;
@@ -40,7 +40,7 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     float discA = 0.0;
     if (r < 1.0 + aa) {
         float z = sqrt(max(0.0, 1.0 - r * r));
-        float2 sp = q / (z + 0.35);
+        float2 sp = q / (z + 0.35) * cellScale;
         float2 w = float2(fbm5(sp * 3.0 + t * 0.07), fbm5(sp * 3.0 + 4.0 - t * 0.06));
         float gran = fbm5(sp * 7.0 + w * 2.4 + t * 0.05);
         float cells = vn(sp * 26.0 + w * 3.0 + t * 0.12);
@@ -81,12 +81,84 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     return half4(half3(col), half(alpha));
 }
 
-[[ stitchable ]] half4 sunPlasma(float2 position, half4 colour, float2 size, float t, float discFraction, float flare, float glow) {
-    return plasma(position, size, t, discFraction, flare, glow,
-                  float3(1.0, 0.975, 0.86), float3(1.0, 0.878, 0.290) /* FFE04A */, float3(0.851, 0.310, 0.239) /* D94F3D */);
+// THE SUN LIVES A STAR'S LIFE AS THE STREAK GROWS. `heat` 0...1 is the star's age (SunView.heat: 1 week 0.13, 4 weeks
+// 0.40, 10 weeks 0.62, a year 0.85, ten years 1), smooth in the weeks, most of it spent in the first ten weeks, so
+// every week is a clear step: - our sun in its prime (0 to about 3 weeks): yellow, brighter and more alive every week,
+// flares reaching out - it swells into a red giant (about 3 to 10 weeks): bigger, orange to red, huge slow cells,
+// calmer flares - it turns white (about 3 months to 10 years): the same big star burns white-hot, its surface boils
+// fast and a white corona reaches further every year. No rings, no shells, nothing round it but its own light. `swell`
+// (from the view): how far the giant may grow here (less at 50%, where Earth's moon is close below).
+[[ stitchable ]] half4 sunPlasma(float2 position, half4 colour, float2 size, float t, float discFraction, float flare,
+                                 float glow, float heat, float swell) {
+    float3 cream = float3(1.0, 0.975, 0.86), yel = float3(1.0, 0.878, 0.290) /* FFE04A */,
+           red = float3(0.851, 0.310, 0.239) /* D94F3D */, white = float3(1.0, 1.0, 0.985);
+    float prime = smoothstep(0.0, 0.35, heat);
+    float big = smoothstep(0.33, 0.62, heat);            // how swollen it is; it never shrinks back
+    float giant = big * (1.0 - smoothstep(0.66, 0.95, heat));   // how red it is
+    float whiteHot = smoothstep(0.66, 1.0, heat);        // how white it burns
+
+    float scale = 1.0 + 0.55 * big * swell;
+    float3 core = mix(cream, white, prime * 0.35);
+    float3 y2 = yel, r2 = red;
+    core = mix(core, mix(yel, red, 0.25), giant);
+    y2 = mix(y2, mix(yel, red, 0.5), giant);
+    r2 = mix(r2, red * 0.8, giant);
+    core = mix(core, white, whiteHot);
+    y2 = mix(y2, mix(white, cream, 0.5), whiteHot);
+    r2 = mix(r2, mix(yel, cream, 0.25), whiteHot);
+    float speed = (0.7 + 0.9 * prime) * (1.0 - 0.6 * giant) + 1.4 * whiteHot;
+    float cells = mix(mix(1.0, 0.42, giant), 1.15, whiteHot);
+    float fl = flare * (1.0 - 0.55 * giant);
+    half4 base = plasma(position, size, t * speed, discFraction * scale, fl, glow, core, y2, r2, cells);
+
+    float2 c = size * 0.5;
+    float R = min(size.x, size.y) * 0.5 * discFraction;
+    float2 q = (position - c) / R;
+    float r = length(q);
+    float rs = r / scale;                                  // in the star's own radii
+    float rmax = 1.0 / discFraction;
+    float a = atan2(q.y, q.x);
+    float2 dirv = float2(cos(a), sin(a));
+    float edgeFade = 1.0 - smoothstep(rmax * 0.80, rmax * 0.98, r);
+    float outside = smoothstep(1.0, 1.04, rs);
+    float d = max(0.0, rs - 1.0);
+
+    // the corona: white streamers from the first week, quieter while it is a red giant, then reaching further every
+    // year as it burns white (about one star radius at 1.5 years, two at ten)
+    float cor = smoothstep(0.03, 0.3, heat) * (1.0 - 0.7 * giant) + 0.9 * whiteHot;
+    float len = 0.35 + 0.9 * smoothstep(0.03, 0.3, heat) + 1.1 * whiteHot;
+    float bigS = smoothstep(0.42, 0.85, fbm5(dirv * 2.2 + float2(t * 0.012, -t * 0.009)));
+    float fine = smoothstep(0.5, 0.95, ridged(float2(a * 9.0 + t * 0.01, d * 0.6 - t * 0.03)));
+    float coronaL = cor * ((bigS * 0.75 + fine * 0.35) * exp(-d / len) + exp(-d / (len * 0.35)) * 0.35) * outside * edgeFade;
+
+    // the giant's warm haze; the white star's bright glow
+    float hazeL = giant * exp(-d * 2.2) * 0.55 * outside * edgeFade;
+    float glowL = whiteHot * exp(-d * 3.0) * 0.6 * outside * edgeFade;
+
+    float er = 0.0;   // no loops: they read as rings (his 19:10)
+    float period = mix(10.0, 5.0, smoothstep(0.15, 0.4, heat));
+    float k = floor(t / period);
+    float ph = fract(t / period);
+    float a0 = h21(float2(k, 3.1)) * 6.2831853;
+    float2 d0 = float2(cos(a0), sin(a0)) * scale;
+    float rise = sin(ph * 3.14159265);
+    float rl = (0.18 + 0.7 * rise) * scale;
+    float2 cp = d0 * (1.0 + rl * 0.15 / scale);
+    float ringE = abs(length(q - cp) - rl);
+    float above = smoothstep(-0.1, 0.25, dot(q - d0, normalize(d0)));
+    float loopL = er * exp(-ringE * 26.0 / scale) * rise * above * outside * edgeFade;
+
+    float3 hazeCol = mix(yel, red, 0.45);
+    float3 light = mix(cream, white, 0.6) * coronaL * 0.55 + hazeCol * hazeL + white * glowL + yel * loopL;
+    float add = clamp(coronaL * 0.55 + hazeL + glowL + loopL, 0.0, 1.0);
+    float ba = float(base.a);
+    float3 col = float3(base.rgb) + light * (1.0 - ba * 0.7);
+    float alpha = clamp(ba + add * 0.55 * (1.0 - ba), 0.0, 1.0);
+    return half4(half3(min(col, float3(alpha * 1.6))), half(alpha));
 }
 
-// A STAR IS THE SUN'S PLASMA, ONLY THE PLASMA: the sun's tongues and corona with no disc, all white, at full strength
+// A STAR IS THE SUN'S PLASMA, ONLY THE PLASMA (; 11:39: "There's no white circle ... It's just the plasma ... stop
+// putting them at 50% opacity"): the sun's tongues and corona with no disc, all white, at full strength
 [[ stitchable ]] half4 starPlasma(float2 position, half4 colour, float2 size, float t, float discFraction, float flare) {
     float2 c = size * 0.5;
     float R = min(size.x, size.y) * 0.5 * discFraction;
@@ -110,8 +182,8 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     return half4(half3(lum), half(lum));
 }
 
-// MARK: A PLANET: a real sphere lit by one light, wearing its NASA surface map (public domain), graded realistic
-// but softened to pastel colours. Like a moon phase it
+// MARK: A PLANET: a real sphere lit by one light, wearing its NASA surface map (public domain), graded to style A:
+// realistic, but softened toward pastel colours. Like a moon phase it
 // darkens as you stamp more of its continent; Earth's night side shows its city lights.
 [[ stitchable ]] half4 planetSphere(float2 position, half4 colour, float2 size, float spin, float3 light,
                                     texture2d<half> surface, texture2d<half> nightLights, float hasLights, float bands) {
@@ -173,62 +245,3 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     return half4(rc.rgb * rc.a, rc.a);
 }
 
-// MARK: the night: deep space with slow clouds of the old night's colours and fine grain
-[[ stitchable ]] half4 nightSpace(float2 position, half4 colour, float2 size, float t, float dark) {
-    float2 uv = position / size.y;
-    float3 navy = float3(0.075, 0.094, 0.165);
-    float3 mauve = float3(0.33, 0.24, 0.36);
-    float3 rose = float3(0.40, 0.25, 0.26);
-    float3 deepTeal = float3(0.12, 0.24, 0.25);
-    float n1 = fbm5(uv * 2.2 + float2(t * 0.004, -t * 0.003));
-    float n2 = fbm5(uv * 1.7 + float2(-t * 0.003, t * 0.005) + 9.0);
-    float n3 = fbm5(uv * 2.8 + 21.0);
-    float3 col = navy;
-    col = mix(col, mauve, smoothstep(0.42, 0.82, n1) * 0.8);
-    col = mix(col, rose, smoothstep(0.5, 0.86, n2) * 0.7);
-    col = mix(col, deepTeal, smoothstep(0.48, 0.85, n3) * 0.7);
-    float grain = (h21(position * 0.9 + fract(t * 0.5)) - 0.5) * 0.035;
-    col += grain;
-    return half4(half3(col * dark), half(dark));
-}
-
-// MARK: THE SPACE MIST at full: thin nebula, the way it looks in real photographs: long wisps and filaments from
-// twice-warped noise, a fine dust in them, very faint and nearly white, a breath of our blue and teal and a little rose
-// where it is thickest. It spreads out from the sun as the sheet goes from p 0.3 to full: the field is drawn about the
-// sun and scaled up from it, so it grows and moves and never fades in. Premultiplied, at most about a third covered:
-// the map stays behind.
-[[ stitchable ]] half4 spaceMist(float2 position, half4 colour, float2 size, float t, float p, float2 sun) {
-    float e = smoothstep(0.3, 1.0, p);
-    if (e <= 0.001) return half4(0);
-    // the field's own coordinates, scaled out from the sun: at e it shows what it shows at full, e times as big round
-    // the sun, so the wisps come out of the sun
-    float2 f = (position - sun) / max(e, 0.05) / size.x;
-    float2 drift = float2(t * 0.0025, -t * 0.0018);
-    float2 w1 = float2(fbm5(f * 1.6 + drift), fbm5(f * 1.6 + float2(5.2, 1.3) - drift));
-    float2 w2 = float2(fbm5(f * 2.2 + w1 * 2.2 + float2(1.7, 9.2)), fbm5(f * 2.2 + w1 * 2.2 + float2(8.3, 2.8)));
-    float n = fbm5(f * 2.6 + w2 * 2.6);
-    // filaments: the ridges of the warped field, thin and long
-    float fil = ridged(f * 3.2 + w2 * 1.8 + drift * 2.0);
-    float body = smoothstep(0.45, 0.85, n);
-    float wisp = smoothstep(0.62, 0.95, fil) * smoothstep(0.35, 0.7, n);
-    // dust: fine grains in the thick parts only
-    float dust = smoothstep(0.8, 1.0, vn(position * 0.35 + 7.0)) * body * 0.5;
-    // the field thins out towards the edge of the space it has reached
-    float reachFade = 1.0 - smoothstep(0.55, 1.2, length((position - sun) / size.x) / max(e, 0.05));
-    float dens = clamp(body * 0.55 + wisp * 0.7 + dust, 0.0, 1.0) * mix(0.35, 1.0, reachFade);
-    float3 white = float3(1.0);
-    float3 blue = float3(0.471, 0.682, 0.973), teal = float3(0.690, 0.878, 0.804), red = float3(0.851, 0.310, 0.239);
-    float hue = fbm5(f * 0.9 + 13.0);
-    float3 tint = mix(mix(blue, white, 0.55), mix(teal, white, 0.45), smoothstep(0.35, 0.65, hue));
-    tint = mix(tint, mix(red, white, 0.72), smoothstep(0.6, 0.9, n) * 0.35);
-    float3 col = mix(white, tint, 0.55 + 0.35 * body);
-    // THE SPACE ITSELF: under the wisps a field of our blue deepening from the sun out to the screen's edges, so the
-    // space reads as space and the white stars read on it; the wisps over it at twice their old weight
-    float r = length((position - sun) / size.x) / max(e, 0.05);
-    float3 deep = mix(blue, teal, smoothstep(0.3, 0.7, hue) * 0.35);
-    float ga = 0.55 * smoothstep(0.08, 0.95, r);
-    float wa = dens * 0.62;
-    float a = wa + ga * (1.0 - wa);
-    float3 c = (col * wa + deep * ga * (1.0 - wa)) / max(a, 0.0001);
-    return half4(half3(c * a), half(a));
-}

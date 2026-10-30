@@ -1,8 +1,9 @@
 import SwiftUI
+import CoreLocation
 import simd
 
 /// What the map shows and where the camera is. The camera is a centre in map units and a scale in points per map unit;
-/// the Metal view reads it every frame. The rules it keeps: - the world's height fills the screen at home: the
+/// the Metal view reads it every frame. His rules it keeps: - the world's height fills the screen at home: the
 /// northernmost land (83.6°N) at the top edge, the South Pole at the bottom edge; no panning up or down at that zoom -
 /// the camera never shows past the world: not above the north edge, not under Antarctica, not zoomed out past the
 /// world's size, at any moment, a pinch held included - the map never moves on its own: only your fingers, the zoom
@@ -16,10 +17,21 @@ final class MapController {
     private(set) var ready = false
 
     // MARK: what's on the map (a demo account for now: see DemoAccount)
-    var stamped: Set<Int> = []
-    var wished: Set<Int> = []
+    var stamped: Set<Int> = [] { didSet { marksChanged(stamped: oldValue, wished: wished, filter: filter) } }
+    var wished: Set<Int> = [] { didSet { marksChanged(stamped: stamped, wished: oldValue, filter: filter) } }
     /// the moon's stop: 0 Both, 1 Stamped, 2 Stamped+, 3 Wishlist+, 4 Wishlist (the + views come with counts)
-    var filter = 0 { didSet { needsFrame = true } }
+    var filter = 0 { didSet { needsFrame = true; marksChanged(stamped: stamped, wished: wished, filter: oldValue) } }
+
+    // MARK: A PLACE'S COLOUR (Part 1.5): it changes in one frame
+    enum Look: Equatable { case plain, lime, blue }
+    func look(of i: Int, stamped s: Set<Int>, wished w: Set<Int>, filter f: Int) -> Look {
+        if f <= 2 && s.contains(i) { return .lime }
+        if (f == 0 || f >= 3) && w.contains(i) { return .blue }
+        return .plain
+    }
+    private func marksChanged(stamped s0: Set<Int>, wished w0: Set<Int>, filter f0: Int) {
+        needsFrame = true
+    }
     /// the moon is held: the caption shows the filter's name
     var moonHeld = false
     var showsStamped: Bool { filter <= 2 }
@@ -27,8 +39,17 @@ final class MapController {
     /// the place darkened under a finger (or for a moment after a search); the tap is felt only under a finger
     /// a finger has landed on the map (the head puts settings or the AI away then, and the touch goes on as normal)
     @ObservationIgnored var onTouch: (() -> Void)?
-    @ObservationIgnored var pressed: Int? { didSet { if pressed != oldValue { if pressed != nil && touching { Feel.tap() }; needsFrame = true } } }
-    /// the lock: the map still moves, but pressing a place does nothing
+    @ObservationIgnored var pressed: Int? {
+        didSet {
+            guard pressed != oldValue else { return }
+            // no haptic at touch-down (Part 0.3 rule 3: a map tap's haptic plays when the tap is confirmed, after the
+            // double-tap wait, with the card or the stamp it opens: Step 5)
+            needsFrame = true
+        }
+    }
+    // THE PRESS DARKENING (A1.1): the whole place darkens the moment the finger lands and clears the moment it lifts,
+    // as an iOS control highlights; drawn by the renderer from `pressed` / the lock: the map still moves, but pressing
+    // a place does nothing
     var locked = false
     /// the sun picked: the words show your streak instead of the count, and the fire rises
     var sunPicked = false
@@ -61,9 +82,17 @@ final class MapController {
         guard let w = world else { return nil }
         let m = mapPoint(p)
         let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(10 / k), tiny = Float(14 / k)
-        if let d = diamond(at: p) { return d }
-        if let det = details, det.drawsTiles { return det.place(at: mp, reach: reach, tiny: tiny) }
-        return w.place(at: mp, reach: reach, tiny: tiny)
+        let small: (Int) -> Bool = { w.places[$0].tiny }
+        let under: Int?
+        if let det = details, det.drawsTiles { under = det.place(at: mp, reach: reach, tiny: tiny, small: small) }
+        else { under = w.place(at: mp, reach: reach, tiny: tiny) }
+        // A DIAMOND WINS when the finger is on it (8 pt), or near it (14 pt) over the sea or another small place; near it
+        // over a big country's land, that country wins (Step 1f: at the world view a press in the middle of Sicily picked
+        // Malta, Switzerland's picked Liechtenstein, Ukraine's Transnistria, all diamonds within 14 pt)
+        if let d = diamond(at: p) {
+            if d.d <= 8 || under == nil || under == d.place || w.places[under!].tiny { return d.place }
+        }
+        return under
     }
     /// HOW DARK A STAR HAS TO BE TO BE SEEN HERE: 0 over the sea, where white light shows; a little over a wished
     /// (blue) place; more over a stamped (lime) place; most over the white land. From what is drawn at this screen
@@ -79,6 +108,27 @@ final class MapController {
         if wished.contains(i) { return 0.15 }
         return 0.8
     }
+    /// THE SAME FOR MANY POINTS, worked out off the main thread (Step 1c: the stars' 687 lookups on the detailed map
+    /// took 600 to 800 ms of main-thread turns after every rest, a few ms in each frame of the next pan or pinch). What
+    /// is under the camera and the marks are copied first; the lookup itself reads only shapes that never change.
+    func groundDark(at pts: [CGPoint]) async -> [Double] {
+        guard let w = world else { return pts.map { _ in 0 } }
+        let ms = pts.map { s -> SIMD2<Float> in let m = mapPoint(s); return SIMD2(Float(m.x), Float(m.y)) }
+        let tiles = (details?.drawsTiles ?? false) ? details?.tilesShown : nil
+        let stamped: Set<Int> = showsStamped ? self.stamped : [], wished = self.wished
+        return await Task.detached(priority: .utility) {
+            ms.map { mp -> Double in
+                let i = tiles.map { DetailMaps.place(in: $0, at: mp, reach: 0, tiny: 0) } ?? w.place(at: mp)
+                guard let i else { return 0 }
+                if stamped.contains(i) { return 0.45 }
+                if wished.contains(i) { return 0.15 }
+                return 0.8
+            }
+        }.value
+    }
+    /// counts each time the camera comes to rest (a flight landed, fingers off with no glide, a held zoom ended), so
+    /// work tied to what is under the camera (the stars' darkness) is done once per rest, never on a frame that moves
+    private(set) var restVersion = 0
     /// the detailed maps (set by the renderer), so a touch is answered from what is drawn
     @ObservationIgnored weak var details: DetailMaps?
     /// the camera's level for the zoom column: at home or not
@@ -124,13 +174,27 @@ final class MapController {
         needsFrame = true
     }
 
-    /// Home is centred on the phone's region's longitude, else 12°E.
+    /// Home is centred on where you are when your location is shared with the app; when it is not, on your passport's
+    /// country (your first nationality in Profile); else 12°E. Location is never asked for here: only the last known
+    /// one, when it is already allowed.
     static func homeLongitudeX(_ w: World) -> Double {
-        if let r = Locale.current.region?.identifier.lowercased(), let i = w.placeIndex[r] {
+        let lm = CLLocationManager()
+        if [.authorizedWhenInUse, .authorizedAlways].contains(lm.authorizationStatus), let l = lm.location {
+            return Double(EqualEarth.project(lon: l.coordinate.longitude, lat: l.coordinate.latitude).x)
+        }
+        if let n = (UserDefaults.standard.stringArray(forKey: Self.nationalitiesKey) ?? []).first,
+           let i = w.placeIndex[n.lowercased()] {
             return w.places[i].c[0]
         }
         return Double(EqualEarth.project(lon: 12, lat: 0).x)
     }
+    /// the home again, when what it is centred on may have changed (location allowed, a nationality set)
+    func refreshHome() {
+        guard let w = world else { return }
+        homeX = Self.homeLongitudeX(w)
+    }
+    /// your nationalities, first first, as place ids ("de", ): Profile writes them (Part 14); read here for home
+    static let nationalitiesKey = "profileNationalities"
 
     // MARK: the small places
     /// the places too small to see at the world's size, drawn as diamonds
@@ -141,23 +205,26 @@ final class MapController {
     /// THE DIAMONDS GO TOGETHER, except a place that would be lost when they go: one still under 6 points across at
     /// that zoom keeps its diamond until its own shape is 6 points across, so there is always something to see and
     /// touch
-    func showsDiamond(_ i: Int) -> Bool {
-        if diamondsShown { return true }
-        guard i < tinyBig.count else { return false }
-        return tinyBig[i] * kMin * 6 < 6 && tinyBig[i] * k < 6
+    func showsDiamond(_ i: Int) -> Bool { diamondSize(i) > 0.001 }
+    /// A1.19: the shared diamonds shrink about their centres into their places across 5 to 6 x kMin, tied to the
+    /// zoom (0.75 of their size a quarter of the way, gone at 6 x kMin, back the same way out); a kept one shrinks
+    /// while its own shape grows from 5 to 6 points across. Never a pop.
+    func diamondSize(_ i: Int) -> Double {
+        if i < tinyBig.count, tinyBig[i] * kMin * 6 < 6 { return min(1, max(0, 6 - tinyBig[i] * k)) }
+        return min(1, max(0, 6 - k / kMin))
     }
     var anyDiamond: Bool { diamondsShown || tinyPlaces.contains { showsDiamond($0) } }
     /// the diamond under a point of the screen, if they are shown
-    func diamond(at s: CGPoint) -> Int? {
+    func diamond(at s: CGPoint) -> (place: Int, d: Double)? {
         guard let w = world else { return nil }
-        var best: (Int, Double)?
+        var best: (place: Int, d: Double)?
         for i in tinyPlaces where showsDiamond(i) {
             let pl = w.places[i]
             let sx = (pl.c[0] - c.x) * k + Double(view.width) / 2, sy = (pl.c[1] - c.y) * k + Double(view.height) / 2
             let d = hypot(sx - Double(s.x), sy - Double(s.y))
-            if d < 14, d < (best?.1 ?? 1e9) { best = (i, d) }
+            if d < 14, d < (best?.d ?? 1e9) { best = (i, d) }
         }
-        return best?.0
+        return best
     }
 
     // MARK: limits
@@ -237,11 +304,21 @@ final class MapController {
         if let v, simd_length(v) > 250 {
             let target = clamped(c - v * 0.26 / k, k)
             fly(to: target, k: k, dur: 0.62, glide: true)
-        }
+        } else { restVersion &+= 1 }
         needsFrame = true
     }
 
+    /// two fingers tapped together: one step out about the point between them (Apple Maps' gesture; Part 1.3, A1.21)
+    func twoFingerTap(at s: CGPoint) {
+        Feel.tap()
+        let target = max(kMin, k / 1.6)
+        let p = mapPoint(s)
+        let sp = SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2
+        fly(to: clamped(p - sp / target, target), k: target, dur: 0.45)
+    }
+
     func doubleTap(at s: CGPoint) {
+        Feel.tap()
         let target = min(kMax, k * 1.8)
         let p = mapPoint(s)
         let sp = SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2
@@ -292,7 +369,8 @@ final class MapController {
         let p = w.places[i]
         if continent != nil || drawnContinent != nil { continent = nil; offContinent() }
         let W = Double(view.width)
-        let top = Double(layout.headBottom) + 8, bottom = Double(sheetTop ?? layout.top(.quarter)) - 12
+        let room = layout.room(sheetTop: sheetTop ?? layout.top(.quarter))
+        let top = Double(room.lowerBound), bottom = Double(room.upperBound)
         let roomH = max(80, bottom - top)
         var mid = SIMD2(p.c[0], p.c[1])
         var target: Double
@@ -310,15 +388,15 @@ final class MapController {
         #if DEBUG
         NSLog("wya show %@ frame %@ k %.3f (kMin %.3f) room %.0f-%.0f", p.id, String(describing: w.frame(of: i)), target, kMin, top, bottom)
         #endif
-        fly(to: clamped(centre, target), k: target, dur: 0.8)
-        flash(i)
+        // the flash at the landing (A1.4), not as the flight sets off
+        fly(to: clamped(centre, target), k: target, dur: 0.8) { [weak self] in self?.flash(i) }
     }
 
-    /// the place darkened for 1.2 s, as under a finger
+    /// the place darkened as under a finger for 1.5 s (A1.4)
     private func flash(_ i: Int) {
         pressed = i
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(1200))
+            try? await Task.sleep(for: .milliseconds(1500))
             if let self, self.pressed == i, !self.touching { self.pressed = nil }
         }
     }
@@ -342,7 +420,9 @@ final class MapController {
             return
         }
         let W = Double(view.width)
-        let top = Double(layout.headBottom) + 22, bottom = Double(layout.top(.half)) - 14
+        // the room at 50%, with the continent's own margins inside it
+        let room = layout.room(sheetTop: layout.top(.half))
+        let top = Double(room.lowerBound) + 14, bottom = Double(room.upperBound) - 2
         let roomH = max(80, bottom - top)
         let s = max(W / (f.z - f.x), roomH / (f.w - f.y))
         let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
@@ -382,7 +462,9 @@ final class MapController {
     #endif
 
     private func fly(to p: SIMD2<Double>, k nk: Double, dur: Double, glide: Bool = false, then: (() -> Void)? = nil) {
-        flight = (SIMD3(c.x, c.y, log(k)), SIMD3(p.x, p.y, log(nk)), 0, dur, glide)
+        // Reduce Motion: the same move, shorter (Part 19; never a fade or a cut)
+        flight = (SIMD3(c.x, c.y, log(k)), SIMD3(p.x, p.y, log(nk)), 0, Motion.reduce ? dur * 0.6 : dur, glide)
+        details?.prefetch(c: p, k: nk, view: view)
         afterFlight = then
         needsFrame = true
     }
@@ -403,6 +485,21 @@ final class MapController {
     // MARK: every frame
     /// moves what moves; returns true while something still does
     func step(_ dt: Double) -> Bool {
+        let moving = stepCamera(dt)
+        flowStep(dt)
+        return moving
+    }
+    /// THE FLOW SOUND (Part 0.3): how fast the map moves on the screen this frame, whatever moves it (fingers, a
+    /// glide, a flight, a held zoom): the pan in points a second plus the zoom (200 pt a second per doubling)
+    @ObservationIgnored private var flowLast: (c: SIMD2<Double>, k: Double)?
+    private func flowStep(_ dt: Double) {
+        defer { flowLast = (c, k) }
+        guard let l = flowLast, dt > 0 else { return }
+        let pan = simd_length(c - l.c) * k / dt
+        let zoom = abs(log(k / l.k)) / log(2.0) * 200 / dt
+        Sound.flow("map", speed: CGFloat(pan + zoom))
+    }
+    private func stepCamera(_ dt: Double) -> Bool {
         // HOLDING PLUS OR MINUS: the zoom keeps going about the screen's middle, gently faster the longer it is held,
         // from one doubling a second to three at 1.2 s, until the limit or the finger lifts
         if holdZoom != 0 {
@@ -412,7 +509,7 @@ final class MapController {
             let before = k
             zoom(by: exp(Double(holdZoom) * Double(rate) * min(dt, 1.0 / 30)),
                  about: CGPoint(x: view.width / 2, y: view.height / 2))
-            if k == before { holdZoom = 0 }
+            if k == before { holdZoom = 0; restVersion &+= 1 }
             return true
         }
         guard var f = flight else { return false }
@@ -421,8 +518,7 @@ final class MapController {
         // a glide slows to a stop; any other flight is the old camera curve (critically damped, 0.44 s)
         let e: Double
         if f.glide { e = 1 - pow(1 - f.t, 3.2) } else {
-            let w0 = 2 * Double.pi / 0.44, t = f.t * 0.646
-            e = f.t >= 1 ? 1 : 1 - exp(-w0 * t) * (1 + w0 * t)
+            e = Motion.camera(f.t)
         }
         // the old ZoomPath.even: the zoom changes by the same factor each moment, and the point of the map that is in
         // the same place on the screen in both views stays there all the way
@@ -439,6 +535,7 @@ final class MapController {
         updateHome()
         if f.t >= 1 {
             flight = nil
+            restVersion &+= 1
             let then = afterFlight
             afterFlight = nil
             then?()

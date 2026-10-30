@@ -68,6 +68,8 @@ nonisolated final class DetailPack: @unchecked Sendable {
 nonisolated final class DetailTile: @unchecked Sendable {
     let key: Int64
     let points: MTLBuffer
+    /// each point's place at the start of the morph (on the coarser level's outline; Morph.swift)
+    let from: MTLBuffer
     let fans: MTLBuffer
     let fanCount: Int
     /// per item: the place (index into World.places, -1 for none), its run of the fans, and its own continent when it is
@@ -80,9 +82,9 @@ nonisolated final class DetailTile: @unchecked Sendable {
     let rings: [[Range<Int>]]
     let boxes: [[SIMD4<Float>]]
 
-    init(key: Int64, points: MTLBuffer, fans: MTLBuffer, fanCount: Int, items: [(place: Int, start: Int, count: Int, cont: String?)],
+    init(key: Int64, points: MTLBuffer, from: MTLBuffer, fans: MTLBuffer, fanCount: Int, items: [(place: Int, start: Int, count: Int, cont: String?)],
          segs: MTLBuffer?, segCount: Int, cpu: [SIMD2<Float>], rings: [[Range<Int>]]) {
-        self.key = key; self.points = points; self.fans = fans; self.fanCount = fanCount; self.items = items
+        self.key = key; self.points = points; self.from = from; self.fans = fans; self.fanCount = fanCount; self.items = items
         self.segs = segs; self.segCount = segCount
         self.cpu = cpu; self.rings = rings
         boxes = rings.map { rs in rs.map { r in
@@ -130,8 +132,28 @@ nonisolated final class DetailTile: @unchecked Sendable {
         return out
     }
 
-    /// reads one tile's bytes and lays it out (off the main thread)
-    static func make(key: Int64, x: Double, y: Double, blob: Data, owners: [String: Int], mainLon: [Double], device: MTLDevice) -> DetailTile? {
+    #if DEBUG
+    nonisolated(unsafe) static var morphMs: Double = 0
+    #endif
+    /// one tile's bytes read into points and rings (off the main thread): each point in map units, and whether it lies
+    /// on the tile's cut edge (its square's side, where the data was cut, not a real coast)
+    struct Parsed {
+        var pts: [SIMD2<Float>] = []
+        var cut: [Bool] = []
+        /// on a line of the coarser level's own grid (a 100 m tile's edge that is also a 500 m tile's): such a point
+        /// never moves, since the tiles on its two sides are laid on two different coarse tiles
+        var pin: [Bool] = []
+        var itemRings: [[Range<Int>]] = []
+        var places: [Int] = []
+        var keys: [String] = []
+        var conts: [String?] = []
+        var edges: [[NSNumber]] = []
+        /// the lines that are not along a ring (their own points)
+        var extra: [(a: Int, b: Int, pts: [SIMD2<Float>], cut: [Bool])] = []
+    }
+
+    static func parse(x: Double, y: Double, size: Double, blob: Data, owners: [String: Int], mainLon: [Double],
+                      coarseSize: Double = 0) -> Parsed? {
         guard let raw = try? (blob as NSData).decompressed(using: .zlib) as Data else { return nil }
         let bytes = [UInt8](raw)
         func u32(_ o: Int) -> Int { Int(bytes[o]) | Int(bytes[o + 1]) << 8 | Int(bytes[o + 2]) << 16 | Int(bytes[o + 3]) << 24 }
@@ -153,11 +175,15 @@ nonisolated final class DetailTile: @unchecked Sendable {
             return (z >> 1) ^ -(z & 1)
         }
         var qx = Int((x * 1e5).rounded()), qy = Int((y * 1e5).rounded())
+        let ex0 = qx, ey0 = qy, ex1 = Int(((x + size) * 1e5).rounded()), ey1 = Int(((y + size) * 1e5).rounded())
         /// `off` moves a country's piece over the date line to sit beside the rest of it (World: "the pieces over the
         /// date line"): ±360° when the tile is on the far side of 180° from the place's biggest piece
-        func point(_ off: Double = 0) -> SIMD2<Float> {
+        let grid = Int((coarseSize * 1e5).rounded())
+        func point(_ off: Double = 0) -> (SIMD2<Float>, Bool, Bool) {
             qx += next(); qy += next()
-            return EqualEarth.project(lon: Double(qx) / 1e5 + off, lat: Double(qy) / 1e5)
+            let onCut = qx == ex0 || qx == ex1 || qy == ey0 || qy == ey1
+            let onGrid = grid > 0 && onCut && (qx % grid == 0 || qy % grid == 0)
+            return (EqualEarth.project(lon: Double(qx) / 1e5 + off, lat: Double(qy) / 1e5), onCut, onGrid)
         }
         func offset(_ key: String) -> Double {
             guard let p = owners[key], p >= 0, p < mainLon.count, !mainLon[p].isNaN else { return 0 }
@@ -165,36 +191,73 @@ nonisolated final class DetailTile: @unchecked Sendable {
             guard abs(tileLon - mainLon[p]) > 180 else { return 0 }
             return tileLon < mainLon[p] ? 360 : -360
         }
-        var pts: [SIMD2<Float>] = []
-        var idx: [UInt32] = []
-        var items: [(place: Int, start: Int, count: Int, cont: String?)] = []
-        var itemRings: [[Range<Int>]] = []
-        var keys: [String] = []
+        var out = Parsed()
         for p in ps {
             guard p.count == 2, let key = p[0] as? String, let counts = p[1] as? [NSNumber] else { return nil }
-            keys.append(key)
+            out.keys.append(key)
             let off = offset(key)
-            let s = idx.count
             var rings: [Range<Int>] = []
             for c in counts {
                 let n = c.intValue
-                let r0 = pts.count
-                for _ in 0 ..< n { pts.append(point(off)) }
-                rings.append(r0 ..< pts.count)
-                if n >= 3 {
-                    let b = UInt32(r0)
-                    for i in 1 ..< n - 1 { idx += [b, b + UInt32(i), b + UInt32(i + 1)] }
-                }
+                let r0 = out.pts.count
+                for _ in 0 ..< n { let (q, k, g) = point(off); out.pts.append(q); out.cut.append(k); out.pin.append(g) }
+                rings.append(r0 ..< out.pts.count)
             }
-            itemRings.append(rings)
+            out.itemRings.append(rings)
+            out.places.append(owners[key] ?? -1)
             let parts = key.hasPrefix("o:") ? key.dropFirst(2).split(separator: "|") : []
-            items.append((owners[key] ?? -1, s, idx.count - s, parts.count > 1 ? String(parts[1]) : nil))
+            out.conts.append(parts.count > 1 ? String(parts[1]) : nil)
+        }
+        out.edges = es
+        for e in xs where e.count == 3 {
+            let a = e[0].intValue, b = e[1].intValue, n = e[2].intValue
+            let off = a >= 0 && a < out.keys.count ? offset(out.keys[a]) : 0
+            var line: [SIMD2<Float>] = [], cut: [Bool] = []
+            for _ in 0 ..< n { let (q, k, _) = point(off); line.append(q); cut.append(k) }
+            out.extra.append((a, b, line, cut))
+        }
+        return out
+    }
+
+    /// the coarse outlines of a parsed tile, for the finer tiles inside it to be laid on
+    static func morphIndex(_ p: Parsed) -> MorphIndex {
+        var rings: [(points: [SIMD2<Float>], place: Int, cut: [Bool]?)] = []
+        for (ii, rs) in p.itemRings.enumerated() {
+            for r in rs { rings.append((Array(p.pts[r]), p.places[ii], Array(p.cut[r]))) }
+        }
+        return MorphIndex(rings: rings, cell: 0.05)
+    }
+
+    /// reads one tile's bytes and lays it out (off the main thread); `coarse`: the outlines its morph starts from (nil:
+    /// none, it is drawn at its true place always)
+    static func make(key: Int64, x: Double, y: Double, size: Double, blob: Data, owners: [String: Int], mainLon: [Double],
+                     device: MTLDevice, coarse: MorphIndex?, coarseSize: Double = 0, close: Float, maxR: Float) -> DetailTile? {
+        guard let p = parse(x: x, y: y, size: size, blob: blob, owners: owners, mainLon: mainLon, coarseSize: coarseSize) else { return nil }
+        let pts = p.pts
+        #if DEBUG
+        let tm = CACurrentMediaTime()
+        #endif
+        let from = coarse?.from(points: pts, rings: p.itemRings, places: p.places, cut: p.cut, pin: p.pin, close: close, maxR: maxR) ?? pts
+        #if DEBUG
+        DetailTile.morphMs += (CACurrentMediaTime() - tm) * 1000
+        #endif
+        var idx: [UInt32] = []
+        var items: [(place: Int, start: Int, count: Int, cont: String?)] = []
+        for (ii, rs) in p.itemRings.enumerated() {
+            let s = idx.count
+            for r in rs where r.count >= 3 {
+                let b = UInt32(r.lowerBound)
+                for i in 1 ..< r.count - 1 { idx += [b, b + UInt32(i), b + UInt32(i + 1)] }
+            }
+            items.append((p.places[ii], s, idx.count - s, p.conts[ii]))
         }
         // the lines: coasts (against the sea) and borders. A border is drawn only where the two sides belong to
         // different places in the chosen borders view. Dashed only where the view says a side is a dotted place (the
-        // old WorldGeometry.dotted rule); on De facto nothing is dotted.
+        // old WorldGeometry.dotted rule); on De facto nothing is dotted. Each segment: its two ends, the same two at
+        // their morph start, its distance along the line, its kind.
         var segs: [Float] = []
-        func addLine(_ line: [SIMD2<Float>], a: Int, b: Int) {
+        let keys = p.keys
+        func addLine(_ line: [SIMD2<Float>], _ start: [SIMD2<Float>], a: Int, b: Int) {
             let kind: Float = b < 0 ? 0 : 1
             if b >= 0, b < keys.count, let oa = owners[keys[a]], let ob = owners[keys[b]], oa == ob { return }
             let dashed: Float = b >= 0 && (Borders.dotted(owners[keys[a]]) || Borders.dotted(owners[keys[b]])) ? 1 : 0
@@ -203,33 +266,33 @@ nonisolated final class DetailTile: @unchecked Sendable {
                 let p0 = line[i - 1], p1 = line[i]
                 let l = simd_length(p1 - p0)
                 if l == 0 { continue }
-                segs += [p0.x, p0.y, p1.x, p1.y, dist, dashed + 2 * kind]
+                segs += [p0.x, p0.y, p1.x, p1.y, start[i - 1].x, start[i - 1].y, start[i].x, start[i].y, dist, dashed + 2 * kind]
                 dist += l
             }
         }
-        for e in es where e.count == 5 {
+        for e in p.edges where e.count == 5 {
             let a = e[0].intValue, b = e[1].intValue, ri = e[2].intValue, st = e[3].intValue, n = e[4].intValue
-            guard a >= 0, a < itemRings.count, ri >= 0, ri < itemRings[a].count else { continue }
-            let r = itemRings[a][ri]
+            guard a >= 0, a < p.itemRings.count, ri >= 0, ri < p.itemRings[a].count else { continue }
+            let r = p.itemRings[a][ri]
             guard r.count > 0, n >= 2 else { continue }
-            var line: [SIMD2<Float>] = []
-            line.reserveCapacity(n)
-            for i in 0 ..< n { line.append(pts[r.lowerBound + (st + i) % r.count]) }
-            addLine(line, a: a, b: b)
+            var line: [SIMD2<Float>] = [], start: [SIMD2<Float>] = []
+            line.reserveCapacity(n); start.reserveCapacity(n)
+            for i in 0 ..< n { let j = r.lowerBound + (st + i) % r.count; line.append(pts[j]); start.append(from[j]) }
+            addLine(line, start, a: a, b: b)
         }
-        for e in xs where e.count == 3 {
-            let a = e[0].intValue, b = e[1].intValue, n = e[2].intValue
-            var line: [SIMD2<Float>] = []
-            let off = a >= 0 && a < keys.count ? offset(keys[a]) : 0
-            for _ in 0 ..< n { line.append(point(off)) }
-            if a >= 0, a < keys.count { addLine(line, a: a, b: b) }
+        for x in p.extra where x.a >= 0 && x.a < keys.count {
+            // a line of its own: each point laid on the coarse outline of its place on its own
+            var start = x.pts
+            if let coarse { start = coarse.lineFrom(points: x.pts, place: p.places[x.a], cut: x.cut, close: close, maxR: maxR) }
+            addLine(x.pts, start, a: x.a, b: x.b)
         }
         guard !pts.isEmpty, !idx.isEmpty,
               let pb = device.makeBuffer(bytes: pts, length: pts.count * MemoryLayout<SIMD2<Float>>.stride),
+              let fb = device.makeBuffer(bytes: from, length: from.count * MemoryLayout<SIMD2<Float>>.stride),
               let ib = device.makeBuffer(bytes: idx, length: idx.count * 4) else { return nil }
         let sb = segs.isEmpty ? nil : device.makeBuffer(bytes: segs, length: segs.count * 4)
-        return DetailTile(key: key, points: pb, fans: ib, fanCount: idx.count, items: items, segs: sb, segCount: segs.count / 6,
-                          cpu: pts, rings: itemRings)
+        return DetailTile(key: key, points: pb, from: fb, fans: ib, fanCount: idx.count, items: items, segs: sb,
+                          segCount: segs.count / 10, cpu: pts, rings: p.itemRings)
     }
 }
 
@@ -246,11 +309,15 @@ final class DetailMaps {
     private var clock = 0
     private var loading = Set<Int64>()
     private let device: MTLDevice
+    private let world: World
+    /// the coarse outlines each tile's morph starts from (Morph.swift)
+    private let sources = MorphSources()
     private let keep = 160
     var onReady: () -> Void = {}
 
     init(device: MTLDevice, world: World) {
         self.device = device
+        self.world = world
         mainLon = world.mainLon
         for l in ["500m", "100m"] {
             if let url = Bundle.main.url(forResource: "detail-\(l)", withExtension: "wyad"), let p = try? DetailPack(url: url) { packs[l] = p }
@@ -275,9 +342,43 @@ final class DetailMaps {
     /// map back to the world's coarse outlines until it came, then forward again. Now only the tiles actually on screen
     /// decide; the margin (now 60%) is only read ahead. If the level wanted isn't ready on screen, the level drawn last
     /// stays while it still covers the screen, then the other level, and the world only when nothing else can.
+    #if DEBUG
+    /// test only (Step 1f's hit test): the tile of a level under a map point, read now on this thread (no morph)
+    func testTile(at p: SIMD2<Float>, level: String) -> DetailTile? {
+        guard let pack = packs[level] else { return nil }
+        let lat = EqualEarth.lat(y: Double(p.y)), lon = EqualEarth.lon(x: Double(p.x), lat: lat)
+        let ll = (lon: lon, lat: lat)
+        let k = DetailPack.key(ll.lon, ll.lat, pack.size)
+        let ck = Self.cacheKey(level, k)
+        if let t = cache[ck] { return t }
+        let x = (ll.lon / pack.size).rounded(.down) * pack.size, y = (ll.lat / pack.size).rounded(.down) * pack.size
+        guard let blob = pack.blob(k) else { return nil }
+        return DetailTile.make(key: k, x: x, y: y, size: pack.size, blob: blob, owners: owners, mainLon: mainLon, device: device,
+                               coarse: nil, close: 0, maxR: 0)
+    }
+    #endif
+
+    /// READ AHEAD AT WHERE THE CAMERA IS GOING (a flight's end, set as it starts), so the levels it ends on are ready
+    /// when it arrives and nothing drops to the world's outlines on the way (Step 1e: a flight from 400 km out to
+    /// 2,500 km and back showed the world's outlines for a moment each time, then the detail settling back in)
+    func prefetch(c: SIMD2<Double>, k: Double, view: CGSize) {
+        let hw = Double(view.width) / 2 / k, hh = Double(view.height) / 2 / k
+        let km = EqualEarth.kmAcross(x0: c.x - hw, x1: c.x + hw, y: c.y)
+        func read(_ level: String) {
+            guard let pack = packs[level] else { return }
+            let box = EqualEarth.geoBox(x0: c.x - hw * 1.3, x1: c.x + hw * 1.3, y0: c.y - hh * 1.3, y1: c.y + hh * 1.3)
+            let want = pack.tiles(lon0: box.lon0, lat0: box.lat0, lon1: box.lon1, lat1: box.lat1)
+                .map { ($0.x, $0.y, $0.key) }.filter { cache[Self.cacheKey(level, $0.2)] == nil }
+            if !want.isEmpty, want.count <= 400 { load(level: level, pack: pack, want) }
+        }
+        if km < 3000 { read("500m") }
+        if km < 620 { read("100m") }
+    }
+
     func visible(c: SIMD2<Double>, k: Double, view: CGSize) -> [DetailTile]? {
         let hw = Double(view.width) / 2 / k, hh = Double(view.height) / 2 / k
         let km = EqualEarth.kmAcross(x0: c.x - hw, x1: c.x + hw, y: c.y)
+        lastKm = km
         clock += 1
         func keys(_ pack: DetailPack, margin m: Double) -> [(Double, Double, Int64)] {
             let box = EqualEarth.geoBox(x0: c.x - hw * (1 + m), x1: c.x + hw * (1 + m), y0: c.y - hh * (1 + m), y1: c.y + hh * (1 + m))
@@ -310,10 +411,12 @@ final class DetailMaps {
             let ahead = keys(pack, margin: 0.6).filter { cache[Self.cacheKey(level, $0.2)] == nil }
             if !ahead.isEmpty, ahead.count <= 400 { load(level: level, pack: pack, ahead) }
         }
-        // THE LEVELS CHANGE WITH THE ZOOM ITSELF: across a band of the zoom the finer lines come in and the coarser go,
-        // each as strong as how far into the band the screen is, so a slow pinch changes them slowly, a pinch that
-        // stops half way leaves them half way, and zooming back undoes it exactly. The world's outlines to the 500 m
-        // tiles between 2,300 and 1,700 km across, the 500 m to the 100 m between 470 and 330 km.
+        // THE LEVELS CHANGE WITH THE ZOOM ITSELF: across a band of the zoom the finer level is drawn alone, every point
+        // moving from its place on the coarser outline to its own (the morph, Morph.swift) as far as the screen is into
+        // the band, so a slow pinch changes it slowly, a pinch that stops half way leaves it half way, and zooming back
+        // undoes it exactly. Nothing fades: at the band's start the finer level lies on the coarser one, so the swap
+        // between them can't be seen. The world's outlines to the 500 m tiles between 2,300 and 1,700 km across, the
+        // 500 m to the 100 m between 470 and 330 km.
         let band: (coarse: String?, fine: String, e: Double)?
         let only: String?
         if km >= 2300 { band = nil; only = nil }
@@ -325,39 +428,78 @@ final class DetailMaps {
         if km < 3000 { readAhead("500m") }
         if km < 620 { readAhead("100m") }
         var fill: [DetailTile]?? = nil
-        var sets: [(tiles: [DetailTile]?, strength: Float)] = []
-        if let b = band {
-            let cr = ready(b.coarse), fr = ready(b.fine)
-            if let cr, let fr {
-                fill = b.e >= 0.5 ? fr : cr
-                sets = [(cr, Float(min(1, 2 * (1 - b.e)))), (fr, Float(min(1, 2 * b.e)))]
-            } else if let cr { fill = cr; sets = [(cr, 1)] }
-            else if let fr { fill = fr; sets = [(fr, 1)] }
-        } else if let r = ready(only) { fill = r; sets = [(r, 1)] }
+        var level: String?
+        var m: Float = 1
+        if let b = band, testCoarse, let cr = ready(b.coarse) {
+            // test only: the coarser level as it is, to lay the morph's start over it
+            fill = cr; level = b.coarse
+        } else if let b = band {
+            // the finer level, morphing, once every tile of it on screen is ready; until then the coarser one as it is
+            if let fr = ready(b.fine) { fill = fr; level = b.fine; m = Float(b.e) }
+            else if let cr = ready(b.coarse) { fill = cr; level = b.coarse }
+        } else if let r = ready(only) { fill = r; level = only }
+        // A LEVEL ARRIVING LATE (the zoom already into or past the band when its tiles come: a fast pinch, a flight):
+        // the same morph runs from its start to where the zoom is over 0.35 s on a smoothstep (Part 1.6), never a jump.
+        // Its goal moves with the zoom while it runs.
+        let goal: Float = level != nil && level == band?.fine ? m : 1
+        let now = CACurrentMediaTime()
+        // (only from the level just coarser than it, which its morph starts on: the world for the 500 m tiles, the
+        // 500 m tiles for the 100 m ones)
+        if let lv = level, (fill ?? nil) != nil, lv != shownLevel, shownLevel == (lv == "100m" ? "500m" : nil), goal > 0.05 {
+            arrival = (lv, now)
+            #if DEBUG
+            FrameStats.log(String(format: "wya detail %@ arrived late, settling to %.2f", lv, goal))
+            #endif
+        }
+        #if DEBUG
+        if level != shownLevel { FrameStats.log(String(format: "wya detail level %@ (morph %.2f) -> %@ (morph %.2f)", shownLevel ?? "world", morph, level ?? "world", m)) }
+        #endif
+        settling = false
+        if let a = arrival {
+            let k = Float(min(1, (now - a.at) / 0.35))
+            if a.level == level && k < 1 { m = goal * k * k * (3 - 2 * k); settling = true } else { arrival = nil }
+        }
         // not ready: what was drawn last, while it still covers the screen; then the world
         if fill == nil {
-            if let sl = shownLevel, let r = ready(sl) { fill = r } else { fill = .some(nil) }
-            sets = [(fill!, 1)]
+            if let sl = shownLevel, let r = ready(sl) { fill = r; level = sl } else { fill = .some(nil); level = nil }
         }
         let chosen = fill!
-        shownLevel = chosen == nil ? nil : (band.map { b in (b.e >= 0.5 ? b.fine : b.coarse) } ?? only)
+        shownLevel = chosen == nil ? nil : level
         shownTiles = chosen
-        lineSets = sets
+        morph = chosen == nil ? 1 : (testMorph ?? (level == band?.fine || settling ? m : 1))
+        lineSets = [(chosen, morph)]
         return chosen
     }
 
-    /// the lines to draw now: one set, or while the zoom is in a band between two levels, both, each at its strength
-    private(set) var lineSets: [(tiles: [DetailTile]?, strength: Float)] = []
+    /// the lines to draw now, and how far into its morph the level is (1: at its true place)
+    private(set) var lineSets: [(tiles: [DetailTile]?, morph: Float)] = []
+    private(set) var morph: Float = 1
+    private var lastKm: Double = 0
+    /// a level that came in late, settling into its place (when, and how far it had to go)
+    private var arrival: (level: String, at: CFTimeInterval)?
+    /// the late level is still settling: the map keeps drawing at full rate
+    private(set) var settling = false
+    /// test only (driver "morph <0..1|auto>", "coarse on|off"): the morph held at a value; the coarser level shown
+    var testMorph: Float?
+    var testCoarse = false
+    /// test only: every tile read again (after the morph's rules change, or to probe one)
+    func dropTiles() { cache = [:]; used = [:]; shownTiles = nil; shownLevel = nil }
 
     /// THE PLACE UNDER A FINGER on the detailed map: every place whose shape holds the point, and of them the one whose
     /// piece there is smallest (the enclave over the country round it, the Vatican over Rome); a tiny piece within
     /// `reach` of the finger wins over land round it, so a place smaller than a fingertip can still be touched.
-    func place(at p: SIMD2<Float>, reach: Float, tiny: Float) -> Int? {
+    func place(at p: SIMD2<Float>, reach: Float, tiny: Float, small: (Int) -> Bool = { _ in true }) -> Int? {
         guard let tiles = shownTiles else { return nil }
+        return Self.place(in: tiles, at: p, reach: reach, tiny: tiny, small: small)
+    }
+    /// the same, on given tiles, from any thread (the tiles never change once made); `small`: the places the reach may
+    /// find (only places smaller than a fingertip, never a small piece of a big country)
+    nonisolated static func place(in tiles: [DetailTile], at p: SIMD2<Float>, reach: Float, tiny: Float,
+                                  small: (Int) -> Bool = { _ in true }) -> Int? {
         var best: (place: Int, size: Float)?
         for t in tiles { for h in t.hits(p) where h.size < (best?.size ?? .greatestFiniteMagnitude) { best = h } }
         var close: (place: Int, d: Float)?
-        for t in tiles { for n in t.near(p, reach: reach, under: tiny) where n.d < (close?.d ?? .greatestFiniteMagnitude) { close = (n.place, n.d) } }
+        for t in tiles { for n in t.near(p, reach: reach, under: tiny) where small(n.place) && n.d < (close?.d ?? .greatestFiniteMagnitude) { close = (n.place, n.d) } }
         if let c = close, c.place != best?.place, (best?.size ?? .greatestFiniteMagnitude) > tiny * tiny { return c.place }
         return best?.place
     }
@@ -365,10 +507,12 @@ final class DetailMaps {
     private var shownLevel: String?
     private var shownTiles: [DetailTile]?
     var debugState: String {
-        "level \(shownLevel ?? "world") tiles \(shownTiles?.count ?? -1) segs \(shownTiles?.reduce(0) { $0 + $1.segCount } ?? -1) cache \(cache.count)"
+        "level \(shownLevel ?? "world") morph \(String(format: "%.2f", morph)) km \(Int(lastKm)) tiles \(shownTiles?.count ?? -1) segs \(shownTiles?.reduce(0) { $0 + $1.segCount } ?? -1) cache \(cache.count)"
     }
     /// the detailed tiles are what is drawn now (then the world's coarse shapes don't answer touches)
     var drawsTiles: Bool { shownTiles != nil }
+    /// the tiles drawn now (nil: the world's own shapes), for lookups made off the main thread
+    var tilesShown: [DetailTile]? { shownTiles }
 
     nonisolated private static func cacheKey(_ level: String, _ k: Int64) -> Int64 { level == "100m" ? k : -k - 1 }
 
@@ -376,15 +520,48 @@ final class DetailMaps {
         let todo = tiles.filter { !loading.contains(Self.cacheKey(level, $0.2)) }
         guard !todo.isEmpty else { return }
         for t in todo { loading.insert(Self.cacheKey(level, t.2)) }
-        let owners = self.owners, device = self.device, mainLon = self.mainLon
+        let owners = self.owners, device = self.device, mainLon = self.mainLon, world = self.world, sources = self.sources
+        let coarsePack = packs["500m"]
         Task.detached(priority: .userInitiated) {
             var made: [(Int64, DetailTile?)] = []
+            #if DEBUG
+            let t0 = CACurrentMediaTime()
+            #endif
             for t in todo {
                 let ck = DetailMaps.cacheKey(level, t.2)
                 guard let blob = pack.blob(t.2) else { made.append((ck, nil)); continue }
-                made.append((ck, DetailTile.make(key: t.2, x: t.0, y: t.1, blob: blob, owners: owners, mainLon: mainLon, device: device)))
+                // the coarser outline its morph starts from: the world's for a 500 m tile; for a 100 m tile, the 500 m
+                // tile it lies in (2° tiles inside 10° ones). In map units (about 40 km each): `close` 2.4 km and
+                // 0.5 km (a cut edge's point that near is laid on it), looked for up to 80 km and 20 km.
+                var coarse: MorphIndex?
+                var close: Float = 0, maxR: Float = 0
+                if level == "500m" {
+                    coarse = sources.world(world); close = 0.06; maxR = 2
+                } else if level == "100m", let cp = coarsePack {
+                    let cx = t.0 + pack.size / 2, cy = t.1 + pack.size / 2
+                    let k5 = DetailPack.key(cx, cy, cp.size)
+                    let x5 = (cx / cp.size).rounded(.down) * cp.size, y5 = (cy / cp.size).rounded(.down) * cp.size
+                    coarse = sources.tile(k5) {
+                        cp.blob(k5).flatMap { DetailTile.parse(x: x5, y: y5, size: cp.size, blob: $0, owners: owners, mainLon: mainLon) }
+                            .map(DetailTile.morphIndex)
+                    }
+                    close = 0.0125; maxR = 0.5
+                }
+                made.append((ck, DetailTile.make(key: t.2, x: t.0, y: t.1, size: pack.size, blob: blob, owners: owners, mainLon: mainLon,
+                                                 device: device, coarse: coarse, coarseSize: level == "100m" ? (coarsePack?.size ?? 0) : 0,
+                                                 close: close, maxR: maxR)))
             }
-            await MainActor.run { [made] in self.arrived(made) }
+            #if DEBUG
+            let line = String(format: "wya tiles %@ %d read in %.0f ms (of which the morph: %.0f ms)", level, made.count,
+                              (CACurrentMediaTime() - t0) * 1000, DetailTile.morphMs)
+            DetailTile.morphMs = 0
+            #endif
+            await MainActor.run { [made] in
+                #if DEBUG
+                FrameStats.log(line)
+                #endif
+                self.arrived(made)
+            }
         }
     }
 

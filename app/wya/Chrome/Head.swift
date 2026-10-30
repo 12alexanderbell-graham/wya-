@@ -84,18 +84,21 @@ final class HeadState {
     }
     func pullEnded(velocity: CGFloat) {
         let projected = pull + Flow.project(velocity) * 0.5
-        settlePull(to: projected > HeadState.aiStop / 2 ? 1 : 0)
+        settlePull(to: projected > HeadState.aiStop / 2 ? 1 : 0, speed: abs(velocity))
     }
-    func settlePull(to s: Int) {
+    /// `speed`: the release's, for the landing (3.7: the `land` haptic by it, the thud above 15%); 900 for a settle
+    /// that no finger let go of
+    func settlePull(to s: Int, speed: CGFloat = 900) {
         pullStop = s
-        withAnimation(TopPull.settle) {
+        withAnimation(Motion.settle) {
             pull = s == 1 ? HeadState.aiStop : 0
             // a pull from the gear never leaves half a gear behind: back to the dot, or on into the AI
             gear = 0
         } completion: {
             if self.pullStop == 0 && self.pull < 0.5 { self.pullFromGear = false }
         }
-        Feel.land(speed: 900)
+        Feel.land(speed: speed)
+        Sound.land(speed / 2400)
     }
 
     /// the AI's part of the pull as the dot morph draws it (after the gear has gone, when the pull started from it)
@@ -133,13 +136,6 @@ struct IconRoll: View {
         .frame(width: 44, height: 44)
         .clipShape(Circle())
     }
-}
-
-/// The head's one curve: smooth, no bounce
-@MainActor
-enum Motion {
-    static let chrome = Animation.smooth(duration: 0.38)
-    static let quick = Animation.smooth(duration: 0.26)
 }
 
 /// THE HEAD (Apple's toolbar: 44 glass circles 16 from the edges, centred 22 under the safe top): search · the mode
@@ -238,7 +234,7 @@ struct HeadView: View {
             // once the field has drawn back.
             if dotInIsland {
                 Animated(p: searchP) { p in
-                    IslandDrop(p: p, dot: CGPoint(x: L.W / 2, y: L.headY), island: L.island, ink: ink)
+                    IslandDrop(p: p, dot: CGPoint(x: L.W / 2, y: L.headY), island: L.island, notch: L.notch, ink: ink)
                 }
                 .frame(width: L.W, height: L.H)
                 .allowsHitTesting(false)
@@ -262,13 +258,17 @@ struct HeadView: View {
                 if !head.searching { dotInIsland = false }
             }
         }
-        .onChange(of: head.toolsOpen) { _, v in if v { putAIBack() } }
+        .onChange(of: head.toolsOpen) { _, v in
+            if v { putAIBack() }
+            // quick stamping ends with the tools (3.6), unless Map settings' "Always on" (Part 4.7, not built yet)
+            else if head.quickStamp { withAnimation(Motion.chrome) { head.quickStamp = false } }
+        }
         // held still, the dot becomes the gear over the hold; let go early and it goes back; held to the end,
         // settings open and the gear stays, rolling
         .onChange(of: head.dotHeld) { _, held in
             if held {
                 guard !head.settingsOpen else { return }
-                Feel.tick()
+                Feel.tick(); Sound.tick()
                 withAnimation(.timingCurve(0.3, 0, 0.2, 1, duration: TopPull.holdForm)) { head.gear = 1 } completion: {
                     guard head.dotHeld, !head.settingsOpen else { return }
                     head.openSettings()
@@ -300,7 +300,8 @@ struct HeadView: View {
         ZStack(alignment: .leading) {
             if p > 0.001 || head.searching {
                 TextField("Search", text: $head.query)
-                    .font(.system(size: 17))
+                    .font(.body)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .foregroundStyle(ink)
                     .focused($typing)
                     .submitLabel(.search)
@@ -370,7 +371,7 @@ struct HeadView: View {
         head.closeSettings()
         guard head.pullStop > 0 || head.pull > 0 else { return }
         head.pullStop = 0
-        withAnimation(TopPull.settle) { head.pull = 0 }
+        withAnimation(Motion.settle) { head.pull = 0 }
     }
 
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
@@ -384,17 +385,33 @@ struct HeadView: View {
             default: head.toolsOpen = false
             }
         } label: {
-            // bare circles until he picks their icons, filled when on
-            ZStack {
-                if on { Circle().fill(ink) } else { Circle().strokeBorder(ink, lineWidth: 1.6) }
-            }
-            .frame(width: 17, height: 17)
+            // bare circles until he picks their icons, filled when on: the ring thickens into the disc (and thins
+            // back), as the first tool on the dot does, never a one-frame swap
+            ToolRing(width: on ? 8.5 : 1.6)
+                .fill(ink, style: FillStyle(eoFill: true))
+                .animation(Motion.quick, value: on)
+                .frame(width: 17, height: 17)
             .frame(width: slot, height: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(names[i])
         .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}
+
+/// a ring of a given width inside its frame (as wide as the radius: the disc)
+nonisolated struct ToolRing: Shape {
+    var width: CGFloat
+    var animatableData: CGFloat {
+        get { width }
+        set { width = newValue }
+    }
+    func path(in rect: CGRect) -> Path {
+        var p = Path(ellipseIn: rect)
+        let w = min(width, rect.width / 2)
+        if w < rect.width / 2 - 0.01 { p.addEllipse(in: rect.insetBy(dx: w, dy: w)) }
+        return p
     }
 }
 
@@ -408,12 +425,16 @@ struct IslandDrop: View {
     let p: CGFloat
     let dot: CGPoint
     let island: CGRect
+    var notch: CGRect = .zero
     let ink: Color
 
     var body: some View {
         let r = DotMorph.dotR
-        // a phone without an island: the dot goes up into the top edge of the screen
-        let target = island == .zero ? CGRect(x: dot.x - r / 2, y: -2 * r, width: r, height: r) : island
+        // the island: it widens into the island's capsule. A notch (the 17e): it rises into the notch at its own size,
+        // never widening, black into the notch's black (0.8.11; A3.2). No cutout at all: up past the screen's top edge
+        let target = island != .zero ? island
+            : notch != .zero ? CGRect(x: dot.x - r, y: notch.midY - r, width: 2 * r, height: 2 * r)
+            : CGRect(x: dot.x - r, y: -3 * r, width: 2 * r, height: 2 * r)
         let travel = Flow.smooth(0, 0.5, p)
         let merge = Flow.smooth(0.28, 0.6, p)
         // a circle that becomes the island's capsule, never squashed or stretched on the way (no cartoon drop)
@@ -507,22 +528,22 @@ struct ModeWheel: View {
                 .allowsHitTesting(false)
             FirstTool(p: toolsP, lit: lit, ink: ink)
                 .allowsHitTesting(false)
-            // THE MODE'S NAME under the wheel while you hold it. It grows down from its own top edge, 28 points under
-            // the wheel's middle, and shrinks back up to that edge, all the way to nothing: it was moved there by an
-            // offset, which the shrink doesn't see, so it shrank toward the wheel's middle and vanished at 40%. It is
-            // laid out there now, so its top edge is where it shrinks to, clear of the circle.
+            // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's
+            // middle, clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as
+            // the wheel passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces
+            // when not shown.
+            let i = Int(at.rounded()).clamped(0, 3)
+            let name = HeadState.Mode(rawValue: i)!.name
             VStack(spacing: 0) {
                 Color.clear.frame(width: 1, height: 100 + 28)
-                if dragging {
-                    Text(HeadState.Mode(rawValue: Int(at.rounded()).clamped(0, 3))!.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(ink)
-                        .fixedSize()
-                        // the name rolls to the next as the wheel passes a mode (the same text roll as the caption)
-                        .contentTransition(.numericText())
-                        .animation(Motion.quick, value: Int(at.rounded()).clamped(0, 3))
-                        .transition(.scale(scale: 0.001, anchor: .top))
-                }
+                Text(dragging ? name : String(repeating: "\u{2002}", count: name.count))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(ink)
+                    .fixedSize()
+                    // in rises, out goes down, a pass rolls the way the wheel turns
+                    .contentTransition(.numericText(value: dragging ? Double(i + 1) : 0))
+                    .animation(Motion.quick, value: dragging ? i + 1 : 0)
+                    .accessibilityHidden(true)
             }
             .frame(width: 200, height: 200, alignment: .top)
             .allowsHitTesting(false)
@@ -590,9 +611,9 @@ struct ModeWheel: View {
         if head.dotHeld { head.dotHeld = false }
     }
 
-    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule)
+    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule) With settings open
+    /// the wheel still turns and changes the mode; the gear stays on top.
     private func turn(_ dx: CGFloat) {
-        if head.settingsOpen { return }
         if !dragging {
             endHold()
             withAnimation(Motion.quick) { dragging = true; reveal = 1 }
@@ -609,7 +630,6 @@ struct ModeWheel: View {
     }
     /// the finger is off; `fling` is how much further it would have gone
     private func letGo(_ fling: CGFloat) {
-        // the gear never turns the modes
         guard dragging else { return }
         let projected = at - fling / step * 0.3
         choose(Int(projected.rounded()).clamped(0, 3))
@@ -702,6 +722,23 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
+enum ResultKey: Hashable { case place(Int), miss }
+
+/// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
+/// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
+/// it, and the box's bottom edge is the sum of them all. (SwiftUI's own animations failed here three ways: a removal
+/// transition froze the row's layout, a transition's modifier wrapped the row's y too, and rows placed at their final
+/// y overlapped slots still closing when letters came faster than the curve.) The curve is `Motion.quick`'s: a
+/// critically damped spring of response 0.26 s (0.2 s with Reduce Motion), retargeted from its value and speed.
+struct ResultSlot {
+    var x0: Double, v0: Double, t0: Double, to: Double
+    static var w: Double { 2 * .pi / (Motion.reduce ? 0.2 : 0.26) }
+    func at(_ t: Double) -> (x: Double, v: Double) {
+        let w = Self.w, dt = max(0, t - t0), d = x0 - to, b = v0 + w * d, e = exp(-w * dt)
+        return (to + (d + b * dt) * e, (b - w * (d + b * dt)) * e)
+    }
+}
+
 /// The search results: the places whose name, formal name, other names or the names people type match. The box is the
 /// field's own width, under it.
 struct SearchResults: View {
@@ -723,32 +760,99 @@ struct SearchResults: View {
         let hits = typed ? Self.matches(map: map, query: head.query) : Self.suggestions(map: map)
         // a typo with no match: the nearest place, as a row of its own
         let guess = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
-        let rows = hits.isEmpty ? (typed ? 1 : 0) : hits.count
-        let full = CGFloat(rows) * 44 + 8
-        // from the circle (44 by 44, in the circle's place) to the full box
-        let h = 44 + (max(44, full + gap) - 44) * reveal - gap * reveal, w = width > 0 ? width : fullWidth
-        if rows > 0 && reveal > 0.001 {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(hits, id: \.self) { i in row(i, note: nil) }
-                if hits.isEmpty && typed {
-                    if let guess { row(guess, note: "Did you mean?") } else {
-                        Text("No results")
-                            .font(.system(size: 17))
-                            .foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 16)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so "Fra"
+        // to "Frnace" keeps the France row and only its note rolls to
+        let keys: [ResultKey] = hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
+        let w = width > 0 ? width : fullWidth
+        // a stack that is always there (an empty Group is no view, so its onChange never ran and the first list never
+        // came)
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(width: 0, height: 0)
+            if !shown.isEmpty && reveal > 0.001 {
+                TimelineView(.animation(paused: Date().timeIntervalSinceReferenceDate > until)) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let open = shown.map { CGFloat(min(1, max(0, slots[$0]?.at(t).x ?? 1))) }
+                    let full = 44 * open.reduce(0, +) + 8
+                    // from the circle (44 by 44, in the circle's place) to the full box
+                    let h = 44 + (max(44, full + gap) - 44) * reveal - gap * reveal
+                    // a row coming or going opens or closes its own slot from its bottom edge (uncovered or covered,
+                    // the rows under it moving with it), never a fade (A1.13)
+                    ZStack(alignment: .topLeading) {
+                        ForEach(Array(shown.enumerated()), id: \.element) { n, k in
+                            Group {
+                                switch k {
+                                case .place(let i): row(i, note: i == guess ? "Did you mean?" : nil)
+                                case .miss: missRow()
+                                }
+                            }
+                            .frame(height: 44 * open[n], alignment: .top)
+                            .clipped()
+                            .padding(.top, 44 * open[..<n].reduce(0, +))
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .padding(.vertical, 4)
+                    .frame(width: fullWidth > 0 ? fullWidth : nil, height: max(full, 8), alignment: .top)
+                    .offset(y: gap * (1 - reveal))
+                    // the box's own size grows with the opening, its rows uncovered from the top left (never scaled,
+                    // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
+                    .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
+                    .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
+                    .glassEffect(.clear, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
                 }
             }
-            .padding(.vertical, 4)
-            .frame(width: fullWidth > 0 ? fullWidth : nil, height: full, alignment: .top)
-            .offset(y: gap * (1 - reveal))
-            // the box's own size grows with the opening, its rows uncovered from the top left (never scaled, never
-            // faded); a change of rows while typing grows or shrinks it on the quick curve
-            .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
-            .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-            .glassEffect(.clear, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
-            .animation(Motion.quick, value: rows)
+        }
+        .onChange(of: keys, initial: true) { old, new in update(to: new, first: old == new) }
+    }
+
+    /// the rows on screen: the new rows in their order, each leaving row kept just after the row it followed, its slot
+    /// closing; a row whose slot has shut is dropped at the next change or when all have settled (at no height, so
+    /// nothing is seen to go). A row that comes back while closing opens again from where it is.
+    @State private var shown: [ResultKey] = []
+    @State private var slots: [ResultKey: ResultSlot] = [:]
+    @State private var until: Double = 0
+    @State private var run = 0
+    private func update(to new: [ResultKey], first: Bool) {
+        let t = Date().timeIntervalSinceReferenceDate
+        // the first list (search opening) is there at once: the box itself opens over it
+        if first || shown.isEmpty {
+            shown = new
+            slots = Dictionary(uniqueKeysWithValues: new.map { ($0, ResultSlot(x0: 1, v0: 0, t0: t, to: 1)) })
+            return
+        }
+        // shut rows go first, so the list never grows while letters come fast
+        let live = shown.filter { k in
+            guard let s = slots[k], s.to == 0 else { return true }
+            return s.at(t).x > 0.002
+        }
+        var merged: [ResultKey] = [], next = 0
+        for k in live {
+            if let j = new.firstIndex(of: k) {
+                if j >= next { merged += new[next ... j]; next = j + 1 }
+            } else {
+                merged.append(k)
+            }
+        }
+        if next < new.count { merged += new[next...] }
+        var s2: [ResultKey: ResultSlot] = [:]
+        for k in merged {
+            let to: Double = new.contains(k) ? 1 : 0
+            if let s = slots[k] {
+                let (x, v) = s.at(t)
+                s2[k] = ResultSlot(x0: x, v0: v, t0: t, to: to)
+            } else {
+                s2[k] = ResultSlot(x0: 0, v0: 0, t0: t, to: to)
+            }
+        }
+        shown = merged
+        slots = s2
+        until = t + 0.6
+        run += 1
+        let me = run
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            guard me == run else { return }
+            shown.removeAll { slots[$0]?.to == 0 }
+            until = 0   // the clock stops (a new value makes the view look again and pause its timeline)
         }
     }
 
@@ -766,20 +870,39 @@ struct SearchResults: View {
                 .frame(width: 22, height: 22)
                 .clipShape(Circle())
                 Text(pl?.n ?? "")
-                    .font(.system(size: 17))
+                    .font(.body)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? "")
-                    .font(.system(size: 15))
+                    .font(.subheadline)
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1)
+                    .contentTransition(.numericText())
+                    .animation(Motion.quick, value: note)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
             .contentShape(Rectangle())
+            // Apple's text styles up to the largest standard size: the rows are 44 pt; the AX sizes need growing rows
+            // and a scrolling box (Part 1.10's AX note), not built yet
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
         .buttonStyle(.plain)
+    }
+
+    /// no match and no near name: "No results", in the name's place
+    private func missRow() -> some View {
+        HStack(spacing: 12) {
+            Color.clear.frame(width: 22, height: 22)
+            Text("No results")
+                .font(.body)
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
     }
 
     /// the name closest to what was typed, by edit distance against each name's start of the same length (so "Shenzen"

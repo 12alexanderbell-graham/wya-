@@ -24,6 +24,8 @@ enum Flags {
         return (flags, d, 12 + hl)
     }()
     private static var cache: [String: Image] = [:]
+    /// every flag in the pack (for the review sheet)
+    static var ids: [String] { pack.map { Array($0.index.keys) } ?? [] }
 
     /// the place's round flag, or nil if there is none
     static func round(_ id: String) -> Image? {
