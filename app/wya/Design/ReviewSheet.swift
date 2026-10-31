@@ -11,13 +11,13 @@ struct ReviewItem: Identifiable {
 
 enum ReviewSheet {
     /// lays the items out `columns` across and writes the picture at 3x
-    @MainActor static func save(_ name: String, title: String, items: [ReviewItem], cell: CGSize, columns: Int) {
+    @MainActor static func save(_ name: String, title: String, note: String? = nil, items: [ReviewItem], cell: CGSize, columns: Int) {
         #if targetEnvironment(simulator) && DEBUG
         let sheet = VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Palette.ink)
-            Text("\(items.count) items, drawn by the app's own code. Each: real size, then 3x; its id and name.")
+            Text(note ?? "\(items.count) items, drawn by the app's own code. Each: real size, then 3x; its id and name.")
                 .font(.system(size: 13))
                 .foregroundStyle(Palette.ink.opacity(0.5))
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell.width), spacing: 8), count: columns),
