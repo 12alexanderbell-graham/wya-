@@ -70,6 +70,8 @@ struct ContentView: View {
                 #if DEBUG
                 // the colour picker's test host (Part 15; its real hosts come with Pins)
                 PickerTestHost(L: water.layout)
+                // the pins review (8.3), over the map or Apple's
+                PinReviewHost(L: water.layout)
                 #endif
                 // the sheet's top read in a view of its own, so its every frame re-runs only this, not the whole screen
                 SheetWatch(water: water, map: map)
