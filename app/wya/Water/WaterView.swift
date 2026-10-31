@@ -178,7 +178,11 @@ struct SheetContent: View {
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
-            if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, map.regionScene == nil {
+            // THE PAGE'S OWN SHEET (16.6) over a place's page, in the water at 50%
+            if water.pageSheet { PageSheet(water: water, map: map, form: form).transition(.identity) }
+            // (never under a place's page: the water there is only the tab capsule or the page's sheet)
+            if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
+               !PlacePageState.shared.isOpen, map.regionScene == nil {
                 PlacesShelf(water: water, map: map, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
             }
             // REGIONS' SELECTION MENU (6.3), riding the water's top; kept while its rows leave
@@ -196,7 +200,7 @@ struct SheetContent: View {
             }
             // THE STAMPED LIST (Part 4.6) under the caption, which stays; hidden while Details from a row is up
             let captionY = max(L.headBottom + 12 + 52, form.top + 72)
-            if (water.stampedList || water.listLeaving) && !water.details {
+            if (water.stampedList || water.listLeaving) && !water.details && !water.pageSheet {
                 StampedList(water: water, map: map, form: form, top: captionY + 56).transition(.identity)
             }
 
@@ -209,7 +213,7 @@ struct SheetContent: View {
                     .frame(width: L.W, height: L.H, alignment: .top)
                     .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
             }
-            if !Perf.shared.off.contains("caption"), map.regionScene == nil {
+            if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
                     Caption(name: map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
@@ -227,7 +231,7 @@ struct SheetContent: View {
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, region == nil {
+            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
@@ -256,7 +260,7 @@ struct SheetContent: View {
             // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, a continent by name; on a
             // continent, its stamped list or back to the world. The ring follows (the front planet is the map's)
             if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList,
-               region == nil {
+               !water.pageSheet, region == nil {
                 let here = map.continent
                 Color.clear
                     .frame(width: 180, height: 26)
@@ -332,6 +336,7 @@ struct SheetContent: View {
     /// the solar system is down out of the water while something else is the water's content
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
+            || water.pageSheet
             // Places' 50% holds the shelf (7.5), so the solar system is down out of the water there
             || map.placesMode
     }

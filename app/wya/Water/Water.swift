@@ -162,6 +162,8 @@ final class Water {
     /// THE STAMPED LIST is the water's content (Part 4.6): opened by the caption's number, at full; `listFrom` is the
     /// stop it goes back to
     var stampedList = false
+    /// a place's page is up and its own sheet is in the water (16.6)
+    var pageSheet = false
     @ObservationIgnored var listFrom: Stop?
     func openList() {
         guard !stampedList else { return }
