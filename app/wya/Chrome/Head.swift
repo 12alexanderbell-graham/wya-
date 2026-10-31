@@ -201,7 +201,7 @@ struct HeadView: View {
                         searchCapsule(ink: ink, p: p, fieldW: fieldW)
                             .frame(width: L.circle + (fieldW - L.circle) * p, height: L.circle, alignment: .leading)
                             .clipShape(Capsule())
-                            .glassEffect(.clear, in: .capsule)
+                            .glassEffect(PlacePageState.shared.isOpen && p > 0.01 ? .regular : .clear, in: .capsule)
                     }
                     .frame(width: fieldW, height: L.circle, alignment: .leading)
                     .position(x: L.side + fieldW / 2, y: L.headY)
@@ -434,10 +434,11 @@ struct HeadView: View {
     private func plusButton(ink: Color) -> some View {
         // on a place's page the plus rolls into Share inside its own circle, with the page's growth (A16.1, 16.3)
         let page = PlacePageState.shared
-        let share = page.isOpen ? page.p : 0
+        // (search open on a page: the circle is search's close, as everywhere; 31 Oct 01:17 "I can't press the X")
+        let share = page.isOpen && !head.searching ? page.p : 0
         return Button {
             Feel.tap(); Sound.tap()
-            if page.isOpen && page.p > 0.5 { sharePage(); return }
+            if page.isOpen && page.p > 0.5 && !head.searching { sharePage(); return }
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
@@ -452,7 +453,7 @@ struct HeadView: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(page.isOpen ? "Share" : head.searching ? "Close search" : head.toolsOpen ? "Close tools" : "Tools")
+        .accessibilityLabel(page.isOpen && !head.searching ? "Share" : head.searching ? "Close search" : head.toolsOpen ? "Close tools" : "Tools")
     }
 
     /// a page's Share: the system share sheet with its name and the page's link (16.6; `wya://page/<key>`)
@@ -953,7 +954,8 @@ struct SearchResults: View {
                     // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
                     .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
                     .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-                    .glassEffect(.clear, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
+                    // over a place's page: the logically frosted glass (16.3, Part 0.7), so the page's words don't read through
+                    .glassEffect(PlacePageState.shared.isOpen ? .regular : .clear, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
                 }
             }
         }
