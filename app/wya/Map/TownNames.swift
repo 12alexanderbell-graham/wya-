@@ -4,7 +4,9 @@ import SwiftUI
 /// THE NAMES ON THE PLACES MAP (7.4: "the Apple Maps way"; the old app's TownNames rules, its labels over the map):
 /// 13 pt semibold ink with a 2 pt cream halo; from 3x the country's framing zoom; the capital first, then regional
 /// capitals, then by people; a name only once its town's shape is 12 pt across; at most 8 on screen, 4 pt clear of each
-/// other, never under the head, the zoom column or the 25% water; a name that is up keeps its place while you zoom.
+/// other, never under the head, the zoom column or the 25% water; a name keeps its place while you zoom (it is pinned to
+/// its town), but a bigger town's name always wins the room (31 Oct: Frankfurt was kept out by eight smaller names
+/// that came up first on the way in).
 /// Each name rolls in (its letters rising into place) across its own band of zoom: the progress is the zoom's, so a
 /// pinch scrubs it both ways and nothing arrives on a timer (29 Oct 02:10: "It needs to zoom in consistently, like
 /// mathematically").
@@ -102,13 +104,19 @@ final class TownNamesView: UIView {
         let dotsOn = MapSettingsStore.shared.value.townDots
         if orderFor?.cc != cc || orderFor?.dots != dotsOn {
             var o: [Int] = []
-            for kind in [2, 1, 0] { for i in sc.towns.indices where sc.towns[i].kind == kind && (dotsOn || sc.runs[i] != nil) { o.append(i) } }
+            for kind in [2, 1, 0] {
+                for i in sc.towns.indices where sc.towns[i].kind == kind && sc.towns[i].part.isEmpty
+                    && (dotsOn || sc.runs[i] != nil || Self.bigShapeless(sc, i)) { o.append(i) }
+            }
+            // a town's sections ("Gallus" of Frankfurt) after every town, so a section never takes its city's name place
+            for i in sc.towns.indices where !sc.towns[i].part.isEmpty && (dotsOn || sc.runs[i] != nil) { o.append(i) }
             orderFor = (cc, dotsOn, o)
         }
         var order = orderFor?.order ?? []
-        // the ones up first (they keep their places)
-        let up = Set(shown.keys)
-        order = order.filter { up.contains($0) } + order.filter { !up.contains($0) }
+        // sections only from 10x the framing zoom (their city's name first)
+        if k / k0 < 10 { order = order.filter { sc.towns[$0].part.isEmpty } }
+        // (pure priority: a name up never holds its place against a bigger town's, so a city's name is never kept out
+        // by smaller ones that came up first on the way in)
         var taken: [CGRect] = own
         var keep: [Int: CGFloat] = [:]
         for i in order {
@@ -117,10 +125,13 @@ final class TownNamesView: UIView {
             let b = sc.box(i)
             let across = CGFloat(max(b.z - b.x, b.w - b.y)) * CGFloat(k)
             let dots = MapSettingsStore.shared.value.townDots
-            guard across >= 12 || (dots && sc.runs[i] == nil) else { continue }
+            // a big city whose built-up land is all its sections' (Frankfurt's is Gallus' and the others') is named at its
+            // point by the zoom alone
+            let atPoint = sc.runs[i] == nil && (dots || Self.bigShapeless(sc, i))
+            guard across >= 12 || atPoint else { continue }
             // its roll: from 12 pt across to 16 (and from 3x to 3.3x the framing zoom), by the zoom
             let a = min(1, max(0, (across - 12) / 4)), z = min(1, max(0, CGFloat((k / k0 - 3) / 0.3)))
-            var p = dots && sc.runs[i] == nil ? z : min(a, z)
+            var p = atPoint ? z : min(a, z)
             if !moving { p = p >= 0.5 ? 1 : 0 }
             guard p > 0.001 || shown[i] != nil else { continue }
             let size = shown[i]?.size ?? Self.measure(sc.towns[i].name)
@@ -161,6 +172,9 @@ final class TownNamesView: UIView {
         s.halo.frame = f; s.ink.frame = f
         s.holder.isHidden = p <= 0.001
     }
+
+    /// a town of 100,000 people or more with no shape of its own
+    static func bigShapeless(_ sc: TownScene, _ i: Int) -> Bool { sc.runs[i] == nil && sc.towns[i].people >= 100_000 }
 
     private static func measure(_ name: String) -> CGSize {
         let z = (name as NSString).size(withAttributes: [.font: font])

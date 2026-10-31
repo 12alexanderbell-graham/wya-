@@ -288,6 +288,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var awayCache: [String: (units: [Int], places: Set<Int>)] = [:]
     /// each place's towns' buffers (points, fan index), made once per scene
     private var townBuffers: [String: (scene: TownScene, points: MTLBuffer, fans: MTLBuffer)] = [:]
+    /// the open country's plain towns and its dots, kept until the marks or the pressed town change
+    private var plainCache: (key: String, list: [Int])?
+    private var dotCache: (key: String, buffer: MTLBuffer?, count: Int)?
     /// a focus key ("place:12", Regions) and its place
     static func focus(_ k: String) -> Int? { k.hasPrefix("place:") ? Int(k.dropFirst(6)) : nil }
 
@@ -781,9 +784,14 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     relief(3, colour)
                 }
                 let marked = (controller.showsStamped ? st : []).union(controller.showsWished ? wi : [])
-                var plain: [Int] = []
-                for i in sc.runs.indices where !marked.contains(i) && i != pressedTown { plain.append(i) }
-                towns(plain, grey)
+                // the plain towns' list, made again only when the marks or the pressed town change (not every frame)
+                let plainKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)|\(controller.filter)"
+                if plainCache?.key != plainKey {
+                    var plain: [Int] = []
+                    for i in sc.runs.indices where !marked.contains(i) && i != pressedTown { plain.append(i) }
+                    plainCache = (plainKey, plain)
+                }
+                towns(plainCache?.list ?? [], grey)
                 if controller.showsStamped { towns(st.filter { $0 != pressedTown }.sorted(), Palette.limeV) }
                 if controller.showsWished { towns(wi.filter { $0 != pressedTown && !st.contains($0) }.sorted(), Palette.blueV) }
                 if let tp = pressedTown {
@@ -793,18 +801,23 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             // dots only with Town dots on (every town, the old app's 2.5 to 6 points by its population in the country)
             if MapSettingsStore.shared.value.townDots, let dp = townDotPipe {
                 struct D { var p: SIMD2<Float>; var r: Float; var pad: Float; var colour: SIMD4<Float> }
-                let lo = log(Float(max(1, sc.towns.last?.people ?? 1))), hi = log(Float(max(1, sc.towns.first?.people ?? 1)))
-                let ds: [D] = sc.towns.indices.map { i in
-                    let t = hi > lo ? min(1, max(0, (log(Float(max(1, sc.towns[i].people))) - lo) / (hi - lo))) : 0.5
-                    var col = st.contains(i) ? Palette.limeV : wi.contains(i) ? Palette.blueV : grey
-                    if i == pressedTown { col = st.contains(i) ? dark(Palette.limeV) : wi.contains(i) ? dark(Palette.blueV) : greyDark }
-                    return D(p: sc.at[i], r: 2.5 + 3.5 * t, pad: 0, colour: col)
+                // made again only when the marks or the pressed town change (review 31 Oct: not every frame)
+                let dotKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)"
+                if dotCache?.key != dotKey {
+                    let lo = log(Float(max(1, sc.towns.last?.people ?? 1))), hi = log(Float(max(1, sc.towns.first?.people ?? 1)))
+                    let ds: [D] = sc.towns.indices.map { i in
+                        let t = hi > lo ? min(1, max(0, (log(Float(max(1, sc.towns[i].people))) - lo) / (hi - lo))) : 0.5
+                        var col = st.contains(i) ? Palette.limeV : wi.contains(i) ? Palette.blueV : grey
+                        if i == pressedTown { col = st.contains(i) ? dark(Palette.limeV) : wi.contains(i) ? dark(Palette.blueV) : greyDark }
+                        return D(p: sc.at[i], r: 2.5 + 3.5 * t, pad: 0, colour: col)
+                    }
+                    dotCache = (dotKey, ds.isEmpty ? nil : device.makeBuffer(bytes: ds, length: ds.count * MemoryLayout<D>.stride), ds.count)
                 }
                 enc.setDepthStencilState(noStencil)
                 enc.setRenderPipelineState(dp)
-                if !ds.isEmpty, let b = device.makeBuffer(bytes: ds, length: ds.count * MemoryLayout<D>.stride) {
+                if let c = dotCache, let b = c.buffer, c.count > 0 {
                     enc.setVertexBuffer(b, offset: 0, index: 0)
-                    enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
+                    enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: c.count)
                 }
             }
         }
