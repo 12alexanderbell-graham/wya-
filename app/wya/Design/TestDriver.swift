@@ -282,6 +282,13 @@ final class TestDriver {
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
                 // regiondirect fr: a country's "Open its region map" (A6.14), from whatever mode
+                // pick everywhere | pick it | pick cont Europe | pick reg Southern Europe: a shelf card's tap (7.5)
+                case "pick":
+                    let rest = p.dropFirst(2).joined(separator: " ")
+                    if a == "everywhere" { map?.showPlacesMap(.everywhere) }
+                    else if a == "cont" { map?.showPlacesMap(.continent(rest)) }
+                    else if a == "reg" { map?.showPlacesMap(.region(rest)) }
+                    else if let i = map?.world?.placeIndex[a] { map?.showPlacesMap(.country(i)) }
                 // placeopen de: Places' country opened with its towns (7.4); placeopen off: back to the world
                 case "placeopen":
                     if a == "off" { map?.closePlace(); map?.goHome() }
