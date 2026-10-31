@@ -29,6 +29,11 @@ final class TownNamesView: UIView {
     /// called every frame the map draws; `moving`: the camera or a finger is moving it (at rest no name is left half
     /// rolled: nothing cut off at rest, 30 Oct 16:04)
     func update(_ m: MapController, moving: Bool) {
+        // (the list up at full: the map's names and marks step back under its rows and caption, gone by the time the
+        // water passes half way to full, back as it comes down)
+        let half = m.layout.top(.half)
+        let a = m.sheetTop <= 0 ? 1 : min(1, max(0, (m.sheetTop - half * 0.4) / (half * 0.6)))
+        if abs(alpha - a) > 0.001 { alpha = a }
         let own = ownMarks(m)
         let named = names(m, moving: moving, taken: own)
         thingMarks(m, taken: named)

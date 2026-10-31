@@ -400,7 +400,13 @@ enum TownStamps {
     static func unstamp(_ key: PlaceKey, name: String, cc: String) async {
         await MarkStore.shared.unstamp(key, name: name)
         guard through.contains(cc) else { return }
-        let held = MarkStore.shared.marks.contains { $0.key.kind == .town && $0.value.stamped && $0.key.id.hasPrefix(cc + "/") }
+        // still held by another stamped town or thing of it
+        let held = MarkStore.shared.marks.contains { k, s in
+            guard s.stamped else { return false }
+            if k.kind == .town { return k.id.hasPrefix(cc + "/") }
+            if k.kind == .thing { return (ThingStore.shared.thing(k.id)?.cc ?? ThingIndex.shared.hit(k.id)?.file) == cc }
+            return false
+        }
         guard !held else { return }
         through.remove(cc)
         let country = PlaceKey.country(cc)

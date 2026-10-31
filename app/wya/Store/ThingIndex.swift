@@ -71,8 +71,12 @@ final class ThingIndex {
     /// one thing by its key's id ("wd:Q19675"), once the index has come
     func hit(_ id: String) -> Hit? {
         let q = id.hasPrefix("wd:") ? String(id.dropFirst(3)) : id
+        if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+        if let i = byID?[q] { return rows[i].hit }
         return rows.first { $0.hit.id == q }?.hit
     }
+    /// each thing's row by its id, made once at the first look-up
+    @ObservationIgnored private var byID: [String: Int]?
     /// is this hit found by its code (it leads the results)
     func byCode(_ h: Hit, _ query: String) -> Bool {
         let code = query.trimmingCharacters(in: .whitespaces).lowercased()

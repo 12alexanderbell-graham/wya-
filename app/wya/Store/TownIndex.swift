@@ -70,7 +70,13 @@ final class TownIndex {
     }
 
     /// one town by its key's id ("de/2925533"), if the index has come
-    func hit(_ id: String) -> Hit? { rows.first { $0.hit.id == id }?.hit }
+    func hit(_ id: String) -> Hit? {
+        if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
+        if let i = byID?[id] { return rows[i].hit }
+        return rows.first { $0.hit.id == id }?.hit
+    }
+    /// each town's row by its id, made once at the first look-up (the Stamped list asks for many)
+    @ObservationIgnored private var byID: [String: Int]?
 
     /// DID YOU MEAN (1.10's rule for a typo, D12): nothing found, the biggest of the 40,000 most peopled towns within
     /// two letters' change of what was typed (its whole name or its first word; from four letters; "Frankfrut" is
