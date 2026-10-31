@@ -97,6 +97,10 @@ struct ContentView: View {
                     .onChange(of: map.placeOpen) { _, _ in
                         if head.history, map.placesMode, !map.historyOn() { head.history = false }
                     }
+                    // a dated stamp made or undone while the journey is up joins or leaves the line (A13.6)
+                    .onChange(of: MarkStore.shared.changes) { _, _ in
+                        if head.history { map.refreshHistory() }
+                    }
                     // the upload from Regions: once finding starts the wheel turns to Countries by itself, because the
                     // review always opens on the Countries map (6.3's connections, A6.4)
                     .onChange(of: UploadState.shared.phase) { _, ph in
