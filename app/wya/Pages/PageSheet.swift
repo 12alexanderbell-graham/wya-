@@ -146,7 +146,7 @@ struct PageSheet: View {
             Text(r).font(.subheadline).foregroundStyle(Palette.ink)
                 .frame(width: width, height: 44)
                 .background(Capsule().fill(on ? Palette.lime : Color.clear))
-                .glassEffect(on ? .identity : PageGlass.on, in: .capsule)
+                .glassEffect(on ? .identity : PageGlass.control, in: .capsule)
         }
         .buttonStyle(.plain)
     }

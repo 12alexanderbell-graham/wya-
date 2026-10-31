@@ -507,13 +507,14 @@ struct HeadView: View {
             Feel.tap(); Sound.tap()
             act()
         } label: {
-            // bare circles until their icons are picked (31 Oct: the drawn passport and clock were set aside), filled
-            // when on: the ring thickens into the disc (and thins back), as the first tool on the dot does, never a
-            // one-frame swap
-            ToolRing(width: on ? 8.5 : 1.6)
-                .fill(ink, style: FillStyle(eoFill: true))
-                .animation(Motion.quick, value: on)
-                .frame(width: 17, height: 17)
+            // the icons (31 Oct): quick stamping the stamp, the passport the book, history the two ends joined, upload
+            // the arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
+            // (no grow, no fade)
+            let key = ["stamp", "lists-books", "history", "cal-out"][i]
+            ZStack {
+                Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
+                Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
+            }
             .frame(width: slot, height: 44)
             .contentShape(Rectangle())
         }
@@ -721,7 +722,11 @@ struct ModeWheel: View {
             withAnimation(Motion.chrome) { head.quickStamp.toggle() }
         }
         .onAppear { at = CGFloat(head.mode.rawValue); lastTick = head.mode.rawValue; lit = head.quickStamp ? 1 : 0 }
-        .onChange(of: head.quickStamp) { _, v in withAnimation(Motion.quick) { lit = v ? 1 : 0 } }
+        .onChange(of: head.quickStamp) { _, v in
+            // on or off is there at once (no fade, no grow)
+            var tr = Transaction(); tr.disablesAnimations = true
+            withTransaction(tr) { lit = v ? 1 : 0 }
+        }
         .onChange(of: head.testDial) { _, v in
             withAnimation(Motion.chrome) {
                 if let v { dragging = true; reveal = 1; at = v } else { dragging = false; reveal = 0; at = CGFloat(head.mode.rawValue) }
@@ -808,15 +813,16 @@ private struct FirstTool: View, Animatable {
 
     var body: some View {
         // the dot's own size: the wheel draws it 30 points on the 9-unit icon box, so the circle is 8/9 of that
-        let dot: CGFloat = 30 * 8 / 9, tool: CGFloat = 17
+        let dot: CGFloat = 30 * 8 / 9
         let t = Flow.smooth(Self.start, 1, p)
-        let d = dot + (tool - dot) * t
-        // a ring as thick as the radius is the solid dot; the tool's ring is 1.6, or solid again when on
-        let ring = 1.6 + (d / 2 - 1.6) * max(1 - t, lit)
+        // (31 Oct 11:47: quick stamping gets its icon, the stamp.) The dot fades as the icon comes in over the same
+        // stretch, never shrinking; on, the dot stays behind the icon and the icon turns white, as the other tools'
         if p > Self.start {
-            Circle()
-                .strokeBorder(ink, lineWidth: min(d / 2, ring))
-                .frame(width: d, height: d)
+            ZStack {
+                Circle().fill(ink).frame(width: dot, height: dot).opacity(Double(max(1 - t, lit)))
+                Icon5(key: "stamp", ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
+                    .opacity(Double(t))
+            }
         }
     }
 }
@@ -990,7 +996,7 @@ struct SearchResults: View {
                     // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
                     .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
                     .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-                    .glassEffect(PageGlass.head, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
+                    .glassEffect(PageGlass.surface, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
                 }
             }
         }

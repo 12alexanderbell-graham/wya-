@@ -519,7 +519,7 @@ private struct PageLayer: View {
             } label: {
                 Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                     .frame(maxWidth: .infinity).frame(height: 44)
-                    .glassEffect(s.stamped ? PageGlass.on.tint(Palette.lime) : PageGlass.on, in: .capsule)
+                    .glassEffect(s.stamped ? PageGlass.control.tint(Palette.lime) : PageGlass.control, in: .capsule)
             }
             Button {
                 guard !s.stamped else { Feel.refuse(); return }
@@ -531,7 +531,7 @@ private struct PageLayer: View {
             } label: {
                 Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(s.stamped ? 0.5 : 1))
                     .frame(maxWidth: .infinity).frame(height: 44)
-                    .glassEffect(s.wished ? PageGlass.on.tint(Palette.blue) : PageGlass.on, in: .capsule)
+                    .glassEffect(s.wished ? PageGlass.control.tint(Palette.blue) : PageGlass.control, in: .capsule)
             }
         }
         .buttonStyle(.plain)
@@ -577,7 +577,7 @@ private struct PageLayer: View {
                 } label: {
                     Icon5(key: "plus", ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
-                        .glassEffect(st.wished ? PageGlass.on.tint(Palette.blue) : PageGlass.on, in: .circle)
+                        .glassEffect(st.wished ? PageGlass.control.tint(Palette.blue) : PageGlass.control, in: .circle)
                 }
                 .buttonStyle(.plain)
                 .padding(8)
@@ -784,11 +784,11 @@ private struct InsideList: View {
                 if s.stamped {
                     Text("Stamped").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                         .padding(.horizontal, 14).frame(height: 44)
-                        .glassEffect(PageGlass.on.tint(Palette.lime), in: .capsule)
+                        .glassEffect(PageGlass.control.tint(Palette.lime), in: .capsule)
                 } else {
                     Icon5(key: "plus", ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
-                        .glassEffect(PageGlass.on, in: .circle)
+                        .glassEffect(PageGlass.control, in: .circle)
                 }
             }
             .buttonStyle(.plain)
@@ -894,10 +894,17 @@ struct SourcesRow: View {
 /// on a place's page (the head's circles and search the whole time the page is up, the marking block, the lists'
 /// fields and buttons) is the logically frosted glass, and never changes kind while it moves
 enum PageGlass {
-    /// a page's own glass
+    /// TRIAL (31 Oct 11:47, may be reversed): Apple's split as asked for, the navigation and the small controls clear,
+    /// the rest frosted. Set to false and every glass is as before (all of it frosted while a page is up).
+    static let clearControls = true
+    /// a page's surfaces and its text fields (frosted, so typed words read over the page)
     static let on: SwiftUI.Glass = .regular
-    /// the head's glass: frosted while a page is up, clear on the map
-    @MainActor static var head: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
+    /// a page's buttons and chips
+    static var control: SwiftUI.Glass { clearControls ? .clear : .regular }
+    /// the head's circles (search, the plus and its tools): navigation, clear on the map and over a page
+    @MainActor static var head: SwiftUI.Glass { clearControls ? .clear : surface }
+    /// the water and what rises out of it, and search's results box: frosted while a page is up, clear on the map
+    @MainActor static var surface: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
 }
 
 

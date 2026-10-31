@@ -4,19 +4,17 @@ import simd
 
 // HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web and no dots
 // (23 Oct 15:58: "they were just a big web of the same colored lines. Like, no one knows where you started and
-// ended"). Your stops in date order, each leg bowed a tenth of its length to the right of travel (a leg flown twice
-// bows to the other side the second time), 1.5 pt at the start widening evenly to 2.5 pt at the end in screen points,
-// black at the start through our blue to white at the end (Q13.1: "I guess black to blue to white"), with a 0.5 pt
-// black 50% edge where it crosses land so the white end reads on white and lime. A small glass capsule names the start
-// and the end ("Lisbon · Mar 2024"), beside the line, never on it.
+// ended"). Your stops in date order, each leg straight (the same two places again bow a little, one side then the
+// other), 2.5 pt all along in screen points, black at the start to our blue at the end, no edge (31 Oct 11:47: the bows
+// and the edge are gone; Q13.1's white end with them, which needed the edge on white land). A small glass capsule names
+// the start and the end ("Lisbon · Mar 2024"), beside the line, never on it.
 
 /// THE JOURNEY: the stops of one mode in range, and the legs between them in map units (worked out once per range)
 struct HistoryTrack {
     struct Stop { let key: PlaceKey; let place: Int; let at: SIMD2<Double>; let from: LocalDay; let name: String; let ll: SIMD2<Double> }
     let stops: [Stop]
-    /// every leg as points in map units, the whole journey's segments in order with whether each crosses land
+    /// every leg as points in map units, the whole journey's segments in order
     let points: [SIMD2<Double>]
-    let land: [Bool]
     /// the segment index each leg starts at (a leg's capsule and its tap)
     let legStart: [Int]
 
@@ -32,6 +30,22 @@ struct HistoryTrack {
             let p = w.places[i]
             stops.append(Stop(key: e.key, place: i, at: SIMD2(p.c[0], p.c[1]), from: e.from, name: p.n,
                               ll: SIMD2(p.ll.first ?? 0, p.ll.count > 1 ? p.ll[1] : 0)))
+        }
+        return stops
+    }
+    /// Regions (13.3): with a country's region map open, the dated visits of its regions at the level shown, each at
+    /// its region's middle. (A visit to a smaller unit standing for the unit that holds it is not built yet: only the
+    /// level's own units' visits count.)
+    @MainActor static func regionStops(scene sc: RegionScene) -> [Stop] {
+        let cal = MarkStore.shared.calendar
+        var index: [String: Int] = [:]
+        for (i, id) in sc.unitIDs.enumerated() { index[id] = i }
+        var stops: [Stop] = []
+        for e in cal.spans where (e.kind == .visit || e.kind == .lived) && e.key.kind == .region && MarkStore.shared.state(e.key).stamped {
+            guard let u = index[e.key.id], let b = sc.box(of: u) else { continue }
+            let at = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
+            let g = EqualEarth.unproject(at)
+            stops.append(Stop(key: e.key, place: sc.place, at: at, from: e.from, name: sc.unitNames[u], ll: SIMD2(g.lon, g.lat)))
         }
         return stops
     }
@@ -97,8 +111,7 @@ struct HistoryTrack {
         return Int(d.rounded())
     }
 
-    /// `land`: look up the land under each segment for the edge (skipped while a handle is dragged; done on release)
-    @MainActor init(stops: [Stop], world w: World, land findLand: Bool = true) {
+    @MainActor init(stops: [Stop]) {
         self.stops = stops
         var pts: [SIMD2<Double>] = []
         var starts: [Int] = []
@@ -113,10 +126,13 @@ struct HistoryTrack {
             let pair = [stops[j].place, stops[j + 1].place].sorted().map(String.init).joined(separator: "-")
             let again = seen[pair, default: 0]
             seen[pair] = again + 1
-            let side: Double = again % 2 == 0 ? 1 : -1
-            // right of travel on the map (y runs down): (-dy, dx); the bow a tenth of the length at the middle
+            // (31 Oct 11:47, the bows read as strange maths) a leg is straight; only the same two places again bow, a
+            // little, to one side and then the other, so two trips never draw on one another
+            let side: Double = again % 2 == 1 ? 1 : -1
+            let bow: Double = again == 0 ? 0 : 0.12 * Double((again + 1) / 2)
+            // right of travel on the map (y runs down): (-dy, dx)
             let normal = SIMD2(-d.y, d.x) / len * side
-            let ctrl = (a + b) / 2 + normal * (len * 0.2)
+            let ctrl = (a + b) / 2 + normal * (len * bow)
             for s in 0 ... n {
                 if s == 0 && !pts.isEmpty { continue }
                 let t = Double(s) / Double(n)
@@ -127,28 +143,20 @@ struct HistoryTrack {
         if pts.isEmpty, let only = stops.first { pts = [only.at] }
         points = pts
         legStart = starts
-        // land under each segment's middle (the edge only there); a long journey skips the look-ups
-        if findLand, pts.count > 1, pts.count < 1600 {
-            land = (0 ..< pts.count - 1).map { i in
-                let m = (pts[i] + pts[i + 1]) / 2
-                return w.place(at: SIMD2(Float(m.x), Float(m.y))) != nil
-            }
-        } else {
-            land = Array(repeating: true, count: max(0, pts.count - 1))
-        }
     }
 
-    /// the line's colour at a share of its length: black, through our blue, to white
+    /// the line's colour at a share of its length: black to our blue (31 Oct 11:47: no edge any more, so it ends in
+    /// the blue, not white, which would vanish on white land)
     static func colour(_ t: Double) -> UIColor {
         let blue = SIMD3<Double>(0x78 / 255.0, 0xae / 255.0, 0xf8 / 255.0)
-        let v = t < 0.5 ? blue * (t / 0.5) : blue + (SIMD3<Double>(1, 1, 1) - blue) * ((t - 0.5) / 0.5)
+        let v = blue * t
         return UIColor(red: v.x, green: v.y, blue: v.z, alpha: 1)
     }
 }
 
-/// THE LINE ON THE MAP: its paths made once in map units, in 40 pieces along its length (each its own colour and width
-/// on the way from black to white, 1.5 to 2.5 pt), and only moved with the camera each frame (one transform, the widths
-/// divided by the zoom so they stay in screen points); drawn along by each piece's stroke end. Over the map, under the
+/// THE LINE ON THE MAP: its paths made once in map units, in 40 pieces along its length (each its own colour on the
+/// way from black to blue), and only moved with the camera each frame (one transform, the width divided by the zoom
+/// so it stays 2.5 screen points); drawn along by each piece's stroke end. Over the map, under the
 /// names; it takes no touch.
 final class HistoryLineView: UIView {
     private let startCap = HistoryCapsule()
@@ -161,7 +169,7 @@ final class HistoryLineView: UIView {
     private var track: HistoryTrack?
     private var builtCount = -1
     private let holder = CALayer()
-    private var pieces: [(line: CAShapeLayer, edge: CAShapeLayer?, t: CGFloat, from: CGFloat, to: CGFloat)] = []
+    private var pieces: [(line: CAShapeLayer, t: CGFloat, from: CGFloat, to: CGFloat)] = []
 
     /// the one on screen (the test driver's `history tap`)
     nonisolated(unsafe) static weak var current: HistoryLineView?
@@ -184,35 +192,18 @@ final class HistoryLineView: UIView {
         let segs = pts.count - 1
         guard segs > 0 else { return }
         let n = min(40, segs)
-        var edges: [CAShapeLayer] = []
-        var lines: [CAShapeLayer] = []
         for j in 0 ..< n {
             let a = j * segs / n, b = (j + 1) * segs / n
-            let line = CGMutablePath(), edge = CGMutablePath()
+            let line = CGMutablePath()
             line.move(to: CGPoint(x: pts[a].x, y: pts[a].y))
             for i in a ..< b { line.addLine(to: CGPoint(x: pts[i + 1].x, y: pts[i + 1].y)) }
-            var anyLand = false
-            for i in a ..< b where t.land[i] {
-                anyLand = true
-                edge.move(to: CGPoint(x: pts[i].x, y: pts[i].y)); edge.addLine(to: CGPoint(x: pts[i + 1].x, y: pts[i + 1].y))
-            }
             let share = CGFloat(a) / CGFloat(segs)
             let l = CAShapeLayer()
             l.path = line; l.fillColor = nil; l.lineCap = .round; l.lineJoin = .round
             l.strokeColor = HistoryTrack.colour(Double(share)).cgColor
-            var e: CAShapeLayer?
-            if anyLand {
-                let x = CAShapeLayer()
-                x.path = edge; x.fillColor = nil; x.lineCap = .round; x.lineJoin = .round
-                x.strokeColor = UIColor.black.withAlphaComponent(0.5).cgColor
-                edges.append(x); e = x
-            }
-            lines.append(l)
-            pieces.append((l, e, share, CGFloat(a) / CGFloat(segs), CGFloat(b) / CGFloat(segs)))
+            holder.addSublayer(l)
+            pieces.append((l, share, CGFloat(a) / CGFloat(segs), CGFloat(b) / CGFloat(segs)))
         }
-        // every edge under every line, so a piece's edge never crosses over the line before it
-        for e in edges { holder.addSublayer(e) }
-        for l in lines { holder.addSublayer(l) }
     }
 
     func update(_ m: MapController) {
@@ -237,22 +228,20 @@ final class HistoryLineView: UIView {
         holder.position = .zero
         holder.sublayerTransform = tr
         for p in pieces {
-            let w = (1.5 + p.t) / k
-            p.line.lineWidth = w
-            p.edge?.lineWidth = w + 1 / k
+            // one width all along (31 Oct 11:47), 2.5 pt on the screen at every zoom
+            p.line.lineWidth = 2.5 / k
             // drawn along: each piece from 0 to 1 as the shown share passes over it
             let end = max(0, min(1, (shown - p.from) / max(0.0001, p.to - p.from)))
             p.line.strokeEnd = end
-            p.edge?.strokeEnd = end
             p.line.isHidden = end <= 0
-            p.edge?.isHidden = end <= 0
         }
         CATransaction.commit()
         // the capsules ride the ends: the start one is up from the beginning, the end one once the head arrives (A13.2);
         // kept in the room between the head and the water, and away while their stop is off the screen (31 Oct 07:30: the
         // end's capsule stood over the head with Silverstone far off the top)
         let rr = m.layout.room(sheetTop: m.sheetTop > 0 ? m.sheetTop : m.layout.top(.quarter))
-        let room = CGRect(x: 0, y: rr.lowerBound, width: bounds.width, height: rr.upperBound - rr.lowerBound)
+        // (and left of the zoom column, 31 Oct 11:55: a capsule ended against its plus and full screen mark)
+        let room = CGRect(x: 0, y: rr.lowerBound, width: bounds.width - m.layout.side - 44, height: rr.upperBound - rr.lowerBound)
         let seen = room.insetBy(dx: -24, dy: -24)
         // the leg's capsule beside its middle, on the side its bow goes (the chord's middle is inside the bow)
         // (first: a leg's capsule names both its ends, so a start or end capsule it would overlap steps back while it is
@@ -353,6 +342,8 @@ final class HistoryLineView: UIView {
                 NSLog("wya history tap: nothing")
                 v.dismissLeg(m)
             }
+        case "units":
+            if let sc = map?.regionScene { NSLog("wya region units %@", sc.unitIDs.prefix(6).joined(separator: " ")) }
         case "share":
             // (the picture only, into the test folder; "share sheet" also opens the system sheet)
             if let m = map, let v = current { v.shareJourney(m, present: p.count > 2 && p[2] == "sheet") }

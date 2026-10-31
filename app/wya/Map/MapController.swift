@@ -392,17 +392,19 @@ final class MapController {
 
     /// on (A13.1): the line draws along its length in 1.2 s; false when there is nothing dated to draw (the tool refuses)
     func historyOn() -> Bool {
-        guard let w = world, regionScene == nil else { return false }
-        // Countries: your countries' visits; Places: the towns, things and own places of the current map (13.3)
-        let all = placesMode
-            ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
-            : HistoryTrack.countryStops(world: w, continent: continent)
+        guard let w = world else { return false }
+        // Countries: your countries' visits; Places: the towns, things and own places of the current map; Regions: the
+        // open region map's regions (13.3)
+        let all = regionScene.map { HistoryTrack.regionStops(scene: $0) }
+            ?? (placesMode
+                ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
+                : HistoryTrack.countryStops(world: w, continent: continent))
         let today = LocalDay(Date(), in: .current)
         guard let r = HistoryTrack.defaultRange(all, today: today) else { return false }
         historyAll = all
         let first = HistoryInfo.number(all.first!.from), last = max(HistoryInfo.number(today), HistoryInfo.number(all.last!.from))
         historyInfo = HistoryInfo(first: first, last: last, lo: HistoryInfo.number(r.0), hi: HistoryInfo.number(r.1), count: 0, km: 0)
-        guard rebuildHistory(land: true) else { historyInfo = nil; return false }
+        guard rebuildHistory() else { historyInfo = nil; return false }
         // the whole journey framed between the head and the water at history height (31 Oct)
         frameHistory()
         // (a new scope draws its line from the start again)
@@ -416,9 +418,10 @@ final class MapController {
     /// does, so a stop added today is in it. Nothing left: history stays on with no line.
     func refreshHistory() {
         guard historyTrack != nil, historyAnim == nil, var info = historyInfo, let w = world else { return }
-        let all = placesMode
-            ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
-            : HistoryTrack.countryStops(world: w, continent: continent)
+        let all = regionScene.map { HistoryTrack.regionStops(scene: $0) }
+            ?? (placesMode
+                ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
+                : HistoryTrack.countryStops(world: w, continent: continent))
         historyAll = all
         let today = HistoryInfo.number(LocalDay(Date(), in: .current))
         let atEnd = info.hi >= info.last
@@ -429,28 +432,28 @@ final class MapController {
         info.lo = min(max(info.lo, info.first), info.last)
         info.hi = atEnd ? info.last : min(max(info.hi, info.lo), info.last)
         historyInfo = info
-        _ = rebuildHistory(land: true)
+        _ = rebuildHistory()
         historyShown = 1
         needsFrame = true
     }
-    /// a handle dragged (live: the land edge waits for the release), a year tapped, a menu row picked
+    /// a handle dragged, a year tapped, a menu row picked
     func setHistoryRange(lo: Int, hi: Int, live: Bool = false) {
         guard var info = historyInfo, historyTrack != nil else { return }
         info.lo = min(lo, hi); info.hi = max(lo, hi)
         historyInfo = info
-        _ = rebuildHistory(land: !live)
+        _ = rebuildHistory()
         if historyAnim == nil { historyShown = 1 }
         needsFrame = true
     }
-    @discardableResult private func rebuildHistory(land: Bool) -> Bool {
-        guard let w = world, var info = historyInfo else { return false }
+    @discardableResult private func rebuildHistory() -> Bool {
+        guard world != nil, var info = historyInfo else { return false }
         let stops = HistoryTrack.within(historyAll, HistoryInfo.day(info.lo), HistoryInfo.day(info.hi))
         guard !stops.isEmpty else {
             info.count = 0; info.km = 0; historyInfo = info
-            historyTrack = HistoryTrack(stops: [], world: w, land: false)
+            historyTrack = HistoryTrack(stops: [])
             return historyTrack != nil
         }
-        let t = HistoryTrack(stops: stops, world: w, land: land)
+        let t = HistoryTrack(stops: stops)
         historyTrack = t
         info.count = stops.count; info.km = t.km
         if historyInfo != info { historyInfo = info }
