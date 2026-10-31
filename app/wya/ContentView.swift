@@ -90,9 +90,12 @@ struct ContentView: View {
                             if water.historyUp { water.historyUp = false; if water.stop == .quarter { water.go(.quarter) } }
                         }
                     }
-                    // a continent picked: the line runs through its stops only (13.4's states)
+                    // a continent picked: the line runs through its stops only (13.4's states); in Places, the current map's
                     .onChange(of: map.continent) { _, _ in
                         if head.history, !map.historyOn() { head.history = false }
+                    }
+                    .onChange(of: map.placeOpen) { _, _ in
+                        if head.history, map.placesMode, !map.historyOn() { head.history = false }
                     }
                     // the upload from Regions: once finding starts the wheel turns to Countries by itself, because the
                     // review always opens on the Countries map (6.3's connections, A6.4)

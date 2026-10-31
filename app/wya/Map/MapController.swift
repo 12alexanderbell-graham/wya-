@@ -392,8 +392,11 @@ final class MapController {
 
     /// on (A13.1): the line draws along its length in 1.2 s; false when there is nothing dated to draw (the tool refuses)
     func historyOn() -> Bool {
-        guard let w = world, regionScene == nil, !placesMode else { return false }
-        let all = HistoryTrack.countryStops(world: w, continent: continent)
+        guard let w = world, regionScene == nil else { return false }
+        // Countries: your countries' visits; Places: the towns, things and own places of the current map (13.3)
+        let all = placesMode
+            ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
+            : HistoryTrack.countryStops(world: w, continent: continent)
         let today = LocalDay(Date(), in: .current)
         guard let r = HistoryTrack.defaultRange(all, today: today) else { return false }
         historyAll = all
