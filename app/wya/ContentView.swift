@@ -179,7 +179,11 @@ struct ContentView: View {
                 if head.mode == .regions { return }
                 // the Places map (7.4, the old app's system): a town of the open country answers; any other country opens
                 if map.placesMode {
-                    if map.townPressed != nil { townTapped() } else if map.placeOpen != i { closeCard(); map.openPlace(i) }
+                    if map.ownPressed != nil { ownTapped() }
+                    else if map.townPressed != nil { townTapped() }
+                    else if map.placeOpen != i { closeCard(); map.openPlace(i) }
+                    // quick add on the open country's empty land: your own place there (7.8, A7.11)
+                    else if head.quickStamp { map.makeOwnPlace(at: p) }
                     return
                 }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
@@ -333,6 +337,21 @@ struct ContentView: View {
         water.openMenu()
         map.goHome()
     }
+    /// YOUR OWN PLACE TAPPED (7.8): quick add toggles its stamp; otherwise its card ("Your place in Germany")
+    private func ownTapped() {
+        guard let id = map.ownPressed, let o = OwnPlaces.shared.place(id), let w = map.world, let place = w.placeIndex[o.cc] else { return }
+        guard head.quickStamp else {
+            RegionCardState.shared.open(o.key, name: o.name, parents: "Your place in \(w.places[place].n)", place: place, map: map)
+            return
+        }
+        let stamped = MarkStore.shared.state(o.key).stamped
+        if stamped { Feel.lift() } else { Feel.stamp() }
+        Task {
+            if stamped { await MarkStore.shared.unstamp(o.key, name: o.name) }
+            else { await MarkStore.shared.stamp(o.key, name: o.name, cc: o.cc, source: .quick) }
+        }
+    }
+
     /// A TOWN TAPPED (7.4): quick add stamps it with its country (or unstamps it); otherwise its card from the water
     private func townTapped() {
         guard let t = map.townPressed, let sc = map.townScenes[t.cc], t.i < sc.towns.count,

@@ -180,6 +180,9 @@ final class MapController {
         // PLACES (7.4): a town under the finger answers (its country is the press's place; the town darkens)
         // (outside the open country, or on the world, a country answers as ever: the tap opens it)
         if placesMode, let open = placeOpen {
+            // your own places first (their marks sit over the towns), then the towns
+            ownPressed = ownHit(at: p)
+            if ownPressed != nil { townPressed = nil; return open }
             townPressed = townHit(at: p)
             if townPressed != nil { return open }
         }
@@ -360,6 +363,8 @@ final class MapController {
     var placeOpen: Int?
     /// Regions' towns level (6.6): the region map's last word, the country's towns drawn as Places draws them
     var regionTowns = false
+    /// your own place under the finger (7.8), by id
+    @ObservationIgnored var ownPressed: String?
     @ObservationIgnored var townScenes: [String: TownScene] = [:]
     @ObservationIgnored var townLoading: Set<String> = []
     /// places whose shapes failed to come (their towns are asked for again on the next opening)
@@ -1097,6 +1102,23 @@ nonisolated enum EqualEarth {
     static func project(lon: Double, lat: Double) -> SIMD2<Float> {
         let (x, y) = raw(lon, lat)
         return SIMD2(Float((x + RX) * S), Float((RY - y) * S))
+    }
+    /// a map point back to longitude and latitude (project's reverse: Newton's method on the parametric latitude)
+    static func unproject(_ p: SIMD2<Double>) -> (lon: Double, lat: Double) {
+        let x = p.x / S - RX, y = RY - p.y / S
+        var th = y / A1
+        for _ in 0 ..< 12 {
+            let t2 = th * th, t6 = t2 * t2 * t2
+            let f = th * (A1 + A2 * t2 + t6 * (A3 + A4 * t2)) - y
+            let fp = A1 + 3 * A2 * t2 + t6 * (7 * A3 + 9 * A4 * t2)
+            let d = f / fp
+            th -= d
+            if abs(d) < 1e-12 { break }
+        }
+        let t2 = th * th, t6 = t2 * t2 * t2
+        let lat = asin(max(-1, min(1, sin(th) / M)))
+        let lon = x * M * (A1 + 3 * A2 * t2 + t6 * (7 * A3 + 9 * A4 * t2)) / cos(th)
+        return (lon * 180 / .pi, lat * 180 / .pi)
     }
     /// the world's width along the parallel at map y (360° there): the shift between the world and its copy past the
     /// date line (the same as wrapStep in MapShaders)

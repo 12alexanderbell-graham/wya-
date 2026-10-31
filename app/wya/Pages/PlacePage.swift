@@ -359,7 +359,7 @@ struct PlacePageView: View {
             } label: {
                 Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                     .frame(maxWidth: .infinity).frame(height: 44)
-                    .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
+                    .glassEffect(s.stamped ? PageGlass.on.tint(Palette.lime) : PageGlass.on, in: .capsule)
             }
             Button {
                 guard !s.stamped else { Feel.refuse(); return }
@@ -371,7 +371,7 @@ struct PlacePageView: View {
             } label: {
                 Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(s.stamped ? 0.5 : 1))
                     .frame(maxWidth: .infinity).frame(height: 44)
-                    .glassEffect(s.wished ? .clear.tint(Palette.blue) : .clear, in: .capsule)
+                    .glassEffect(s.wished ? PageGlass.on.tint(Palette.blue) : PageGlass.on, in: .capsule)
             }
         }
         .buttonStyle(.plain)
@@ -416,7 +416,7 @@ struct PlacePageView: View {
                 } label: {
                     Icon5(key: "plus", ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
-                        .glassEffect(st.wished ? .clear.tint(Palette.blue) : .clear, in: .circle)
+                        .glassEffect(st.wished ? PageGlass.on.tint(Palette.blue) : PageGlass.on, in: .circle)
                 }
                 .buttonStyle(.plain)
                 .padding(8)
@@ -518,13 +518,20 @@ struct PlacePageView: View {
     /// down, one layer behind the whole top
     private func groundView(L: Layout) -> some View {
         let c = ground.isEmpty ? [Palette.cream] : ground
-        return LinearGradient(stops: [
-            .init(color: c[0].opacity(0.85), location: 0),
-            .init(color: (c.count > 1 ? c[1] : c[0]).opacity(0.45), location: 0.35),
-            .init(color: (c.count > 2 ? c[2] : c[0]).opacity(0.12), location: 0.7),
-            .init(color: Palette.white.opacity(0), location: 1),
-        ], startPoint: .top, endPoint: .bottom)
-        .frame(height: L.H * 0.75)
+        let top = c[0].opacity(0.85)
+        // the ground goes on above the page's top in its strongest colour, so pulling the page down past its top shows
+        // more of the same ground, never white (31 Oct 01:22: "There's no need for that to happen in Swift")
+        return VStack(spacing: 0) {
+            Rectangle().fill(top).frame(height: L.H)
+            LinearGradient(stops: [
+                .init(color: top, location: 0),
+                .init(color: (c.count > 1 ? c[1] : c[0]).opacity(0.45), location: 0.35),
+                .init(color: (c.count > 2 ? c[2] : c[0]).opacity(0.12), location: 0.7),
+                .init(color: Palette.white.opacity(0), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            .frame(height: L.H * 0.75)
+        }
+        .offset(y: -L.H)
         .allowsHitTesting(false)
     }
 
@@ -575,7 +582,7 @@ private struct InsideList: View {
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
             }
             .padding(.horizontal, 14).frame(height: 44)
-            .glassEffect(.clear, in: .capsule)
+            .glassEffect(PageGlass.on, in: .capsule)
             ForEach(rows.prefix(shown), id: \.self) { r in row(r) }
             if rows.count > shown {
                 Button { withAnimation(Motion.quick) { shown += 10 } } label: {
@@ -612,11 +619,11 @@ private struct InsideList: View {
                 if s.stamped {
                     Text("Stamped").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                         .padding(.horizontal, 14).frame(height: 44)
-                        .glassEffect(.clear.tint(Palette.lime), in: .capsule)
+                        .glassEffect(PageGlass.on.tint(Palette.lime), in: .capsule)
                 } else {
                     Icon5(key: "plus", ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
-                        .glassEffect(.clear, in: .circle)
+                        .glassEffect(PageGlass.on, in: .circle)
                 }
             }
             .buttonStyle(.plain)
@@ -732,4 +739,14 @@ private struct SourcesRow: View {
         for b in name.utf8 { h ^= UInt32(b); h = h &* 0x01000193 }
         return String(format: "%02x", h & 0xff)
     }
+}
+
+/// ONE GLASS ON A PAGE (16.3, Part 0.7; 31 Oct 01:22: "either use frosted glass consistently or not"): everything glass
+/// on a place's page (the head's circles and search the whole time the page is up, the marking block, the lists'
+/// fields and buttons) is the logically frosted glass, and never changes kind while it moves
+enum PageGlass {
+    /// a page's own glass
+    static let on: SwiftUI.Glass = .regular
+    /// the head's glass: frosted while a page is up, clear on the map
+    @MainActor static var head: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
 }

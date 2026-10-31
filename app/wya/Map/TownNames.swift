@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 
 /// THE NAMES ON THE PLACES MAP (7.4: "the Apple Maps way"; the old app's TownNames rules, its labels over the map):
 /// 13 pt semibold ink with a 2 pt cream halo; from 3x the country's framing zoom; the capital first, then regional
@@ -26,6 +27,55 @@ final class TownNamesView: UIView {
     /// called every frame the map draws; `moving`: the camera or a finger is moving it (at rest no name is left half
     /// rolled: nothing cut off at rest, 30 Oct 16:04)
     func update(_ m: MapController, moving: Bool) {
+        ownMarks(m)
+        names(m, moving: moving)
+    }
+
+    // MARK: YOUR OWN PLACES' MARKS (7.8; 31 Oct 01:17: a lime circle is right for these, "just do it correctly ... really
+    // elegant ... how Apple Maps would do it"): a small dot when the map is far out, growing with the zoom (by the zoom,
+    // never on a timer) to a 20 pt circle close in; lime when stamped, blue when wished, cream otherwise; no outline, no
+    // shadow; its name (13 pt semibold, the cream halo) under it from twice the country's framing zoom. The kind's icon
+    // inside waits for the twelve kinds' icons (their review, Step 3b).
+    private var marks: [String: (dot: UIView, name: UILabel)] = [:]
+    private func ownMarks(_ m: MapController) {
+        guard m.placesMode, let k0 = m.continentK ?? Optional(m.worldKMin) else { clearMarks(); return }
+        let z = m.k / k0
+        let size = CGFloat(min(20, max(7, 7 + 13 * (z - 1) / 5)))
+        let named = z >= 2
+        var seen = Set<String>()
+        for o in OwnPlaces.shared.all {
+            let q = m.screenPoint(SIMD2(Double(o.point.x), Double(o.point.y)))
+            guard bounds.insetBy(dx: -40, dy: -40).contains(q) else { continue }
+            seen.insert(o.id)
+            let mk = marks[o.id] ?? {
+                let d = UIView(), l = UILabel()
+                d.isUserInteractionEnabled = false; l.isUserInteractionEnabled = false
+                l.textAlignment = .center
+                addSubview(d); addSubview(l)
+                marks[o.id] = (d, l)
+                return (d, l)
+            }()
+            let st = MarkStore.shared.state(o.key)
+            mk.dot.backgroundColor = st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : Self.cream
+            mk.dot.frame = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
+            mk.dot.layer.cornerRadius = size / 2
+            if named {
+                mk.name.attributedText = NSAttributedString(string: o.name, attributes: [
+                    .font: Self.font, .foregroundColor: UIColor.black, .strokeColor: Self.cream, .strokeWidth: -3.0,
+                ])
+                let w = ceil((o.name as NSString).size(withAttributes: [.font: Self.font]).width) + 4
+                mk.name.frame = CGRect(x: q.x - w / 2, y: q.y + size / 2 + 2, width: w, height: 18)
+                mk.name.isHidden = false
+            } else { mk.name.isHidden = true }
+        }
+        for (id, mk) in marks where !seen.contains(id) { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview(); marks[id] = nil }
+    }
+    private func clearMarks() {
+        for mk in marks.values { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview() }
+        marks = [:]
+    }
+
+    private func names(_ m: MapController, moving: Bool) {
         guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return }
         if key != cc { clear(); key = cc }
         let k = m.k
