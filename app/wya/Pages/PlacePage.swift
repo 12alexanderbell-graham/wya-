@@ -451,7 +451,7 @@ private struct PageLayer: View {
                 if let f = page.facts, !f.activities.isEmpty { ActivitiesList(all: f.activities) }
                 if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
-                if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
+                suggestions()
                 if MarkStore.shared.state(key).stamped { record(key) }
                 if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
                 Color.clear.frame(height: 140).id("end")
@@ -643,23 +643,13 @@ private struct PageLayer: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// FOR YOU (16.4.9): the visa line first, then each government's advice with who says it and when it was checked
-    private func forYou(_ f: PlacePageState.Facts) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("For you").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            ForEach(f.visa, id: \.self) { v in
-                let parts = v.components(separatedBy: "\n")
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(parts[0]).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                    if parts.count > 1 { Text(parts[1]).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)) }
-                }
-            }
-            ForEach(Array(f.advice.enumerated()), id: \.offset) { _, a in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(a.text).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
-                    Text(a.when.isEmpty ? a.who : "\(a.who) · checked \(a.when)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                }
-            }
+    /// SUGGESTIONS (16.4.9, renamed 31 Oct 11:19 from "For you"): only its title and what it will be made from, nothing
+    /// in it yet: the suggestions come with Profile and the AI. The visa and advice data
+    /// stay in Facts for then.
+    private func suggestions() -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
