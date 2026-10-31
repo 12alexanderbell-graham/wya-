@@ -30,7 +30,90 @@ final class TownNamesView: UIView {
     /// rolled: nothing cut off at rest, 30 Oct 16:04)
     func update(_ m: MapController, moving: Bool) {
         let own = ownMarks(m)
-        names(m, moving: moving, taken: own)
+        let named = names(m, moving: moving, taken: own)
+        thingMarks(m, taken: named)
+    }
+
+    // MARK: THINGS' MARKS (7.4, D5; 31 Oct 01:17: "it needs to be really elegant. Think about how Apple Maps would do it"):
+    // as Apple Maps shows its places: a thing comes with its name or not at all (a mark without words says nothing), by
+    // the zoom across its fame's own band (World Heritage from 3x the country's framing zoom, things with a photo from 8x,
+    // the rest from 16x); its mark small and round, growing with the zoom from 6 pt to 10 pt over that band, never
+    // bigger; the map's darker grey, lime when stamped, blue when wished; no outline, no shadow; its name (12 pt semibold,
+    // the cream halo) beside it on the right; a thing whose name has no room (a town's name, another thing) is not shown,
+    // except one you stamped or wished, whose mark always shows; famous first, at most 40 on screen. The kind's icon
+    // inside waits for the twelve kinds' icons (their review, Step 3b).
+    private var thingViews: [String: (dot: UIView, name: UILabel)] = [:]
+    private static let thingFont = UIFont.systemFont(ofSize: 12, weight: .semibold)
+    /// each thing's name's width (measured once)
+    private var thingWidths: [String: CGFloat] = [:]
+    /// what the marks were last laid out for (the camera, the room, the marks, the town names): unchanged, nothing is done
+    private var thingKey: [Double] = []
+    private func thingMarks(_ m: MapController, taken named: [CGRect]) {
+        guard m.placesMode, let cc = m.placeOpenID, let all = ThingStore.shared.things(cc), let k0 = m.continentK else {
+            clearThings(); m.thingFrames = [:]; thingKey = []; return
+        }
+        let marksNow = Double(MarkStore.shared.marks.count) + Double(MarkStore.shared.marks.values.filter { $0.stamped }.count) * 1e6
+        let key: [Double] = [m.c.x, m.c.y, m.k, Double(bounds.width), Double(bounds.height), marksNow, Double(all.count),
+                             Double(m.thingPressed?.hashValue ?? 0), Double(named.count)]
+        guard key != thingKey else { return }
+        thingKey = key
+        let z = m.k / k0
+        let room = m.layout.room(sheetTop: m.layout.top(.quarter))
+        let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
+        var taken = named
+        var frames: [String: CGRect] = [:]
+        var named = Set<String>()
+        for t in all {
+            guard frames.count < 40 else { break }
+            let st = MarkStore.shared.state(t.key)
+            let marked = st.stamped || st.wished
+            let start: Double = t.fame == 2 ? 3 : t.fame == 1 ? 8 : 16
+            guard z >= start else { continue }
+            let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
+            guard box.contains(q) else { continue }
+            let u = CGFloat(min(1, max(0, (z - start) / start)))
+            let size = 6 + 4 * u * u * (3 - 2 * u)
+            let r = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
+            let w = thingWidths[t.id] ?? {
+                let w = min(150, ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4)
+                thingWidths[t.id] = w
+                return w
+            }()
+            let nr = CGRect(x: r.maxX + 3, y: q.y - 8, width: w, height: 16)
+            let markFree = !taken.contains { $0.intersects(r.insetBy(dx: -2, dy: -2)) }
+            let nameFree = box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -3, dy: -3)) }
+            guard markFree && (nameFree || marked) else { continue }
+            let v = thingViews[t.id] ?? {
+                let d = UIView(), l = UILabel()
+                d.isUserInteractionEnabled = false; l.isUserInteractionEnabled = false
+                l.attributedText = NSAttributedString(string: t.name, attributes: [
+                    .font: Self.thingFont, .foregroundColor: UIColor.black, .strokeColor: Self.cream, .strokeWidth: -3.0,
+                ])
+                l.lineBreakMode = .byTruncatingTail
+                addSubview(d); addSubview(l)
+                thingViews[t.id] = (d, l)
+                return (d, l)
+            }()
+            v.dot.backgroundColor = m.thingPressed == t.id ? Self.pressed
+                : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.beigeDark)
+            v.dot.frame = r
+            v.dot.layer.cornerRadius = size / 2
+            taken.append(r)
+            frames[t.id] = r
+            v.name.frame = nr
+            v.name.isHidden = !nameFree
+            if nameFree { taken.append(nr); named.insert(t.id) }
+        }
+        for (id, v) in thingViews where frames[id] == nil { v.dot.removeFromSuperview(); v.name.removeFromSuperview(); thingViews[id] = nil }
+        // (a named thing answers a finger on its name too)
+        var hits = frames
+        for id in named { if let f = frames[id], let v = thingViews[id] { hits[id] = f.union(v.name.frame) } }
+        m.thingFrames = hits
+    }
+    private static let pressed = UIColor(red: 0xa1 / 255, green: 0x9e / 255, blue: 0x95 / 255, alpha: 1)
+    private func clearThings() {
+        for v in thingViews.values { v.dot.removeFromSuperview(); v.name.removeFromSuperview() }
+        thingViews = [:]
     }
 
     // MARK: YOUR OWN PLACES' MARKS (7.8; 31 Oct 01:17: a lime circle is right for these, "just do it correctly ... really
@@ -89,12 +172,13 @@ final class TownNamesView: UIView {
         marks = [:]
     }
 
-    private func names(_ m: MapController, moving: Bool, taken own: [CGRect]) {
-        guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return }
+    @discardableResult
+    private func names(_ m: MapController, moving: Bool, taken own: [CGRect]) -> [CGRect] {
+        guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return own }
         if key != cc { clear(); key = cc }
         let k = m.k
         // from 3x the country's framing zoom (each name rolling in across its own band from there)
-        guard k >= 3 * k0 * 0.999 else { clear(); return }
+        guard k >= 3 * k0 * 0.999 else { clear(); return own }
         let W = bounds.width
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
@@ -145,6 +229,7 @@ final class TownNamesView: UIView {
             place(i, name: sc.towns[i].name, at: r, progress: p, size: size)
         }
         for (i, s) in shown where keep[i] == nil { s.holder.removeFromSuperview(); shown[i] = nil }
+        return taken
     }
 
     private func place(_ i: Int, name: String, at r: CGRect, progress p: CGFloat, size: CGSize) {
