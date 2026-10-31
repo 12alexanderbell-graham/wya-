@@ -18,7 +18,12 @@ final class PlacePageState {
         /// What is in it (16.4.8): a country's regions (first level) and its cities, most peopled first
         var regions: [Inside] = []
         var cities: [Inside] = []
+        /// Highlights (16.4.6): the country's World Heritage sites for now (the server's heritage list)
+        var highlights: [Highlight] = []
     }
+    struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
+    /// the server's World Heritage list, read once
+    private static var heritage: [String: [String: Any]]?
     struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil }
     private(set) var key: PlaceKey?
     private(set) var name = ""
@@ -140,6 +145,17 @@ final class PlacePageState {
                 let ll = t["ll"] as? [NSNumber]
                 return Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil })
+            }
+        }
+        // highlights: the country's World Heritage sites (the list the server's country file names)
+        if let ids = j["heritage"] as? [String], !ids.isEmpty {
+            if Self.heritage == nil, case .ok(let hd) = await Servers.data.file("heritage.json"),
+               let all = try? JSONSerialization.jsonObject(with: hd) as? [String: [String: Any]] { Self.heritage = all }
+            out.highlights = ids.compactMap { q in
+                guard let h = Self.heritage?[q], let n = h["n"] as? String else { return nil }
+                let year = h["year"] as? String
+                return Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
+                                 photo: (h["img"] as? [String])?.first)
             }
         }
         facts = out
@@ -282,6 +298,7 @@ struct PlacePageView: View {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
+                if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, L: L).id("highlights") }
                 if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
@@ -295,7 +312,7 @@ struct PlacePageView: View {
         .scrollIndicators(.hidden)
         // the one blur under the head, only once words scroll under it (16.3)
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .onChange(of: page.toEnd) { _, _ in reader.scrollTo("end", anchor: .bottom) }
+        .onChange(of: page.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
         }
         .background(Palette.white)
     }
@@ -354,6 +371,63 @@ struct PlacePageView: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// HIGHLIGHTS (16.4.6): a sideways row, one card wide with the next peeking 24 pt; the photo fills the card's top
+    /// (square corners, 16:10; real photos from Wikimedia Commons, credited in Sources), its name 17 pt semibold and one
+    /// line 15 pt black 50% under it; the plus at the photo's top right wishes it
+    private func highlights(_ all: [PlacePageState.Highlight], L: Layout) -> some View {
+        let w = L.W - 32 - 24
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Highlights").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 12) {
+                    ForEach(all, id: \.self) { h in highlightCard(h, w: w) }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+        }
+    }
+    private func highlightCard(_ h: PlacePageState.Highlight, w: CGFloat) -> some View {
+        let key = PlaceKey(.thing, h.id)
+        let st = MarkStore.shared.state(key)
+        return VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    if let f = h.photo, let u = Self.commons(f, width: 800) {
+                        AsyncImage(url: u) { img in img.resizable().scaledToFill() } placeholder: { Palette.cream }
+                    } else { Palette.cream }
+                }
+                .frame(width: w, height: w * 10 / 16)
+                .clipped()
+                Button {
+                    Feel.tap()
+                    Task {
+                        if st.wished { await MarkStore.shared.unwish(key, name: h.name) }
+                        else { await MarkStore.shared.wish(key, name: h.name, cc: page.country) }
+                    }
+                } label: {
+                    Icon5(key: "plus", ink: Palette.ink, size: 22)
+                        .frame(width: 44, height: 44)
+                        .glassEffect(st.wished ? .clear.tint(Palette.blue) : .clear, in: .circle)
+                }
+                .buttonStyle(.plain)
+                .padding(8)
+            }
+            Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+            Text(h.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+        }
+        .frame(width: w, alignment: .leading)
+    }
+    /// a Commons file at a width (Special:FilePath)
+    static func commons(_ file: String, width: Int) -> URL? {
+        let name = file.replacingOccurrences(of: " ", with: "_")
+        guard let e = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        return URL(string: "https://commons.wikimedia.org/wiki/Special:FilePath/\(e)?width=\(width)")
     }
 
     /// WHAT IS IN IT (16.4.8): a list with its own search field, five rows (the most peopled), then Show more; a row is a
