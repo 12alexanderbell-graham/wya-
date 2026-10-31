@@ -326,6 +326,9 @@ final class TestDriver {
                     }
                     else if a == "back" { PlacePageState.shared.close() }
                     // page at <0..1>: the top page held part way open, to look at one frame of its growing
+                    // page report <reason words>: Report a mistake open with that reason; page send: Send
+                    else if a == "report" { PlacePageState.shared.reportTest = p.dropFirst(2).joined(separator: " ") }
+                    else if a == "send" { PlacePageState.shared.sendTest += 1 }
                     else if a == "at", p.count > 2, let v = Double(p[2]) { PlacePageState.shared.top?.p = CGFloat(v) }
                     // page highlight: the open page's first highlight's page pushed (16.7)
                     else if a == "highlight", let h = PlacePageState.shared.facts?.highlights.first {

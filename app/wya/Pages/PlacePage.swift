@@ -73,6 +73,11 @@ final class PlacePageState {
     /// the test driver's scroll to the end, and its opening of Sources (checks)
     var toEnd = 0
     var sourcesTest = 0
+    /// the page's own sheet asked for (Sources tapped, 16.6): the water rises to 50% with it
+    var sheetAsked = 0
+    /// the test driver's way into Report a mistake (a reason picked, then Send)
+    var reportTest = ""
+    var sendTest = 0
     var isOpen: Bool { !pages.isEmpty }
 
     /// the first page, grown from what opened it on the map, the card or the list (A16.1)
@@ -360,7 +365,23 @@ struct PlacePageView: View {
         }
         .onChange(of: stack.isOpen) { _, open in
             if open { before = water.stop; water.go(.closed) }
-            else if let b = before { water.go(b); before = nil }
+            else {
+                water.pageSheet = false
+                if let b = before { water.go(b); before = nil }
+            }
+        }
+        // THE PAGE'S OWN SHEET (16.6): the water pulled up from the tab capsule, or Sources tapped, comes to 50% holding
+        // the page's sheet; back down to the capsule, the sheet goes
+        .onChange(of: water.stop) { _, s in
+            guard stack.isOpen else { return }
+            if s == .closed { water.pageSheet = false; return }
+            if !water.pageSheet { water.pageSheet = true }
+            if s == .quarter { water.go(.half) }
+        }
+        .onChange(of: stack.sheetAsked) { _, _ in
+            guard stack.isOpen else { return }
+            water.pageSheet = true
+            water.go(.half)
         }
     }
 }
@@ -781,60 +802,45 @@ private struct InsideList: View {
     }
 }
 
-/// SOURCES (16.4.11, 16.6): a row "Sources"; open, the sources the page drew on: Wikivoyage's text (CC BY-SA),
-/// Wikidata's and GeoNames' facts, each photo with its author and licence from the server's Commons credits, and the
-/// governments whose advice is shown. (The visa rules' and the climate figures' own sources are not recorded in the
-/// server's data yet, so they are not named here.) The page's own sheet (16.6, pulled up from the capsule) is not
-/// built: the row opens in place for now
-private struct SourcesRow: View {
+/// SOURCES (16.4.11, 16.6): a row "Sources" at the page's foot; a tap raises the page's own sheet (16.6) to 50%, which
+/// lists the sources the page drew on: Wikivoyage's text (CC BY-SA), Wikidata's and GeoNames' facts, each photo with
+/// its author and licence from the server's Commons credits, and the governments whose advice is shown. (The visa
+/// rules' and the climate figures' own sources are not recorded in the server's data yet, so they are not named.)
+struct SourcesRow: View {
     let facts: PlacePageState.Facts
     let kind: PlaceKey.Kind
-    @State private var open = false
-    @State private var credits: [String: String] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button {
-                withAnimation(Motion.quick) { open.toggle() }
-                Feel.tap()
-                if open && credits.isEmpty { Task { await loadCredits() } }
-            } label: {
-                Text("Sources").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: 44).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            if open {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(lines, id: \.self) { l in
-                        Text(l).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
+        Button {
+            Feel.tap()
+            PlacePageState.shared.sheetAsked += 1
+        } label: {
+            Text("Sources").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity, alignment: .leading).frame(height: 44).contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onChange(of: PlacePageState.shared.sourcesTest) { _, _ in
-            open = true
-            if credits.isEmpty { Task { await loadCredits() } }
-        }
+        .onChange(of: PlacePageState.shared.sourcesTest) { _, _ in PlacePageState.shared.sheetAsked += 1 }
     }
 
-    private var lines: [String] {
-        var out: [String] = []
-        if kind == .country, !facts.prose.isEmpty { out.append("Text: Wikivoyage, CC BY-SA") }
-        else if !facts.prose.isEmpty { out.append(kind == .thing ? "Text: Wikidata, CC0" : "Text: Wikidata") }
-        if let f = facts.photo { out.append("Photo: " + (credits[f] ?? f) + ", Wikimedia Commons") }
-        if !facts.rows.isEmpty { out.append(kind == .town ? "Facts: GeoNames, CC BY 4.0" : kind == .thing ? "Facts: Wikidata, CC0" : "Facts: Wikidata") }
+    /// the page's sources as (what, who and the licence) pairs, in the page's order
+    static func lines(_ facts: PlacePageState.Facts, kind: PlaceKey.Kind, credits: [String: String]) -> [(String, String)] {
+        var out: [(String, String)] = []
+        if kind == .country, !facts.prose.isEmpty { out.append(("Text", "Wikivoyage, CC BY-SA")) }
+        else if !facts.prose.isEmpty { out.append(("Text", kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
+        if let f = facts.photo { out.append(("Photo", (credits[f] ?? f) + ", Wikimedia Commons")) }
+        if !facts.rows.isEmpty { out.append(("Facts", kind == .town ? "GeoNames, CC BY 4.0" : kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
         for h in facts.highlights {
             guard let f = h.photo else { continue }
-            out.append("Photo of \(h.name): " + (credits[f] ?? f) + ", Wikimedia Commons")
+            out.append(("Photo of \(h.name)", (credits[f] ?? f) + ", Wikimedia Commons"))
         }
-        if !facts.activities.isEmpty { out.append("Activities: Wikivoyage, CC BY-SA") }
-        for a in facts.advice { out.append("Advice: the \(a.who) government") }
+        if !facts.activities.isEmpty { out.append(("Activities", "Wikivoyage, CC BY-SA")) }
+        for a in facts.advice { out.append(("Advice", "The \(a.who) government")) }
         return out
     }
 
     /// each photo's author and licence from the server's credits (256 shards by the FNV-1a of the file name)
-    private func loadCredits() async {
+    static func credits(_ facts: PlacePageState.Facts) async -> [String: String] {
         var out: [String: String] = [:]
         var shards: [String: [String: Any]] = [:]
         for f in facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? []) {
@@ -866,10 +872,7 @@ private struct SourcesRow: View {
                 out[key] = [v("Artist"), v("LicenseShortName")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
             }
         }
-        #if DEBUG
-        NSLog("wya credits %d of %d, e.g. %@", out.count, facts.highlights.count, out.first.map { "\($0.key): \($0.value)" } ?? "-")
-        #endif
-        credits = out
+        return out
     }
     /// a Commons field's HTML as plain words
     static func text(_ html: String) -> String {
