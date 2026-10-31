@@ -325,6 +325,8 @@ final class TestDriver {
                                                    from: CGRect(x: 16, y: 520, width: 398, height: 52))
                     }
                     else if a == "back" { PlacePageState.shared.close() }
+                    // page at <0..1>: the top page held part way open, to look at one frame of its growing
+                    else if a == "at", p.count > 2, let v = Double(p[2]) { PlacePageState.shared.top?.p = CGFloat(v) }
                     // page highlight: the open page's first highlight's page pushed (16.7)
                     else if a == "highlight", let h = PlacePageState.shared.facts?.highlights.first {
                         let cc = PlacePageState.shared.country

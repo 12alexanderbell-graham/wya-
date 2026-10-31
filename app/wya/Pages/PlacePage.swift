@@ -386,6 +386,12 @@ private struct PageLayer: View {
                            width: page.origin.width + (full.width - page.origin.width) * p,
                            height: page.origin.height + (full.height - page.origin.height) * p)
             let corner = min(page.origin.height / 2, 22) + (Self.screenCorner - min(page.origin.height / 2, 22)) * p
+            // (31 Oct 03:07: opening and leaving "strange"; the way Apple's zoom does it) what is under the page dims a
+            // little as it grows, and the page itself fades over its first and last stretch, so it never lands as a small
+            // card on the map where it opened from (the camera may have moved since)
+            Color.black.opacity(0.12 * Double(p))
+                .frame(width: L.W, height: L.H)
+                .allowsHitTesting(false)
             content(key, L: L)
                 .frame(width: L.W, height: L.H)
                 // one scale for both sides (the way Apple's zoom grows a view): the page is never squeezed or stretched on
@@ -394,6 +400,7 @@ private struct PageLayer: View {
                 .offset(x: r.minX, y: r.minY)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous).offset(x: r.minX, y: r.minY).size(r.size))
+                .opacity(min(1, Double(p) / 0.3))
                 .allowsHitTesting(top && page.p > 0.98)
                 .onAppear { ground = Self.colours(page.country) }
                 .onChange(of: page.country) { _, c in ground = Self.colours(c) }

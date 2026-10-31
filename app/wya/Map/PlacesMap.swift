@@ -170,6 +170,8 @@ extension MapController {
     static let continents = ["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"]
     func showPlacesMap(_ pick: PlacesPick) {
         guard placesMode, world != nil else { return }
+        // a card left up from the last map goes back into the water (a town's card stood over the world after Everywhere)
+        CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
         if case .collection = pick {} else { placesCollection = nil }
         switch pick {
         case .everywhere:
