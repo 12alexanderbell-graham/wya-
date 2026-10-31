@@ -48,12 +48,25 @@ struct StampedList: View {
         let name: String
         let place: Int
         let line: String
+        /// a town of Places' open country (7.6: the list scoped to the current map): its key's id is `id`
+        var town = false
     }
 
     private var rows: [Row] {
         guard let w = map.world else { return [] }
         var index: [String: Int] = [:]
         for (i, p) in w.places.enumerated() { index[p.id] = i }
+        // PLACES (7.6): with a country open, your stamped towns of it (the Stamped list scoped to the current map)
+        if map.placesMode, let open = map.placeOpen, let cc = map.placeOpenID {
+            let sc = map.townScenes[cc]
+            return marks.marks.compactMap { k, s -> Row? in
+                guard k.kind == .town, s.stamped, k.id.hasPrefix(cc + "/"), let t = sc?.index[k.id].map({ sc!.towns[$0] }) else { return nil }
+                var line = t.region.isEmpty ? "Town" : "Town · \(t.region)"
+                if s.visits > 1 { line += s.visits == 2 ? " · Twice" : " · \(s.visits) times" }
+                return Row(id: k.id, name: t.name, place: open, line: line, town: true)
+            }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
             // a continent picked: its stamps only (20.3.2), fixed as the list opened, so a row's flight (which leaves the
@@ -97,14 +110,18 @@ struct StampedList: View {
                     .contextMenu {
                         Button("Show on the map") { open(r) }
                         // the passport on that stamp's page (11.5); the list closes first
-                        Button("Show in passport") {
-                            water.closeList(to: .quarter)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                        if !r.town {
+                            Button("Show in passport") {
+                                water.closeList(to: .quarter)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                            }
                         }
                         Button("Details") { details(r) }
-                        Button("Verify") { VerifyState.shared.open(.country(r.id), name: r.name, place: r.place, water: water) }
+                        Button("Verify") {
+                            VerifyState.shared.open(r.town ? PlaceKey(.town, r.id) : .country(r.id), name: r.name, place: r.place, water: water)
+                        }
                         // offline for now: the app's own link and the name (11.7)
-                        ShareLink(item: URL(string: "wya://country/\(r.id)")!, subject: Text(r.name), message: Text(r.name)) {
+                        ShareLink(item: URL(string: r.town ? "wya://page/t:\(r.id)" : "wya://country/\(r.id)")!, subject: Text(r.name), message: Text(r.name)) {
                             Text("Share")
                         }
                         Button("Unstamp", role: .destructive) { unstamp(r) }
@@ -223,7 +240,7 @@ struct StampedList: View {
     private func row(_ r: Row) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.id.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.square(r.town ? (map.placeOpenID ?? "") : r.id.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
             .scaleEffect(flagOut.contains(r.id) ? 1 : 0)
@@ -251,6 +268,8 @@ struct StampedList: View {
     private func open(_ r: Row) {
         Feel.tap()
         water.closeList(to: .quarter)
+        // a town: the camera frames it and it darkens (as a town found by search)
+        if r.town { map.showTown(file: String(r.id.prefix { $0 != "/" }), id: r.id); return }
         map.show(place: r.place, sheetTop: water.y(.quarter))
         // the card from the place once the camera has landed (show's flight is 0.8 s) and the water is at 25%, so
         // nothing moves into the card's way while it grows
@@ -267,6 +286,10 @@ struct StampedList: View {
     /// A4.14, are not built: they are there in one frame once the list has gone.)
     private func details(_ r: Row) {
         Feel.tick()
+        if r.town {
+            DetailsState.shared.open(PlaceKey(.town, r.id), name: r.name, water: water)
+            return
+        }
         Self.backFromDetails = true
         withAnimation(Motion.quick) { listDrop = listHeight + 8 }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.each) {
@@ -293,6 +316,11 @@ struct StampedList: View {
     /// rows below move up into its place
     private func unstamp(_ r: Row) {
         Feel.lift()
+        if r.town {
+            let cc = String(r.id.prefix { $0 != "/" })
+            Task { await TownStamps.unstamp(PlaceKey(.town, r.id), name: r.name, cc: cc) }
+            return
+        }
         Task { await MarkStore.shared.unstamp(.country(r.id), name: r.name) }
     }
 }
