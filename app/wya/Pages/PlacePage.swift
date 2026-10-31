@@ -33,6 +33,8 @@ final class PlacePageState {
     private(set) var country: String = ""
     private(set) var facts: Facts?
     private(set) var origin: CGRect = .zero
+    /// a town's or your own place's point, for Where it is
+    private(set) var point: SIMD2<Float>?
     /// 0 at the origin to 1 full screen
     var p: CGFloat = 0
     var drag: CGFloat = 0
@@ -48,6 +50,7 @@ final class PlacePageState {
         guard self.key == nil else { return }
         self.key = key; self.name = name; self.what = what; self.country = country.lowercased()
         self.origin = origin; facts = nil; drag = 0; p = 0
+        point = Self.point(of: key, cc: self.country)
         Feel.tap()
         DispatchQueue.main.async { [weak self] in
             withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.5, dampingFraction: 1)) { self?.p = 1 }
@@ -60,6 +63,7 @@ final class PlacePageState {
     func replace(_ key: PlaceKey, name: String, what: String, country: String, code: String?) {
         self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
         facts = nil
+        point = Self.point(of: key, cc: self.country)
         Feel.tap()
         if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
         if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
@@ -227,6 +231,13 @@ final class PlacePageState {
         return s
     }
 
+    /// a town's point (from the town index, if it has come) or your own place's
+    static func point(of key: PlaceKey, cc: String) -> SIMD2<Float>? {
+        if key.kind == .yours { return OwnPlaces.shared.place(key.id)?.point }
+        if key.kind == .town, let h = TownIndex.shared.hit(key.id) { return EqualEarth.project(lon: h.lon, lat: h.lat) }
+        return nil
+    }
+
     /// the source's HTML entities as the characters they stand for
     static func plain(_ s: String) -> String {
         var t = s
@@ -297,6 +308,10 @@ struct PlacePageView: View {
             VStack(spacing: 32) {
                 top(key, L: L)
                 marking(key)
+                if let i = map.world?.placeIndex[page.country] {
+                    WhereItIs(map: map, place: i, point: page.point, key: key)
+                        .onTapGesture { page.close() }
+                }
                 if let f = page.facts, !f.prose.isEmpty {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -749,4 +764,59 @@ enum PageGlass {
     static let on: SwiftUI.Glass = .regular
     /// the head's glass: frosted while a page is up, clear on the map
     @MainActor static var head: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
+}
+
+/// WHERE IT IS (16.4.3): a piece of our map, the content width x 160 pt, corners 22: the place and its neighbours as
+/// the world's outlines draw them (the sea our blue, the land white, borders 0.5 pt black 50%), the place filled in its
+/// stamped or wished colour (else our grey), a town or your own place as a point in it. Drawn from the world's rings,
+/// no live map under the page
+struct WhereItIs: View {
+    let map: MapController
+    /// the country it is in
+    let place: Int
+    /// a point inside it to mark (a town, your own place), in map units
+    var point: SIMD2<Float>?
+    var key: PlaceKey
+
+    var body: some View {
+        Canvas { ctx, size in
+            guard let w = map.world, let f = w.frame(of: place) else { return }
+            // the frame: the place's box with a fifth of room round it, at the canvas's aspect
+            var x0 = Double(f.x), y0 = Double(f.y), x1 = Double(f.z), y1 = Double(f.w)
+            let mx = (x1 - x0) * 0.2 + 0.5, my = (y1 - y0) * 0.2 + 0.5
+            x0 -= mx; x1 += mx; y0 -= my; y1 += my
+            let aspect = Double(size.width / size.height)
+            if (x1 - x0) / (y1 - y0) < aspect {
+                let c = (x0 + x1) / 2, hw = (y1 - y0) * aspect / 2; x0 = c - hw; x1 = c + hw
+            } else {
+                let c = (y0 + y1) / 2, hh = (x1 - x0) / aspect / 2; y0 = c - hh; y1 = c + hh
+            }
+            let sx = Double(size.width) / (x1 - x0)
+            func pt(_ p: SIMD2<Float>) -> CGPoint { CGPoint(x: (Double(p.x) - x0) * sx, y: (Double(p.y) - y0) * sx) }
+            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Palette.blue.opacity(0.45)))
+            var land = Path(), mine = Path()
+            for r in w.rings where r.unit >= 0 {
+                guard Double(r.box.z) >= x0, Double(r.box.x) <= x1, Double(r.box.w) >= y0, Double(r.box.y) <= y1 else { continue }
+                var p = Path()
+                p.move(to: pt(w.points[r.start]))
+                for i in 1 ..< r.count { p.addLine(to: pt(w.points[r.start + i])) }
+                p.closeSubpath()
+                if w.unitOwner[r.unit] == place { mine.addPath(p) } else { land.addPath(p) }
+            }
+            ctx.fill(land, with: .color(Palette.white), style: FillStyle(eoFill: true))
+            let st = MarkStore.shared.state(key)
+            let fill = st.stamped && key.kind == .country ? Palette.lime : st.wished && key.kind == .country ? Palette.blue : Palette.grey
+            ctx.fill(mine, with: .color(fill), style: FillStyle(eoFill: true))
+            ctx.stroke(land, with: .color(Palette.ink.opacity(0.5)), lineWidth: 0.5)
+            ctx.stroke(mine, with: .color(Palette.ink.opacity(0.5)), lineWidth: 0.5)
+            if let point {
+                let c = pt(point)
+                let mark = MarkStore.shared.state(key)
+                let col = mark.stamped ? Palette.lime : mark.wished ? Palette.blue : Palette.ink
+                ctx.fill(Path(ellipseIn: CGRect(x: c.x - 6, y: c.y - 6, width: 12, height: 12)), with: .color(col))
+            }
+        }
+        .frame(height: 160)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
 }
