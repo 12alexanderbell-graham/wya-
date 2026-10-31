@@ -20,7 +20,10 @@ final class PlacePageState {
         var cities: [Inside] = []
         /// Highlights (16.4.6): the country's World Heritage sites for now (the server's heritage list)
         var highlights: [Highlight] = []
+        /// Activities (16.4.7): Wikivoyage's "do" listings (a country's from all its cities, a town's its own)
+        var activities: [Activity] = []
     }
+    struct Activity: Hashable { let name: String; let line: String }
     struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
     /// the server's World Heritage list, read once
     private static var heritage: [String: [String: Any]]?
@@ -163,6 +166,9 @@ final class PlacePageState {
                                  photo: (h["img"] as? [String])?.first)
             }
         }
+        // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
+        let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
+        out.activities = await Self.activities(cc, town: nil, first: mainCities)
         // (a page opened since this one began loading keeps its own facts)
         guard key?.id.lowercased() == cc else { return }
         facts = out
@@ -198,6 +204,8 @@ final class PlacePageState {
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
             out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
         }
+        if let n = t["n"] as? String { out.activities = await Self.activities(cc, town: n) }
+        guard key?.id == id else { return }
         facts = out
     }
 
@@ -212,6 +220,25 @@ final class PlacePageState {
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", Self.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
         facts = out
+    }
+
+    /// Wikivoyage's "do" listings (a town's own, see and do; a country's do from every city it has), as rows
+    static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
+        guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
+        var out: [Activity] = []
+        var seen = Set<String>()
+        let cities = town.map { [$0] } ?? (first.filter { all[$0] != nil } + all.keys.sorted().filter { !first.contains($0) })
+        for c in cities {
+            for l in all[c] ?? [] {
+                let k = l["k"] as? String ?? ""
+                guard k == "do" || (town != nil && k == "see"), let n = l["n"] as? String, seen.insert(n).inserted else { continue }
+                let desc = (l["d"] as? String).map { plain($0) } ?? ""
+                let line = town == nil ? (desc.isEmpty ? c : "\(c) · \(desc)") : desc
+                out.append(Activity(name: n, line: line))
+            }
+        }
+        return out
     }
 
     /// "90" -> "visa free for 90 days"; the rest as they are written
@@ -317,6 +344,7 @@ struct PlacePageView: View {
                 }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
                 if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, L: L).id("highlights") }
+                if let f = page.facts, !f.activities.isEmpty { ActivitiesList(all: f.activities) }
                 if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
@@ -700,6 +728,7 @@ private struct SourcesRow: View {
             guard let f = h.photo else { continue }
             out.append("Photo of \(h.name): " + (credits[f] ?? f) + ", Wikimedia Commons")
         }
+        if !facts.activities.isEmpty { out.append("Activities: Wikivoyage, CC BY-SA") }
         for a in facts.advice { out.append("Advice: the \(a.who) government") }
         return out
     }
@@ -818,5 +847,45 @@ struct WhereItIs: View {
         }
         .frame(height: 160)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+/// ACTIVITIES (16.4.7; the word chosen, never "See and do"): its own search field, the first five rows, then Show more; each
+/// row its name and one line (Wikivoyage's words, credited in Sources)
+private struct ActivitiesList: View {
+    let all: [PlacePageState.Activity]
+    @State private var query = ""
+    @State private var shown = 5
+
+    var body: some View {
+        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let rows = q.isEmpty ? all : all.filter {
+            ($0.name + " " + $0.line).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).contains(q)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Activities").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            HStack(spacing: 8) {
+                Icon5(key: "search", ink: Palette.ink, size: 22)
+                TextField("Search activities", text: $query).font(.body)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+            }
+            .padding(.horizontal, 14).frame(height: 44)
+            .glassEffect(PageGlass.on, in: .capsule)
+            ForEach(rows.prefix(shown), id: \.self) { a in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                    if !a.line.isEmpty {
+                        Text(a.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            }
+            if rows.count > shown {
+                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
+                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
