@@ -1006,6 +1006,16 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         #endif
         // locked: no menu; the lift refuses the hold (finish) (11.7)
         if c.locked { return nil }
+        // THE JOURNEY (13.4): held on its line, a leg or a capsule, the journey's own menu
+        if c.historyTrack != nil, historyLine.hit(location, c) != nil, let menu = historyLine.menu(c) {
+            menuTarget?.removeFromSuperview()
+            let v = UIView(frame: CGRect(x: location.x - 22, y: location.y - 22, width: 44, height: 44))
+            v.backgroundColor = .clear
+            v.isUserInteractionEnabled = false
+            addSubview(v)
+            menuTarget = v
+            return UIContextMenuConfiguration(identifier: NSNumber(value: -1), previewProvider: nil) { _ in menu }
+        }
         // the sea, or a place off the continent you're on: no menu and no haptic
         guard let i = c.hit(at: location) else { return nil }
         if let k = c.drawnContinent, let w = c.world, !w.inCont(i, k) { return nil }
@@ -1193,12 +1203,23 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 // passed, as a place's does); any other tap takes a leg's capsule away and goes on as always
                 let journey = c.historyTrack != nil ? historyLine.hit(d0, c) : nil
                 if journey == nil { historyLine.dismissLeg(c) }
+                // A NAME (31 Oct): a town's or thing's name on the map opens its page (its shape or mark still
+                // stamps or opens its card)
+                let name = journey == nil ? townNames.nameHit(d0) : nil
                 if c.locked { Feel.refuse(); c.lockedPress() }
                 else if let journey {
                     let stamp = t.timestamp
                     DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
                         guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
                         self.historyLine.tapped(journey, c)
+                    }
+                }
+                else if let name {
+                    let stamp = t.timestamp, hit = c.pressed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
+                        guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
+                        // no page (a collection's stop): the tap goes on as a tap on what is under it
+                        if !self.townNames.openPage(name, c), let hit { c.onPlaceTap?(hit, d0) }
                     }
                 }
                 else if let hit = c.pressed {

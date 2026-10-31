@@ -403,6 +403,8 @@ final class MapController {
         let first = HistoryInfo.number(all.first!.from), last = max(HistoryInfo.number(today), HistoryInfo.number(all.last!.from))
         historyInfo = HistoryInfo(first: first, last: last, lo: HistoryInfo.number(r.0), hi: HistoryInfo.number(r.1), count: 0, km: 0)
         guard rebuildHistory(land: true) else { historyInfo = nil; return false }
+        // the whole journey framed between the head and the water at history height (31 Oct)
+        frameHistory()
         // (a new scope draws its line from the start again)
         historyShown = 0
         historyAnim = (0, 1, CACurrentMediaTime(), Motion.reduce ? 0.3 : 1.2)
@@ -958,6 +960,26 @@ final class MapController {
             try? await Task.sleep(for: .milliseconds(1500))
             if let self, self.pressed == i, !self.touching { self.pressed = nil }
         }
+    }
+
+    /// the journey in range framed: its points' box fitted inside the room between the head and the water at history
+    /// height (25% + 56 pt), 40 pt in from the sides and 56 pt from the top and bottom (room for the capsules), never
+    /// closer than the town level's start (a trip inside one city is not blown up)
+    func frameHistory() {
+        guard let t = historyTrack, !t.points.isEmpty else { return }
+        let xs = t.points.map(\.x), ys = t.points.map(\.y)
+        guard let x0 = xs.min(), let x1 = xs.max(), let y0 = ys.min(), let y1 = ys.max() else { return }
+        let W = Double(view.width)
+        let room = layout.room(sheetTop: layout.top(.quarter) - 56)
+        let top = Double(room.lowerBound) + 56, bottom = Double(room.upperBound) - 56
+        let roomH = Swift.max(80, bottom - top)
+        let bw = Swift.max(1e-6, x1 - x0), bh = Swift.max(1e-6, y1 - y0)
+        var target = Swift.min((W - 80) / bw, roomH / bh)
+        target = Swift.min(target, townsK, kMax)
+        target = Swift.max(kMin, target)
+        let mid = SIMD2((x0 + x1) / 2, (y0 + y1) / 2)
+        let centre = mid + SIMD2(0, (Double(view.height) / 2 - (top + bottom) / 2) / target)
+        fly(to: clamped(centre, target), k: target, dur: Self.flight)
     }
 
     /// a journey's start or end capsule tapped (13.4): the camera flies to frame that stop, the search flight's room
