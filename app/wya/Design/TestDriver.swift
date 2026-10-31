@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 
 /// TEST ONLY, simulator builds only: reads snaps/cmd.txt in the night folder four times a second and runs it when it
 /// changes, so every state of the screen can be reached and checked from outside (with Snap's frames). The first
@@ -407,6 +408,17 @@ final class TestDriver {
                         t.colour.strength = v; ColourStore.shared.add(t.colour)
                     }
                     NSLog("wya picker %@: P3 %.3f %.3f %.3f, %d kept", ColourNames.name(t.colour), t.colour.p3.x, t.colour.p3.y, t.colour.p3.z, ColourStore.shared.recent.count)
+                // pinreview <map|apple|satellite|off> [spread|stacked|lines] | pinreview at <lat> <lon> <span>: the pins review (8.3)
+                case "pinreview":
+                    let r = PinReview.shared
+                    if a == "off" { r.on = false }
+                    else if a == "at", p.count > 4, let la = Double(p[2]), let lo = Double(p[3]), let sp = Double(p[4]) {
+                        r.centre = CLLocationCoordinate2D(latitude: la, longitude: lo); r.span = sp
+                    } else {
+                        r.ground = a; if p.count > 2 { r.scene = p[2] }
+                        r.on = true
+                        if a != "map", let L = water?.layout { r.snapshot(size: CGSize(width: L.W, height: L.H)) }
+                    }
                 case "regiontap":
                     if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
                         let pt = CGPoint(x: x, y: y)
