@@ -10,6 +10,8 @@ final class RegionCardState {
     private(set) var parents = ""
     /// the country it lies in (the map's place: Verify's shape test and the flag)
     private(set) var place: Int?
+    /// an event stop's day ("2026-07-05"), when the card is a collection's stop (D7)
+    private(set) var day: String?
     /// 0 in the water to 1 out
     var p: CGFloat = 0
     /// stamped on this card (a tap on Stamped lifts it again); stamped before, Stamped refuses (Part 4.2.3)
@@ -18,9 +20,9 @@ final class RegionCardState {
     var isOpen: Bool { key != nil }
 
     /// out of the water (A6.11): the map never moves; the region stays darkened while the card is up
-    func open(_ key: PlaceKey, name: String, parents: String, place: Int, map: MapController) {
+    func open(_ key: PlaceKey, name: String, parents: String, place: Int, map: MapController, day: String? = nil) {
         guard self.key == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
-        self.key = key; self.name = name; self.parents = parents; self.place = place
+        self.key = key; self.name = name; self.parents = parents; self.place = place; self.day = day
         stampedHere = false
         map.kept = place
         p = 0
@@ -134,6 +136,12 @@ struct RegionCard: View {
                         await TownStamps.stamp(key, name: card.name, cc: cc, source: .hand, place: card.place, at: at)
                     } else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
                         await RegionStamps.stamp(u, in: sc, source: .hand)
+                    } else if key.kind == .thing, let place = card.place, let w = map.world {
+                        // a thing stamps its country too; a collection's stop that has been gets its day as a visit (D7)
+                        let cc = w.places[place].id.lowercased()
+                        let at = ThingStore.shared.thing(key.id)?.1.at
+                        await TownStamps.stamp(key, name: card.name, cc: cc, source: .hand, place: place, at: at,
+                                               day: CollectionStore.pastDay(card.day))
                     } else {
                         await MarkStore.shared.stamp(key, name: card.name)
                     }
@@ -179,7 +187,9 @@ struct RegionCard: View {
                 } else if s.wished {
                     await MarkStore.shared.unwish(key, name: card.name); Feel.lift()
                 } else {
-                    await MarkStore.shared.wish(key, name: card.name); Feel.tap()
+                    // a stop still to come is wished with its day (D7)
+                    let when = CollectionStore.upcoming(card.day) ? card.day : nil
+                    await MarkStore.shared.wish(key, name: card.name, when: when); Feel.tap()
                 }
             }
         } label: {

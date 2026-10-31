@@ -63,6 +63,19 @@ final class CollectionStore {
     }
 
     /// a stop's line ("5 Jul 2026 · British Grand Prix")
+    /// a stop's day if it has come (stamping gives the place that day as a visit, D7), nil for a stop still to come or
+    /// one without a day
+    static func pastDay(_ day: String?) -> String? {
+        guard let day, day.count == 10 else { return nil }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "yyyy-MM-dd"
+        return day <= f.string(from: Date()) ? day : nil
+    }
+    /// a stop still to come (it is wished with its day, not stamped with it)
+    static func upcoming(_ day: String?) -> Bool {
+        guard let day, day.count == 10 else { return false }
+        return pastDay(day) == nil
+    }
+
     static func line(_ i: Item) -> String {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "yyyy-MM-dd"
         let day = f.date(from: i.date).map { $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? ""

@@ -204,10 +204,26 @@ actor TravelStore {
 
     /// STAMP a place. A wished place loses its wish and keeps when it was wished (`came`). A region, town or thing in one
     /// country stamps that country too, on only (unstamping it later leaves the country), the old app's cascade.
+    /// With `day` ("2026-07-05", an event stop's day: D7) the place gets that day as a visit too, in the same write and
+    /// the same undo step, unless it has that visit already (a stamped place only gains the visit).
     func stamp(_ key: PlaceKey, account: String, source: MarkSource, at: Date = Date(),
-               name: String = "", cc: String = "", level: Int = 0) throws -> Result {
+               name: String = "", cc: String = "", level: Int = 0, day: String? = nil) throws -> Result {
         var res = Result()
         try stampOne(key, account: account, source: source, at: at, name: name, cc: cc, level: level, via: nil, into: &res)
+        if let day {
+            let k = key.description
+            let have = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.key == k }))
+            if !have.contains(where: { $0.arrived == day && $0.left == day }), let r = try record(account, key) {
+                let before = res.changed[key]?.old ?? state(r, visits: have.count)
+                let v = VisitRecord(account: account, key: key)
+                v.arrived = day; v.left = day; v.source = source.rawValue
+                modelContext.insert(v)
+                if let i = res.undo.firstIndex(where: { $0.key == key }) { res.undo[i].added = [v.id] }
+                else { var snap = snapshot(key, r); snap.added = [v.id]; res.undo.append(snap) }
+                r.times = max(1, r.times, have.count + 1)
+                res.changed[key] = (before, state(r, visits: have.count + 1))
+            }
+        }
         if key.kind != .country, !cc.isEmpty {
             let c = PlaceKey.country(cc.lowercased())
             if try record(account, c)?.stamped != true {
@@ -261,7 +277,7 @@ actor TravelStore {
 
     /// WISH a place, `want` 1 to 5. A stamped place can't be wished (the old toggleWish refused it).
     func wish(_ key: PlaceKey, account: String, want: Int = 3, source: MarkSource = .hand,
-              name: String = "", cc: String = "", level: Int = 0) throws -> Result {
+              name: String = "", cc: String = "", level: Int = 0, when: String? = nil) throws -> Result {
         var res = Result()
         let r0 = try record(account, key)
         if r0?.stamped == true { return res }
@@ -271,6 +287,7 @@ actor TravelStore {
         let r = r0 ?? { let n = StampRecord(account: account, key: key); modelContext.insert(n); return n }()
         r.wished = true
         r.want = min(5, max(1, want))
+        if let when { r.wishWhen = when }
         r.at = Date()
         r.source = source.rawValue
         if !name.isEmpty { r.name = name }
