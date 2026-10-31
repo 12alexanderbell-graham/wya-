@@ -180,6 +180,7 @@ struct ContentView: View {
                 // the Places map (7.4, the old app's system): a town of the open country answers; any other country opens
                 if map.placesMode {
                     if map.ownPressed != nil { ownTapped() }
+                    else if map.thingPressed != nil { thingTapped() }
                     else if map.townPressed != nil { townTapped() }
                     else if map.placeOpen != i { closeCard(); map.openPlace(i) }
                     // quick add on the open country's empty land: your own place there (7.8, A7.11)
@@ -349,6 +350,26 @@ struct ContentView: View {
         Task {
             if stamped { await MarkStore.shared.unstamp(o.key, name: o.name) }
             else { await MarkStore.shared.stamp(o.key, name: o.name, cc: o.cc, source: .quick) }
+        }
+    }
+
+    /// A THING TAPPED (7.4, 7.7): quick add stamps it with its region chain and country (or unstamps it); otherwise its
+    /// card from the water
+    private func thingTapped() {
+        guard let id = map.thingPressed, let cc = map.placeOpenID, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }),
+              let w = map.world, let place = map.placeOpen else { return }
+        defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }
+        guard head.quickStamp else {
+            let line = t.line.isEmpty ? w.places[place].n : t.line.prefix(1).uppercased() + t.line.dropFirst()
+            RegionCardState.shared.open(t.key, name: t.name, parents: line, place: place, map: map)
+            return
+        }
+        let stamped = MarkStore.shared.state(t.key).stamped
+        if stamped { Feel.lift() } else { Feel.stamp() }
+        Task {
+            if stamped { await TownStamps.unstamp(t.key, name: t.name, cc: cc) }
+            else { await TownStamps.stamp(t.key, name: t.name, cc: cc, source: .quick, place: place, at: t.at) }
+            UIAccessibility.post(notification: .announcement, argument: "\(t.name) \(stamped ? "unstamped" : "stamped")")
         }
     }
 

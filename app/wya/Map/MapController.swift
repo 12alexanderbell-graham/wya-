@@ -182,7 +182,10 @@ final class MapController {
         if placesMode, let open = placeOpen {
             // your own places first (their marks sit over the towns), then the towns
             ownPressed = ownHit(at: p)
-            if ownPressed != nil { townPressed = nil; return open }
+            if ownPressed != nil { townPressed = nil; thingPressed = nil; return open }
+            // then the things (their marks sit over the towns' shapes)
+            thingPressed = thingHit(at: p)?.id
+            if thingPressed != nil { townPressed = nil; needsFrame = true; return open }
             townPressed = townHit(at: p)
             if townPressed != nil { return open }
         }
@@ -362,6 +365,10 @@ final class MapController {
     /// THE CURRENT PLACES MAP when it is wider than a country (7.2): a continent or a world region by name; nil with a
     /// country open (placeOpen) or on Everywhere
     var placesArea: String?
+    /// the things' marks on screen now (id: frame), kept by the names view each frame, for the hit test
+    @ObservationIgnored var thingFrames: [String: CGRect] = [:]
+    /// the thing under the finger (7.4), by id
+    @ObservationIgnored var thingPressed: String?
     /// the country open in Places (its towns drawn), or the world
     var placeOpen: Int?
     /// Regions' towns level (6.6): the region map's last word, the country's towns drawn as Places draws them

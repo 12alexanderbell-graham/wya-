@@ -22,6 +22,7 @@ extension MapController {
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
+        ThingStore.shared.load(w.places[i].id.lowercased())
     }
     /// REGIONS' TOWNS LEVEL (6.6, the level line's last word "towns"): the level that was up kept, drawn as borders
     /// only (the book's finest level was tried on 31 Oct: France's 35,000 communes' borders buried the towns), and the
@@ -210,6 +211,20 @@ extension MapController {
         placeOpen = nil
         townPressed = nil
         closeRegions()
+    }
+
+    /// the thing whose mark is under a screen point (only marks showing now: TownNamesView keeps their frames)
+    func thingHit(at p: CGPoint) -> ThingStore.Thing? {
+        guard placesMode, let cc = placeOpenID, let all = ThingStore.shared.things(cc) else { return nil }
+        var best: (ThingStore.Thing, CGFloat)?
+        for (id, f) in thingFrames {
+            // within the mark and its name, with a fingertip's room round them
+            guard f.insetBy(dx: -8, dy: -8).contains(p) else { continue }
+            let d = hypot(f.minX + 5 - p.x, f.midY - p.y)
+            guard best == nil || d < best!.1, let t = all.first(where: { $0.id == id }) else { continue }
+            best = (t, d)
+        }
+        return best?.0
     }
 
     /// the town under a screen point (only towns showing now)
