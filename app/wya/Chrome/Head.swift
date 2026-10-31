@@ -904,6 +904,7 @@ struct SearchResults: View {
         let placesSearch = map.placesMode && map.regionScene == nil && !head.settingsOpen
         let _ = placesSearch ? TownIndex.shared.load() : ()
         let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
@@ -922,6 +923,8 @@ struct SearchResults: View {
                 let rest = hits.filter { !lead.contains($0) }
                 let k = lead.map { ResultKey.place($0) } + townHits.map { ResultKey.town($0.key) }
                     + rest.prefix(max(2, 8 - townHits.count - lead.count)).map { ResultKey.place($0) }
+                // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
+                if k.isEmpty, let g = townGuess { return [.town(g.key)] }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
             }() : baseKeys
         let w = width > 0 ? width : fullWidth
@@ -946,7 +949,8 @@ struct SearchResults: View {
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
-                                case .town(let k): townRow(townHits.first { $0.key == k })
+                                case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil),
+                                                           note: townGuess?.key == k ? "Did you mean?" : nil)
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
                                 }
                             }
@@ -1140,8 +1144,8 @@ struct SearchResults: View {
 
     /// a town found in Places: its name and where it is (its region inside the open country, else its country); a tap
     /// closes search and shows it (its country opened)
-    private func townRow(_ h: TownIndex.Hit?) -> some View {
-        let country = h.flatMap { h in
+    private func townRow(_ h: TownIndex.Hit?, note: String? = nil) -> some View {
+        let country = note ?? h.flatMap { h in
             h.file == map.placeOpenID && !h.region.isEmpty ? h.region
                 : map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } }
         } ?? ""
