@@ -203,75 +203,47 @@ struct MapCard: View {
     }
 }
 
-/// A CARD'S PICTURE: the map's land white on our sea (the land round it lighter), your stamped towns and own places
-/// on it as lime points; drawn once per map, size and marks, kept
+/// A CARD'S PICTURE: our map's piece (MapPicture, drawn off the main thread once per map, size and marks, kept);
+/// until it has come, the sea's blue
 struct ShelfPicture: View {
     let map: MapController
     let pick: MapController.PlacesPick
     let side: CGFloat
     let ready: Bool
     let version: Int
-    private static var kept: [String: UIImage] = [:]
+    @State private var image: CGImage?
+    private static var kept: [String: CGImage] = [:]
+    @Environment(\.displayScale) private var scale
 
     var body: some View {
         let key = "\(pick)|\(side)|\(version)|\(ready)"
-        if let i = Self.kept[key] ?? draw(key) {
-            Image(uiImage: i).resizable()
-        } else {
-            Palette.blue
-        }
-    }
-
-    private func draw(_ key: String) -> UIImage? {
-        guard let w = map.world, let b0 = map.box(of: pick) else { return nil }
-        let size = side
-        // the box with room round it, made square
-        var x0 = Double(b0.x), y0 = Double(b0.y), x1 = Double(b0.z), y1 = Double(b0.w)
-        let pad = pick == .everywhere ? 0 : max(x1 - x0, y1 - y0) * 0.12 + 0.3
-        x0 -= pad; x1 += pad; y0 -= pad; y1 += pad
-        if x1 - x0 > y1 - y0 { let c = (y0 + y1) / 2, h = (x1 - x0) / 2; y0 = c - h; y1 = c + h }
-        else { let c = (x0 + x1) / 2, h = (y1 - y0) / 2; x0 = c - h; x1 = c + h }
-        let s = Double(size) / (x1 - x0)
-        func pt(_ p: SIMD2<Float>) -> CGPoint { CGPoint(x: (Double(p.x) - x0) * s, y: (Double(p.y) - y0) * s) }
-        let own: Set<Int>? = map.members(of: pick).map(Set.init)
-        let ids: Set<String>? = own.map { Set($0.map { w.places[$0].id.lowercased() }) }
-        // your marks on it
-        var dots: [SIMD2<Float>] = []
-        for (k, st) in MarkStore.shared.marks where st.stamped {
-            if k.kind == .town, let h = TownIndex.shared.hit(k.id), ids?.contains(h.file) ?? true {
-                dots.append(EqualEarth.project(lon: h.lon, lat: h.lat))
-            } else if k.kind == .yours, let o = OwnPlaces.shared.place(k.id), ids?.contains(o.cc) ?? true {
-                dots.append(o.point)
+        Group {
+            if let i = Self.kept[key] ?? image {
+                Image(decorative: i, scale: scale).resizable()
+            } else {
+                Palette.blue
             }
         }
-        let r = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
-        let image = r.image { ctx in
-            let g = ctx.cgContext
-            g.setFillColor(UIColor(Palette.blue).cgColor)
-            g.fill(CGRect(x: 0, y: 0, width: size, height: size))
-            let mine = CGMutablePath(), rest = CGMutablePath(), lakes = CGMutablePath()
-            for ring in w.rings {
-                guard Double(ring.box.z) >= x0, Double(ring.box.x) <= x1, Double(ring.box.w) >= y0, Double(ring.box.y) <= y1 else { continue }
-                // rings smaller than a third of a point are skipped (thousands of islets cost and show nothing)
-                guard Double(max(ring.box.z - ring.box.x, ring.box.w - ring.box.y)) * s > 0.35 else { continue }
-                let p = CGMutablePath()
-                p.move(to: pt(w.points[ring.start]))
-                for i in 1 ..< ring.count { p.addLine(to: pt(w.points[ring.start + i])) }
-                p.closeSubpath()
-                if ring.unit < 0 { lakes.addPath(p) }
-                else if own == nil || own!.contains(w.unitOwner[ring.unit]) { mine.addPath(p) } else { rest.addPath(p) }
+        .task(id: key) {
+            guard Self.kept[key] == nil, let w = map.world, let box = map.box(of: pick) else { return }
+            let own: Set<Int>? = map.members(of: pick).map(Set.init)
+            let ids: Set<String>? = own.map { Set($0.map { w.places[$0].id.lowercased() }) }
+            // your marks on it
+            var dots: [SIMD2<Float>] = []
+            for (k, st) in MarkStore.shared.marks where st.stamped {
+                if k.kind == .town, let h = TownIndex.shared.hit(k.id), ids?.contains(h.file) ?? true {
+                    dots.append(EqualEarth.project(lon: h.lon, lat: h.lat))
+                } else if k.kind == .yours, let o = OwnPlaces.shared.place(k.id), ids?.contains(o.cc) ?? true {
+                    dots.append(o.point)
+                }
             }
-            g.addPath(rest); g.setFillColor(UIColor.white.withAlphaComponent(0.55).cgColor); g.fillPath(using: .evenOdd)
-            g.addPath(mine); g.setFillColor(UIColor.white.cgColor); g.fillPath(using: .evenOdd)
-            g.addPath(lakes); g.setFillColor(UIColor(Palette.blue).cgColor); g.fillPath()
-            g.setFillColor(UIColor(Palette.lime).cgColor)
-            let d: CGFloat = pick == .everywhere ? 3 : 5
-            for p in dots {
-                let c = pt(p)
-                g.fillEllipse(in: CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d))
-            }
+            let relief = map.relief, every = pick == .everywhere, px = Int(side * scale)
+            let made = await Task.detached(priority: .utility) {
+                MapPicture.draw(world: w, relief: relief, box: box, own: own, everywhere: every, dots: dots, px: px)
+            }.value
+            guard let made else { return }
+            Self.kept[key] = made
+            image = made
         }
-        DispatchQueue.main.async { Self.kept[key] = image }
-        return image
     }
 }
