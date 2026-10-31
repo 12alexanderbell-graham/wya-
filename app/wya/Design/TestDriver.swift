@@ -397,6 +397,16 @@ final class TestDriver {
                             }
                         } else { NSLog("wya thingtap %@: no mark", q) }
                     }
+                // picker on|off | picker at <x 0-1> <y 0-1> | picker strength <0-1>: the colour picker's test host (Part 15)
+                case "picker":
+                    let t = PickerTest.shared
+                    if a == "on" { t.on = true } else if a == "off" { t.on = false }
+                    else if a == "at", p.count > 3, let x = Double(p[2]), let y = Double(p[3]) {
+                        t.colour = ColourPick.at(CGPoint(x: x, y: y), strength: t.colour.strength); ColourStore.shared.add(t.colour)
+                    } else if a == "strength", p.count > 2, let v = Double(p[2]) {
+                        t.colour.strength = v; ColourStore.shared.add(t.colour)
+                    }
+                    NSLog("wya picker %@: P3 %.3f %.3f %.3f, %d kept", ColourNames.name(t.colour), t.colour.p3.x, t.colour.p3.y, t.colour.p3.z, ColourStore.shared.recent.count)
                 case "regiontap":
                     if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
                         let pt = CGPoint(x: x, y: y)
