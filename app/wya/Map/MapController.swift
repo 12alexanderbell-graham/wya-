@@ -827,6 +827,7 @@ final class MapController {
     /// after a pan or pinch the camera still moves only as much as the room's middle moves
     func sheetMoved(top: CGFloat) {
         sheetTop = top
+        if placesMode { needsFrame = true }
         guard continentFrame != nil, let was = followMid, flight == nil else { return }
         let r = layout.room(sheetTop: max(top, layout.top(.half)))
         let mid = (Double(r.lowerBound) + 14 + Double(r.upperBound) - 2) / 2

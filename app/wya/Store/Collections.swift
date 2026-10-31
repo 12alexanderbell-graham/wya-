@@ -63,6 +63,12 @@ final class CollectionStore {
     }
 
     /// a stop's line ("5 Jul 2026 · British Grand Prix")
+    /// a stop of any collection read, by its key
+    func item(_ key: PlaceKey) -> Item? {
+        for c in all { if let it = c.items.first(where: { $0.key == key }) { return it } }
+        return nil
+    }
+
     /// a stop's day if it has come (stamping gives the place that day as a visit, D7), nil for a stop still to come or
     /// one without a day
     static func pastDay(_ day: String?) -> String? {

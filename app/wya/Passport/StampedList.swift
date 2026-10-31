@@ -48,25 +48,28 @@ struct StampedList: View {
         let name: String
         let place: Int
         let line: String
-        /// a town of Places' open country (7.6: the list scoped to the current map): its key's id is `id`
-        var town = false
+        /// what the row is (7.6: in Places the list is the current map's towns and things, a collection's stops)
+        var kind: Kind = .country
+        /// the country whose flag the row shows
+        var flag = ""
+        /// an event stop's day, for the stops' order
+        var day = ""
+        enum Kind { case country, town, thing, stop }
+        var town: Bool { kind == .town }
+        var key: PlaceKey { kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : .thing, id) }
+    }
+
+    /// a row's words for how often: "Twice", "3 times" ("" for once)
+    private static func often(_ s: MarkState) -> String {
+        s.visits <= 1 ? "" : s.visits == 2 ? " · Twice" : " · \(s.visits) times"
     }
 
     private var rows: [Row] {
         guard let w = map.world else { return [] }
         var index: [String: Int] = [:]
         for (i, p) in w.places.enumerated() { index[p.id] = i }
-        // PLACES (7.6): with a country open, your stamped towns of it (the Stamped list scoped to the current map)
-        if map.placesMode, let open = map.placeOpen, let cc = map.placeOpenID {
-            let sc = map.townScenes[cc]
-            return marks.marks.compactMap { k, s -> Row? in
-                guard k.kind == .town, s.stamped, k.id.hasPrefix(cc + "/"), let t = sc?.index[k.id].map({ sc!.towns[$0] }) else { return nil }
-                var line = t.region.isEmpty ? "Town" : "Town · \(t.region)"
-                if s.visits > 1 { line += s.visits == 2 ? " · Twice" : " · \(s.visits) times" }
-                return Row(id: k.id, name: t.name, place: open, line: line, town: true)
-            }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        }
+        // PLACES (7.6): the Stamped list scoped to the current map, as the caption's number counts it
+        if map.placesMode { return placesRows(w, index) }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
             // a continent picked: its stamps only (20.3.2), fixed as the list opened, so a row's flight (which leaves the
@@ -80,6 +83,57 @@ struct StampedList: View {
                 if x.verified { line += " · Verified" }
             }
             return Row(id: k.id, name: w.places[i].n, place: i, line: line)
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// PLACES' ROWS (7.6): a collection's stops you stamped, by their day; with a country open its towns and things you
+    /// stamped; otherwise (Everywhere, a continent, a world region) every town and thing you stamped on that map
+    private func placesRows(_ w: World, _ index: [String: Int]) -> [Row] {
+        if let cid = map.placesCollection, let c = CollectionStore.shared.collection(cid) {
+            return c.items.compactMap { it -> Row? in
+                let s = marks.state(it.key)
+                guard s.stamped, let i = index[it.cc] ?? index[it.cc.uppercased()] else { return nil }
+                return Row(id: it.key.id, name: it.name, place: i, line: CollectionStore.line(it) + Self.often(s), kind: .stop,
+                           flag: it.cc, day: it.date)
+            }
+            .sorted { ($0.day, $0.name) < ($1.day, $1.name) }
+        }
+        // (the indexes read once they have come: a thing or town not in a loaded country is named from them)
+        _ = TownIndex.shared.ready; _ = ThingIndex.shared.ready
+        TownIndex.shared.load(); ThingIndex.shared.load()
+        let ids: Set<String>? = map.members(of: map.placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) }
+        let open = map.placeOpenID
+        return marks.marks.compactMap { k, s -> Row? in
+            guard s.stamped else { return nil }
+            switch k.kind {
+            case .town:
+                let cc = String(k.id.prefix { $0 != "/" })
+                guard ids?.contains(cc) ?? true, let i = index[cc] ?? index[cc.uppercased()] else { return nil }
+                // the open country's scene first (its region), else the index
+                let name: String
+                var region: String
+                if let sc = map.townScenes[cc], let j = sc.index[k.id] { name = sc.towns[j].name; region = sc.towns[j].region }
+                else if let h = TownIndex.shared.hit(k.id) { name = h.name; region = h.region }
+                else { return nil }
+                // a region named in two languages ("Région de Bruxelles-Capitale/Brussels Hoofdstedelijk Gewest"): the first
+                region = String(region.prefix { $0 != "/" })
+                let wherePart = cc == open ? region : [region, w.places[i].n].filter { !$0.isEmpty }.joined(separator: ", ")
+                return Row(id: k.id, name: name, place: i, line: (wherePart.isEmpty ? "Town" : "Town · \(wherePart)") + Self.often(s),
+                           kind: .town, flag: cc)
+            case .thing:
+                func word(_ kind: Int) -> String { let w = ThingStore.kinds[min(max(kind, 0), 11)]; return w.prefix(1).uppercased() + w.dropFirst() }
+                let found: (cc: String, name: String, what: String)?
+                if let (cc, t) = ThingStore.shared.thing(k.id) { found = (cc, t.name, word(t.kind)) }
+                else if let h = ThingIndex.shared.hit(k.id) { found = (h.file, h.name, word(h.kind)) }
+                // a collection's stop that isn't among the things (a circuit): its collection's line
+                else if let it = CollectionStore.shared.item(k) { found = (it.cc, it.name, CollectionStore.line(it)) }
+                else { found = nil }
+                guard let f = found, ids?.contains(f.cc) ?? true, let i = index[f.cc] ?? index[f.cc.uppercased()] else { return nil }
+                return Row(id: k.id, name: f.name, place: i, line: (f.cc == open ? f.what : "\(f.what) · \(w.places[i].n)") + Self.often(s),
+                           kind: .thing, flag: f.cc)
+            default: return nil
+            }
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
@@ -110,7 +164,7 @@ struct StampedList: View {
                     .contextMenu {
                         Button("Show on the map") { open(r) }
                         // the passport on that stamp's page (11.5); the list closes first
-                        if !r.town {
+                        if r.kind == .country {
                             Button("Show in passport") {
                                 water.closeList(to: .quarter)
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
@@ -118,10 +172,11 @@ struct StampedList: View {
                         }
                         Button("Details") { details(r) }
                         Button("Verify") {
-                            VerifyState.shared.open(r.town ? PlaceKey(.town, r.id) : .country(r.id), name: r.name, place: r.place, water: water)
+                            VerifyState.shared.open(r.key, name: r.name, place: r.place, water: water)
                         }
                         // offline for now: the app's own link and the name (11.7)
-                        ShareLink(item: URL(string: r.town ? "wya://page/t:\(r.id)" : "wya://country/\(r.id)")!, subject: Text(r.name), message: Text(r.name)) {
+                        ShareLink(item: URL(string: r.kind == .country ? "wya://country/\(r.id)" : "wya://page/\(r.key.description)")!,
+                                  subject: Text(r.name), message: Text(r.name)) {
                             Text("Share")
                         }
                         Button("Unstamp", role: .destructive) { unstamp(r) }
@@ -240,7 +295,7 @@ struct StampedList: View {
     private func row(_ r: Row) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.town ? (map.placeOpenID ?? "") : r.id.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.square(r.kind == .country ? r.id.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
             .scaleEffect(flagOut.contains(r.id) ? 1 : 0)
@@ -250,6 +305,7 @@ struct StampedList: View {
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
                     .contentTransition(.numericText(value: w ? 1 : 0))
                 Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
+                    .lineLimit(1)
                     .contentTransition(.numericText(value: w ? 1 : 0))
             }
             Spacer(minLength: 0)
@@ -270,6 +326,16 @@ struct StampedList: View {
         water.closeList(to: .quarter)
         // a town: the camera frames it and it darkens (as a town found by search)
         if r.town { map.showTown(file: String(r.id.prefix { $0 != "/" }), id: r.id); return }
+        // a thing: its country opens and the camera comes close to it (as a thing found by search)
+        if r.kind == .thing { map.showThing(file: r.flag.lowercased(), id: String(r.id.dropFirst(3))); return }
+        // a collection's stop: the camera comes to it on the collection's map, its mark pressed for a moment
+        if r.kind == .stop, let it = CollectionStore.shared.collection(map.placesCollection ?? "")?.items.first(where: { $0.key.id == r.id }) {
+            let d: Float = 2
+            map.thingPressed = it.id
+            map.showBox(SIMD4(it.at.x - d, it.at.y - d, it.at.x + d, it.at.y + d), place: r.place)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { if map.thingPressed == it.id { map.thingPressed = nil; map.needsFrame = true } }
+            return
+        }
         map.show(place: r.place, sheetTop: water.y(.quarter))
         // the card from the place once the camera has landed (show's flight is 0.8 s) and the water is at 25%, so
         // nothing moves into the card's way while it grows
@@ -286,8 +352,8 @@ struct StampedList: View {
     /// A4.14, are not built: they are there in one frame once the list has gone.)
     private func details(_ r: Row) {
         Feel.tick()
-        if r.town {
-            DetailsState.shared.open(PlaceKey(.town, r.id), name: r.name, water: water)
+        if r.kind != .country {
+            DetailsState.shared.open(r.key, name: r.name, water: water)
             return
         }
         Self.backFromDetails = true
@@ -316,9 +382,9 @@ struct StampedList: View {
     /// rows below move up into its place
     private func unstamp(_ r: Row) {
         Feel.lift()
-        if r.town {
-            let cc = String(r.id.prefix { $0 != "/" })
-            Task { await TownStamps.unstamp(PlaceKey(.town, r.id), name: r.name, cc: cc) }
+        if r.kind != .country {
+            // with the country stamped only through it (7.4's unstamp rule)
+            Task { await TownStamps.unstamp(r.key, name: r.name, cc: r.flag.lowercased()) }
             return
         }
         Task { await MarkStore.shared.unstamp(.country(r.id), name: r.name) }
