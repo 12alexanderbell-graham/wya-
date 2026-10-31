@@ -55,6 +55,9 @@ final class TownIndex {
         }
     }
 
+    /// one town by its key's id ("de/2925533"), if the index has come
+    func hit(_ id: String) -> Hit? { rows.first { $0.hit.id == id }?.hit }
+
     /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere
     func hits(_ query: String, open: String?, limit: Int = 6) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)

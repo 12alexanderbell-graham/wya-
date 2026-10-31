@@ -35,7 +35,8 @@ struct UndoDrop: View {
             .frame(height: 36)
             // as wide as its words + 28 pt (the icon included), never wider than the tab capsule
             .fixedSize()
-            .glassEffect(.clear, in: .capsule)
+            // the water's own kind of glass (frosted over a page, clear on the map), so inside the water it merges away
+            .glassEffect(PageGlass.head, in: .capsule)
         }
         .buttonStyle(.plain)
         // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at
