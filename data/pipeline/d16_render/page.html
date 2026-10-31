@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8">
+<style>html,body,#m{margin:0;width:440px;height:600px}</style></head><body><div id="m"></div>
+<script type="module">
+import * as maplibregl from './node_modules/maplibre-gl/dist/maplibre-gl.mjs';
+const q = new URLSearchParams(location.search);
+const style = await (await fetch(q.get('style'))).json();
+const map = new maplibregl.Map({container:'m', style, center:[+q.get('lon'), +q.get('lat')], zoom:+q.get('z'), attributionControl:false, canvasContextAttributes:{preserveDrawingBuffer:true}});
+map.on('idle', () => { window.done = true; });
+map.on('error', e => { console.log('ERR', e.error && e.error.message); });
+</script></body></html>
