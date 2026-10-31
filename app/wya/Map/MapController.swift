@@ -411,6 +411,28 @@ final class MapController {
         needsFrame = true
         return true
     }
+    /// A STOP JOINING OR LEAVING (A13.6, simplified: the line is redrawn as it now is, no draw-along of its own): a
+    /// dated stamp made or undone while history is on. The range keeps where it was; if it reached the end, it still
+    /// does, so a stop added today is in it. Nothing left: history stays on with no line.
+    func refreshHistory() {
+        guard historyTrack != nil, historyAnim == nil, var info = historyInfo, let w = world else { return }
+        let all = placesMode
+            ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
+            : HistoryTrack.countryStops(world: w, continent: continent)
+        historyAll = all
+        let today = HistoryInfo.number(LocalDay(Date(), in: .current))
+        let atEnd = info.hi >= info.last
+        if let a = all.first, let b = all.last {
+            info.first = HistoryInfo.number(a.from)
+            info.last = max(today, HistoryInfo.number(b.from))
+        }
+        info.lo = min(max(info.lo, info.first), info.last)
+        info.hi = atEnd ? info.last : min(max(info.hi, info.lo), info.last)
+        historyInfo = info
+        _ = rebuildHistory(land: true)
+        historyShown = 1
+        needsFrame = true
+    }
     /// a handle dragged (live: the land edge waits for the release), a year tapped, a menu row picked
     func setHistoryRange(lo: Int, hi: Int, live: Bool = false) {
         guard var info = historyInfo, historyTrack != nil else { return }
