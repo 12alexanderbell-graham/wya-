@@ -529,6 +529,12 @@ struct ContentView: View {
         // (30 Oct 23:55: "You're long pressing Frankfurt, so you get the page for Frankfurt"); empty land of the open
         // country: no menu yet (its land rows, Add a place here · What's here? · Copy coordinates, wait for 7.8)
         if map.placesMode || map.regionTowns, let open = map.placeOpen {
+            // a thing held: its own menu (its marks sit over the towns)
+            if map.placesMode, let t = map.thingHit(at: p), let cc = map.placeOpenID {
+                map.townPressed = nil
+                map.thingPressed = t.id
+                return thingMenu(t, cc: cc, place: open, map: map, water: water)
+            }
             if let t = map.townHit(at: p), let sc = map.townScenes[t.cc], t.i < sc.towns.count {
                 map.townPressed = t
                 return townMenu(sc.towns[t.i], cc: t.cc, place: open, at: p, map: map, water: water, head: head)
@@ -708,6 +714,68 @@ struct ContentView: View {
             }
         }
         return UIMenu(title: town.name, children: [
+            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [details, verify]),
+            UIMenu(options: .displayInline, children: [page, directions]),
+            UIMenu(options: .displayInline, children: [share]),
+        ])
+    }
+
+    /// A THING'S HOLD MENU (11.5's town or thing menu): Stamp or Unstamp, Wish or Unwish | Details, Verify | Open its
+    /// page, Directions | Share
+    @MainActor static func thingMenu(_ t: ThingStore.Thing, cc: String, place: Int, map: MapController, water: Water) -> UIMenu {
+        let key = t.key
+        let st = MarkStore.shared.state(key)
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let country = map.world.map { $0.places[place].n } ?? ""
+        let line = t.line.isEmpty ? country : t.line.prefix(1).uppercased() + t.line.dropFirst()
+        let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+        let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
+            if st.stamped { Feel.lift() } else { Feel.stamp() }
+            Task {
+                if st.stamped { await TownStamps.unstamp(key, name: t.name, cc: cc) }
+                else { await TownStamps.stamp(key, name: t.name, cc: cc, source: .hand, place: place, at: t.at) }
+            }
+        }
+        let wish = UIAction(title: st.wished ? "Unwish" : "Wish", attributes: st.stamped ? .disabled : []) { _ in
+            Feel.tap()
+            Task {
+                if st.wished { await MarkStore.shared.unwish(key, name: t.name) }
+                else { await MarkStore.shared.wish(key, name: t.name, cc: cc) }
+            }
+        }
+        let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: t.name, parents: line, place: place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: t.name, water: water) }
+            }
+        }
+        let verify = UIAction(title: "Verify", attributes: st.stamped ? [] : .disabled) { _ in
+            after {
+                RegionCardState.shared.open(key, name: t.name, parents: line, place: place, map: map)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { VerifyState.shared.open(key, name: t.name, place: place, water: water) }
+            }
+        }
+        // OPEN ITS PAGE (16): the thing's own page, growing from its mark (A16.1)
+        let page = UIAction(title: "Open its page") { _ in
+            let from = map.thingFrames[t.id].map { CGRect(x: $0.minX, y: $0.midY - 22, width: 44, height: 44) } ?? map.screenRect(of: place)
+            after { PlacePageState.shared.open(key, name: t.name, what: line, country: cc, from: from) }
+        }
+        let directions = UIAction(title: "Directions") { _ in
+            let item = MKMapItem(location: CLLocation(latitude: ll.lat, longitude: ll.lon), address: nil)
+            item.name = t.name
+            item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault])
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                let vc = UIActivityViewController(activityItems: ["\(t.name), \(country)"], applicationActivities: nil)
+                let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                var top = root
+                while let n = top?.presentedViewController { top = n }
+                top?.present(vc, animated: true)
+            }
+        }
+        return UIMenu(title: t.name, children: [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [page, directions]),

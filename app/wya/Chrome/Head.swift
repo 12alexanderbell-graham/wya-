@@ -847,7 +847,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String), thing(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -904,7 +904,9 @@ struct SearchResults: View {
         let placesSearch = map.placesMode && map.regionScene == nil && !head.settingsOpen
         let _ = placesSearch ? TownIndex.shared.load() : ()
         let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
-        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty ? TownIndex.shared.guess(head.query) : nil
+        let _ = placesSearch ? ThingIndex.shared.load() : ()
+        let thingHits = placesSearch && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
@@ -921,8 +923,12 @@ struct SearchResults: View {
                     return w.aliases[q].flatMap { w.placeIndex[$0] } == i || w.places[i].n.lowercased() == q
                 }
                 let rest = hits.filter { !lead.contains($0) }
-                let k = lead.map { ResultKey.place($0) } + townHits.map { ResultKey.town($0.key) }
-                    + rest.prefix(max(2, 8 - townHits.count - lead.count)).map { ResultKey.place($0) }
+                // a thing found by its code ("JFK") leads too; then the towns, the things, the other countries
+                let coded = thingHits.first.map { ThingIndex.shared.byCode($0, head.query) } ?? false
+                let things = thingHits.map { ResultKey.thing($0.key) }
+                let towns = Array(townHits.prefix(max(3, 8 - lead.count - things.count))).map { ResultKey.town($0.key) }
+                let k = lead.map { ResultKey.place($0) } + (coded ? [things[0]] : []) + towns + (coded ? Array(things.dropFirst()) : things)
+                    + rest.prefix(max(2, 8 - towns.count - things.count - lead.count)).map { ResultKey.place($0) }
                 // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
@@ -949,6 +955,7 @@ struct SearchResults: View {
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
+                                case .thing(let k): thingRow(thingHits.first { $0.key == k })
                                 case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil),
                                                            note: townGuess?.key == k ? "Did you mean?" : nil)
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
@@ -1158,6 +1165,29 @@ struct SearchResults: View {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// a thing found in Places: its name and its kind and country; a tap closes search and shows it (its country opened)
+    private func thingRow(_ h: ThingIndex.Hit?) -> some View {
+        let country = h.flatMap { h in map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } } } ?? ""
+        let kind = h.map { ThingStore.kinds[min(max($0.kind, 0), 11)].capitalized } ?? ""
+        return Button {
+            Feel.tap()
+            head.searching = false
+            if let h { map.showThing(file: h.file, id: h.id) }
+        } label: {
+            HStack(spacing: 12) {
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(h?.file == map.placeOpenID ? kind : "\(kind) · \(country)").font(.subheadline)
+                    .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)

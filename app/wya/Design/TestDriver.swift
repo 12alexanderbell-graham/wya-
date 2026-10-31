@@ -282,6 +282,23 @@ final class TestDriver {
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
                 // regiondirect fr: a country's "Open its region map" (A6.14), from whatever mode
+                // thingfind jfk: search's first thing found, shown (as its row's tap)
+                case "thingfind":
+                    ThingIndex.shared.load()
+                    for _ in 0 ..< 150 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let t = ThingIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first { map?.showThing(file: t.file, id: t.id) }
+                // thingpage louvre museum: the first thing found, its country's things read, its page opened (Part 16)
+                case "thingpage":
+                    ThingIndex.shared.load()
+                    for _ in 0 ..< 150 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let h = ThingIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first {
+                        ThingStore.shared.load(h.file)
+                        for _ in 0 ..< 100 where ThingStore.shared.things(h.file) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                        if let t = ThingStore.shared.things(h.file)?.first(where: { $0.id == h.id }) {
+                            PlacePageState.shared.open(t.key, name: t.name, what: t.line, country: h.file,
+                                                       from: CGRect(x: 200, y: 400, width: 44, height: 44))
+                        }
+                    }
                 // pick everywhere | pick it | pick cont Europe | pick reg Southern Europe: a shelf card's tap (7.5)
                 case "pick":
                     let rest = p.dropFirst(2).joined(separator: " ")

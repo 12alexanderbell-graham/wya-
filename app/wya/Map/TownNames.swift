@@ -66,9 +66,10 @@ final class TownNamesView: UIView {
         for t in all {
             guard frames.count < 40 else { break }
             let st = MarkStore.shared.state(t.key)
-            let marked = st.stamped || st.wished
+            // (one found by search and shown is marked too while it is darkened)
+            let marked = st.stamped || st.wished || m.thingPressed == t.id
             let start: Double = t.fame == 2 ? 3 : t.fame == 1 ? 8 : 16
-            guard z >= start else { continue }
+            guard z >= start || m.thingPressed == t.id else { continue }
             let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
             guard box.contains(q) else { continue }
             let u = CGFloat(min(1, max(0, (z - start) / start)))
@@ -82,7 +83,7 @@ final class TownNamesView: UIView {
             let nr = CGRect(x: r.maxX + 3, y: q.y - 8, width: w, height: 16)
             let markFree = !taken.contains { $0.intersects(r.insetBy(dx: -2, dy: -2)) }
             let nameFree = box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -3, dy: -3)) }
-            guard markFree && (nameFree || marked) else { continue }
+            guard (markFree && (nameFree || marked)) || m.thingPressed == t.id else { continue }
             let v = thingViews[t.id] ?? {
                 let d = UIView(), l = UILabel()
                 d.isUserInteractionEnabled = false; l.isUserInteractionEnabled = false
