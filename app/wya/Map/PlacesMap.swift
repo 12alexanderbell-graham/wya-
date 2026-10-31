@@ -278,7 +278,8 @@ extension MapController {
 
     /// the thing whose mark is under a screen point (only marks showing now: TownNamesView keeps their frames)
     func thingHit(at p: CGPoint) -> ThingStore.Thing? {
-        guard placesMode, let cc = placeOpenID, let all = ThingStore.shared.things(cc) else { return nil }
+        guard placesMode, placesCollection == nil else { return nil }
+        let all = townCountries.flatMap { ThingStore.shared.things($0) ?? [] }
         var best: (ThingStore.Thing, CGFloat)?
         for (id, f) in thingFrames {
             // within the mark and its name, with a fingertip's room round them
@@ -296,8 +297,49 @@ extension MapController {
         let m = mapPoint(p)
         let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(12 / k)
         let dots = MapSettingsStore.shared.value.townDots
-        guard let cc = placeOpenID, let s = townScenes[cc] else { return nil }
-        return s.town(at: mp, reach: reach, upTo: s.towns.count, dots: dots).map { (cc, $0) }
+        for cc in townCountries {
+            guard let s = townScenes[cc], let i = s.town(at: mp, reach: reach, upTo: s.towns.count, dots: dots) else { continue }
+            return (cc, i)
+        }
+        return nil
+    }
+
+    // MARK: TOWNS EVERYWHERE (7.4: "Everywhere zoomed out: only the visible size classes are drawn ... more come in as
+    // you zoom in"): with no country open, once the map is close (about 1,000 km across the screen) the towns and things
+    // of the countries in view are read and drawn as an open country's are, the nearest six at most
+    /// the zoom from which they come
+    var townsK: Double { Double(view.width) / 25 }
+    /// the countries whose towns are drawn now: the open one's, else the ones in view close in
+    var townCountries: [String] {
+        if let cc = placeOpenID { return [cc] }
+        guard placesMode, regionScene == nil, placesCollection == nil else { return [] }
+        return nearbyTowns
+    }
+    /// worked out again when the camera has moved a fifth of a screen or zoomed by a fifth (called by the renderer)
+    func updateNearbyTowns() {
+        guard placesMode, placeOpen == nil, placesCollection == nil, regionScene == nil, let w = world, k >= townsK else {
+            if !nearbyTowns.isEmpty { nearbyTowns = []; nearbyAt = .zero }
+            return
+        }
+        // (not on the way: a flight to Belgium over the Alps loads no Swiss towns; worked out where it lands)
+        guard flight == nil else { return }
+        let span = Double(view.width) / k
+        let now = SIMD3(c.x, c.y, k)
+        guard abs(now.x - nearbyAt.x) > span / 5 || abs(now.y - nearbyAt.y) > span / 5 || abs(now.z / max(1, nearbyAt.z) - 1) > 0.2 else { return }
+        nearbyAt = now
+        if placeBoxes == nil { placeBoxes = w.places.indices.map { w.frame(of: $0) } }
+        let a = mapPoint(.zero), b = mapPoint(CGPoint(x: view.width, y: view.height))
+        let x0 = Float(min(a.x, b.x)), y0 = Float(min(a.y, b.y)), x1 = Float(max(a.x, b.x)), y1 = Float(max(a.y, b.y))
+        var found: [(String, Float)] = []
+        for (i, f) in (placeBoxes ?? []).enumerated() {
+            guard let f, f.z >= x0, f.x <= x1, f.w >= y0, f.y <= y1, w.places[i].id != "aq" else { continue }
+            let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
+            found.append((w.places[i].id.lowercased(), simd_distance(mid, SIMD2(Float(c.x), Float(c.y)))))
+        }
+        let list = found.sorted { $0.1 < $1.1 }.prefix(6).map(\.0)
+        nearbyTowns = list
+        for cc in list { loadTowns(cc); ThingStore.shared.load(cc) }
+        needsFrame = true
     }
 
     /// which towns of the loaded places are yours, from the store (`t:` keys)

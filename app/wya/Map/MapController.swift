@@ -195,6 +195,13 @@ final class MapController {
             townPressed = townHit(at: p)
             if townPressed != nil { return open }
         }
+        // PLACES CLOSE IN WITH NO COUNTRY OPEN: the towns of the countries in view answer (the press's place their country)
+        if placesMode, placeOpen == nil, placesCollection == nil, !nearbyTowns.isEmpty {
+            thingPressed = thingHit(at: p)?.id
+            if let id = thingPressed, let cc = ThingStore.shared.thing(id)?.cc, let i = w.placeIndex[cc] { townPressed = nil; needsFrame = true; return i }
+            townPressed = townHit(at: p)
+            if let t = townPressed, let i = w.placeIndex[t.cc] { return i }
+        }
         // THE REGION MAP (6.5): only the open country's regions answer a finger (the faded world does nothing); the
         // region found is kept for the press's darkening and the tap
         if let sc = regionScene {
@@ -264,7 +271,7 @@ final class MapController {
     /// the world at home, nothing to reset: the reset dims to 50% (BUILD-BOOK 1.9)
     private(set) var atRest = true
 
-    @ObservationIgnored private var flight: (from: SIMD3<Double>, to: SIMD3<Double>, t: Double, dur: Double, glide: Bool)?
+    @ObservationIgnored private(set) var flight: (from: SIMD3<Double>, to: SIMD3<Double>, t: Double, dur: Double, glide: Bool)?
     @ObservationIgnored var touching = false
 
     static let north = 2.2081   // map y of 83.64°N, the northernmost land (Greenland)
@@ -373,6 +380,11 @@ final class MapController {
     var placesArea: String?
     /// the current Places map is a collection (7.2), by id
     var placesCollection: String?
+    /// the countries whose towns are drawn with none open (Places close in), and where the camera was when they were found
+    @ObservationIgnored var nearbyTowns: [String] = []
+    @ObservationIgnored var nearbyAt = SIMD3<Double>(0, 0, 0)
+    /// each place's box on the map, worked out once
+    @ObservationIgnored var placeBoxes: [SIMD4<Float>?]?
     /// the things' marks on screen now (id: frame), kept by the names view each frame, for the hit test
     @ObservationIgnored var thingFrames: [String: CGRect] = [:]
     /// the thing under the finger (7.4), by id

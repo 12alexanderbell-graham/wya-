@@ -373,8 +373,9 @@ struct ContentView: View {
             }
             return
         }
-        guard let id = map.thingPressed, let cc = map.placeOpenID, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }),
-              let w = map.world, let place = map.placeOpen else { return }
+        // (the open country's thing, or one of the countries in view close in)
+        guard let id = map.thingPressed, let (cc, t) = ThingStore.shared.thing(id),
+              let w = map.world, let place = w.placeIndex[cc] else { return }
         defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }
         guard head.quickStamp else {
             let line = t.line.isEmpty ? w.places[place].n : t.line.prefix(1).uppercased() + t.line.dropFirst()
@@ -545,6 +546,17 @@ struct ContentView: View {
         // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
         // (30 Oct 23:55: "You're long pressing Frankfurt, so you get the page for Frankfurt"); empty land of the open
         // country: no menu yet (its land rows, Add a place here · What's here? · Copy coordinates, wait for 7.8)
+        // Places close in with no country open: a town or thing of the countries in view held is its own menu
+        if map.placesMode, map.placeOpen == nil, !map.nearbyTowns.isEmpty {
+            if let t = map.thingHit(at: p), let cc = ThingStore.shared.thing(t.id)?.cc, let pi = w.placeIndex[cc] {
+                map.townPressed = nil; map.thingPressed = t.id
+                return thingMenu(t, cc: cc, place: pi, map: map, water: water)
+            }
+            if let t = map.townHit(at: p), let sc = map.townScenes[t.cc], t.i < sc.towns.count, let pi = w.placeIndex[t.cc] {
+                map.townPressed = t
+                return townMenu(sc.towns[t.i], cc: t.cc, place: pi, at: p, map: map, water: water, head: head)
+            }
+        }
         if map.placesMode || map.regionTowns, let open = map.placeOpen {
             // a thing held: its own menu (its marks sit over the towns)
             if map.placesMode, let t = map.thingHit(at: p), let cc = map.placeOpenID {

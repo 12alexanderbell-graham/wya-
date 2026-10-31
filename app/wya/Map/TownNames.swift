@@ -12,10 +12,10 @@ import SwiftUI
 /// mathematically").
 @MainActor
 final class TownNamesView: UIView {
-    private struct Shown { let i: Int; let holder: UIView; let halo: UILabel; let ink: UILabel; let size: CGSize }
-    private var shown: [Int: Shown] = [:]
+    private struct Shown { let id: String; let holder: UIView; let halo: UILabel; let ink: UILabel; let size: CGSize }
+    private var shown: [String: Shown] = [:]
     private var key: String?
-    private var orderFor: (cc: String, dots: Bool, order: [Int])?
+    private var orderFor: (cc: String, dots: Bool, order: [Pick])?
     private static let font = UIFont.systemFont(ofSize: 13, weight: .semibold)
     private static let cream = UIColor(red: 0xfb / 255, green: 0xf6 / 255, blue: 0xf2 / 255, alpha: 1)
 
@@ -55,8 +55,16 @@ final class TownNamesView: UIView {
         let all: [ThingStore.Thing]
         if let c = collection {
             all = c.items.map { ThingStore.Thing(id: $0.id, name: $0.name, kind: 11, at: $0.at, fame: 9, line: "", photo: "") }
-        } else if m.placesMode, let cc = m.placeOpenID, let t = ThingStore.shared.things(cc) { all = t } else { all = [] }
-        guard m.placesMode, !all.isEmpty, let k0 = m.continentK ?? (collection != nil ? m.worldKMin : nil) else {
+        } else if m.placesMode {
+            // the open country's, or (close in with none open) the countries' in view, the best known first
+            let lists = m.townCountries.compactMap { ThingStore.shared.things($0) }
+            all = lists.count == 1 ? lists[0]
+                : lists.flatMap { $0 }.enumerated().sorted { ($0.element.fame, -$0.offset) > ($1.element.fame, -$1.offset) }.map(\.element)
+        } else { all = [] }
+        // (close in with none open the things count from about 1,000 km across, the framing of a mid-size country, so they
+        // come in no sooner than in an open Germany and never crowd the towns of the countries round)
+        guard m.placesMode, !all.isEmpty,
+              let k0 = collection != nil ? (m.continentK ?? m.worldKMin) : m.placeOpen == nil ? m.townsK : m.continentK else {
             clearThings(); m.thingFrames = [:]; thingKey = []; return
         }
         let marksNow = Double(MarkStore.shared.marks.count) + Double(MarkStore.shared.marks.values.filter { $0.stamped }.count) * 1e6
@@ -189,37 +197,48 @@ final class TownNamesView: UIView {
 
     @discardableResult
     private func names(_ m: MapController, moving: Bool, taken own: [CGRect]) -> [CGRect] {
-        guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return own }
-        if key != cc { clear(); key = cc }
+        // the open country's towns, or (Places close in with none open) the towns of the countries in view
+        let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
+        // (close in with none open, the same zoom whatever framed the camera last: a country flown to, a continent or the world)
+        let near = m.placesMode && m.placeOpen == nil
+        guard !ccs.isEmpty, let k0 = near ? m.townsK / 3 : m.continentK else { clear(); return own }
+        let setKey = ccs.joined(separator: ",")
+        if key != setKey { clear(); key = setKey }
         let k = m.k
         // from 3x the country's framing zoom (each name rolling in across its own band from there)
         guard k >= 3 * k0 * 0.999 else { clear(); return own }
         let W = bounds.width
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
-        // the candidates, in order: capital, regional capitals, then by people (the scene is biggest first)
-        // (worked out once per country, and only the towns that can ever be named: those with a shape, or every town with
-        // Town dots on)
+        // the candidates, in order: capitals, regional capitals, then by people (each scene is biggest first); several
+        // countries' merged the same way; sections after every town
+        // (worked out once per set of countries, and only the towns that can ever be named: those with a shape, or every
+        // town with Town dots on)
         let dotsOn = MapSettingsStore.shared.value.townDots
-        if orderFor?.cc != cc || orderFor?.dots != dotsOn {
-            var o: [Int] = []
-            for kind in [2, 1, 0] {
-                for i in sc.towns.indices where sc.towns[i].kind == kind && sc.towns[i].part.isEmpty
-                    && (dotsOn || sc.runs[i] != nil || Self.bigShapeless(sc, i)) { o.append(i) }
+        if orderFor?.cc != setKey || orderFor?.dots != dotsOn {
+            var whole: [(cc: String, i: Int, kind: Int, people: Int)] = [], parts: [(cc: String, i: Int, kind: Int, people: Int)] = []
+            for cc in ccs {
+                guard let sc = m.townScenes[cc] else { continue }
+                for i in sc.towns.indices {
+                    let t = sc.towns[i]
+                    if t.part.isEmpty, dotsOn || sc.runs[i] != nil || Self.bigShapeless(sc, i) { whole.append((cc, i, t.kind, t.people)) }
+                    else if !t.part.isEmpty, dotsOn || sc.runs[i] != nil { parts.append((cc, i, t.kind, t.people)) }
+                }
             }
-            // a town's sections ("Gallus" of Frankfurt) after every town, so a section never takes its city's name place
-            for i in sc.towns.indices where !sc.towns[i].part.isEmpty && (dotsOn || sc.runs[i] != nil) { o.append(i) }
-            orderFor = (cc, dotsOn, o)
+            whole.sort { ($0.kind, $0.people) > ($1.kind, $1.people) }
+            parts.sort { $0.people > $1.people }
+            orderFor = (setKey, dotsOn, (whole + parts).map { Pick(cc: $0.cc, i: $0.i) })
         }
         var order = orderFor?.order ?? []
         // sections only from 10x the framing zoom (their city's name first)
-        if k / k0 < 10 { order = order.filter { sc.towns[$0].part.isEmpty } }
+        if k / k0 < 10 { order = order.filter { m.townScenes[$0.cc]?.towns[$0.i].part.isEmpty ?? true } }
         // (pure priority: a name up never holds its place against a bigger town's, so a city's name is never kept out
         // by smaller ones that came up first on the way in)
         var taken: [CGRect] = own
-        var keep: [Int: CGFloat] = [:]
-        for i in order {
-            guard keep.count < 8 else { break }
+        var keep: [String: CGFloat] = [:]
+        for c in order {
+            guard keep.count < 8, let sc = m.townScenes[c.cc] else { if keep.count >= 8 { break } else { continue } }
+            let i = c.i, id = c.id
             // a name only once its shape is 12 pt across (no shape, no name, unless Town dots are on)
             let b = sc.box(i)
             let across = CGFloat(max(b.z - b.x, b.w - b.y)) * CGFloat(k)
@@ -232,22 +251,23 @@ final class TownNamesView: UIView {
             let a = min(1, max(0, (across - 12) / 4)), z = min(1, max(0, CGFloat((k / k0 - 3) / 0.3)))
             var p = atPoint ? z : min(a, z)
             if !moving { p = p >= 0.5 ? 1 : 0 }
-            guard p > 0.001 || shown[i] != nil else { continue }
-            let size = shown[i]?.size ?? Self.measure(sc.towns[i].name)
+            guard p > 0.001 || shown[id] != nil else { continue }
+            let size = shown[id]?.size ?? Self.measure(sc.towns[i].name)
             let pt = m.screenPoint(SIMD2(Double(sc.at[i].x), Double(sc.at[i].y)))
             let r = CGRect(x: pt.x - size.width / 2, y: pt.y - size.height / 2, width: size.width, height: size.height)
             guard box.contains(r) else { continue }
             let clear4 = r.insetBy(dx: -4, dy: -4)
             guard !taken.contains(where: { $0.intersects(clear4) }) else { continue }
             taken.append(r)
-            keep[i] = p
-            place(i, name: sc.towns[i].name, at: r, progress: p, size: size)
+            keep[id] = p
+            place(id, name: sc.towns[i].name, at: r, progress: p, size: size)
         }
-        for (i, s) in shown where keep[i] == nil { s.holder.removeFromSuperview(); shown[i] = nil }
+        for (id, s) in shown where keep[id] == nil { s.holder.removeFromSuperview(); shown[id] = nil }
         return taken
     }
+    private struct Pick { let cc: String; let i: Int; var id: String { "\(cc)#\(i)" } }
 
-    private func place(_ i: Int, name: String, at r: CGRect, progress p: CGFloat, size: CGSize) {
+    private func place(_ i: String, name: String, at r: CGRect, progress p: CGFloat, size: CGSize) {
         let s: Shown
         if let have = shown[i] { s = have } else {
             let holder = UIView()
@@ -261,7 +281,7 @@ final class TownNamesView: UIView {
             halo.textAlignment = .center; ink.textAlignment = .center
             holder.addSubview(halo); holder.addSubview(ink)
             addSubview(holder)
-            s = Shown(i: i, holder: holder, halo: halo, ink: ink, size: size)
+            s = Shown(id: i, holder: holder, halo: halo, ink: ink, size: size)
             shown[i] = s
         }
         // the holder is the name's box with room for its halo; the letters rise into it by the zoom's progress
