@@ -432,17 +432,40 @@ struct HeadView: View {
     // MARK: plus and its tools
     /// the plus: it turns into the × (its own film, a spin) and back; the capsule grows out of it (ToolsCapsule)
     private func plusButton(ink: Color) -> some View {
-        Button {
+        // on a place's page the plus rolls into Share inside its own circle, with the page's growth (A16.1, 16.3)
+        let page = PlacePageState.shared
+        let share = page.isOpen ? page.p : 0
+        return Button {
             Feel.tap(); Sound.tap()
+            if page.isOpen && page.p > 0.5 { sharePage(); return }
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
-            Icon5(key: "plus", on: head.toolsOpen || head.searching, ink: ink, size: 22)
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+            Group {
+                if share > 0.001 {
+                    IconRoll(from: "plus", to: "share", p: share, ink: ink)
+                } else {
+                    Icon5(key: "plus", on: head.toolsOpen || head.searching, ink: ink, size: 22)
+                }
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(head.searching ? "Close search" : head.toolsOpen ? "Close tools" : "Tools")
+        .accessibilityLabel(page.isOpen ? "Share" : head.searching ? "Close search" : head.toolsOpen ? "Close tools" : "Tools")
+    }
+
+    /// a page's Share: the system share sheet with its name and the page's link (16.6; `wya://page/<key>`)
+    private func sharePage() {
+        let page = PlacePageState.shared
+        guard let key = page.key else { return }
+        var items: [Any] = [page.name]
+        if let u = URL(string: "wya://page/\(key.description)") { items.append(u) }
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+        var top = root
+        while let next = top?.presentedViewController { top = next }
+        top?.present(vc, animated: true)
     }
 
     /// search or the plus while the AI is out or settings are open: those go back into the dot first, as they would
