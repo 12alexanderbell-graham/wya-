@@ -12,11 +12,15 @@ enum Snap {
         if let d = ProcessInfo.processInfo.environment["WYA_SNAPS"], !d.isEmpty { return d }
         let src = URL(fileURLWithPath: #filePath)   // …/<parent>/<project>/wya/Design/Snap.swift
         let parent = src.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return parent.appendingPathComponent("Claude outputs/night-2026-10-22/snaps").path
+        // (31 Oct 05:05: a folder iCloud leaves alone; the grabs written four times a second into the synced `snaps`
+        // folder kept iCloud busy and the Mac slow, and the commands were sometimes read half written)
+        return parent.appendingPathComponent("Claude outputs/night-2026-10-22/snaps.nosync").path
     }()
     static let me = UUID().uuidString
     /// grabs are taken until this time (set by each test command)
     nonisolated(unsafe) static var activeUntil: CFTimeInterval = 0
+    /// a grab is still being written (main thread only)
+    nonisolated(unsafe) static var writing = false
     /// another copy of the app has taken the test files over; a moment when the file can't be read (iCloud busy with
     /// it) is not that: grabs stopped for good on such a moment, which looked like the app freezing
     static var isOwner: Bool {
@@ -30,7 +34,10 @@ enum Snap {
         try? me.write(toFile: dir + "/owner.txt", atomically: true, encoding: .utf8)
         NSLog("wya snap owner %@", me)
         let t0 = Date()
-        let queue = DispatchQueue(label: "snap", qos: .utility)
+        // (31 Oct 06:10: at .utility the writes were starved while the Mac was busy and queued up behind each other,
+        // so latest.jpg showed the screen of minutes before; now a grab is skipped while the last one is still being
+        // written, and the writing runs at a level the system doesn't hold back)
+        let queue = DispatchQueue(label: "snap", qos: .userInitiated)
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
             MainActor.assumeIsolated {
                 guard isOwner else { return }
@@ -39,7 +46,7 @@ enum Snap {
                 guard CACurrentMediaTime() < activeUntil else { return }
                 // never while frames are being measured (each grab is itself a late frame: the first Step 1c tables
                 // counted the grabs, about 10 of the late frames in each 120)
-                guard !FrameStats.on else { return }
+                guard !FrameStats.on, !writing else { return }
                 let ms = Int(Date().timeIntervalSince(t0) * 1000)
                 let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
                     .flatMap(\.windows).filter { !$0.isHidden && $0.alpha > 0 }
@@ -50,10 +57,12 @@ enum Snap {
                 let img = UIGraphicsImageRenderer(bounds: base.bounds, format: format).image { _ in
                     for w in windows { w.drawHierarchy(in: w.bounds, afterScreenUpdates: false) }
                 }
+                writing = true
                 queue.async {
+                    defer { DispatchQueue.main.async { writing = false } }
                     guard let data = img.jpegData(compressionQuality: 0.85) else { return }
                     let url = URL(fileURLWithPath: dir)
-                    try? data.write(to: url.appendingPathComponent("latest.jpg"))
+                    try? data.write(to: url.appendingPathComponent("latest.jpg"), options: .atomic)
                     try? data.write(to: url.appendingPathComponent(String(format: "r%02d.jpg", (ms / 250) % 40)))
                 }
             }
