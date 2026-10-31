@@ -27,8 +27,8 @@ final class TownNamesView: UIView {
     /// called every frame the map draws; `moving`: the camera or a finger is moving it (at rest no name is left half
     /// rolled: nothing cut off at rest, 30 Oct 16:04)
     func update(_ m: MapController, moving: Bool) {
-        ownMarks(m)
-        names(m, moving: moving)
+        let own = ownMarks(m)
+        names(m, moving: moving, taken: own)
     }
 
     // MARK: YOUR OWN PLACES' MARKS (7.8; 31 Oct 01:17: a lime circle is right for these, "just do it correctly ... really
@@ -37,11 +37,17 @@ final class TownNamesView: UIView {
     // shadow; its name (13 pt semibold, the cream halo) under it from twice the country's framing zoom. The kind's icon
     // inside waits for the twelve kinds' icons (their review, Step 3b).
     private var marks: [String: (dot: UIView, name: UILabel)] = [:]
-    private func ownMarks(_ m: MapController) {
-        guard m.placesMode, let k0 = m.continentK ?? Optional(m.worldKMin) else { clearMarks(); return }
+    /// returns the frames of the names it put up (the towns' names keep clear of them)
+    private func ownMarks(_ m: MapController) -> [CGRect] {
+        guard m.placesMode, let k0 = m.continentK ?? Optional(m.worldKMin) else { clearMarks(); return [] }
+        // names stay in the map's room: under the head, above the 25% water, clear of the zoom column
+        let room = m.layout.room(sheetTop: m.layout.top(.quarter))
+        let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
+        var taken: [CGRect] = []
         let z = m.k / k0
-        let size = CGFloat(min(20, max(7, 7 + 13 * (z - 1) / 5)))
-        let named = z >= 2
+        // 7 pt (a dot) until 4x the country's framing zoom, 20 pt from 20x, smoothly between (by the zoom)
+        let t = min(1, max(0, (z - 4) / 16)), size = CGFloat(7 + 13 * t * t * (3 - 2 * t))
+        let named = z >= 6
         var seen = Set<String>()
         for o in OwnPlaces.shared.all {
             let q = m.screenPoint(SIMD2(Double(o.point.x), Double(o.point.y)))
@@ -64,18 +70,24 @@ final class TownNamesView: UIView {
                     .font: Self.font, .foregroundColor: UIColor.black, .strokeColor: Self.cream, .strokeWidth: -3.0,
                 ])
                 let w = ceil((o.name as NSString).size(withAttributes: [.font: Self.font]).width) + 4
-                mk.name.frame = CGRect(x: q.x - w / 2, y: q.y + size / 2 + 2, width: w, height: 18)
-                mk.name.isHidden = false
+                let r = CGRect(x: q.x - w / 2, y: q.y + size / 2 + 2, width: w, height: 18)
+                let fits = box.contains(r) && !taken.contains { $0.intersects(r.insetBy(dx: -4, dy: -4)) }
+                mk.name.frame = r
+                mk.name.isHidden = !fits
+                if fits { taken.append(r) }
             } else { mk.name.isHidden = true }
+            // the mark itself is kept clear of too (a town's name never sits on it)
+            taken.append(mk.dot.frame)
         }
         for (id, mk) in marks where !seen.contains(id) { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview(); marks[id] = nil }
+        return taken
     }
     private func clearMarks() {
         for mk in marks.values { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview() }
         marks = [:]
     }
 
-    private func names(_ m: MapController, moving: Bool) {
+    private func names(_ m: MapController, moving: Bool, taken own: [CGRect]) {
         guard m.placesMode || m.regionTowns, let cc = m.placeOpenID, let sc = m.townScenes[cc], let k0 = m.continentK else { clear(); return }
         if key != cc { clear(); key = cc }
         let k = m.k
@@ -97,7 +109,7 @@ final class TownNamesView: UIView {
         // the ones up first (they keep their places)
         let up = Set(shown.keys)
         order = order.filter { up.contains($0) } + order.filter { !up.contains($0) }
-        var taken: [CGRect] = []
+        var taken: [CGRect] = own
         var keep: [Int: CGFloat] = [:]
         for i in order {
             guard keep.count < 8 else { break }

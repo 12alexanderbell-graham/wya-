@@ -294,6 +294,12 @@ final class TestDriver {
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
+                // ownclear: every own place removed with its stamp (test data)
+                case "ownclear":
+                    for o in OwnPlaces.shared.all {
+                        await MarkStore.shared.unstamp(o.key, name: o.name)
+                        OwnPlaces.shared.remove(o.id)
+                    }
                 // townpage frankf: the first town found's page (Part 16)
                 case "townpage":
                     TownIndex.shared.load()
