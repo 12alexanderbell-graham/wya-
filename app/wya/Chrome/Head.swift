@@ -654,6 +654,13 @@ struct ModeWheel: View {
                 .allowsHitTesting(false)
             FirstTool(p: toolsP, lit: lit, ink: ink)
                 .allowsHitTesting(false)
+            // A PAGE OPEN: the dot carries a white cross and a tap on it closes the page (31 Oct 03:07: "it isn't directly
+            // obvious how to leave them, maybe the black dot can get a white x on it")
+            if PlacePageState.shared.isOpen && !tools && !hideDot {
+                Icon5(key: "cross", ink: Palette.white, size: 12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's
             // middle, clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as
             // the wheel passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces
@@ -687,7 +694,8 @@ struct ModeWheel: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { g in
                     if hypot(g.translation.width, g.translation.height) > 6 { endHold(); return }
-                    guard holdTask == nil, !tools, !head.settingsOpen, head.pullStop == 0, !head.searching, !head.dotHeld else { return }
+                    guard holdTask == nil, !tools, !head.settingsOpen, head.pullStop == 0, !head.searching, !head.dotHeld,
+                          !PlacePageState.shared.isOpen else { return }
                     holdTask = Task { @MainActor in
                         try? await Task.sleep(for: .seconds(TopPull.holdDelay))
                         if !Task.isCancelled && !dragging { head.dotHeld = true }
@@ -702,6 +710,7 @@ struct ModeWheel: View {
         // with the tools out a tap on the dot is the first tool; with settings open, a tap on the gear closes them;
         // the wheel itself is never tapped
         .onTapGesture {
+            if PlacePageState.shared.isOpen && !tools { Feel.tap(); PlacePageState.shared.close(); return }
             if head.settingsOpen { Feel.tap(); Sound.tap(); head.closeSettings(); return }
             guard tools else { return }
             if head.filtersMenu { Feel.refuse(); return }
@@ -721,7 +730,7 @@ struct ModeWheel: View {
             }
         }
         .accessibilityElement()
-        .accessibilityLabel(tools ? "Quick stamping, \(head.quickStamp ? "on" : "off")" : "Map mode")
+        .accessibilityLabel(tools ? "Quick stamping, \(head.quickStamp ? "on" : "off")" : PlacePageState.shared.isOpen ? "Close page" : "Map mode")
         .accessibilityValue(head.mode.name)
         .accessibilityAdjustableAction { dir in
             switch dir {
@@ -741,6 +750,8 @@ struct ModeWheel: View {
     /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule) With settings open
     /// the wheel still turns and changes the mode; the gear stays on top.
     private func turn(_ dx: CGFloat) {
+        // over a page the dot is the page's close, not the wheel
+        if PlacePageState.shared.isOpen && !dragging { return }
         if !dragging {
             endHold()
             withAnimation(Motion.quick) { dragging = true; reveal = 1 }
