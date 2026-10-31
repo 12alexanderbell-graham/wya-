@@ -67,6 +67,10 @@ struct ContentView: View {
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
                 }
                 if side.on { SidewaysMarks(map: map, L: water.layout) }
+                #if DEBUG
+                // the colour picker's test host (Part 15; its real hosts come with Pins)
+                PickerTestHost(L: water.layout)
+                #endif
                 // the sheet's top read in a view of its own, so its every frame re-runs only this, not the whole screen
                 SheetWatch(water: water, map: map)
                 // the open region map's country and level written into the session as they change
