@@ -13,6 +13,11 @@ nonisolated final class TownScene: @unchecked Sendable {
     let points: [SIMD2<Float>]
     let fans: [UInt32]
     let runs: [(start: Int, count: Int)?]
+    /// a section whose city has a shape of its own (Paris' arrondissements, Berlin's Kreuzberg): its shape lies inside its
+    /// city's, so it is not filled with the plain towns (the even-odd fill would cut it out of the city, leaving the
+    /// city's middle white: Paris and Berlin on 31 Oct); it keeps its shape for the finger and its name, and is drawn
+    /// when it is yours (lime, blue) or pressed
+    let covered: [Bool]
     /// where each town is (map units)
     let at: [SIMD2<Float>]
     /// the size classes: each class's last town (exclusive) and the population it starts at
@@ -56,6 +61,9 @@ nonisolated final class TownScene: @unchecked Sendable {
         }
         while ce.count < Self.classes.count { ce.append(towns.count); cfe.append(fan.count) }
         points = pts; fans = fan; runs = rn; boxes = bx; rings = rs
+        var shaped = Set<String>()
+        for (i, t) in towns.enumerated() where t.part.isEmpty && rn[i] != nil { shaped.insert(t.name) }
+        covered = towns.enumerated().map { i, t in !t.part.isEmpty && rn[i] != nil && shaped.contains(t.part) }
         classEnd = ce; classFanEnd = cfe
         at = towns.map { EqualEarth.project(lon: $0.lon, lat: $0.lat) }
     }
