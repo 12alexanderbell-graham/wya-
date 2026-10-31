@@ -19,6 +19,7 @@ extension MapController {
     func openPlace(_ i: Int) {
         guard placesMode, let w = world, i >= 0, i < w.places.count, placeOpen != i else { return }
         townPressed = nil
+        placesCollection = nil
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
@@ -150,10 +151,18 @@ extension MapController {
     /// A PLACES MAP PICKED (7.5's cards): Everywhere (the world), a country (opened with its towns), a continent (its own
     /// framing, the rest of the world into the blue, as Countries' continent) or a world region (its countries framed)
     enum PlacesPick: Hashable {
-        case everywhere, country(Int), continent(String), region(String)
-        var title: String { switch self { case .everywhere: "Everywhere"; case .continent(let k), .region(let k): k; case .country: "" } }
+        case everywhere, country(Int), continent(String), region(String), collection(String)
+        @MainActor var title: String {
+            switch self {
+            case .everywhere: "Everywhere"
+            case .continent(let k), .region(let k): k
+            case .country: ""
+            case .collection(let id): CollectionStore.shared.collection(id)?.title ?? ""
+            }
+        }
     }
     var placesPick: PlacesPick {
+        if let c = placesCollection { return .collection(c) }
         if let i = placeOpen { return .country(i) }
         if let a = placesArea { return Self.continents.contains(a) ? .continent(a) : .region(a) }
         return .everywhere
@@ -161,6 +170,7 @@ extension MapController {
     static let continents = ["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"]
     func showPlacesMap(_ pick: PlacesPick) {
         guard placesMode, world != nil else { return }
+        if case .collection = pick {} else { placesCollection = nil }
         switch pick {
         case .everywhere:
             placesArea = nil
@@ -173,6 +183,14 @@ extension MapController {
             closePlace()
             placesArea = k
             show(continent: k)
+        case .collection(let id):
+            // A COLLECTION (7.2): its places marked wherever they are, framed together (the world for one spread over it)
+            closePlace()
+            placesArea = nil
+            placesCollection = id
+            guard let f = box(of: pick) else { return }
+            if f.z - f.x > (world?.width ?? 1000) * 0.45 { goHome() }
+            else { frameArea(SIMD4(Double(f.x), Double(f.y), Double(f.z), Double(f.w))) }
         case .region(let name):
             closePlace()
             placesArea = name
@@ -187,6 +205,12 @@ extension MapController {
         switch pick {
         case .everywhere: return SIMD4(0, 0, w.width, w.height)
         case .country(let i): return w.frame(of: i)
+        case .collection(let id):
+            guard let items = CollectionStore.shared.collection(id)?.items, !items.isEmpty else { return nil }
+            var f = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+            for i in items { f = SIMD4(min(f.x, i.at.x), min(f.y, i.at.y), max(f.z, i.at.x), max(f.w, i.at.y)) }
+            let pad = max(f.z - f.x, f.w - f.y) * 0.08 + 2
+            return SIMD4(f.x - pad, f.y - pad, f.z + pad, f.w + pad)
         case .continent(let k):
             if let v = w.contViews[k] { return SIMD4(Float(v.x), Float(v.y), Float(v.z), Float(v.w)) }
             fallthrough
@@ -211,15 +235,22 @@ extension MapController {
         case .country(let i): return [i]
         case .continent(let k): return w.places.indices.filter { w.places[$0].cont == k }
         case .region(let n): return WorldRegions.members(n).compactMap { w.placeIndex[$0] }
+        case .collection(let id):
+            let ccs = Set(CollectionStore.shared.collection(id)?.items.map(\.cc) ?? [])
+            return ccs.compactMap { w.placeIndex[$0] }
         }
     }
-    /// your stamped towns (and own places) on a pick
+    /// your stamped towns (and own places, and things) on a pick; a collection's: its places you stamped
     func stampedTowns(on pick: PlacesPick) -> Int {
+        if case .collection(let id) = pick {
+            return CollectionStore.shared.collection(id)?.items.filter { MarkStore.shared.state($0.key).stamped }.count ?? 0
+        }
         let ids: Set<String>? = members(of: pick).map { Set($0.compactMap { world?.places[$0].id.lowercased() }) }
         var n = 0
-        for (k, s) in MarkStore.shared.marks where s.stamped && (k.kind == .town || k.kind == .yours) {
+        for (k, s) in MarkStore.shared.marks where s.stamped && (k.kind == .town || k.kind == .yours || k.kind == .thing) {
             guard let ids else { n += 1; continue }
-            let cc = k.kind == .town ? String(k.id.prefix { $0 != "/" }) : OwnPlaces.shared.place(k.id)?.cc ?? ""
+            let cc = k.kind == .town ? String(k.id.prefix { $0 != "/" })
+                : k.kind == .thing ? (ThingStore.shared.thing(k.id)?.cc ?? "") : OwnPlaces.shared.place(k.id)?.cc ?? ""
             if ids.contains(cc) { n += 1 }
         }
         return n
@@ -231,6 +262,18 @@ extension MapController {
         placeOpen = nil
         townPressed = nil
         closeRegions()
+    }
+
+    /// a collection's place whose mark is under a screen point (the collection's map up)
+    func collectionHit(at p: CGPoint) -> CollectionStore.Item? {
+        guard placesMode, let id = placesCollection, let items = CollectionStore.shared.collection(id)?.items else { return nil }
+        var best: (CollectionStore.Item, CGFloat)?
+        for (q, f) in thingFrames {
+            guard f.insetBy(dx: -8, dy: -8).contains(p), let it = items.first(where: { $0.id == q }) else { continue }
+            let d = hypot(f.minX + 5 - p.x, f.midY - p.y)
+            if best == nil || d < best!.1 { best = (it, d) }
+        }
+        return best?.0
     }
 
     /// the thing whose mark is under a screen point (only marks showing now: TownNamesView keeps their frames)

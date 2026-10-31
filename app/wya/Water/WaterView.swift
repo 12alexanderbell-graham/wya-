@@ -304,6 +304,11 @@ struct SheetContent: View {
 
     /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
     private var placesCaption: (name: String, count: Int, tail: String)? {
+        // a collection's map: its title, your places of it, of how many (an event collection: "of 23 stops")
+        if let id = map.placesCollection, let c = CollectionStore.shared.collection(id) {
+            _ = map.townsVersion
+            return (c.title, map.stampedTowns(on: .collection(id)), "of \(c.items.count)" + (c.event ? " stops" : ""))
+        }
         // a continent's or world region's map: its name and your towns in it (no "of N" yet: its towns are not all read)
         if let a = map.placesArea {
             _ = map.townsVersion

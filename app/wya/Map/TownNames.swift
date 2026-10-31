@@ -49,7 +49,14 @@ final class TownNamesView: UIView {
     /// what the marks were last laid out for (the camera, the room, the marks, the town names): unchanged, nothing is done
     private var thingKey: [Double] = []
     private func thingMarks(_ m: MapController, taken named: [CGRect]) {
-        guard m.placesMode, let cc = m.placeOpenID, let all = ThingStore.shared.things(cc), let k0 = m.continentK else {
+        // the things of the open country, or a collection's places (its map up: every one of them is its map's place, so
+        // all are shown from the start, names where they have room)
+        let collection = m.placesCollection.flatMap { CollectionStore.shared.collection($0) }
+        let all: [ThingStore.Thing]
+        if let c = collection {
+            all = c.items.map { ThingStore.Thing(id: $0.id, name: $0.name, kind: 11, at: $0.at, fame: 9, line: "", photo: "") }
+        } else if m.placesMode, let cc = m.placeOpenID, let t = ThingStore.shared.things(cc) { all = t } else { all = [] }
+        guard m.placesMode, !all.isEmpty, let k0 = m.continentK ?? (collection != nil ? m.worldKMin : nil) else {
             clearThings(); m.thingFrames = [:]; thingKey = []; return
         }
         let marksNow = Double(MarkStore.shared.marks.count) + Double(MarkStore.shared.marks.values.filter { $0.stamped }.count) * 1e6
@@ -68,11 +75,11 @@ final class TownNamesView: UIView {
             let st = MarkStore.shared.state(t.key)
             // (one found by search and shown is marked too while it is darkened)
             let marked = st.stamped || st.wished || m.thingPressed == t.id
-            let start: Double = t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
+            let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
             guard z >= start || m.thingPressed == t.id else { continue }
             let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
             guard box.contains(q) else { continue }
-            let u = CGFloat(min(1, max(0, (z - start) / start)))
+            let u = start == 0 ? 1 : CGFloat(min(1, max(0, (z - start) / start)))
             let size = 6 + 4 * u * u * (3 - 2 * u)
             let r = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
             let w = thingWidths[t.id] ?? {

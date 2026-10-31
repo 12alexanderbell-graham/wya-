@@ -72,6 +72,7 @@ struct PlacesShelf: View {
     }
 
     private func shelf(_ L: Layout) -> some View {
+        ScrollViewReader { reader in
         ScrollView(.horizontal) {
             HStack(alignment: .top, spacing: 12) {
                 ForEach(cards, id: \.self) { c in MapCard(water: water, map: map, pick: c, side: Self.side) }
@@ -85,6 +86,12 @@ struct PlacesShelf: View {
         .scrollIndicators(.hidden)
         .frame(width: L.W - 2 * L.sheetInset, height: Self.rowH)
         .clipped()
+        // the current map's card in view when the row is worked out (a collection's card sits far along the row)
+        .onChange(of: cards) { _, _ in
+            let now = map.placesPick
+            if let n = cards.firstIndex(of: now), n > 1 { reader.scrollTo(now, anchor: .leading) }
+        }
+        }
     }
 
     /// THE CARDS, in order (7.5): Everywhere; Here (the country under the room's middle, its world region, its
@@ -100,6 +107,12 @@ struct PlacesShelf: View {
             if let r = WorldRegions.of(w.places[i].id) { out.append(.region(r)) }
             if let k = w.places[i].cont { out.append(.continent(k)) }
         }
+        // collections: those touching the country here first, then the world's (7.5)
+        CollectionStore.shared.load()
+        let here = out.compactMap { p -> String? in if case .country(let i) = p { return w.places[i].id.lowercased() }; return nil }.first
+        let cols = CollectionStore.shared.all
+        out += cols.filter { c in here.map { h in c.items.contains { $0.cc == h } } ?? false }.map { .collection($0.id) }
+        out += cols.filter { c in !out.contains(.collection(c.id)) }.map { .collection($0.id) }
         let now = map.placesPick
         if !out.contains(now) { out.insert(now, at: 1) }
         cards = out
@@ -124,7 +137,11 @@ struct PlacesAtlas: View {
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 grid([.everywhere], cols, cw)
-                if !here.isEmpty { section("Here", here, cols, cw) }
+                let mapsHere = here.filter { if case .collection = $0 { return false }; return true }
+                if !mapsHere.isEmpty { section("Here", mapsHere, cols, cw) }
+                if !CollectionStore.shared.all.isEmpty {
+                    section("Collections", CollectionStore.shared.all.map { .collection($0.id) }, cols, cw)
+                }
                 section("Continents", MapController.continents.map { .continent($0) }, cols, cw)
                 section("World regions", Self.regions.map { .region($0) }, cols, cw)
                 section("Countries", countries, cols, cw)
@@ -174,6 +191,7 @@ struct MapCard: View {
         if case .country(let i) = pick, let cc = map.world?.places[i].id.lowercased(), let all = map.townScenes[cc]?.towns.count {
             number += " of \(all.formatted())"
         }
+        if case .collection(let id) = pick, let c = CollectionStore.shared.collection(id) { number += " of \(c.items.count)" }
         return VStack(alignment: .leading, spacing: 0) {
             ShelfPicture(map: map, pick: pick, side: side, ready: TownIndex.shared.ready, version: map.townsVersion)
                 .frame(width: side, height: side)
@@ -226,10 +244,14 @@ struct ShelfPicture: View {
         }
         .task(id: key) {
             guard Self.kept[key] == nil, let w = map.world, let box = map.box(of: pick) else { return }
-            let own: Set<Int>? = map.members(of: pick).map(Set.init)
+            let isCollection: Bool = { if case .collection = pick { return true }; return false }()
+            let own: Set<Int>? = isCollection ? nil : map.members(of: pick).map(Set.init)
             let ids: Set<String>? = own.map { Set($0.map { w.places[$0].id.lowercased() }) }
             // your marks on it
-            var dots: [SIMD2<Float>] = []
+            var dots: [SIMD2<Float>] = [], plain: [SIMD2<Float>] = []
+            if case .collection(let cid) = pick, let c = CollectionStore.shared.collection(cid) {
+                for it in c.items { if MarkStore.shared.state(it.key).stamped { dots.append(it.at) } else { plain.append(it.at) } }
+            } else {
             for (k, st) in MarkStore.shared.marks where st.stamped {
                 if k.kind == .town, let h = TownIndex.shared.hit(k.id), ids?.contains(h.file) ?? true {
                     dots.append(EqualEarth.project(lon: h.lon, lat: h.lat))
@@ -237,9 +259,10 @@ struct ShelfPicture: View {
                     dots.append(o.point)
                 }
             }
+            }
             let relief = map.relief, every = pick == .everywhere, px = Int(side * scale)
             let made = await Task.detached(priority: .utility) {
-                MapPicture.draw(world: w, relief: relief, box: box, own: own, everywhere: every, dots: dots, px: px)
+                MapPicture.draw(world: w, relief: relief, box: box, own: own, everywhere: every, dots: dots, plain: plain, px: px)
             }.value
             guard let made else { return }
             Self.kept[key] = made

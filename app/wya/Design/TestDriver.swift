@@ -305,6 +305,11 @@ final class TestDriver {
                     if a == "everywhere" { map?.showPlacesMap(.everywhere) }
                     else if a == "cont" { map?.showPlacesMap(.continent(rest)) }
                     else if a == "reg" { map?.showPlacesMap(.region(rest)) }
+                    else if a == "col" {
+                        CollectionStore.shared.load()
+                        for _ in 0 ..< 50 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                        map?.showPlacesMap(.collection(rest))
+                    }
                     else if let i = map?.world?.placeIndex[a] { map?.showPlacesMap(.country(i)) }
                 // placeopen de: Places' country opened with its towns (7.4); placeopen off: back to the world
                 case "placeopen":
