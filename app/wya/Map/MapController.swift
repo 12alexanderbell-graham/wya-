@@ -381,6 +381,41 @@ final class MapController {
     /// the current Places map is a collection (7.2), by id
     var placesCollection: String?
     /// the countries whose towns are drawn with none open (Places close in), and where the camera was when they were found
+    // HISTORY (Part 13): the journey up, and how much of it is drawn (0 to 1), moving from `historyFrom` to `historyTo`
+    @ObservationIgnored var historyTrack: HistoryTrack?
+    @ObservationIgnored var historyShown: CGFloat = 0
+    @ObservationIgnored private var historyAnim: (from: CGFloat, to: CGFloat, t0: CFTimeInterval, dur: Double)?
+
+    /// on (A13.1): the line draws along its length in 1.2 s; false when there is nothing dated to draw (the tool refuses)
+    func historyOn() -> Bool {
+        guard let w = world, regionScene == nil, !placesMode,
+              let t = HistoryTrack.countries(world: w, continent: continent) else { return false }
+        historyTrack = t
+        // (a new scope draws its line from the start again)
+        historyShown = 0
+        historyAnim = (0, 1, CACurrentMediaTime(), Motion.reduce ? 0.3 : 1.2)
+        needsFrame = true
+        return true
+    }
+    /// off (A13.3): undrawn into its start in 0.6 s, twice as fast when something else is taking over
+    func historyOff(fast: Bool = false) {
+        guard historyTrack != nil else { return }
+        historyAnim = (historyShown, 0, CACurrentMediaTime(), (Motion.reduce ? 0.2 : 0.6) / (fast ? 2 : 1))
+        needsFrame = true
+    }
+    func stepHistory(_ now: CFTimeInterval) {
+        guard let a = historyAnim else { return }
+        let x = min(1, (now - a.t0) / a.dur)
+        // the settle curve's shape (47%, 82%, 95% at a quarter, a half, three quarters)
+        let k = 6.4, e = 1 - (1 + k * x) * exp(-k * x), norm = 1 - (1 + k) * exp(-k)
+        historyShown = a.from + (a.to - a.from) * CGFloat(e / norm)
+        needsFrame = true
+        if x >= 1 {
+            historyShown = a.to
+            historyAnim = nil
+            if a.to == 0 { historyTrack = nil }
+        }
+    }
     @ObservationIgnored var nearbyTowns: [String] = []
     @ObservationIgnored var nearbyAt = SIMD3<Double>(0, 0, 0)
     /// each place's box on the map, worked out once

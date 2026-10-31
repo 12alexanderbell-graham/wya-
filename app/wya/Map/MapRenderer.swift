@@ -377,6 +377,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let moving = controller.step(dt)
         // the Places map's names (7.4), placed for this frame's camera
         (view as? MapMTKView)?.townNames.update(controller, moving: moving || controller.touching)
+        // the history line (Part 13), drawn along for this frame
+        controller.stepHistory(now)
+        if controller.historyTrack != nil || controller.historyShown > 0 { (view as? MapMTKView)?.historyLine.update(controller) }
         // 120 a second while anything moves, 30 for the lights alone
         view.preferredFramesPerSecond = (moving || controller.touching || controller.needsFrame) ? 120 : 30
         controller.needsFrame = false
@@ -952,6 +955,13 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         let v = TownNamesView(frame: bounds)
         v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(v)
+        return v
+    }()
+    /// the history line (Part 13), over the map and under the names
+    lazy var historyLine: HistoryLineView = {
+        let v = HistoryLineView(frame: bounds)
+        v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        insertSubview(v, at: 0)
         return v
     }()
     private var downAt: CGPoint?
