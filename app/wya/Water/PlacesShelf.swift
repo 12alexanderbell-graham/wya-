@@ -1,13 +1,18 @@
 import SwiftUI
 import simd
 
-/// THE SHELF (7.5): at 50% in Places, the maps that fit where you are looking, one sideways row of cards snapping card
-/// by card, 12 pt under the caption's foot, riding the water's edge with it and passing under the soft edge above the
-/// tabs as a scrolled row does (A7.4). Worked out when the sheet rises to 50%, never while you look at it. A card: its
-/// picture (132 pt, corners 20: the map's land on our sea, your towns on it lime), its title and your number under it
-/// on the water; the current map's card 4 pt higher. A tap makes it the current map (A7.2), the water going to 25% so
-/// the map is framed where it is seen (author's call).
-/// Not on it yet: Around you (location), your lists, collections (D7), the AI's maps, New map and All maps (the atlas).
+/// THE SHELF (7.5) AND THE ATLAS (7.6), Places' water above 25%.
+/// The shelf: at 50%, the maps that fit where you are looking, one sideways row of cards snapping card by card, 12 pt
+/// under the caption's foot, riding the water's edge with it and passing under the soft edge above the tabs as a
+/// scrolled row does (A7.4). Worked out when the sheet rises to 50%, never while you look at it. A card: its picture
+/// (corners 20: the map's land on our sea, your towns on it lime), its title and your number under it on the water;
+/// the current map's card 4 pt higher. A tap makes it the current map (A7.2), the water going to 25% so the map is
+/// framed where it is seen (author's call).
+/// The atlas: at full, every map in sections, three columns (`(W - 56) / 3`), from 12 pt under the caption's foot
+/// (the caption stays under the head at full). From 50% to full the shelf rides up and passes under the soft edge at
+/// the caption's foot while the atlas rises into view (A7.5); down is the exact reverse.
+/// Not here yet: Around you (location), your maps (lists), collections (D7), the AI's maps, New map, Collections by
+/// country, search over maps.
 struct PlacesShelf: View {
     let water: Water
     let map: MapController
@@ -16,40 +21,60 @@ struct PlacesShelf: View {
     let captionY: CGFloat
     @State private var cards: [MapController.PlacesPick] = []
     private static let side: CGFloat = 132
+    private static let rowH: CGFloat = side + 64
 
     var body: some View {
         let L = water.layout
-        // (the caption's foot is 65 pt under its centre and the row's place 14 pt under where it is asked for, both
+        // 0 at 50% (or lower), 1 at full
+        let f = min(1, max(0, (L.top(.half) - form.top) / max(1, L.top(.half) - L.top(.full))))
+        // (the caption's foot is 65 pt under its centre and a row is placed 14 pt under where it is asked for, both
         // measured on the Pro Max; the 4 pt the current card rises by is inside the row)
-        let top = captionY + 65 + 12 - 4 - 14
-        // the row's foot under the soft edge above the tabs (P3): seen only once the water has lifted it clear
+        let foot = captionY + 65
+        let shelfTop = foot + 12 - 4 - 14 - f * (Self.rowH + 40)
+        let atlasFrom = foot + 12 - 4 - 14 + Self.rowH + 24
+        let atlasTop = atlasFrom + (foot + 12 - 14 - atlasFrom) * f
         let fade = L.capsule.minY - 2
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 12) {
-                ForEach(cards, id: \.self) { c in card(c) }
+        ZStack(alignment: .top) {
+            shelf(L)
+                .padding(.top, shelfTop)
+                .frame(width: L.W, height: L.H, alignment: .top)
+                .allowsHitTesting(f < 0.02 && shelfTop + Self.side < fade - 24)
+            if f > 0.01 {
+                PlacesAtlas(water: water, map: map, here: Array(cards.dropFirst()), bottom: L.H - fade + 24)
+                    .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - atlasTop))
+                    .padding(.top, atlasTop)
+                    .frame(width: L.W, height: L.H, alignment: .top)
+                    .allowsHitTesting(f > 0.98)
             }
-            .scrollTargetLayout()
-            .padding(.top, 4)
-            .frame(height: Self.side + 64, alignment: .top)
         }
-        .contentMargins(.horizontal, 16, for: .scrollContent)
-        .scrollTargetBehavior(.viewAligned)
-        .scrollIndicators(.hidden)
-        .frame(width: L.W - 2 * L.sheetInset, height: Self.side + 64)
-        .clipped()
-        .padding(.top, top)
-        .frame(width: L.W, height: L.H, alignment: .top)
+        // under the caption's soft edge at the top (P3) and the soft edge above the tabs at the bottom
         .mask(alignment: .top) {
             VStack(spacing: 0) {
-                Rectangle().frame(height: max(0, fade - 24))
+                Color.clear.frame(height: max(0, foot - 20))
+                LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                Rectangle().frame(height: max(0, fade - 24 - foot + 4))
                 LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: 24)
                 Spacer(minLength: 0)
             }
         }
-        // touchable only once the cards are clear of the edge (a masked row would still take touches)
-        .allowsHitTesting(top + Self.side < fade - 24)
         .onAppear { TownIndex.shared.load(); work() }
         .onChange(of: water.stop) { _, s in if s == .half { work() } }
+    }
+
+    private func shelf(_ L: Layout) -> some View {
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(cards, id: \.self) { c in MapCard(water: water, map: map, pick: c, side: Self.side) }
+            }
+            .scrollTargetLayout()
+            .padding(.top, 4)
+            .frame(height: Self.rowH, alignment: .top)
+        }
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollIndicators(.hidden)
+        .frame(width: L.W - 2 * L.sheetInset, height: Self.rowH)
+        .clipped()
     }
 
     /// THE CARDS, in order (7.5): Everywhere; Here (the country under the room's middle, its world region, its
@@ -69,54 +94,117 @@ struct PlacesShelf: View {
         if !out.contains(now) { out.insert(now, at: 1) }
         cards = out
     }
+}
 
-    private func card(_ c: MapController.PlacesPick) -> some View {
-        let current = map.placesPick == c
+/// THE ATLAS (7.6): every map, in sections (the sections 7.6 lists that exist now: Here, Continents, World regions,
+/// Countries A to Z), three columns 12 pt apart, 16 pt margins, rows 20 pt apart; a section's name 15 pt semibold black
+/// 50%, 24 pt above its cards
+struct PlacesAtlas: View {
+    let water: Water
+    let map: MapController
+    /// Here's cards (the shelf's, without Everywhere)
+    let here: [MapController.PlacesPick]
+    /// the room under the content (the tabs' place)
+    let bottom: CGFloat
+
+    var body: some View {
+        let L = water.layout
+        let cw = ((L.W - 56) / 3).rounded(.down)
+        let cols = Array(repeating: GridItem(.fixed(cw), spacing: 12, alignment: .top), count: 3)
+        ScrollView(.vertical) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                grid([.everywhere], cols, cw)
+                if !here.isEmpty { section("Here", here, cols, cw) }
+                section("Continents", MapController.continents.map { .continent($0) }, cols, cw)
+                section("World regions", Self.regions.map { .region($0) }, cols, cw)
+                section("Countries", countries, cols, cw)
+                Color.clear.frame(height: bottom)
+            }
+            .padding(.top, 4)
+        }
+        .contentMargins(.horizontal, 16 - L.sheetInset, for: .scrollContent)
+        .scrollIndicators(.hidden)
+    }
+
+    private static let regions = Array(Set(WorldRegions.table.values)).sorted()
+    private var countries: [MapController.PlacesPick] {
+        guard let w = map.world else { return [] }
+        return w.places.indices.filter { w.places[$0].id != "aq" }
+            .sorted { w.places[$0].n.localizedStandardCompare(w.places[$1].n) == .orderedAscending }
+            .map { .country($0) }
+    }
+
+    private func section(_ name: String, _ picks: [MapController.PlacesPick], _ cols: [GridItem], _ cw: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                .padding(.top, 24).padding(.bottom, 12)
+            grid(picks, cols, cw)
+        }
+    }
+    private func grid(_ picks: [MapController.PlacesPick], _ cols: [GridItem], _ cw: CGFloat) -> some View {
+        LazyVGrid(columns: cols, alignment: .leading, spacing: 20) {
+            ForEach(picks, id: \.self) { p in MapCard(water: water, map: map, pick: p, side: cw) }
+        }
+    }
+}
+
+/// A MAP'S CARD (7.5, 7.6): its picture, its title (15 pt semibold, two lines at most) and your number (12 pt black
+/// 50%) under it; the current map's 4 pt higher. A tap: the current map, the water at 25%
+struct MapCard: View {
+    let water: Water
+    let map: MapController
+    let pick: MapController.PlacesPick
+    let side: CGFloat
+
+    var body: some View {
+        let current = map.placesPick == pick
         _ = map.townsVersion
-        let n = map.stampedTowns(on: c)
+        let n = map.stampedTowns(on: pick)
         var number = "\(n)"
-        if case .country(let i) = c, let cc = map.world?.places[i].id.lowercased(), let all = map.townScenes[cc]?.towns.count {
+        if case .country(let i) = pick, let cc = map.world?.places[i].id.lowercased(), let all = map.townScenes[cc]?.towns.count {
             number += " of \(all.formatted())"
         }
         return VStack(alignment: .leading, spacing: 0) {
-            ShelfPicture(map: map, pick: c, ready: TownIndex.shared.ready, version: map.townsVersion)
-                .frame(width: Self.side, height: Self.side)
+            ShelfPicture(map: map, pick: pick, side: side, ready: TownIndex.shared.ready, version: map.townsVersion)
+                .frame(width: side, height: side)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            Text(title(c)).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                 .lineLimit(2).multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
             Text(number).font(.caption).foregroundStyle(Palette.ink.opacity(0.5))
         }
-        .frame(width: Self.side, alignment: .leading)
+        .frame(width: side, alignment: .leading)
         .offset(y: current ? -4 : 0)
         .animation(Motion.quick, value: current)
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
             water.go(.quarter)
-            map.showPlacesMap(c)
+            map.showPlacesMap(pick)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
     }
 
-    private func title(_ c: MapController.PlacesPick) -> String {
-        if case .country(let i) = c { return map.world?.places[i].n ?? "" }
-        return c.title
+    private var title: String {
+        if case .country(let i) = pick { return map.world?.places[i].n ?? "" }
+        return pick.title
     }
 }
 
 /// A CARD'S PICTURE: the map's land white on our sea (the land round it lighter), your stamped towns and own places
-/// on it as lime points; drawn once per map and marks, kept
+/// on it as lime points; drawn once per map, size and marks, kept
 struct ShelfPicture: View {
     let map: MapController
     let pick: MapController.PlacesPick
+    let side: CGFloat
     let ready: Bool
     let version: Int
     private static var kept: [String: UIImage] = [:]
 
     var body: some View {
-        let key = "\(pick)|\(version)|\(ready)"
+        let key = "\(pick)|\(side)|\(version)|\(ready)"
         if let i = Self.kept[key] ?? draw(key) {
             Image(uiImage: i).resizable()
         } else {
@@ -126,10 +214,10 @@ struct ShelfPicture: View {
 
     private func draw(_ key: String) -> UIImage? {
         guard let w = map.world, let b0 = map.box(of: pick) else { return nil }
-        let size: CGFloat = 132
+        let size = side
         // the box with room round it, made square
         var x0 = Double(b0.x), y0 = Double(b0.y), x1 = Double(b0.z), y1 = Double(b0.w)
-        let pad = pick == .everywhere ? 0 : max(x1 - x0, y1 - y0) * 0.12
+        let pad = pick == .everywhere ? 0 : max(x1 - x0, y1 - y0) * 0.12 + 0.3
         x0 -= pad; x1 += pad; y0 -= pad; y1 += pad
         if x1 - x0 > y1 - y0 { let c = (y0 + y1) / 2, h = (x1 - x0) / 2; y0 = c - h; y1 = c + h }
         else { let c = (x0 + x1) / 2, h = (y1 - y0) / 2; x0 = c - h; x1 = c + h }
@@ -154,6 +242,8 @@ struct ShelfPicture: View {
             let mine = CGMutablePath(), rest = CGMutablePath(), lakes = CGMutablePath()
             for ring in w.rings {
                 guard Double(ring.box.z) >= x0, Double(ring.box.x) <= x1, Double(ring.box.w) >= y0, Double(ring.box.y) <= y1 else { continue }
+                // rings smaller than a third of a point are skipped (thousands of islets cost and show nothing)
+                guard Double(max(ring.box.z - ring.box.x, ring.box.w - ring.box.y)) * s > 0.35 else { continue }
                 let p = CGMutablePath()
                 p.move(to: pt(w.points[ring.start]))
                 for i in 1 ..< ring.count { p.addLine(to: pt(w.points[ring.start + i])) }
