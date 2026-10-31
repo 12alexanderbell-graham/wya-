@@ -102,10 +102,10 @@ final class MarkStore {
     // MARK: the writes every marking surface calls (Part 20.1: the same eleven ways in, the same functions)
 
     func stamp(_ key: PlaceKey, name: String = "", cc: String = "", level: Int = 0, source: MarkSource = .hand,
-               who: Who = .you, origin: CGPoint? = nil) async {
+               who: Who = .you, origin: CGPoint? = nil, day: String? = nil) async {
         guard let store else { return }
         let acc = account
-        guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level) else { return }
+        guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { return }
         apply(r, words: "\(label(key, name)) stamped", origin: origin, who: who)
     }
 
@@ -119,10 +119,11 @@ final class MarkStore {
     }
 
     func wish(_ key: PlaceKey, want: Int = 3, name: String = "", cc: String = "", level: Int = 0,
-              source: MarkSource = .hand, who: Who = .you, origin: CGPoint? = nil) async {
+              source: MarkSource = .hand, who: Who = .you, origin: CGPoint? = nil, when: String? = nil) async {
         guard let store else { return }
         let acc = account
-        guard let r = try? await store.wish(key, account: acc, want: want, source: source, name: name, cc: cc, level: level) else { return }
+        guard let r = try? await store.wish(key, account: acc, want: want, source: source, name: name, cc: cc, level: level,
+                                            when: when) else { return }
         apply(r, words: "\(label(key, name)) wished", origin: origin, who: who)
     }
 

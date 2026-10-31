@@ -369,8 +369,8 @@ extension MapController {
 enum TownStamps {
     @MainActor
     static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource, place: Int? = nil,
-                      at point: SIMD2<Float>? = nil) async {
-        await MarkStore.shared.stamp(key, name: name, cc: cc, source: source)
+                      at point: SIMD2<Float>? = nil, day: String? = nil) async {
+        await MarkStore.shared.stamp(key, name: name, cc: cc, source: source, day: day)
         let country = PlaceKey.country(cc)
         if !MarkStore.shared.state(country).stamped {
             await MarkStore.shared.stamp(country, source: source)

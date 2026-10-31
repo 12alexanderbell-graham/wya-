@@ -362,14 +362,24 @@ struct ContentView: View {
             defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }
             let line = CollectionStore.line(it)
             guard head.quickStamp else {
-                RegionCardState.shared.open(it.key, name: it.name, parents: line.isEmpty ? w.places[place].n : line, place: place, map: map)
+                RegionCardState.shared.open(it.key, name: it.name, parents: line.isEmpty ? w.places[place].n : line, place: place, map: map,
+                                            day: it.date)
                 return
             }
-            let stamped = MarkStore.shared.state(it.key).stamped
-            if stamped { Feel.lift() } else { Feel.stamp() }
+            // quick add (D7): a stop that has been is stamped with its day as a visit; one still to come is wished with
+            // its day (a second tap takes either back)
+            let st = MarkStore.shared.state(it.key)
+            let upcoming = CollectionStore.upcoming(it.date)
+            if st.stamped || (upcoming && st.wished) { Feel.lift() } else if upcoming { Feel.tap() } else { Feel.stamp() }
             Task {
-                if stamped { await TownStamps.unstamp(it.key, name: it.name, cc: it.cc) }
-                else { await TownStamps.stamp(it.key, name: it.name, cc: it.cc, source: .quick, place: place, at: it.at) }
+                if st.stamped { await TownStamps.unstamp(it.key, name: it.name, cc: it.cc) }
+                else if upcoming {
+                    if st.wished { await MarkStore.shared.unwish(it.key, name: it.name) }
+                    else { await MarkStore.shared.wish(it.key, name: it.name, cc: it.cc, source: .quick, when: it.date) }
+                } else {
+                    await TownStamps.stamp(it.key, name: it.name, cc: it.cc, source: .quick, place: place, at: it.at,
+                                           day: CollectionStore.pastDay(it.date))
+                }
             }
             return
         }

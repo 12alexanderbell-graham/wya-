@@ -379,6 +379,21 @@ final class TestDriver {
                     if let m = map, let sc = m.regionScene, let r = Int(a) {
                         if r == 99 { m.showRegionTowns() } else { m.leaveRegionTowns(); m.openRegions(sc.place, row: r) }
                     }
+                // thingtap <words>: a tap on the open collection's stop whose name holds the words, at its mark; its mark
+                // state logged a second later (D7: a stop's day as a visit)
+                case "thingtap":
+                    if let m = map, let cid = m.placesCollection, let c = CollectionStore.shared.collection(cid) {
+                        let q = p.dropFirst().joined(separator: " ").lowercased()
+                        if let it = c.items.first(where: { $0.name.lowercased().contains(q) || $0.label.lowercased().contains(q) }),
+                           let f = m.thingFrames[it.id] {
+                            let pt = CGPoint(x: f.midX, y: f.midY)
+                            if let i = m.hit(at: pt) { m.onPlaceTap?(i, pt) }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                let st = MarkStore.shared.state(it.key)
+                                NSLog("wya thingtap %@ (%@): stamped %d wished %d visits %d", it.name, it.date, st.stamped ? 1 : 0, st.wished ? 1 : 0, st.visits)
+                            }
+                        } else { NSLog("wya thingtap %@: no mark", q) }
+                    }
                 case "regiontap":
                     if let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) {
                         let pt = CGPoint(x: x, y: y)
