@@ -388,7 +388,9 @@ private struct PageLayer: View {
             let corner = min(page.origin.height / 2, 22) + (Self.screenCorner - min(page.origin.height / 2, 22)) * p
             content(key, L: L)
                 .frame(width: L.W, height: L.H)
-                .scaleEffect(x: r.width / L.W, y: r.height / L.H, anchor: .topLeading)
+                // one scale for both sides (the way Apple's zoom grows a view): the page is never squeezed or stretched on
+                // the way; the rounded rectangle growing from what opened it shows as much of it as fits (31 Oct 03:07)
+                .scaleEffect(r.width / L.W, anchor: .topLeading)
                 .offset(x: r.minX, y: r.minY)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous).offset(x: r.minX, y: r.minY).size(r.size))
