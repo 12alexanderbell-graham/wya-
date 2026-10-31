@@ -1189,7 +1189,18 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 c.doubleTap(at: d0); lastTapTime = 0
             } else {
                 lastTapTime = t.timestamp; lastTapAt = d0
+                // THE JOURNEY (13.4): a capsule or a leg within 12 pt takes the tap (once the double-tap window has
+                // passed, as a place's does); any other tap takes a leg's capsule away and goes on as always
+                let journey = c.historyTrack != nil ? historyLine.hit(d0, c) : nil
+                if journey == nil { historyLine.dismissLeg(c) }
                 if c.locked { Feel.refuse(); c.lockedPress() }
+                else if let journey {
+                    let stamp = t.timestamp
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
+                        guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
+                        self.historyLine.tapped(journey, c)
+                    }
+                }
                 else if let hit = c.pressed {
                     // A CONFIRMED TAP (Part 4.2.1): once the double-tap window has passed with no second tap, the place
                     // is handed over (the stamping card opens); a double tap within the window never opens anything

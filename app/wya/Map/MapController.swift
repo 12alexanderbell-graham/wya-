@@ -960,6 +960,28 @@ final class MapController {
         }
     }
 
+    /// a journey's start or end capsule tapped (13.4): the camera flies to frame that stop, the search flight's room
+    /// between the head and the water as it is (a country by its frame, a town, thing or own place close in)
+    func frameHistoryStop(_ s: HistoryTrack.Stop) {
+        guard let w = world, s.place < w.places.count else { return }
+        let W = Double(view.width)
+        let room = layout.room(sheetTop: sheetTop > 0 ? sheetTop : layout.top(.quarter))
+        let top = Double(room.lowerBound), bottom = Double(room.upperBound)
+        let roomH = max(80, bottom - top)
+        var mid = s.at
+        var target: Double
+        if s.key.kind == .country, !w.places[s.place].tiny, let f = w.frame(of: s.place) {
+            let fw = max(0.05, Double(f.z - f.x)), fh = max(0.05, Double(f.w - f.y))
+            target = min((W - 32) / fw, roomH / fh)
+            mid = SIMD2(Double(f.x + f.z) / 2, Double(f.y + f.w) / 2)
+        } else {
+            target = max(k, townsK * 3)
+        }
+        target = min(kMax, max(kMin, target))
+        let centre = mid + SIMD2(0, (Double(view.height) / 2 - (top + bottom) / 2) / target)
+        fly(to: clamped(centre, target), k: target, dur: Self.flight)
+    }
+
     /// the old CameraCurve.flightDuration: the critically damped 0.44 s spring's settling time × 0.9
     static let flight = 0.58
 

@@ -34,7 +34,8 @@ final class TownNamesView: UIView {
         let half = m.layout.top(.half)
         let a = m.sheetTop <= 0 ? 1 : min(1, max(0, (m.sheetTop - half * 0.4) / (half * 0.6)))
         if abs(alpha - a) > 0.001 { alpha = a }
-        let own = ownMarks(m)
+        // (the journey's capsules are clear glass: names under them read through as a muddle, so they keep clear)
+        let own = ownMarks(m) + (HistoryLineView.current?.capsuleFrames ?? [])
         let named = names(m, moving: moving, taken: own)
         thingMarks(m, taken: named)
     }

@@ -90,7 +90,21 @@ final class TestDriver {
                     h.pullMoved(v - h.pull)
                     if a == "ai" || a == "off" { h.settlePull(to: v >= HeadState.aiStop ? 1 : 0) }
                 case "tools": head?.toolsOpen = a == "on"
-                case "history": head?.history = a == "on"
+                // history on|off; history tap <x> <y> (a tap on the journey at that point, as the map's confirmed tap
+                // would hand it over); history pull <dy> (the water grabbed at its top, moved dy pt, let go still)
+                case "history":
+                    if a == "tap", p.count > 3, let m = map, let v = HistoryLineView.current {
+                        let pt = CGPoint(x: Double(p[2]) ?? 0, y: Double(p[3]) ?? 0)
+                        if let h = v.hit(pt, m) { NSLog("wya history tap %@", String(describing: h)); v.tapped(h, m) }
+                        else { NSLog("wya history tap: nothing"); v.dismissLeg(m) }
+                    } else if a == "pull", p.count > 2, let w = water {
+                        let dy = CGFloat(Double(p[2]) ?? 0), y0 = w.level
+                        w.begin(at: CGPoint(x: 220, y: y0))
+                        for i in 1 ... 10 { w.move(to: CGPoint(x: 220, y: y0 + dy * CGFloat(i) / 10)) }
+                        try? await Task.sleep(for: .milliseconds(300))
+                        w.end(velocity: 0)
+                        NSLog("wya history pull %.0f: history %@", Double(dy), head?.history == true ? "on" : "off")
+                    } else { head?.history = a == "on" }
                 // visit <id> <yyyy-mm-dd>: the country stamped with that day as a visit (test data for history lines)
                 case "visit": if p.count > 2 { await MarkStore.shared.stamp(.country(a), day: p[2]) }
                 case "quick": head?.quickStamp = a == "on"

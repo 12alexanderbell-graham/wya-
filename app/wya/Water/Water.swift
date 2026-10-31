@@ -306,6 +306,8 @@ final class Water {
         if t < lo { t = lo }
         // the upload sheet has no 50% while choosing: pulled up, the water gives 12 pt and no more (9.3)
         if upload, UploadState.shared.phase != .review, t < L.top(.quarter) { t = L.top(.quarter) - Flow.rubber(L.top(.quarter) - t, 12) }
+        // HISTORY HEIGHT (13.4): the line needs the map, so pulled up the water gives 12 pt and no more
+        if historyUp, t < restTop(.quarter) { t = restTop(.quarter) - Flow.rubber(restTop(.quarter) - t, 12) }
         // under the capsule it does not go either
         if t > hi { t = hi + Flow.rubber(t - hi, 10) }
         // from 50% up to full it is harder: above half the water follows at 0.75 for the first 60 points, then 1:1,
@@ -354,6 +356,20 @@ final class Water {
                 UploadState.shared.close()
             } else {
                 if fingerTop < q - 4 { Feel.refuse() }
+                go(.quarter, speed: v, released: true)
+            }
+            return
+        }
+        // HISTORY HEIGHT (13.4): pulled up it settles back with a refuse; pulled (or flicked) down to 25% or below,
+        // history turns off and the water settles at 25% (the tool's own off, A13.3)
+        if historyUp {
+            let q = layout.top(.quarter)
+            if fingerTop >= q - 4 || v > 300 {
+                head?.history = false
+                historyUp = false
+                go(.quarter, speed: v, released: true)
+            } else {
+                if fingerTop < restTop(.quarter) - 4 { Feel.refuse() }
                 go(.quarter, speed: v, released: true)
             }
             return

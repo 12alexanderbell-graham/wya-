@@ -186,8 +186,9 @@ struct SheetContent: View {
             // THE PAGE'S OWN SHEET (16.6) over a place's page, in the water at 50%
             if water.pageSheet { PageSheet(water: water, map: map, form: form).transition(.identity) }
             // (never under a place's page: the water there is only the tab capsule or the page's sheet)
+            // (nor at history height: the shelf's cards peeked behind the range bar there, 31 Oct 06:25)
             if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
-               !PlacePageState.shared.isOpen, map.regionScene == nil {
+               !water.historyUp, !PlacePageState.shared.isOpen, map.regionScene == nil {
                 PlacesShelf(water: water, map: map, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
             }
             // REGIONS' SELECTION MENU (6.3), riding the water's top; kept while its rows leave

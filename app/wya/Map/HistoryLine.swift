@@ -49,10 +49,11 @@ struct HistoryTrack {
             case .thing:
                 if let h = ThingIndex.shared.hit(e.key.id) { found = (h.file, h.name, h.lon, h.lat) }
                 else if let it = CollectionStore.shared.item(e.key) {
-                    // a collection's stop: its point is already in map units
+                    // a collection's stop: its point is already in map units (its longitude and latitude worked back
+                    // from it for the km: 31 Oct 06:25, a Formula 1 journey read "0 km")
                     if let i = w.placeIndex[it.cc] ?? w.placeIndex[it.cc.uppercased()], countries?.contains(it.cc.lowercased()) ?? true {
-                        stops.append(Stop(key: e.key, place: i, at: SIMD2(Double(it.at.x), Double(it.at.y)), from: e.from, name: it.name,
-                                          ll: SIMD2(0, 0)))
+                        let at = SIMD2(Double(it.at.x), Double(it.at.y)), g = EqualEarth.unproject(at)
+                        stops.append(Stop(key: e.key, place: i, at: at, from: e.from, name: it.name, ll: SIMD2(g.lon, g.lat)))
                     }
                     continue
                 }
@@ -152,18 +153,27 @@ struct HistoryTrack {
 final class HistoryLineView: UIView {
     private let startCap = HistoryCapsule()
     private let endCap = HistoryCapsule()
+    /// a leg's capsule (A13.5) and the leg it names
+    private let legCap = HistoryCapsule()
+    private var legShown: Int?
+    /// what a tap on the journey found (13.4's table): a start or end capsule, or a leg within 12 pt
+    enum Hit { case start, end, leg(Int) }
     private var track: HistoryTrack?
     private var builtCount = -1
     private let holder = CALayer()
     private var pieces: [(line: CAShapeLayer, edge: CAShapeLayer?, t: CGFloat, from: CGFloat, to: CGFloat)] = []
 
+    /// the one on screen (the test driver's `history tap`)
+    nonisolated(unsafe) static weak var current: HistoryLineView?
+
     override init(frame: CGRect) {
         super.init(frame: frame)
+        Self.current = self
         isUserInteractionEnabled = false
         backgroundColor = .clear
         isOpaque = false
         layer.addSublayer(holder)
-        addSubview(startCap); addSubview(endCap)
+        addSubview(startCap); addSubview(endCap); addSubview(legCap)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -238,18 +248,112 @@ final class HistoryLineView: UIView {
             p.edge?.isHidden = end <= 0
         }
         CATransaction.commit()
-        // the capsules ride the ends: the start one is up from the beginning, the end one once the head arrives (A13.2)
+        // the capsules ride the ends: the start one is up from the beginning, the end one once the head arrives (A13.2);
+        // kept in the room between the head and the water, and away while their stop is off the screen (31 Oct 07:30: the
+        // end's capsule stood over the head with Silverstone far off the top)
+        let rr = m.layout.room(sheetTop: m.sheetTop > 0 ? m.sheetTop : m.layout.top(.quarter))
+        let room = CGRect(x: 0, y: rr.lowerBound, width: bounds.width, height: rr.upperBound - rr.lowerBound)
+        let seen = room.insetBy(dx: -24, dy: -24)
+        // the leg's capsule beside its middle, on the side its bow goes (the chord's middle is inside the bow)
+        // (first: a leg's capsule names both its ends, so a start or end capsule it would overlap steps back while it is
+        // up; 31 Oct 07:45, at world zoom the three crossed one another)
+        var legRect: CGRect?
+        if let j = legShown, m.historyTrack != nil, shown > 0.999, j + 1 < track.stops.count, let r = Self.legRange(track, j) {
+            let pm = m.screenPoint(track.points[(r.lowerBound + r.upperBound) / 2])
+            var q = m.screenPoint((track.stops[j].at + track.stops[j + 1].at) / 2)
+            if hypot(pm.x - q.x, pm.y - q.y) < 1 {
+                let n = m.screenPoint(track.points[min(r.upperBound, (r.lowerBound + r.upperBound) / 2 + 1)])
+                q = CGPoint(x: pm.x + (n.y - pm.y), y: pm.y - (n.x - pm.x))
+            }
+            legCap.set(Self.legWords(track.stops[j], track.stops[j + 1]), near: pm, awayFrom: q, in: room, visible: seen.contains(pm))
+            legRect = legCap.isShown ? legCap.planned : nil
+        } else {
+            legShown = nil
+            legCap.hide()
+        }
         if let first = track.stops.first {
             let p0 = m.screenPoint(track.points.first ?? first.at)
             let dir = track.points.count > 1 ? m.screenPoint(track.points[1]) : CGPoint(x: p0.x + 1, y: p0.y)
-            startCap.set(Self.words(first), near: p0, awayFrom: dir, visible: shown > 0.001 && m.historyTrack != nil)
+            startCap.set(Self.words(first), near: p0, awayFrom: dir, in: room, avoid: legRect, visible: shown > 0.001 && m.historyTrack != nil && seen.contains(p0))
         }
         if let last = track.stops.last, track.stops.count > 1 {
             let pn = m.screenPoint(track.points.last ?? last.at)
             let prev = track.points.count > 1 ? m.screenPoint(track.points[track.points.count - 2]) : CGPoint(x: pn.x - 1, y: pn.y)
-            endCap.set(Self.words(last), near: pn, awayFrom: prev, visible: shown > 0.999 && m.historyTrack != nil)
-        } else { endCap.set("", near: .zero, awayFrom: .zero, visible: false) }
+            endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: shown > 0.999 && m.historyTrack != nil && seen.contains(pn))
+        } else { endCap.hide() }
         if m.historyTrack == nil && shown <= 0.001 { self.track = nil; builtCount = -1; isHidden = true }
+    }
+
+    /// the capsules up, in this view's points (the map's names and marks keep clear of them)
+    var capsuleFrames: [CGRect] {
+        guard !isHidden else { return [] }
+        return [startCap, endCap, legCap].filter(\.isShown).map(\.planned)
+    }
+
+    /// the points of leg `j` (none for two stops in one place)
+    static func legRange(_ t: HistoryTrack, _ j: Int) -> ClosedRange<Int>? {
+        guard j < t.legStart.count else { return nil }
+        let a = t.legStart[j], b = j + 1 < t.legStart.count ? t.legStart[j + 1] : t.points.count - 1
+        return b > a ? a ... b : nil
+    }
+
+    /// a tap at `p` (screen points): the capsules first, then the nearest leg within 12 pt; only with the whole line
+    /// drawn
+    func hit(_ p: CGPoint, _ m: MapController) -> Hit? {
+        guard let track, m.historyTrack != nil, m.historyShown > 0.999 else { return nil }
+        if startCap.isShown, startCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .start }
+        if endCap.isShown, endCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .end }
+        if legCap.isShown, legCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return legShown.map { .leg($0) } }
+        var best: (j: Int, d: CGFloat)?
+        for j in 0 ..< track.legStart.count {
+            guard let r = Self.legRange(track, j) else { continue }
+            var a = m.screenPoint(track.points[r.lowerBound])
+            for i in r.lowerBound ..< r.upperBound {
+                let b = m.screenPoint(track.points[i + 1])
+                let d = Self.distance(p, a, b)
+                if d < 12, d < (best?.d ?? .infinity) { best = (j, d) }
+                a = b
+            }
+        }
+        return best.map { .leg($0.j) }
+    }
+    /// a confirmed tap on what `hit` found: a capsule frames its stop; a leg shows its capsule, or takes it away
+    func tapped(_ h: Hit, _ m: MapController) {
+        guard let track, !track.stops.isEmpty else { return }
+        Feel.tap()
+        switch h {
+        case .start: legShown = nil; m.frameHistoryStop(track.stops[0])
+        case .end: legShown = nil; m.frameHistoryStop(track.stops[track.stops.count - 1])
+        case .leg(let j): legShown = legShown == j ? nil : j
+        }
+        m.needsFrame = true
+    }
+    /// any other tap on the map takes a leg's capsule away (13.4)
+    func dismissLeg(_ m: MapController) {
+        guard legShown != nil else { return }
+        legShown = nil
+        m.needsFrame = true
+    }
+    private static func distance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let l2 = dx * dx + dy * dy
+        let t = l2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+    /// "Lisbon → Madrid · 3–9 Mar 2024" (13.4): the two stops' arrival days, the month and year said once where shared
+    static func legWords(_ a: HistoryTrack.Stop, _ b: HistoryTrack.Stop) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB")
+        let mon = { (m: Int) in f.shortMonthSymbols[max(0, min(11, m - 1))] }
+        let A = a.from, B = b.from
+        let span: String
+        if A.y == B.y && A.m == B.m {
+            span = A.d == B.d ? "\(A.d) \(mon(A.m)) \(A.y)" : "\(A.d)–\(B.d) \(mon(A.m)) \(A.y)"
+        } else if A.y == B.y {
+            span = "\(A.d) \(mon(A.m)) – \(B.d) \(mon(B.m)) \(A.y)"
+        } else {
+            span = "\(A.d) \(mon(A.m)) \(A.y) – \(B.d) \(mon(B.m)) \(B.y)"
+        }
+        return "\(a.name) → \(b.name) · \(span)"
     }
 
     static func words(_ s: HistoryTrack.Stop) -> String {
@@ -282,20 +386,52 @@ final class HistoryCapsule: UIView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    func set(_ words: String, near p: CGPoint, awayFrom q: CGPoint, visible: Bool) {
+    var isShown: Bool { showing }
+    /// back into its point, words kept as they were
+    func hide() {
+        guard showing else { return }
+        showing = false
+        UIView.animate(springDuration: 0.42, bounce: 0) { self.transform = CGAffineTransform(scaleX: 0.001, y: 0.001) }
+    }
+
+    /// where it stands at rest (its frame without the grow)
+    private(set) var planned: CGRect = .zero
+    func set(_ words: String, near p: CGPoint, awayFrom q: CGPoint, in room: CGRect, avoid: CGRect? = nil, visible: Bool) {
         if label.text != words { label.text = words; label.sizeToFit() }
+        // never wider than the screen less 16 pt each side (a long leg's words end in "…")
+        let most = room.width - 32 - 20
+        if label.bounds.width > most { label.bounds.size.width = most }
+        label.lineBreakMode = .byTruncatingMiddle
         let w = label.bounds.width + 20, h: CGFloat = 28
         // the side away from the line: from the line's next point back through the end, 8 pt past the capsule's half
         var dx = p.x - q.x, dy = p.y - q.y
         let len = max(0.001, hypot(dx, dy)); dx /= len; dy /= len
-        let reach = 8 + abs(dx) * w / 2 + abs(dy) * h / 2
+        // its nearest edge 8 pt from the point along that way (31 Oct 07:27: the sum of both half sizes put a long
+        // capsule 40 pt and more away from its stop)
+        let ax = abs(dx), ay = abs(dy)
+        let reach = 8 + min(ax > 0.001 ? w / 2 / ax : .infinity, ay > 0.001 ? h / 2 / ay : .infinity)
         var centre = CGPoint(x: p.x + dx * reach, y: p.y + dy * reach)
-        // never off the screen (a start on the map's edge, Portugal): kept 8 pt inside it
-        if let sv = superview?.bounds, sv.width > w + 16 {
-            centre.x = min(sv.maxX - w / 2 - 8, max(sv.minX + w / 2 + 8, centre.x))
-            centre.y = min(sv.maxY - h / 2 - 8, max(sv.minY + h / 2 + 8, centre.y))
+        // never off the screen (a start on the map's edge, Portugal): kept 8 pt inside it; when that would put it over
+        // its own point, under the point, else over it (the capsule covered Silverstone's dot at the screen's edge)
+        if case let sv = room, sv.width > w + 16, sv.height > h + 16 {
+            func kept(_ c: CGPoint) -> CGPoint {
+                CGPoint(x: min(sv.maxX - w / 2 - 8, max(sv.minX + w / 2 + 8, c.x)),
+                        y: min(sv.maxY - h / 2 - 8, max(sv.minY + h / 2 + 8, c.y)))
+            }
+            func covers(_ c: CGPoint) -> Bool {
+                CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h).insetBy(dx: -6, dy: -6).contains(p)
+            }
+            centre = kept(centre)
+            if covers(centre) {
+                // over the point when the line leaves it downwards, under it when upwards (never across the line)
+                let below = kept(CGPoint(x: p.x, y: p.y + 8 + h / 2)), above = kept(CGPoint(x: p.x, y: p.y - 8 - h / 2))
+                let first = dy < 0 ? above : below, second = dy < 0 ? below : above
+                centre = !covers(first) ? first : second
+            }
         }
         bounds = CGRect(x: 0, y: 0, width: w, height: h)
+        planned = CGRect(x: centre.x - w / 2, y: centre.y - h / 2, width: w, height: h)
+        let visible = visible && !(avoid?.intersects(planned.insetBy(dx: -4, dy: -4)) ?? false)
         glass.frame = bounds
         label.frame = CGRect(x: 10, y: (h - label.bounds.height) / 2, width: label.bounds.width, height: label.bounds.height)
         if visible != showing {
