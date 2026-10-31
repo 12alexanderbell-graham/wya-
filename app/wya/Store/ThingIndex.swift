@@ -68,6 +68,11 @@ final class ThingIndex {
         last = (q, open, h)
         return h
     }
+    /// one thing by its key's id ("wd:Q19675"), once the index has come
+    func hit(_ id: String) -> Hit? {
+        let q = id.hasPrefix("wd:") ? String(id.dropFirst(3)) : id
+        return rows.first { $0.hit.id == q }?.hit
+    }
     /// is this hit found by its code (it leads the results)
     func byCode(_ h: Hit, _ query: String) -> Bool {
         let code = query.trimmingCharacters(in: .whitespaces).lowercased()

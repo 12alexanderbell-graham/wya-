@@ -356,6 +356,23 @@ struct ContentView: View {
     /// A THING TAPPED (7.4, 7.7): quick add stamps it with its region chain and country (or unstamps it); otherwise its
     /// card from the water
     private func thingTapped() {
+        // a collection's place (its map up): the card with its stop's line, or quick add
+        if let cid = map.placesCollection, let id = map.thingPressed,
+           let it = CollectionStore.shared.collection(cid)?.items.first(where: { $0.id == id }), let w = map.world, let place = w.placeIndex[it.cc] {
+            defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }
+            let line = CollectionStore.line(it)
+            guard head.quickStamp else {
+                RegionCardState.shared.open(it.key, name: it.name, parents: line.isEmpty ? w.places[place].n : line, place: place, map: map)
+                return
+            }
+            let stamped = MarkStore.shared.state(it.key).stamped
+            if stamped { Feel.lift() } else { Feel.stamp() }
+            Task {
+                if stamped { await TownStamps.unstamp(it.key, name: it.name, cc: it.cc) }
+                else { await TownStamps.stamp(it.key, name: it.name, cc: it.cc, source: .quick, place: place, at: it.at) }
+            }
+            return
+        }
         guard let id = map.thingPressed, let cc = map.placeOpenID, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }),
               let w = map.world, let place = map.placeOpen else { return }
         defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }

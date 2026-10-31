@@ -179,6 +179,12 @@ final class MapController {
         guard let w = world else { return nil }
         // PLACES (7.4): a town under the finger answers (its country is the press's place; the town darkens)
         // (outside the open country, or on the world, a country answers as ever: the tap opens it)
+        // A COLLECTION'S MAP (7.2): its places' marks answer, the press's place being the place's country
+        if placesMode, placesCollection != nil {
+            thingPressed = collectionHit(at: p)?.id
+            if let id = thingPressed, let it = CollectionStore.shared.collection(placesCollection!)?.items.first(where: { $0.id == id }),
+               let i = w.placeIndex[it.cc] { needsFrame = true; return i }
+        }
         if placesMode, let open = placeOpen {
             // your own places first (their marks sit over the towns), then the towns
             ownPressed = ownHit(at: p)
@@ -360,11 +366,13 @@ final class MapController {
     // MARK: PLACES (Part 7): our map's towns (PlacesMap.swift)
     /// Places is the mode: countries' fills drained; a country tapped opens with its towns
     var placesMode = false {
-        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace(); placesArea = nil } } }
+        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace(); placesArea = nil; placesCollection = nil } } }
     }
     /// THE CURRENT PLACES MAP when it is wider than a country (7.2): a continent or a world region by name; nil with a
     /// country open (placeOpen) or on Everywhere
     var placesArea: String?
+    /// the current Places map is a collection (7.2), by id
+    var placesCollection: String?
     /// the things' marks on screen now (id: frame), kept by the names view each frame, for the hit test
     @ObservationIgnored var thingFrames: [String: CGRect] = [:]
     /// the thing under the finger (7.4), by id

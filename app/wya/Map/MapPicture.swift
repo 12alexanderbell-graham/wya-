@@ -13,7 +13,7 @@ nonisolated enum MapPicture {
     private static let lime = SIMD3<Double>(0.8314, 0.8863, 0.2863)
 
     static func draw(world w: World, relief r: Relief?, box b0: SIMD4<Float>, own: Set<Int>?, everywhere: Bool,
-                     dots: [SIMD2<Float>], px: Int) -> CGImage? {
+                     dots: [SIMD2<Float>], plain: [SIMD2<Float>] = [], px: Int) -> CGImage? {
         guard px > 8 else { return nil }
         // the box with room round it, made square
         var x0 = Double(b0.x), y0 = Double(b0.y), x1 = Double(b0.z), y1 = Double(b0.w)
@@ -102,8 +102,14 @@ nonisolated enum MapPicture {
             guard let g = CGContext(data: buf.baseAddress, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
                                     space: rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
             g.translateBy(x: 0, y: CGFloat(px)); g.scaleBy(x: 1, y: -1)
-            g.setFillColor(red: lime.x, green: lime.y, blue: lime.z, alpha: 1)
             let d = CGFloat(px) / (everywhere ? 44 : 26)
+            // a collection's places not yet yours, in ink (half), under the lime ones
+            g.setFillColor(red: 0, green: 0, blue: 0, alpha: 0.55)
+            for p in plain {
+                let c = pt(p)
+                g.fillEllipse(in: CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d))
+            }
+            g.setFillColor(red: lime.x, green: lime.y, blue: lime.z, alpha: 1)
             for p in dots {
                 let c = pt(p)
                 g.fillEllipse(in: CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d))
