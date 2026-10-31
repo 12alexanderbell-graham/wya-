@@ -179,7 +179,8 @@ struct SheetContent: View {
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
             // HISTORY'S RANGE BAR (13.4) on the water, its centre at the water's top + 156
-            if water.historyUp, map.historyInfo != nil {
+            // (not under the journey's rows at full: it rode up over the head, 31 Oct 11:32)
+            if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving {
                 HistoryBar(map: map, width: L.W - 2 * L.sheetInset - 32)
                     .position(x: L.W / 2, y: form.top + 156)
             }
@@ -259,7 +260,7 @@ struct SheetContent: View {
                     .position(x: L.W / 2, y: captionY + 4)
                     .onTapGesture {
                         if water.stampedList { Feel.tap(); water.closeList() }
-                        else if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
+                        else if (water.historyUp ? (map.historyInfo?.count ?? 0) : count) > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
                         else { Feel.refuse() }
                     }
                     .accessibilityLabel("Stamped list")
