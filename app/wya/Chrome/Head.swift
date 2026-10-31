@@ -305,6 +305,8 @@ struct HeadView: View {
             if v { putAIBack() }
             // quick stamping ends with the tools (3.6), unless Map settings' "Always on" (Part 4.7, not built yet)
             else if head.quickStamp { withAnimation(Motion.chrome) { head.quickStamp = false } }
+            // and history goes off with them (13.4: "I come back, they should have restarted")
+            if !v, head.history { head.history = false }
         }
         // held still, the dot becomes the gear over the hold; let go early and it goes back; held to the end,
         // settings open and the gear stays, rolling

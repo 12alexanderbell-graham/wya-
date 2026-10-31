@@ -90,6 +90,9 @@ final class TestDriver {
                     h.pullMoved(v - h.pull)
                     if a == "ai" || a == "off" { h.settlePull(to: v >= HeadState.aiStop ? 1 : 0) }
                 case "tools": head?.toolsOpen = a == "on"
+                case "history": head?.history = a == "on"
+                // visit <id> <yyyy-mm-dd>: the country stamped with that day as a visit (test data for history lines)
+                case "visit": if p.count > 2 { await MarkStore.shared.stamp(.country(a), day: p[2]) }
                 case "quick": head?.quickStamp = a == "on"
                 case "dial": head?.testDial = a == "off" ? nil : CGFloat(Double(a) ?? 0)
                 case "mode": head?.mode = HeadState.Mode(rawValue: Int(a) ?? 0) ?? .countries
