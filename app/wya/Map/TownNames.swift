@@ -15,14 +15,58 @@ final class TownNamesView: UIView {
     private struct Shown { let id: String; let holder: UIView; let halo: UILabel; let ink: UILabel; let size: CGSize }
     private var shown: [String: Shown] = [:]
     private var key: String?
-    private var orderFor: (cc: String, dots: Bool, order: [Pick])?
-    private static let font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+    /// THE PLAN (LabelPlan): the zoom from which each town's and thing's name shows, worked out once per set of
+    /// countries (or collection), Town dots and framing zoom
+    private var plan: LabelPlan?
+    private var planKey = ""
+    /// a planned town's scene and index, by its plan id
+    private var townPick: [String: Pick] = [:]
+    /// the town names up now, by plan id (a tap on one opens its page)
+    private(set) var nameFrames: [String: CGRect] = [:]
+    /// the things' names up now, by thing id (a tap on one opens its page)
+    private(set) var thingNameFrames: [String: CGRect] = [:]
+    /// (31 Oct: bold system type with a hard cream outline read badly. Now as Apple Maps
+    /// sets its names: San Francisco, medium, black, with a soft cream glow round the letters; Tellus was tried and read
+    /// as handwriting at this size)
+    private static let font = UIFont.systemFont(ofSize: 13, weight: .medium)
+    /// the soft glow behind a name (a shadow with no offset, cached as a picture: the name never changes)
+    static func glow(_ l: UILabel) {
+        l.layer.shadowColor = UIColor(red: 0xfb / 255, green: 0xf6 / 255, blue: 0xf2 / 255, alpha: 1).cgColor
+        l.layer.shadowOpacity = 1
+        l.layer.shadowRadius = 2.5
+        l.layer.shadowOffset = .zero
+        l.layer.shouldRasterize = true
+        l.layer.rasterizationScale = UIScreen.main.scale
+    }
+    /// what a name is drawn in
+    static func words(_ name: String, _ font: UIFont) -> NSAttributedString {
+        NSAttributedString(string: name, attributes: [.font: font, .foregroundColor: UIColor.black])
+    }
     private static let cream = UIColor(red: 0xfb / 255, green: 0xf6 / 255, blue: 0xf2 / 255, alpha: 1)
+
+    /// the one on screen (the test driver's `nametap`)
+    nonisolated(unsafe) static weak var current: TownNamesView?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        Self.current = self
         isUserInteractionEnabled = false
         backgroundColor = .clear
+    }
+
+    /// TEST ONLY: `nametap <x> <y>` (a tap on a name there, as the map's confirmed tap hands it over), `names` (the names
+    /// up now, logged)
+    static func drive(_ p: [String], map: MapController?) {
+        guard let v = current, let m = map else { return }
+        if p.first == "names" {
+            let towns = v.nameFrames.keys.compactMap { v.townOf($0) }.compactMap { m.townScenes[$0.cc]?.towns[$0.i].name }.sorted()
+            NSLog("wya names %d towns: %@; %d things", towns.count, towns.joined(separator: ", "), v.thingNameFrames.count)
+            return
+        }
+        guard p.count > 2 else { return }
+        let pt = CGPoint(x: Double(p[1]) ?? 0, y: Double(p[2]) ?? 0)
+        if let h = v.nameHit(pt) { NSLog("wya nametap %@ %@: %@", h.town ?? "-", h.thing ?? "-", v.openPage(h, m) ? "page" : "no page") }
+        else { NSLog("wya nametap: nothing") }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -36,8 +80,102 @@ final class TownNamesView: UIView {
         if abs(alpha - a) > 0.001 { alpha = a }
         // (the journey's capsules are clear glass: names under them read through as a muddle, so they keep clear)
         let own = ownMarks(m) + (HistoryLineView.current?.capsuleFrames ?? [])
+        ensurePlan(m)
         let named = names(m, moving: moving, taken: own)
         thingMarks(m, taken: named)
+    }
+
+    /// the plan for what is on the map now: the towns of the countries in play (the same candidates as before: a shape,
+    /// a big town with none, or every town with Town dots on; sections from 10x), and their things (or a collection's
+    /// places), all in one plan so a thing's name and a town's never overlap
+    private func ensurePlan(_ m: MapController) {
+        let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
+        let near = m.placesMode && m.placeOpen == nil
+        let k0 = near ? m.townsK / 3 : m.continentK
+        let collection = m.placesMode ? m.placesCollection.flatMap { CollectionStore.shared.collection($0) } : nil
+        let kThing: Double? = collection != nil ? (m.continentK ?? m.worldKMin) : !m.placesMode ? nil : m.placeOpen == nil ? m.townsK : m.continentK
+        let dotsOn = MapSettingsStore.shared.value.townDots
+        let thingsCount = ccs.reduce(0) { $0 + (ThingStore.shared.things($1)?.count ?? 0) }
+        let pk = "\(ccs.joined(separator: ","))|\(dotsOn)|\(k0 ?? -1)|\(kThing ?? -1)|\(collection?.id ?? "")|\(thingsCount)"
+        guard pk != planKey else { return }
+        planKey = pk
+        var items: [LabelPlan.Item] = []
+        townPick = [:]
+        if let k0 {
+            for cc in ccs {
+                guard let sc = m.townScenes[cc] else { continue }
+                for i in sc.towns.indices {
+                    let t = sc.towns[i]
+                    let whole = t.part.isEmpty
+                    guard dotsOn || sc.runs[i] != nil || (whole && Self.bigShapeless(sc, i)) else { continue }
+                    let size = Self.measure(t.name)
+                    // a name once its shape is 12 pt across (a big shapeless city at its point by the zoom alone), from 3x
+                    // the framing zoom; a city's sections from 10x
+                    let b = sc.box(i)
+                    let across = Double(max(b.z - b.x, b.w - b.y))
+                    let atPoint = sc.runs[i] == nil
+                    // (a big city before the best-known things round it: 31 Oct 11:07, Frankfurt Airport was named
+                    // before Frankfurt; 500,000 people from 2x, 100,000 from 2.5x, the rest from 3x)
+                    var th = (t.people >= 500_000 ? 2 : t.people >= 100_000 ? 2.5 : 3) * k0
+                    if !atPoint, across > 0 { th = max(th, 12 / across) }
+                    if !whole { th = max(th, 10 * k0) }
+                    let id = "t:\(cc)#\(i)"
+                    townPick[id] = Pick(cc: cc, i: i)
+                    items.append(LabelPlan.Item(id: id, at: SIMD2(Double(sc.at[i].x), Double(sc.at[i].y)),
+                                                box: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height),
+                                                threshold: th, rank: Double(t.kind) * 1e9 + Double(t.people)))
+                }
+            }
+        }
+        if let kThing {
+            let all: [ThingStore.Thing] = collection.map { c in
+                c.items.map { ThingStore.Thing(id: $0.id, name: $0.name, kind: 11, at: $0.at, fame: 9, line: "", photo: "") }
+            } ?? ccs.flatMap { ThingStore.shared.things($0) ?? [] }
+            for t in all {
+                let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
+                let w = thingWidths[t.id] ?? {
+                    // (the whole name: nothing cut off at rest; 31 Oct 11:05 "Maulbronn Monaste…")
+                    let w = ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+                    thingWidths[t.id] = w
+                    return w
+                }()
+                // the mark (10 pt at most) and its name to its right
+                items.append(LabelPlan.Item(id: "h:" + t.id, at: SIMD2(Double(t.at.x), Double(t.at.y)),
+                                            box: CGRect(x: -5, y: -9, width: 10 + 3 + w, height: 18),
+                                            threshold: kThing * start, rank: Double(t.fame)))
+            }
+        }
+        plan = items.isEmpty ? nil : LabelPlan(items)
+        thingKey = []
+    }
+
+    /// a name under a finger (a town's or a thing's, as it is on screen now), for its page
+    func nameHit(_ p: CGPoint) -> (town: String?, thing: String?)? {
+        for (id, f) in nameFrames where f.insetBy(dx: -4, dy: -6).contains(p) { return (id, nil) }
+        for (id, f) in thingNameFrames where f.insetBy(dx: -4, dy: -6).contains(p) { return (nil, id) }
+        return nil
+    }
+    /// a planned town's scene and index
+    func townOf(_ id: String) -> (cc: String, i: Int)? { townPick[id].map { ($0.cc, $0.i) } }
+
+    /// A NAME TAPPED (31 Oct): a name opens its page wherever there is one: the town's or thing's page, growing from its name; false when it has none (a collection's stop)
+    @discardableResult
+    func openPage(_ hit: (town: String?, thing: String?), _ m: MapController) -> Bool {
+        let country = { (cc: String) -> String in m.world.flatMap { w in w.placeIndex[cc].map { w.places[$0].n } } ?? "" }
+        if let id = hit.town, let (cc, i) = townOf(id), let sc = m.townScenes[cc], i < sc.towns.count {
+            let t = sc.towns[i]
+            let parents = t.region.isEmpty ? country(cc) : "\(t.region), \(country(cc))"
+            Feel.tap()
+            PlacePageState.shared.open(t.key, name: t.name, what: "Town in \(parents)", country: cc, from: nameFrames[id] ?? .zero)
+            return true
+        }
+        if let id = hit.thing, let (cc, t) = ThingStore.shared.thing(id) {
+            let line = t.line.isEmpty ? country(cc) : t.line.prefix(1).uppercased() + t.line.dropFirst()
+            Feel.tap()
+            PlacePageState.shared.open(t.key, name: t.name, what: line, country: cc, from: thingNameFrames[id] ?? .zero)
+            return true
+        }
+        return false
     }
 
     // MARK: THINGS' MARKS (7.4, D5; 31 Oct 01:17: "it needs to be really elegant. Think about how Apple Maps would do it"):
@@ -49,12 +187,12 @@ final class TownNamesView: UIView {
     // except one you stamped or wished, whose mark always shows; famous first, at most 40 on screen. The kind's icon
     // inside waits for the twelve kinds' icons (their review, Step 3b).
     private var thingViews: [String: (dot: UIView, name: UILabel)] = [:]
-    private static let thingFont = UIFont.systemFont(ofSize: 12, weight: .semibold)
+    private static let thingFont = UIFont.systemFont(ofSize: 12, weight: .medium)
     /// each thing's name's width (measured once)
     private var thingWidths: [String: CGFloat] = [:]
     /// what the marks were last laid out for (the camera, the room, the marks, the town names): unchanged, nothing is done
     private var thingKey: [Double] = []
-    private func thingMarks(_ m: MapController, taken named: [CGRect]) {
+    private func thingMarks(_ m: MapController, taken: [CGRect]) {
         // the things of the open country, or a collection's places (its map up: every one of them is its map's place, so
         // all are shown from the start, names where they have room)
         let collection = m.placesCollection.flatMap { CollectionStore.shared.collection($0) }
@@ -71,52 +209,45 @@ final class TownNamesView: UIView {
         // come in no sooner than in an open Germany and never crowd the towns of the countries round)
         guard m.placesMode, !all.isEmpty,
               let k0 = collection != nil ? (m.continentK ?? m.worldKMin) : m.placeOpen == nil ? m.townsK : m.continentK else {
-            clearThings(); m.thingFrames = [:]; thingKey = []; return
+            clearThings(); m.thingFrames = [:]; thingNameFrames = [:]; thingKey = []; return
         }
         let marksNow = Double(MarkStore.shared.marks.count) + Double(MarkStore.shared.marks.values.filter { $0.stamped }.count) * 1e6
         let key: [Double] = [m.c.x, m.c.y, m.k, Double(bounds.width), Double(bounds.height), marksNow, Double(all.count),
-                             Double(m.thingPressed?.hashValue ?? 0), Double(named.count)]
+                             Double(m.thingPressed?.hashValue ?? 0), Double(taken.count)]
         guard key != thingKey else { return }
         thingKey = key
         let z = m.k / k0
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
-        var taken = named
+        // FROM THE PLAN (31 Oct 11:10): a thing is up once the zoom is past its own (its fame's band, kept clear of every
+        // name before it), its name always to its right; one you stamped or wished keeps its mark before that, without
+        // its name
         var frames: [String: CGRect] = [:]
         var named = Set<String>()
+        var nameRects: [String: CGRect] = [:]
         for t in all {
-            guard frames.count < 40 else { break }
             let st = MarkStore.shared.state(t.key)
             // (one found by search and shown is marked too while it is darkened)
             let marked = st.stamped || st.wished || m.thingPressed == t.id
-            let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
-            guard z >= start || m.thingPressed == t.id else { continue }
+            let up = (plan?.zoom["h:" + t.id] ?? .infinity) <= m.k * 1.0001
+            guard up || marked else { continue }
             let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
             guard box.contains(q) else { continue }
+            let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
             let u = start == 0 ? 1 : CGFloat(min(1, max(0, (z - start) / start)))
             let size = 6 + 4 * u * u * (3 - 2 * u)
             let r = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
-            let w = thingWidths[t.id] ?? {
-                let w = min(150, ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4)
-                thingWidths[t.id] = w
-                return w
-            }()
-            // its name on the right; where that has no room, on the left, then under, then over (as Apple Maps moves a label)
-            let places = [CGRect(x: r.maxX + 3, y: q.y - 8, width: w, height: 16),
-                          CGRect(x: r.minX - 3 - w, y: q.y - 8, width: w, height: 16),
-                          CGRect(x: q.x - w / 2, y: r.maxY + 1, width: w, height: 16),
-                          CGRect(x: q.x - w / 2, y: r.minY - 17, width: w, height: 16)]
-            let markFree = !taken.contains { $0.intersects(r.insetBy(dx: -2, dy: -2)) }
-            let at = places.firstIndex { nr in box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -3, dy: -3)) } }
-            let nameFree = at != nil
-            let nr = places[at ?? 0]
-            guard (markFree && (nameFree || marked)) || m.thingPressed == t.id else { continue }
+            let w = thingWidths[t.id] ?? ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+            let nr = CGRect(x: q.x + 8, y: q.y - 9, width: w, height: 18)
+            // (only what is not planned can still be in the way: your own places' marks, the journey's capsules)
+            let nameFree = up && box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -1, dy: -1)) }
+            // (a mark without its name says nothing: only one you stamped or wished shows without it)
+            guard nameFree || marked else { continue }
             let v = thingViews[t.id] ?? {
                 let d = UIView(), l = UILabel()
                 d.isUserInteractionEnabled = false; l.isUserInteractionEnabled = false
-                l.attributedText = NSAttributedString(string: t.name, attributes: [
-                    .font: Self.thingFont, .foregroundColor: UIColor.black, .strokeColor: Self.cream, .strokeWidth: -3.0,
-                ])
+                l.attributedText = Self.words(t.name, Self.thingFont)
+                Self.glow(l)
                 l.lineBreakMode = .byTruncatingTail
                 addSubview(d); addSubview(l)
                 thingViews[t.id] = (d, l)
@@ -126,13 +257,13 @@ final class TownNamesView: UIView {
                 : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.beigeDark)
             v.dot.frame = r
             v.dot.layer.cornerRadius = size / 2
-            taken.append(r)
             frames[t.id] = r
             v.name.frame = nr
-            v.name.textAlignment = at == 1 ? .right : (at ?? 0) >= 2 ? .center : .left
+            v.name.textAlignment = .left
             v.name.isHidden = !nameFree
-            if nameFree { taken.append(nr); named.insert(t.id) }
+            if nameFree { named.insert(t.id); nameRects[t.id] = nr }
         }
+        thingNameFrames = nameRects
         for (id, v) in thingViews where frames[id] == nil { v.dot.removeFromSuperview(); v.name.removeFromSuperview(); thingViews[id] = nil }
         // (a named thing answers a finger on its name too)
         var hits = frames
@@ -180,9 +311,7 @@ final class TownNamesView: UIView {
             mk.dot.frame = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
             mk.dot.layer.cornerRadius = size / 2
             if named {
-                mk.name.attributedText = NSAttributedString(string: o.name, attributes: [
-                    .font: Self.font, .foregroundColor: UIColor.black, .strokeColor: Self.cream, .strokeWidth: -3.0,
-                ])
+                if mk.name.attributedText?.string != o.name { mk.name.attributedText = Self.words(o.name, Self.font); Self.glow(mk.name) }
                 let w = ceil((o.name as NSString).size(withAttributes: [.font: Self.font]).width) + 4
                 let r = CGRect(x: q.x - w / 2, y: q.y + size / 2 + 2, width: w, height: 18)
                 let fits = box.contains(r) && !taken.contains { $0.intersects(r.insetBy(dx: -4, dy: -4)) }
@@ -212,63 +341,33 @@ final class TownNamesView: UIView {
         if key != setKey { clear(); key = setKey }
         let k = m.k
         // from 3x the country's framing zoom (each name rolling in across its own band from there)
-        guard k >= 3 * k0 * 0.999 else { clear(); return own }
+        guard k >= 2 * k0 * 0.999 else { clear(); return own }
         let W = bounds.width
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
-        // the candidates, in order: capitals, regional capitals, then by people (each scene is biggest first); several
-        // countries' merged the same way; sections after every town
-        // (worked out once per set of countries, and only the towns that can ever be named: those with a shape, or every
-        // town with Town dots on)
-        let dotsOn = MapSettingsStore.shared.value.townDots
-        if orderFor?.cc != setKey || orderFor?.dots != dotsOn {
-            var whole: [(cc: String, i: Int, kind: Int, people: Int)] = [], parts: [(cc: String, i: Int, kind: Int, people: Int)] = []
-            for cc in ccs {
-                guard let sc = m.townScenes[cc] else { continue }
-                for i in sc.towns.indices {
-                    let t = sc.towns[i]
-                    if t.part.isEmpty, dotsOn || sc.runs[i] != nil || Self.bigShapeless(sc, i) { whole.append((cc, i, t.kind, t.people)) }
-                    else if !t.part.isEmpty, dotsOn || sc.runs[i] != nil { parts.append((cc, i, t.kind, t.people)) }
-                }
-            }
-            whole.sort { ($0.kind, $0.people) > ($1.kind, $1.people) }
-            parts.sort { $0.people > $1.people }
-            orderFor = (setKey, dotsOn, (whole + parts).map { Pick(cc: $0.cc, i: $0.i) })
-        }
-        var order = orderFor?.order ?? []
-        // sections only from 10x the framing zoom (their city's name first)
-        if k / k0 < 10 { order = order.filter { m.townScenes[$0.cc]?.towns[$0.i].part.isEmpty ?? true } }
-        // (pure priority: a name up never holds its place against a bigger town's, so a city's name is never kept out
-        // by smaller ones that came up first on the way in)
+        // FROM THE PLAN (31 Oct 11:10): a name is up once the zoom is past its own (LabelPlan), so names never swap while
+        // you zoom or pan; it rolls in over the first 8% of zoom past it (by the zoom), whole at rest
         var taken: [CGRect] = own
         var keep: [String: CGFloat] = [:]
-        for c in order {
-            guard keep.count < 8, let sc = m.townScenes[c.cc] else { if keep.count >= 8 { break } else { continue } }
-            let i = c.i, id = c.id
-            // a name only once its shape is 12 pt across (no shape, no name, unless Town dots are on)
-            let b = sc.box(i)
-            let across = CGFloat(max(b.z - b.x, b.w - b.y)) * CGFloat(k)
-            let dots = MapSettingsStore.shared.value.townDots
-            // a big city whose built-up land is all its sections' (Frankfurt's is Gallus' and the others') is named at its
-            // point by the zoom alone
-            let atPoint = sc.runs[i] == nil && (dots || Self.bigShapeless(sc, i))
-            guard across >= 12 || atPoint else { continue }
-            // its roll: from 12 pt across to 16 (and from 3x to 3.3x the framing zoom), by the zoom
-            let a = min(1, max(0, (across - 12) / 4)), z = min(1, max(0, CGFloat((k / k0 - 3) / 0.3)))
-            var p = atPoint ? z : min(a, z)
-            if !moving { p = p >= 0.5 ? 1 : 0 }
-            guard p > 0.001 || shown[id] != nil else { continue }
-            let size = shown[id]?.size ?? Self.measure(sc.towns[i].name)
-            let pt = m.screenPoint(SIMD2(Double(sc.at[i].x), Double(sc.at[i].y)))
-            let r = CGRect(x: pt.x - size.width / 2, y: pt.y - size.height / 2, width: size.width, height: size.height)
-            guard box.contains(r) else { continue }
-            let clear4 = r.insetBy(dx: -4, dy: -4)
-            guard !taken.contains(where: { $0.intersects(clear4) }) else { continue }
-            taken.append(r)
-            keep[id] = p
-            place(id, name: sc.towns[i].name, at: r, progress: p, size: size)
+        if let plan {
+            for e in plan.ordered {
+                guard e.zoom <= k * 1.0001 else { break }
+                guard e.id.hasPrefix("t:"), let pick = townPick[e.id], let sc = m.townScenes[pick.cc], pick.i < sc.towns.count else { continue }
+                var p = CGFloat(min(1, max(0, (k / e.zoom - 1) / 0.08)))
+                if !moving { p = 1 }
+                let size = shown[e.id]?.size ?? Self.measure(sc.towns[pick.i].name)
+                let pt = m.screenPoint(SIMD2(Double(sc.at[pick.i].x), Double(sc.at[pick.i].y)))
+                let r = CGRect(x: pt.x - size.width / 2, y: pt.y - size.height / 2, width: size.width, height: size.height)
+                guard box.contains(r) else { continue }
+                // (only your own places' marks and the journey's capsules can still be in the way: they are not planned)
+                guard !own.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -4)) }) else { continue }
+                taken.append(r)
+                keep[e.id] = p
+                place(e.id, name: sc.towns[pick.i].name, at: r, progress: p, size: size)
+            }
         }
         for (id, s) in shown where keep[id] == nil { s.holder.removeFromSuperview(); shown[id] = nil }
+        nameFrames = keep.keys.reduce(into: [:]) { d, id in if let s = shown[id] { d[id] = s.holder.frame } }
         return taken
     }
     private struct Pick { let cc: String; let i: Int; var id: String { "\(cc)#\(i)" } }
@@ -280,10 +379,9 @@ final class TownNamesView: UIView {
             holder.clipsToBounds = true
             holder.isUserInteractionEnabled = false
             let halo = UILabel(), ink = UILabel()
-            halo.attributedText = NSAttributedString(string: name, attributes: [
-                .font: Self.font, .foregroundColor: Self.cream, .strokeColor: Self.cream, .strokeWidth: 4 * 100 / 13,
-            ])
-            ink.attributedText = NSAttributedString(string: name, attributes: [.font: Self.font, .foregroundColor: UIColor.black])
+            halo.isHidden = true
+            ink.attributedText = Self.words(name, Self.font)
+            Self.glow(ink)
             halo.textAlignment = .center; ink.textAlignment = .center
             holder.addSubview(halo); holder.addSubview(ink)
             addSubview(holder)
@@ -291,7 +389,7 @@ final class TownNamesView: UIView {
             shown[i] = s
         }
         // the holder is the name's box with room for its halo; the letters rise into it by the zoom's progress
-        let pad: CGFloat = 3
+        let pad: CGFloat = 4
         s.holder.frame = r.insetBy(dx: -pad, dy: -pad)
         let y = pad + (1 - p) * (size.height + pad)
         let f = CGRect(x: pad, y: y, width: size.width, height: size.height)
@@ -310,5 +408,6 @@ final class TownNamesView: UIView {
     private func clear() {
         for s in shown.values { s.holder.removeFromSuperview() }
         shown = [:]
+        nameFrames = [:]
     }
 }

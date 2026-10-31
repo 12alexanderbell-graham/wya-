@@ -284,6 +284,100 @@ final class HistoryLineView: UIView {
         if m.historyTrack == nil && shown <= 0.001 { self.track = nil; builtCount = -1; isHidden = true }
     }
 
+    /// THE JOURNEY'S HOLD MENU (13.4): Share this journey · Open the start · Open the end (the line, a leg or a capsule)
+    func menu(_ m: MapController) -> UIMenu? {
+        guard let track, let first = track.stops.first, let last = track.stops.last else { return nil }
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let share = UIAction(title: "Share this journey") { [weak self] _ in after { self?.shareJourney(m) } }
+        let start = UIAction(title: "Open the start") { _ in after { Self.openPage(first, m) } }
+        let end = UIAction(title: "Open the end", attributes: track.stops.count > 1 ? [] : .disabled) { _ in
+            after { Self.openPage(last, m) }
+        }
+        return UIMenu(children: [share, start, end])
+    }
+    /// a stop's place page, through the page link (as Share's links open)
+    private static func openPage(_ s: HistoryTrack.Stop, _ m: MapController) {
+        guard let u = URL(string: "wya://page/\(s.key.description)") else { return }
+        Task { @MainActor in
+            if !(await DeepLink.open(u, map: m, close: {})) { Feel.refuse() }
+        }
+    }
+    /// SHARE THIS JOURNEY: a square picture (no rounded corners) of the map as it is now, the line and its capsules on it,
+    /// the room between the head and the water, our logo small in its corner, through the system share sheet
+    func shareJourney(_ m: MapController, present: Bool = true) {
+        guard let map = superview, let track else { return }
+        let rr = m.layout.room(sheetTop: m.sheetTop > 0 ? m.sheetTop : m.layout.top(.quarter))
+        let side = min(map.bounds.width, rr.upperBound - rr.lowerBound)
+        // centred on the journey as it is on screen (31 Oct 10:58: centred on the room, it cut the line's top off), kept
+        // inside the map
+        let pts = track.points.map { m.screenPoint($0) }
+        let lo = CGPoint(x: pts.map(\.x).min() ?? map.bounds.midX, y: pts.map(\.y).min() ?? map.bounds.midY)
+        let hi = CGPoint(x: pts.map(\.x).max() ?? map.bounds.midX, y: pts.map(\.y).max() ?? map.bounds.midY)
+        let cx: CGFloat = Swift.min(map.bounds.maxX - side / 2, Swift.max(map.bounds.minX + side / 2, (lo.x + hi.x) / 2))
+        let cy: CGFloat = Swift.min(map.bounds.maxY - side / 2, Swift.max(map.bounds.minY + side / 2, (lo.y + hi.y) / 2))
+        let crop = CGRect(x: cx - side / 2, y: cy - side / 2, width: side, height: side)
+        let logo = ImageRenderer(content: LogoMark().frame(width: 40, height: 40))
+        logo.scale = 3
+        let mark = logo.uiImage
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        format.opaque = true
+        let img = UIGraphicsImageRenderer(size: crop.size, format: format).image { _ in
+            map.drawHierarchy(in: CGRect(origin: CGPoint(x: -crop.minX, y: -crop.minY), size: map.bounds.size), afterScreenUpdates: false)
+            mark?.draw(in: CGRect(x: side - 40 - 14, y: side - 40 - 14, width: 40, height: 40))
+        }
+        #if DEBUG
+        if let d = img.pngData() { try? d.write(to: URL(fileURLWithPath: Snap.dir + "/journey.png")) }
+        #endif
+        guard present else { return }
+        let vc = UIActivityViewController(activityItems: [img], applicationActivities: nil)
+        let root = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+        var top = root
+        while let next = top?.presentedViewController { top = next }
+        top?.present(vc, animated: true)
+    }
+
+    /// TEST ONLY (the test driver's `history …`): on|off; tap <x> <y> (a tap on the journey there, as the map's
+    /// confirmed tap hands it over); share; open start|end (the menu's rows); pull <dy> (the water grabbed at its top,
+    /// moved dy pt, let go still). Kept out of the driver's one long switch, which compiles slowly.
+    static func drive(_ p: [String], map: MapController?, water: Water?, head: HeadState?) async {
+        let a = p.count > 1 ? p[1] : ""
+        switch a {
+        case "tap":
+            guard p.count > 3, let m = map, let v = current else { return }
+            let pt = CGPoint(x: Double(p[2]) ?? 0, y: Double(p[3]) ?? 0)
+            if let h = v.hit(pt, m) {
+                NSLog("wya history tap %@", String(describing: h))
+                v.tapped(h, m)
+            } else {
+                NSLog("wya history tap: nothing")
+                v.dismissLeg(m)
+            }
+        case "share":
+            // (the picture only, into the test folder; "share sheet" also opens the system sheet)
+            if let m = map, let v = current { v.shareJourney(m, present: p.count > 2 && p[2] == "sheet") }
+        case "open":
+            guard p.count > 2, let m = map, let t = m.historyTrack, let first = t.stops.first, let last = t.stops.last else { return }
+            let s: HistoryTrack.Stop = p[2] == "end" ? last : first
+            guard let u = URL(string: "wya://page/" + s.key.description) else { return }
+            let ok: Bool = await DeepLink.open(u, map: m, close: {})
+            let said: String = ok ? "opened" : "not opened"
+            NSLog("wya history open %@: %@", s.key.description, said)
+        case "pull":
+            guard p.count > 2, let w = water else { return }
+            let dy = CGFloat(Double(p[2]) ?? 0)
+            let y0: CGFloat = w.level
+            w.begin(at: CGPoint(x: 220, y: y0))
+            for i in 1 ... 10 { w.move(to: CGPoint(x: 220, y: y0 + dy * CGFloat(i) / 10)) }
+            try? await Task.sleep(for: .milliseconds(300))
+            w.end(velocity: 0)
+            let state: String = head?.history == true ? "on" : "off"
+            NSLog("wya history pull %.0f: history %@", Double(dy), state)
+        default:
+            head?.history = a == "on"
+        }
+    }
+
     /// the capsules up, in this view's points (the map's names and marks keep clear of them)
     var capsuleFrames: [CGRect] {
         guard !isHidden else { return [] }
@@ -337,7 +431,8 @@ final class HistoryLineView: UIView {
     private static func distance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
         let dx = b.x - a.x, dy = b.y - a.y
         let l2 = dx * dx + dy * dy
-        let t = l2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0
+        let along: CGFloat = l2 > 0 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0
+        let t: CGFloat = Swift.max(0, Swift.min(1, along))
         return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
     /// "Lisbon → Madrid · 3–9 Mar 2024" (13.4): the two stops' arrival days, the month and year said once where shared
@@ -409,7 +504,9 @@ final class HistoryCapsule: UIView {
         // its nearest edge 8 pt from the point along that way (31 Oct 07:27: the sum of both half sizes put a long
         // capsule 40 pt and more away from its stop)
         let ax = abs(dx), ay = abs(dy)
-        let reach = 8 + min(ax > 0.001 ? w / 2 / ax : .infinity, ay > 0.001 ? h / 2 / ay : .infinity)
+        let byWidth: CGFloat = ax > 0.001 ? w / 2 / ax : CGFloat.infinity
+        let byHeight: CGFloat = ay > 0.001 ? h / 2 / ay : CGFloat.infinity
+        let reach: CGFloat = 8 + Swift.min(byWidth, byHeight)
         var centre = CGPoint(x: p.x + dx * reach, y: p.y + dy * reach)
         // never off the screen (a start on the map's edge, Portugal): kept 8 pt inside it; when that would put it over
         // its own point, under the point, else over it (the capsule covered Silverstone's dot at the screen's edge)
