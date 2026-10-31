@@ -177,6 +177,10 @@ struct SheetContent: View {
                     .animation(Motion.chrome, value: cosmosOut)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
+            // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
+            if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, map.regionScene == nil {
+                PlacesShelf(water: water, map: map, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
+            }
             // REGIONS' SELECTION MENU (6.3), riding the water's top; kept while its rows leave
             if water.menuShown || water.menuLeaving, let head = water.head {
                 RegionsMenu(water: water, map: map, head: head, form: form).transition(.identity)
@@ -209,7 +213,7 @@ struct SheetContent: View {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
                     Caption(name: map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
-                            count: map.placesMode ? (placesCaption?.count ?? map.townCount) : map.sunPicked ? map.streakWeeks : count,
+                            count: map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count,
                             tail: map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
                             night: FullView.night(form.page), visible: captionShown)
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
@@ -300,6 +304,11 @@ struct SheetContent: View {
 
     /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
     private var placesCaption: (name: String, count: Int, tail: String)? {
+        // a continent's or world region's map: its name and your towns in it (no "of N" yet: its towns are not all read)
+        if let a = map.placesArea {
+            _ = map.townsVersion
+            return (a, map.stampedTowns(on: map.placesPick), "")
+        }
         guard let i = map.placeOpen, let w = map.world, let cc = map.placeOpenID else { return nil }
         let all = map.townScenes[cc]?.towns.count
         _ = map.townsVersion
@@ -318,6 +327,8 @@ struct SheetContent: View {
     /// the solar system is down out of the water while something else is the water's content
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
+            // Places' 50% holds the shelf (7.5), so the solar system is down out of the water there
+            || map.placesMode
     }
     @State private var captionShown = false
 }

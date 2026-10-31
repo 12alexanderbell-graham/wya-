@@ -126,6 +126,84 @@ extension MapController {
         return screenRect(f)
     }
 
+    /// A PLACES MAP PICKED (7.5's cards): Everywhere (the world), a country (opened with its towns), a continent (its own
+    /// framing, the rest of the world into the blue, as Countries' continent) or a world region (its countries framed)
+    enum PlacesPick: Hashable {
+        case everywhere, country(Int), continent(String), region(String)
+        var title: String { switch self { case .everywhere: "Everywhere"; case .continent(let k), .region(let k): k; case .country: "" } }
+    }
+    var placesPick: PlacesPick {
+        if let i = placeOpen { return .country(i) }
+        if let a = placesArea { return Self.continents.contains(a) ? .continent(a) : .region(a) }
+        return .everywhere
+    }
+    static let continents = ["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"]
+    func showPlacesMap(_ pick: PlacesPick) {
+        guard placesMode, world != nil else { return }
+        switch pick {
+        case .everywhere:
+            placesArea = nil
+            closePlace()
+            goHome()
+        case .country(let i):
+            placesArea = nil
+            if placeOpen == i { frameRegion(i) } else { openPlace(i) }
+        case .continent(let k):
+            closePlace()
+            placesArea = k
+            show(continent: k)
+        case .region(let name):
+            closePlace()
+            placesArea = name
+            guard let f = box(of: pick) else { return }
+            frameArea(SIMD4(Double(f.x), Double(f.y), Double(f.z), Double(f.w)))
+        }
+    }
+    /// a pick's box on the map: the world, a country's, a continent's own view, a world region's countries together (a
+    /// far-off island of one of them left out when it would make the frame a hemisphere wide)
+    func box(of pick: PlacesPick) -> SIMD4<Float>? {
+        guard let w = world else { return nil }
+        switch pick {
+        case .everywhere: return SIMD4(0, 0, w.width, w.height)
+        case .country(let i): return w.frame(of: i)
+        case .continent(let k):
+            if let v = w.contViews[k] { return SIMD4(Float(v.x), Float(v.y), Float(v.z), Float(v.w)) }
+            fallthrough
+        default:
+            let boxes = (members(of: pick) ?? []).compactMap { w.frame(of: $0) }
+            guard !boxes.isEmpty else { return nil }
+            let big = boxes.max { ($0.z - $0.x) * ($0.w - $0.y) < ($1.z - $1.x) * ($1.w - $1.y) }!
+            let mid = SIMD2((big.x + big.z) / 2, (big.y + big.w) / 2)
+            let reach = w.width * 0.18
+            var f = big
+            for b in boxes where abs((b.x + b.z) / 2 - mid.x) < reach && abs((b.y + b.w) / 2 - mid.y) < reach {
+                f = SIMD4(min(f.x, b.x), min(f.y, b.y), max(f.z, b.z), max(f.w, b.w))
+            }
+            return f
+        }
+    }
+    /// the places of a pick (the world's place indices), for counting and pictures
+    func members(of pick: PlacesPick) -> [Int]? {
+        guard let w = world else { return nil }
+        switch pick {
+        case .everywhere: return nil
+        case .country(let i): return [i]
+        case .continent(let k): return w.places.indices.filter { w.places[$0].cont == k }
+        case .region(let n): return WorldRegions.members(n).compactMap { w.placeIndex[$0] }
+        }
+    }
+    /// your stamped towns (and own places) on a pick
+    func stampedTowns(on pick: PlacesPick) -> Int {
+        let ids: Set<String>? = members(of: pick).map { Set($0.compactMap { world?.places[$0].id.lowercased() }) }
+        var n = 0
+        for (k, s) in MarkStore.shared.marks where s.stamped && (k.kind == .town || k.kind == .yours) {
+            guard let ids else { n += 1; continue }
+            let cc = k.kind == .town ? String(k.id.prefix { $0 != "/" }) : OwnPlaces.shared.place(k.id)?.cc ?? ""
+            if ids.contains(cc) { n += 1 }
+        }
+        return n
+    }
+
     /// back to the world: the towns go, the world comes back (the camera stays where it is)
     func closePlace() {
         guard placeOpen != nil else { return }

@@ -357,8 +357,11 @@ final class MapController {
     // MARK: PLACES (Part 7): our map's towns (PlacesMap.swift)
     /// Places is the mode: countries' fills drained; a country tapped opens with its towns
     var placesMode = false {
-        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace() } } }
+        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace(); placesArea = nil } } }
     }
+    /// THE CURRENT PLACES MAP when it is wider than a country (7.2): a continent or a world region by name; nil with a
+    /// country open (placeOpen) or on Everywhere
+    var placesArea: String?
     /// the country open in Places (its towns drawn), or the world
     var placeOpen: Int?
     /// Regions' towns level (6.6): the region map's last word, the country's towns drawn as Places draws them
@@ -482,7 +485,10 @@ final class MapController {
     /// never past its box; the camera held to the country from then (its frame and zoom are the continent's limits)
     func frameRegion(_ i: Int) {
         guard let w = world, let f0 = w.frame(of: i) else { return }
-        let f = SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w))
+        frameArea(SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w)), focus: i)
+    }
+    /// any box framed the same way (a world region's countries in Places, 7.2); with a focus, that country's the rest fades
+    func frameArea(_ f: SIMD4<Double>, focus i: Int? = nil) {
         continent = nil
         drawnContinent = nil
         let W = Double(view.width), H = Double(view.height)
