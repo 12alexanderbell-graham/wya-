@@ -22,7 +22,7 @@ struct WaterView: View {
                         Color.clear
                             .frame(width: L.W, height: L.H)
                             // over a place's page, the page's frosted glass like the head's (16.3)
-                            .glassEffect(PageGlass.head, in: shape)
+                            .glassEffect(PageGlass.surface, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)

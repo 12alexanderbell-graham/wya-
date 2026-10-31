@@ -77,7 +77,11 @@ struct ContentView: View {
                 SheetWatch(water: water, map: map)
                 // the open region map's country and level written into the session as they change
                 Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
-                    .onChange(of: regionKey) { _, _ in saveSession(after: 0) }
+                    .onChange(of: regionKey) { _, _ in
+                        saveSession(after: 0)
+                        // a region map opened, or its level changed: the line runs through its regions (13.3)
+                        if head.history, !map.historyOn() { head.history = false }
+                    }
                     // HISTORY (Part 13): the tool on draws the journey (Countries for now); nothing dated, it refuses
                     .onChange(of: head.history) { _, on in
                         if on {

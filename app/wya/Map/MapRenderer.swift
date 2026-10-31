@@ -76,6 +76,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         view.clearStencil = 0
         view.preferredFramesPerSecond = 120
         view.isOpaque = true
+        // ONE FRAME FOR THE MAP AND WHAT RIDES ON IT (31 Oct 11:47: the names, the history line and its capsules shook
+        // as the map moved). They are UIKit views moved in draw(in:) for this frame's camera, so they show in this
+        // run loop's Core Animation commit; a drawable presented on its own shows on its own schedule, a frame either
+        // side of them. Presented with the transaction (Apple's CAMetalLayer.presentsWithTransaction), the map's
+        // frame and the views' new places reach the screen together.
+        (view.layer as? CAMetalLayer)?.presentsWithTransaction = true
         buildPipelines(view)
     }
 
@@ -915,7 +921,6 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         _ = w
         enc.endEncoding()
-        cb.present(drawable)
         #if DEBUG
         // the frame's cost, measured: CPU time to build it, and the GPU's time once it has run (logged every 2 s
         // while the map draws, so lag can be found by numbers, not by eye)
@@ -926,6 +931,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         #endif
         cb.commit()
+        // with presentsWithTransaction: scheduled first, then presented inside the current transaction
+        cb.waitUntilScheduled()
+        drawable.present()
     }
 
     #if DEBUG
