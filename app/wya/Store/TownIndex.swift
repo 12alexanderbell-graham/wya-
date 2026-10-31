@@ -45,7 +45,7 @@ final class TownIndex {
                                 people: (r[3] as? NSNumber)?.intValue ?? 0,
                                 lat: (r[4] as? NSNumber)?.doubleValue ?? 0, lon: (r[5] as? NSNumber)?.doubleValue ?? 0,
                                 region: r.count > 7 ? r[7] as? String ?? "" : "")
-                    out.append((n.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), h))
+                    out.append((n.townFolded, h))
                     gids.append(gid)
                 }
             }
@@ -53,7 +53,7 @@ final class TownIndex {
             if case .ok(let d) = await Servers.data.file("native/towns/towns-alt-1.wyta"),
                let all = try? JSONSerialization.jsonObject(with: d) as? [String: String] {
                 for (i, g) in gids.enumerated() where g != 0 {
-                    if let a = all[String(g)] { alt[i] = "|" + a.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+                    if let a = all[String(g)] { alt[i] = "|" + a.townFolded }
                 }
             }
             await MainActor.run {
@@ -72,9 +72,49 @@ final class TownIndex {
     /// one town by its key's id ("de/2925533"), if the index has come
     func hit(_ id: String) -> Hit? { rows.first { $0.hit.id == id }?.hit }
 
+    /// DID YOU MEAN (1.10's rule for a typo, D12): nothing found, the biggest of the 40,000 most peopled towns within
+    /// two letters' change of what was typed (its whole name or its first word; from four letters; "Frankfrut" is
+    /// Frankfurt am Main), or nil
+    @ObservationIgnored private var lastGuess: (q: String, hit: Hit?)?
+    func guess(_ query: String) -> Hit? {
+        let q = query.trimmingCharacters(in: .whitespaces).townFolded
+        guard ready, q.count >= 4 else { return nil }
+        if let g = lastGuess, g.q == q { return g.hit }
+        let a = Array(q.unicodeScalars)
+        var best: (Hit, Int)?
+        for r in rows.prefix(40_000) {
+            // its whole name, or its first word when what was typed is one ("Frankfrut" for Frankfurt am Main)
+            let whole = Array(r.folded.unicodeScalars)
+            let first = q.contains(" ") ? whole : Array((r.folded.split(separator: " ").first.map(String.init) ?? r.folded).unicodeScalars)
+            let b = abs(a.count - first.count) < abs(a.count - whole.count) ? first : whole
+            guard abs(a.count - b.count) <= 2 else { continue }
+            let d = Self.distance(a, b, cap: 2)
+            if d <= 2, best == nil || d < best!.1 { best = (r.hit, d); if d == 1 { break } }
+        }
+        lastGuess = (q, best?.0)
+        return best?.0
+    }
+    /// letters to change, insert or drop (stopped past `cap`), with two neighbours swapped counting as one
+    private static func distance(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar], cap: Int) -> Int {
+        let n = a.count, m = b.count
+        var pp = [Int](repeating: 0, count: m + 1), p = Array(0 ... m), c = [Int](repeating: 0, count: m + 1)
+        for i in 1 ... n {
+            c[0] = i
+            var low = c[0]
+            for j in 1 ... m {
+                var v = min(p[j] + 1, c[j - 1] + 1, p[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+                if i > 1, j > 1, a[i - 1] == b[j - 2], a[i - 2] == b[j - 1] { v = min(v, pp[j - 2] + 1) }
+                c[j] = v; low = min(low, v)
+            }
+            if low > cap { return cap + 1 }
+            pp = p; p = c
+        }
+        return p[m]
+    }
+
     /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere
     func hits(_ query: String, open: String?, limit: Int = 6) -> [Hit] {
-        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, !q.isEmpty else { return [] }
         if let l = last, l.q == q, l.open == open { return l.hits }
         var home: [Hit] = [], away: [Hit] = [], homeIn: [Hit] = [], awayIn: [Hit] = []
@@ -104,5 +144,15 @@ final class TownIndex {
         }
         last = (q, open, h)
         return h
+    }
+}
+
+extension String {
+    /// a name as search compares it: case and accents gone, and German's written-out umlauts read as the plain vowel
+    /// on both sides ("Zuerich" finds Zürich, "Muenster" Münster)
+    nonisolated var townFolded: String {
+        folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .replacingOccurrences(of: "ae", with: "a").replacingOccurrences(of: "oe", with: "o")
+            .replacingOccurrences(of: "ue", with: "u")
     }
 }
