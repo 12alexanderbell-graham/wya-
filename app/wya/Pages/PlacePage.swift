@@ -303,6 +303,7 @@ struct PlacePageView: View {
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 if let f = page.facts, !f.visa.isEmpty || !f.advice.isEmpty { forYou(f) }
                 if MarkStore.shared.state(key).stamped { record(key) }
+                if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
                 Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
@@ -625,5 +626,74 @@ private struct InsideList: View {
             page.replace(r.key, name: r.name, what: r.key.kind == .town ? "Town in \(r.line), \(countryName)" : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
                          country: country, code: r.code)
         }
+    }
+}
+
+/// SOURCES (16.4.11, 16.6): a row "Sources"; open, the sources the page drew on: Wikivoyage's text (CC BY-SA),
+/// Wikidata's and GeoNames' facts, each photo with its author and licence from the server's Commons credits, and the
+/// governments whose advice is shown. (The visa rules' and the climate figures' own sources are not recorded in the
+/// server's data yet, so they are not named here.) The page's own sheet (16.6, pulled up from the capsule) is not
+/// built: the row opens in place for now
+private struct SourcesRow: View {
+    let facts: PlacePageState.Facts
+    let kind: PlaceKey.Kind
+    @State private var open = false
+    @State private var credits: [String: String] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(Motion.quick) { open.toggle() }
+                Feel.tap()
+                if open && credits.isEmpty { Task { await loadCredits() } }
+            } label: {
+                Text("Sources").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading).frame(height: 44).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if open {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(lines, id: \.self) { l in
+                        Text(l).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var lines: [String] {
+        var out: [String] = []
+        if kind == .country, !facts.prose.isEmpty { out.append("Text: Wikivoyage, CC BY-SA") }
+        else if !facts.prose.isEmpty { out.append("Text: Wikidata") }
+        if !facts.rows.isEmpty { out.append(kind == .town ? "Facts: GeoNames, CC BY 4.0" : "Facts: Wikidata") }
+        for h in facts.highlights {
+            guard let f = h.photo else { continue }
+            out.append("Photo of \(h.name): " + (credits[f] ?? f) + ", Wikimedia Commons")
+        }
+        for a in facts.advice { out.append("Advice: the \(a.who) government") }
+        return out
+    }
+
+    /// each photo's author and licence from the server's credits (256 shards by the FNV-1a of the file name)
+    private func loadCredits() async {
+        var out: [String: String] = [:]
+        var shards: [String: [String: Any]] = [:]
+        for h in facts.highlights {
+            guard let f = h.photo else { continue }
+            let sh = Self.shard(f)
+            if shards[sh] == nil, case .ok(let d) = await Servers.data.file("credits/\(sh).json"),
+               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { shards[sh] = j }
+            if let c = shards[sh]?[f] as? [String: Any] {
+                out[f] = [c["by"] as? String, c["lic"] as? String].compactMap { $0 }.joined(separator: ", ")
+            }
+        }
+        credits = out
+    }
+    /// FNV-1a of the file name's UTF-8 bytes, its low byte in hex (the server's shard_of)
+    static func shard(_ name: String) -> String {
+        var h: UInt32 = 0x811c9dc5
+        for b in name.utf8 { h ^= UInt32(b); h = h &* 0x01000193 }
+        return String(format: "%02x", h & 0xff)
     }
 }
