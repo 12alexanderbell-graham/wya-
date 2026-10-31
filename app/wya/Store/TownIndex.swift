@@ -3,7 +3,9 @@ import Foundation
 /// SEARCH OVER EVERY TOWN (Part 1.10 in Places, D12's towns part): every town of every place (228,388, D3), biggest
 /// first, read once from the data server (`native/towns/towns-index-2.wyti`: rows [name, file, GeoNames id, people,
 /// lat, lon, kind, region]) the first time Places is searched, folded off the main thread. A search lists names starting with what
-/// was typed, then (from three letters) names holding it; the open country's towns before everywhere else's.
+/// was typed, then (from three letters) names holding it; the open country's towns before everywhere else's. Then a
+/// town's other names (`native/towns/towns-alt-1.wyta`, GeoNames' alternate names, CC BY 4.0: Tiflis, Москва, 東京,
+/// Shenzen), when its own names gave fewer than asked; the row shows its own name.
 @MainActor
 @Observable
 final class TownIndex {
@@ -22,6 +24,8 @@ final class TownIndex {
     private(set) var ready = false
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, hit: Hit)] = []
+    /// each row's other names folded, "|a|b|c" ("" for none), read after the index
+    @ObservationIgnored private var alt: [String] = []
     @ObservationIgnored private var last: (q: String, open: String?, hits: [Hit])?
 
     /// read the index once (in the background)
@@ -30,6 +34,7 @@ final class TownIndex {
         loading = true
         Task.detached(priority: .userInitiated) {
             var out: [(String, Hit)] = []
+            var gids: [Int] = []
             if case .ok(let d) = await Servers.data.file("native/towns/towns-index-2.wyti"),
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 out.reserveCapacity(all.count)
@@ -41,11 +46,20 @@ final class TownIndex {
                                 lat: (r[4] as? NSNumber)?.doubleValue ?? 0, lon: (r[5] as? NSNumber)?.doubleValue ?? 0,
                                 region: r.count > 7 ? r[7] as? String ?? "" : "")
                     out.append((n.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), h))
+                    gids.append(gid)
+                }
+            }
+            var alt = [String](repeating: "", count: out.count)
+            if case .ok(let d) = await Servers.data.file("native/towns/towns-alt-1.wyta"),
+               let all = try? JSONSerialization.jsonObject(with: d) as? [String: String] {
+                for (i, g) in gids.enumerated() where g != 0 {
+                    if let a = all[String(g)] { alt[i] = "|" + a.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
                 }
             }
             await MainActor.run {
                 let me = TownIndex.shared
                 me.rows = out
+                me.alt = alt
                 me.loading = false
                 me.ready = !out.isEmpty
                 #if DEBUG
@@ -74,7 +88,20 @@ final class TownIndex {
             // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
             if home.count >= limit || (open == nil && away.count >= limit) { break }
         }
-        let h = Array((home + homeIn + away + awayIn).prefix(limit))
+        var h = Array((home + homeIn + away + awayIn).prefix(limit))
+        // other names (Tiflis for Tbilisi), biggest first, the open country's first
+        if h.count < limit, q.count >= 2, alt.count == rows.count {
+            let bar = "|" + q
+            var homeAlt: [Hit] = [], awayAlt: [Hit] = []
+            let have = Set(h.map(\.id))
+            for (i, a) in alt.enumerated() where !a.isEmpty && a.contains(bar) {
+                let hit = rows[i].hit
+                guard !have.contains(hit.id) else { continue }
+                if hit.file == open { homeAlt.append(hit) } else { awayAlt.append(hit) }
+                if homeAlt.count + awayAlt.count >= limit { break }
+            }
+            h = Array((h + homeAlt + awayAlt).prefix(limit))
+        }
         last = (q, open, h)
         return h
     }
