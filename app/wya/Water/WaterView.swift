@@ -178,6 +178,11 @@ struct SheetContent: View {
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
+            // HISTORY'S RANGE BAR (13.4) on the water, its centre at the water's top + 156
+            if water.historyUp, map.historyInfo != nil {
+                HistoryBar(map: map, width: L.W - 2 * L.sheetInset - 32)
+                    .position(x: L.W / 2, y: form.top + 156)
+            }
             // THE PAGE'S OWN SHEET (16.6) over a place's page, in the water at 50%
             if water.pageSheet { PageSheet(water: water, map: map, form: form).transition(.identity) }
             // (never under a place's page: the water there is only the tab capsule or the page's sheet)
@@ -216,9 +221,11 @@ struct SheetContent: View {
             if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
-                    Caption(name: map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World"),
-                            count: map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count,
-                            tail: map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)",
+                    // (history up: the journey's range, its places and its length, 13.4)
+                    let hc = water.historyUp ? map.historyInfo?.caption : nil
+                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
+                            count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
+                            tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
                             night: FullView.night(form.page), visible: captionShown)
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
