@@ -292,7 +292,9 @@ struct ContentView: View {
     /// A6.5 entering Regions' menu (Regions always restarts there), and leaving Regions for another mode: the regions
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
-        // 7.4: the Places map's towns come and go with the mode
+        // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
+        // still off, so its open country goes with it)
+        if old == .regions { map.leaveRegionTowns() }
         map.placesMode = new == .places
         if new == .places || old == .places { closeCard() }
         if new == .regions {
@@ -492,7 +494,8 @@ struct ContentView: View {
                 return townMenu(sc.towns[t.i], cc: t.cc, place: open, at: p, map: map, water: water, head: head)
             }
             map.townPressed = nil
-            return nil
+            // the open country's own land: no menu yet; another country keeps its own menu
+            if i == open { return nil }
         }
         // the region map: the region's own menu (11.5's Regions menu)
         if let sc = map.regionScene {

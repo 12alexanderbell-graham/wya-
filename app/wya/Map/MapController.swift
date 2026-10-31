@@ -362,6 +362,8 @@ final class MapController {
     var regionTowns = false
     @ObservationIgnored var townScenes: [String: TownScene] = [:]
     @ObservationIgnored var townLoading: Set<String> = []
+    /// places whose shapes failed to come (their towns are asked for again on the next opening)
+    @ObservationIgnored var retryShapes: Set<String> = []
     /// the town under the finger (or held by its card)
     @ObservationIgnored var townPressed: (cc: String, i: Int)? { didSet { needsFrame = true } }
     @ObservationIgnored var townStamped: [String: Set<Int>] = [:]

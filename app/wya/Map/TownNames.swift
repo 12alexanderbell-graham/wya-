@@ -12,6 +12,7 @@ final class TownNamesView: UIView {
     private struct Shown { let i: Int; let holder: UIView; let halo: UILabel; let ink: UILabel; let size: CGSize }
     private var shown: [Int: Shown] = [:]
     private var key: String?
+    private var orderFor: (cc: String, dots: Bool, order: [Int])?
     private static let font = UIFont.systemFont(ofSize: 13, weight: .semibold)
     private static let cream = UIColor(red: 0xfb / 255, green: 0xf6 / 255, blue: 0xf2 / 255, alpha: 1)
 
@@ -34,10 +35,15 @@ final class TownNamesView: UIView {
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
         // the candidates, in order: capital, regional capitals, then by people (the scene is biggest first)
-        var order: [Int] = []
-        for i in sc.towns.indices where sc.towns[i].kind == 2 { order.append(i) }
-        for i in sc.towns.indices where sc.towns[i].kind == 1 { order.append(i) }
-        for i in sc.towns.indices where sc.towns[i].kind == 0 { order.append(i) }
+        // (worked out once per country, and only the towns that can ever be named: those with a shape, or every town with
+        // Town dots on)
+        let dotsOn = MapSettingsStore.shared.value.townDots
+        if orderFor?.cc != cc || orderFor?.dots != dotsOn {
+            var o: [Int] = []
+            for kind in [2, 1, 0] { for i in sc.towns.indices where sc.towns[i].kind == kind && (dotsOn || sc.runs[i] != nil) { o.append(i) } }
+            orderFor = (cc, dotsOn, o)
+        }
+        var order = orderFor?.order ?? []
         // the ones up first (they keep their places)
         let up = Set(shown.keys)
         order = order.filter { up.contains($0) } + order.filter { !up.contains($0) }
