@@ -110,6 +110,8 @@ final class MarkStore {
     }
 
     func unstamp(_ key: PlaceKey, name: String = "", who: Who = .you, origin: CGPoint? = nil) async {
+        // a country unstamped any way is no longer "stamped only through a town" (7.4's unstamp rule)
+        if key.kind == .country { TownStamps.forget(key.id) }
         guard let store else { return }
         let acc = account
         guard let r = try? await store.unstamp(key, account: acc) else { return }

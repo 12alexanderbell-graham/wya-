@@ -178,6 +178,9 @@ enum TownStamps {
         if MarkStore.shared.state(country).stamped { await MarkStore.shared.unstamp(country) }
     }
 
+    /// a country no longer held only through a town
+    @MainActor static func forget(_ cc: String) { through.remove(cc.lowercased()) }
+
     /// the countries stamped only through a town
     private static let throughKey = "wya.towns.through"
     @MainActor private static var through: Set<String> {
