@@ -788,7 +788,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 let plainKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)|\(controller.filter)"
                 if plainCache?.key != plainKey {
                     var plain: [Int] = []
-                    for i in sc.runs.indices where !marked.contains(i) && i != pressedTown { plain.append(i) }
+                    for i in sc.runs.indices where !marked.contains(i) && i != pressedTown && !sc.covered[i] { plain.append(i) }
                     plainCache = (plainKey, plain)
                 }
                 towns(plainCache?.list ?? [], grey)
