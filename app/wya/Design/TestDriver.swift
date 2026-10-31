@@ -158,6 +158,7 @@ final class TestDriver {
                     if a == "launch" { ReviewSheet.launchPicture() }
                     if a == "logoturn" { ReviewSheet.logoTurnMovie() }
                     if a == "icons" { ReviewSheet.icons() }
+                    if a == "placesideas" { PlacesIdeas.make() }
                     if a == "emblems" { ReviewSheet.emblems() }
                     if a == "flagshapes" { ReviewSheet.flagShapes(world: map?.world) }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }

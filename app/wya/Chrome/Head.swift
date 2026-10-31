@@ -507,12 +507,13 @@ struct HeadView: View {
             Feel.tap(); Sound.tap()
             act()
         } label: {
-            // bare circles until their icons are picked, filled when on: the ring thickens into the disc (and thins
-            // back), as the first tool on the dot does, never a one-frame swap
-            ToolRing(width: on ? 8.5 : 1.6)
-                .fill(ink, style: FillStyle(eoFill: true))
-                .animation(Motion.quick, value: on)
-                .frame(width: 17, height: 17)
+            // THEIR ICONS (Part 18.2, 31 Oct): the passport, history and (cal-in) upload at 17 pt; on, a filled ink
+            // circle grows behind it from its middle and the icon turns white (18.2's one rule for "on")
+            ZStack {
+                Circle().fill(ink).frame(width: 34, height: 34).scaleEffect(on ? 1 : 0.001)
+                Icon5(key: ["stamp", "passport", "history", "cal-in"][i], ink: on ? Palette.white : ink, size: 17)
+            }
+            .animation(Motion.quick, value: on)
             .frame(width: slot, height: 44)
             .contentShape(Rectangle())
         }
