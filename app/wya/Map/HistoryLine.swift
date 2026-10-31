@@ -17,6 +17,8 @@ struct HistoryTrack {
     let points: [SIMD2<Double>]
     /// the segment index each leg starts at (a leg's capsule and its tap)
     let legStart: [Int]
+    /// the segments that are not drawn: a leg over the date line jumps there from one edge of the map to the other
+    let breaks: Set<Int>
 
     /// Countries (13.3): every dated visit and lived span of your stamped countries and territories, by arrival day,
     /// one stop per visit; on a continent, its stops only. All time (the range picks from these).
@@ -116,9 +118,17 @@ struct HistoryTrack {
         var pts: [SIMD2<Double>] = []
         var starts: [Int] = []
         var seen: [String: Int] = [:]
+        var jumps: Set<Int> = []
         let n = 24
         for j in 0 ..< max(0, stops.count - 1) {
-            let a = stops[j].at, b = stops[j + 1].at
+            let a = stops[j].at
+            var b = stops[j + 1].at
+            // OVER THE DATE LINE (13.3, Tokyo to Honolulu): the short way round. The far end is moved by the world's
+            // width at its latitude, the leg made there, and split where it leaves the map: each half runs to the edge
+            // and a little into the sea past it, where its round end is
+            let dLon = stops[j + 1].ll.x - stops[j].ll.x
+            let over: Double = dLon > 180 ? -1 : dLon < -180 ? 1 : 0
+            if over != 0 { b.x += over * EqualEarth.wrapStep(y: b.y) }
             let d = b - a, len = simd_length(d)
             starts.append(max(0, pts.count - 1))
             guard len > 1e-6 else { continue }
@@ -133,16 +143,35 @@ struct HistoryTrack {
             // right of travel on the map (y runs down): (-dy, dx)
             let normal = SIMD2(-d.y, d.x) / len * side
             let ctrl = (a + b) / 2 + normal * (len * bow)
+            var leg: [SIMD2<Double>] = []
             for s in 0 ... n {
-                if s == 0 && !pts.isEmpty { continue }
                 let t = Double(s) / Double(n)
                 let u = 1 - t
-                pts.append(u * u * a + 2 * u * t * ctrl + t * t * b)
+                leg.append(u * u * a + 2 * u * t * ctrl + t * t * b)
+            }
+            if over != 0, let k = leg.firstIndex(where: { abs(EqualEarth.unproject($0).lon) > 180 }), k > 0 {
+                // where it crosses 180°, between the last point on the map and the first past it
+                let l0 = EqualEarth.unproject(leg[k - 1]).lon, l1 = EqualEarth.unproject(leg[k]).lon
+                let edge = over > 0 ? 180.0 : -180.0
+                let f = max(0, min(1, (edge - l0) / max(1e-9, l1 - l0)))
+                let cross = leg[k - 1] + (leg[k] - leg[k - 1]) * f
+                let way = simd_normalize(leg[k] - leg[k - 1])
+                // into the sea past the edge: 8 map units (a few points at the world's size)
+                let past = 8.0
+                let back = { (q: SIMD2<Double>) in SIMD2(q.x - over * EqualEarth.wrapStep(y: q.y), q.y) }
+                let first = Array(leg[..<k]) + [cross, cross + way * past]
+                let second = [back(cross) - way * past, back(cross)] + leg[k...].map(back)
+                for q in first where !(q == first[0] && !pts.isEmpty) { pts.append(q) }
+                jumps.insert(pts.count - 1)
+                pts.append(contentsOf: second)
+            } else {
+                for (i, q) in leg.enumerated() where !(i == 0 && !pts.isEmpty) { pts.append(q) }
             }
         }
         if pts.isEmpty, let only = stops.first { pts = [only.at] }
         points = pts
         legStart = starts
+        breaks = jumps
     }
 
     /// the line's colour at a share of its length: black to our blue (31 Oct 11:47: no edge any more, so it ends in
@@ -196,7 +225,10 @@ final class HistoryLineView: UIView {
             let a = j * segs / n, b = (j + 1) * segs / n
             let line = CGMutablePath()
             line.move(to: CGPoint(x: pts[a].x, y: pts[a].y))
-            for i in a ..< b { line.addLine(to: CGPoint(x: pts[i + 1].x, y: pts[i + 1].y)) }
+            for i in a ..< b {
+                let q = CGPoint(x: pts[i + 1].x, y: pts[i + 1].y)
+                if t.breaks.contains(i) { line.move(to: q) } else { line.addLine(to: q) }
+            }
             let share = CGFloat(a) / CGFloat(segs)
             let l = CAShapeLayer()
             l.path = line; l.fillColor = nil; l.lineCap = .round; l.lineJoin = .round
@@ -395,7 +427,7 @@ final class HistoryLineView: UIView {
             var a = m.screenPoint(track.points[r.lowerBound])
             for i in r.lowerBound ..< r.upperBound {
                 let b = m.screenPoint(track.points[i + 1])
-                let d = Self.distance(p, a, b)
+                let d = track.breaks.contains(i) ? .infinity : Self.distance(p, a, b)
                 if d < 12, d < (best?.d ?? .infinity) { best = (j, d) }
                 a = b
             }
