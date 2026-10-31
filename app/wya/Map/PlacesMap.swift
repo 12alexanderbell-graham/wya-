@@ -85,6 +85,35 @@ extension MapController {
         }
     }
 
+    /// your own place whose mark is under a screen point (within 22 pt of its point)
+    func ownHit(at p: CGPoint) -> String? {
+        var best: (String, CGFloat)?
+        for o in OwnPlaces.shared.all {
+            let q = screenPoint(SIMD2(Double(o.point.x), Double(o.point.y)))
+            let d = hypot(q.x - p.x, q.y - p.y)
+            if d <= 22, best == nil || d < best!.1 { best = (o.id, d) }
+        }
+        return best?.0
+    }
+    /// A7.11 YOUR OWN PLACE MADE BY QUICK ADD: at the tapped point of the open country, named after the nearest town
+    /// ("Near Kyoto"), stamped as it is made (with its region chain and country)
+    func makeOwnPlace(at p: CGPoint) {
+        guard let open = placeOpen, let cc = placeOpenID else { return }
+        let m = mapPoint(p)
+        let ll = EqualEarth.unproject(m)
+        let mp = SIMD2(Float(m.x), Float(m.y))
+        var near: String?
+        if let sc = townScenes[cc] {
+            var bd = Float.infinity
+            for (i, a) in sc.at.enumerated() { let d = simd_distance_squared(a, mp); if d < bd { bd = d; near = sc.towns[i].name } }
+        }
+        let name = near.map { "Near \($0)" } ?? "Your place"
+        let place = OwnPlaces.shared.make(name: name, lat: ll.lat, lon: ll.lon, cc: cc)
+        Feel.tap()
+        needsFrame = true
+        Task { await TownStamps.stamp(place.key, name: place.name, cc: cc, source: .quick, place: open, at: mp) }
+    }
+
     /// a map box's frame on screen now (where a page grows from, A16.1)
     func screenRect(_ b: SIMD4<Float>) -> CGRect {
         let a = screenPoint(SIMD2(Double(b.x), Double(b.y))), c = screenPoint(SIMD2(Double(b.z), Double(b.w)))

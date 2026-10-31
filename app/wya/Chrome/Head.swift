@@ -201,7 +201,7 @@ struct HeadView: View {
                         searchCapsule(ink: ink, p: p, fieldW: fieldW)
                             .frame(width: L.circle + (fieldW - L.circle) * p, height: L.circle, alignment: .leading)
                             .clipShape(Capsule())
-                            .glassEffect(PlacePageState.shared.isOpen && p > 0.01 ? .regular : .clear, in: .capsule)
+                            .glassEffect(PageGlass.head, in: .capsule)
                     }
                     .frame(width: fieldW, height: L.circle, alignment: .leading)
                     .position(x: L.side + fieldW / 2, y: L.headY)
@@ -615,7 +615,7 @@ private struct ToolsCapsule<Tool: View, Plus: View>: View, Animatable {
         }
         .frame(width: 44 + e, height: 44, alignment: .trailing)
         .clipShape(Capsule())
-        .glassEffect(.clear, in: .capsule)
+        .glassEffect(PageGlass.head, in: .capsule)
     }
 }
 
@@ -954,8 +954,7 @@ struct SearchResults: View {
                     // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
                     .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
                     .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-                    // over a place's page: the logically frosted glass (16.3, Part 0.7), so the page's words don't read through
-                    .glassEffect(PlacePageState.shared.isOpen ? .regular : .clear, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
+                    .glassEffect(PageGlass.head, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
                 }
             }
         }

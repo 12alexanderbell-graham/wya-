@@ -21,7 +21,8 @@ struct WaterView: View {
                     if !Perf.shared.off.contains("sheetglass") {
                         Color.clear
                             .frame(width: L.W, height: L.H)
-                            .glassEffect(.clear, in: shape)
+                            // over a place's page, the page's frosted glass like the head's (16.3)
+                            .glassEffect(PageGlass.head, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)
