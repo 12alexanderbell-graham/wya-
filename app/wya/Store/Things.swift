@@ -3,9 +3,9 @@ import simd
 
 /// THINGS (Part 7.1, D5): the places to go in a country that are not towns (museums, castles, lakes, parks, beaches,
 /// stations ...), each in one of the twelve kinds, read from the data server per country (`native/things/
-/// things-<cc>-2.wyth`: rows [Wikidata id, name, kind, lat, lon, fame, description, photo], famous first; built from the
+/// things-<cc>-3.wyth`: rows [Wikidata id, name, kind, lat, lon, fame, description, photo], famous first; built from the
 /// server's Wikidata places by data/pipeline d5_things.py) the first time the country opens in Places, kept for the
-/// session. Fame: 2 World Heritage, 1 with a photo, 0.
+/// session. Fame: 3 World Heritage or known in 40+ Wikipedias, 2 from 12, 1 from 4, 0.
 @MainActor
 @Observable
 final class ThingStore {
@@ -40,7 +40,7 @@ final class ThingStore {
         loading.insert(cc)
         Task.detached(priority: .userInitiated) {
             var out: [Thing] = []
-            if case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-2.wyth"),
+            if case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 for r in all {
                     guard r.count >= 8, let id = r[0] as? String, let n = r[1] as? String,

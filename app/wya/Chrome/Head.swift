@@ -421,6 +421,8 @@ struct HeadView: View {
     /// a result: the search closes and the map flies to the place, framed in the room the sheet leaves
     private func pick(_ i: Int) {
         Feel.tap(); Sound.tap()
+        // a result picked over a page: the pages go first, so what it does on the map is seen (16.8)
+        PlacePageState.shared.closeAll()
         if let id = map.world?.places[i].id { SearchResults.remember(id) }
         // Places: a country picked is opened with its towns (7.4)
         if map.placesMode { map.openPlace(i); closeSearch(); return }
@@ -1134,6 +1136,7 @@ struct SearchResults: View {
         return Button {
             Feel.tap()
             head.searching = false
+            PlacePageState.shared.closeAll()
             if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
         } label: {
             HStack(spacing: 12) {
@@ -1159,6 +1162,7 @@ struct SearchResults: View {
         return Button {
             Feel.tap()
             head.searching = false
+            PlacePageState.shared.closeAll()
             if let h { map.showTown(file: h.file, id: h.id) }
         } label: {
             HStack(spacing: 12) {
@@ -1181,6 +1185,7 @@ struct SearchResults: View {
         return Button {
             Feel.tap()
             head.searching = false
+            PlacePageState.shared.closeAll()
             if let h { map.showThing(file: h.file, id: h.id) }
         } label: {
             HStack(spacing: 12) {

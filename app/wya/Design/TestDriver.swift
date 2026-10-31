@@ -320,6 +320,13 @@ final class TestDriver {
                                                    from: CGRect(x: 16, y: 520, width: 398, height: 52))
                     }
                     else if a == "back" { PlacePageState.shared.close() }
+                    // page highlight: the open page's first highlight's page pushed (16.7)
+                    else if a == "highlight", let h = PlacePageState.shared.facts?.highlights.first {
+                        let cc = PlacePageState.shared.country
+                        ThingStore.shared.load(cc)
+                        PlacePageState.shared.push(PlaceKey(.thing, "wd:" + h.id), name: h.name, what: h.line, country: cc,
+                                                   from: CGRect(x: 16, y: 500, width: 380, height: 300), photo: h.photo)
+                    }
                     else if a == "sources" { PlacePageState.shared.sourcesTest += 1; PlacePageState.shared.toEnd = 5 }
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))

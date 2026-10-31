@@ -45,6 +45,8 @@ final class PlacePageState {
         /// what it grew from (closing goes back into it)
         let origin: CGRect
         var facts: Facts?
+        /// a photo it came with (a highlight's), for a thing the data has no row for
+        var photo: String?
         /// 0 at the origin to 1 full screen
         var p: CGFloat = 0
         var drag: CGFloat = 0
@@ -79,9 +81,11 @@ final class PlacePageState {
         push(key, name: name, what: what, country: country, code: code, from: origin)
     }
     /// a page pushed on top of the one up, grown from the row or card tapped on it (16.7: "its page, pushed on top")
-    func push(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
+    func push(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect,
+              photo: String? = nil) {
         guard key != self.key else { return }
         let page = OnePage(key: key, name: name, what: what, country: country, code: code, origin: origin)
+        page.photo = photo
         pages.append(page)
         Feel.tap()
         DispatchQueue.main.async {
@@ -108,7 +112,18 @@ final class PlacePageState {
 extension PlacePageState.OnePage {
     /// A THING'S PAGE (16.2 for things, D5 as it is): its photo, its own line as the prose, its kind and where it is
     fileprivate func loadThing() {
-        guard let (cc, t) = ThingStore.shared.thing(key.id) else { return }
+        guard let (cc, t) = ThingStore.shared.thing(key.id) else {
+            // its country's things not read yet: once they are, or (a World Heritage site the data keeps as a whole) its
+            // photo and kind from what opened it
+            if ThingStore.shared.things(country) == nil {
+                Task { @MainActor in
+                    for _ in 0 ..< 60 where ThingStore.shared.things(country) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    if ThingStore.shared.thing(key.id) != nil { loadThing(); return }
+                    seedOnly()
+                }
+            } else { seedOnly() }
+            return
+        }
         var out = PlacePageState.Facts()
         if !t.photo.isEmpty { out.photo = t.photo }
         // (its own line is already under its name; no prose repeating it)
@@ -116,6 +131,11 @@ extension PlacePageState.OnePage {
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
         out.rows.append(("Where", String(format: "%.4f, %.4f", ll.lat, ll.lon)))
         _ = cc
+        facts = out
+    }
+    private func seedOnly() {
+        var out = PlacePageState.Facts()
+        out.photo = photo
         facts = out
     }
     fileprivate func loadCountry(_ cc: String) async {
@@ -493,7 +513,8 @@ private struct PageLayer: View {
         }
     }
     private func highlightCard(_ h: PlacePageState.Highlight, w: CGFloat) -> some View {
-        let key = PlaceKey(.thing, h.id)
+        // (its key as a thing's: `m:wd:Q…`, the same mark as the thing on the map)
+        let key = PlaceKey(.thing, "wd:" + h.id)
         let st = MarkStore.shared.state(key)
         return VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .topTrailing) {
@@ -523,7 +544,18 @@ private struct PageLayer: View {
             Text(h.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
         }
         .frame(width: w, alignment: .leading)
+        .contentShape(Rectangle())
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [cardFrames] f in cardFrames.at[h.id] = f }
+        // its page, pushed on top, growing out of the card (16.7)
+        .onTapGesture {
+            ThingStore.shared.load(page.country)
+            PlacePageState.shared.push(key, name: h.name, what: h.line, country: page.country,
+                                       from: cardFrames.at[h.id] ?? .zero, photo: h.photo)
+        }
     }
+    /// each highlight card's frame on screen (a plain box: scrolling redraws nothing)
+    @State private var cardFrames = CardFrames()
+    final class CardFrames { var at: [String: CGRect] = [:] }
     /// a Commons file at a width (Special:FilePath)
     static func commons(_ file: String, width: Int) -> URL? {
         let name = file.replacingOccurrences(of: " ", with: "_")

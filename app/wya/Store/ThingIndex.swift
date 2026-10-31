@@ -1,7 +1,7 @@
 import Foundation
 
 /// SEARCH OVER EVERY THING (Part 1.10 in Places, D12's things part): every thing of D5 (57,754), famous first, read once
-/// from the data server (`native/things/things-index-1.wyti`: rows [name, file, Wikidata id, kind, fame, lat, lon,
+/// from the data server (`native/things/things-index-2.wyti`: rows [name, file, Wikidata id, kind, fame, lat, lon,
 /// other names]) the first time Places is searched. Names starting with what was typed, then (from three letters) names
 /// holding it; an airport's code ("JFK") finds it whole; the open country's before everywhere else's.
 @MainActor
@@ -27,7 +27,7 @@ final class ThingIndex {
         loading = true
         Task.detached(priority: .userInitiated) {
             var out: [(String, [String], Hit)] = []
-            if case .ok(let d) = await Servers.data.file("native/things/things-index-1.wyti"),
+            if case .ok(let d) = await Servers.data.file("native/things/things-index-2.wyti"),
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 out.reserveCapacity(all.count)
                 for r in all {

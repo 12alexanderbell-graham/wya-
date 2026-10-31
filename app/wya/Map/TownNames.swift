@@ -36,10 +36,10 @@ final class TownNamesView: UIView {
 
     // MARK: THINGS' MARKS (7.4, D5; 31 Oct 01:17: "it needs to be really elegant. Think about how Apple Maps would do it"):
     // as Apple Maps shows its places: a thing comes with its name or not at all (a mark without words says nothing), by
-    // the zoom across its fame's own band (World Heritage from 3x the country's framing zoom, things with a photo from 8x,
-    // the rest from 16x); its mark small and round, growing with the zoom from 6 pt to 10 pt over that band, never
-    // bigger; the map's darker grey, lime when stamped, blue when wished; no outline, no shadow; its name (12 pt semibold,
-    // the cream halo) beside it on the right; a thing whose name has no room (a town's name, another thing) is not shown,
+    // the zoom across its fame's own band (World Heritage and the best known, in 40+ Wikipedias, from 2.5x the country's
+    // framing zoom, 12+ from 5x, 4+ from 9x, the rest from 16x; the best known first within each);
+    // its mark small and round, growing with the zoom from 6 pt to 10 pt over that band, never bigger; the map's darker
+    // grey, lime when stamped, blue when wished; no outline, no shadow; its name (12 pt semibold, the cream halo) beside it on the right; a thing whose name has no room (a town's name, another thing) is not shown,
     // except one you stamped or wished, whose mark always shows; famous first, at most 40 on screen. The kind's icon
     // inside waits for the twelve kinds' icons (their review, Step 3b).
     private var thingViews: [String: (dot: UIView, name: UILabel)] = [:]
@@ -68,7 +68,7 @@ final class TownNamesView: UIView {
             let st = MarkStore.shared.state(t.key)
             // (one found by search and shown is marked too while it is darkened)
             let marked = st.stamped || st.wished || m.thingPressed == t.id
-            let start: Double = t.fame == 2 ? 3 : t.fame == 1 ? 8 : 16
+            let start: Double = t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
             guard z >= start || m.thingPressed == t.id else { continue }
             let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
             guard box.contains(q) else { continue }
@@ -80,9 +80,15 @@ final class TownNamesView: UIView {
                 thingWidths[t.id] = w
                 return w
             }()
-            let nr = CGRect(x: r.maxX + 3, y: q.y - 8, width: w, height: 16)
+            // its name on the right; where that has no room, on the left, then under, then over (as Apple Maps moves a label)
+            let places = [CGRect(x: r.maxX + 3, y: q.y - 8, width: w, height: 16),
+                          CGRect(x: r.minX - 3 - w, y: q.y - 8, width: w, height: 16),
+                          CGRect(x: q.x - w / 2, y: r.maxY + 1, width: w, height: 16),
+                          CGRect(x: q.x - w / 2, y: r.minY - 17, width: w, height: 16)]
             let markFree = !taken.contains { $0.intersects(r.insetBy(dx: -2, dy: -2)) }
-            let nameFree = box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -3, dy: -3)) }
+            let at = places.firstIndex { nr in box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -3, dy: -3)) } }
+            let nameFree = at != nil
+            let nr = places[at ?? 0]
             guard (markFree && (nameFree || marked)) || m.thingPressed == t.id else { continue }
             let v = thingViews[t.id] ?? {
                 let d = UIView(), l = UILabel()
@@ -102,6 +108,7 @@ final class TownNamesView: UIView {
             taken.append(r)
             frames[t.id] = r
             v.name.frame = nr
+            v.name.textAlignment = at == 1 ? .right : (at ?? 0) >= 2 ? .center : .left
             v.name.isHidden = !nameFree
             if nameFree { taken.append(nr); named.insert(t.id) }
         }
