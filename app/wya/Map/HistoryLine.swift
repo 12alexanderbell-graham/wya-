@@ -1,4 +1,5 @@
 import UIKit
+import SwiftUI
 import simd
 
 // HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web and no dots
@@ -34,11 +35,44 @@ struct HistoryTrack {
         }
         return stops
     }
+    /// Places (13.3): the towns, things and your own places you stamped, by their dated visits; only the current map's
+    /// places when a map is current (its countries). (The day you added an undated one is not in the calendar index
+    /// yet, so undated ones are left out, as Countries' are.)
+    @MainActor static func placeStops(world w: World, countries: Set<String>?) -> [Stop] {
+        let cal = MarkStore.shared.calendar
+        var stops: [Stop] = []
+        for e in cal.spans where (e.kind == .visit || e.kind == .lived) && MarkStore.shared.state(e.key).stamped {
+            var found: (cc: String, name: String, lon: Double, lat: Double)?
+            switch e.key.kind {
+            case .town:
+                if let h = TownIndex.shared.hit(e.key.id) { found = (h.file, h.name, h.lon, h.lat) }
+            case .thing:
+                if let h = ThingIndex.shared.hit(e.key.id) { found = (h.file, h.name, h.lon, h.lat) }
+                else if let it = CollectionStore.shared.item(e.key) {
+                    // a collection's stop: its point is already in map units
+                    if let i = w.placeIndex[it.cc] ?? w.placeIndex[it.cc.uppercased()], countries?.contains(it.cc.lowercased()) ?? true {
+                        stops.append(Stop(key: e.key, place: i, at: SIMD2(Double(it.at.x), Double(it.at.y)), from: e.from, name: it.name,
+                                          ll: SIMD2(0, 0)))
+                    }
+                    continue
+                }
+            case .yours:
+                if let o = OwnPlaces.shared.place(e.key.id) { found = (o.cc, o.name, o.lon, o.lat) }
+            default: break
+            }
+            guard let f = found, countries?.contains(f.cc.lowercased()) ?? true,
+                  let i = w.placeIndex[f.cc] ?? w.placeIndex[f.cc.uppercased()] ?? w.placeIndex[f.cc.lowercased()] else { continue }
+            let q = EqualEarth.project(lon: f.lon, lat: f.lat)
+            stops.append(Stop(key: e.key, place: i, at: SIMD2(Double(q.x), Double(q.y)), from: e.from, name: f.name, ll: SIMD2(f.lon, f.lat)))
+        }
+        return stops
+    }
+
     /// the stops in a range of days, two in the same place one after the other made one (the line carries on from there)
     static func within(_ all: [Stop], _ lo: LocalDay, _ hi: LocalDay) -> [Stop] {
         var out: [Stop] = []
         for s in all where lo <= s.from && s.from <= hi {
-            if out.last?.place == s.place { continue }
+            if out.last?.key == s.key || (s.key.kind == .country && out.last?.place == s.place) { continue }
             out.append(s)
         }
         return out
@@ -279,7 +313,6 @@ final class HistoryCapsule: UIView {
 /// at the water's top + 156. The track a 1 pt black 50% line from your first dated stop's year to today, a 4 pt black
 /// line between the two handles (24 pt black circles, 44 pt to touch), the years under it (13 pt, black inside the
 /// range, black 50% outside; every year while each has 30 pt, else every 2nd, 5th, 10th).
-import SwiftUI
 
 struct HistoryBar: View {
     let map: MapController
@@ -310,6 +343,7 @@ struct HistoryBar: View {
                 handle(hi, info: info, isLow: false)
             }
             .frame(width: width, height: 44)
+            .coordinateSpace(.named("historybar"))
             .contextMenu {
                 Button("Last 12 months") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
                 Button("This year") { map.setHistoryRange(lo: max(info.first, info.dayNumber(LocalDay(y: info.lastYear, m: 1, d: 1))), hi: info.last) }
