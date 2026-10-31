@@ -26,65 +26,89 @@ final class PlacePageState {
     struct Activity: Hashable { let name: String; let line: String }
     struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
     /// the server's World Heritage list, read once
-    private static var heritage: [String: [String: Any]]?
+    static var heritage: [String: [String: Any]]?
     struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil }
-    private(set) var key: PlaceKey?
-    private(set) var name = ""
-    /// one line of what it is ("City in Hessen, Germany"); empty for a country
-    private(set) var what = ""
-    /// the country it is in (its flag and colours)
-    private(set) var country: String = ""
-    private(set) var facts: Facts?
-    private(set) var origin: CGRect = .zero
-    /// a town's or your own place's point, for Where it is
-    private(set) var point: SIMD2<Float>?
-    /// 0 at the origin to 1 full screen
-    var p: CGFloat = 0
-    var drag: CGFloat = 0
+    /// ONE PAGE of the stack (16.2: a row or card on a page pushes its own page on top; closing it returns to this one)
+    @MainActor
+    @Observable
+    final class OnePage: Identifiable {
+        let key: PlaceKey
+        let name: String
+        /// one line of what it is ("City in Hessen, Germany"); empty for a country
+        let what: String
+        /// the country it is in (its flag and colours)
+        let country: String
+        /// a region's ISO 3166-2 code (its facts on the server are keyed by it)
+        let code: String?
+        /// what it grew from (closing goes back into it)
+        let origin: CGRect
+        var facts: Facts?
+        /// 0 at the origin to 1 full screen
+        var p: CGFloat = 0
+        var drag: CGFloat = 0
+        init(key: PlaceKey, name: String, what: String, country: String, code: String?, origin: CGRect) {
+            self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
+            self.origin = origin
+        }
+        func load() {
+            if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
+            if key.kind == .town { Task { await loadTown(country, id: key.id) } }
+            if key.kind == .region, let code { Task { await loadRegion(country, code: code) } }
+        }
+    }
+    private(set) var pages: [OnePage] = []
+    /// the page on top (the one you see)
+    var top: OnePage? { pages.last }
+    var key: PlaceKey? { top?.key }
+    var name: String { top?.name ?? "" }
+    var country: String { top?.country ?? "" }
+    var facts: Facts? { top?.facts }
+    /// how far the first page has grown (the plus rolls into Share with it, and stays Share while pages are pushed)
+    var p: CGFloat { pages.first?.p ?? 0 }
     /// the test driver's scroll to the end, and its opening of Sources (checks)
     var toEnd = 0
     var sourcesTest = 0
-    var isOpen: Bool { key != nil }
+    var isOpen: Bool { !pages.isEmpty }
 
-    /// a region's ISO 3166-2 code (its facts on the server are keyed by it)
-    private var code: String?
+    /// the first page, grown from what opened it on the map, the card or the list (A16.1)
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
-        self.code = code
-        guard self.key == nil else { return }
-        self.key = key; self.name = name; self.what = what; self.country = country.lowercased()
-        self.origin = origin; facts = nil; drag = 0; p = 0
-        point = Self.point(of: key, cc: self.country)
+        guard pages.isEmpty else { return }
+        push(key, name: name, what: what, country: country, code: code, from: origin)
+    }
+    /// a page pushed on top of the one up, grown from the row or card tapped on it (16.7: "its page, pushed on top")
+    func push(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
+        guard key != self.key else { return }
+        let page = OnePage(key: key, name: name, what: what, country: country, code: code, origin: origin)
+        pages.append(page)
         Feel.tap()
-        DispatchQueue.main.async { [weak self] in
-            withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.5, dampingFraction: 1)) { self?.p = 1 }
+        DispatchQueue.main.async {
+            withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.5, dampingFraction: 1)) { page.p = 1 }
         }
-        if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
-        if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
-        if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
+        page.load()
     }
-    /// another place's page in this one's place (a row tapped on a page; a pushed page waits for its navigation)
-    func replace(_ key: PlaceKey, name: String, what: String, country: String, code: String?) {
-        self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
-        facts = nil
-        point = Self.point(of: key, cc: self.country)
-        Feel.tap()
-        if key.kind == .town { Task { await loadTown(self.country, id: key.id) } }
-        if key.kind == .region, let code { Task { await loadRegion(self.country, code: code) } }
-    }
+    /// the page on top goes back into what it grew from; the one under it is there as it was
     func close() {
-        guard key != nil else { return }
-        withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { p = 0; drag = 0 } completion: { [weak self] in
-            guard let self, self.p < 0.01 else { return }
-            self.key = nil
+        guard let page = top, page.p > 0.5 || page.drag > 0 else { return }
+        withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { page.p = 0; page.drag = 0 } completion: { [weak self] in
+            guard let self, page.p < 0.01 else { return }
+            self.pages.removeAll { $0 === page }
         }
     }
+    /// every page closed at once (a search result picked, the tab left)
+    func closeAll() {
+        guard let first = pages.first else { return }
+        pages = [first]
+        close()
+    }
+}
 
-    private func loadCountry(_ cc: String) async {
+extension PlacePageState.OnePage {
+    fileprivate func loadCountry(_ cc: String) async {
         guard case .ok(let d) = await Servers.data.file("country/\(cc).json"),
-              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key?.id.lowercased() == cc else { return }
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
-        var out = Facts()
-        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = Self.cut(Self.plain(intro), 620) }
+        var out = PlacePageState.Facts()
+        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620) }
         else if let desc = f["desc"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
         func s(_ k: String) -> String? {
             switch f[k] {
@@ -95,8 +119,8 @@ final class PlacePageState {
             }
         }
         if let v = s("capital") { out.rows.append(("Capital", v)) }
-        if let v = f["population"] as? NSNumber { out.rows.append(("People", Self.big(v.doubleValue))) }
-        if let v = f["area"] as? NSNumber { out.rows.append(("Area", Self.big(v.doubleValue) + " km²")) }
+        if let v = f["population"] as? NSNumber { out.rows.append(("People", PlacePageState.big(v.doubleValue))) }
+        if let v = f["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(v.doubleValue) + " km²")) }
         if let v = s("timezone") {
             // an IANA zone ("Europe/Rome") as its offset now, as the others are written ("UTC+01:00")
             let zones = v.components(separatedBy: ", ").map { z -> String in
@@ -119,15 +143,15 @@ final class PlacePageState {
         // each government's advice, with who says it and when it was checked
         let adv = j["advisories"] as? [String: Any] ?? [:]
         if let ca = adv["ca"] as? [String: Any], let t = ca["text"] as? String {
-            out.advice.append(("Canada", t, Self.day(ca["updated"] as? String)))
+            out.advice.append(("Canada", t, PlacePageState.day(ca["updated"] as? String)))
         }
         if let us = adv["us"] as? [String: Any], let l = us["level"] as? String {
             out.advice.append(("United States", l.replacingOccurrences(of: #"^Level \d+: "#, with: "", options: .regularExpression),
-                               Self.day(us["updated"] as? String)))
+                               PlacePageState.day(us["updated"] as? String)))
         }
         if let uk = adv["uk"] as? [String: Any], let a = uk["alert"] as? String, !a.isEmpty {
             let t = a.replacingOccurrences(of: "_", with: " ")
-            out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), Self.day(uk["updated"] as? String)))
+            out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), PlacePageState.day(uk["updated"] as? String)))
         }
         // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
         if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
@@ -140,8 +164,8 @@ final class PlacePageState {
             let word = RegionsMenuModel.word(first.level.one)
             out.regions = file.units.filter { seen.insert($0.id).inserted }
                 .sorted { (pop[$0.code ?? ""] ?? 0) > (pop[$1.code ?? ""] ?? 0) }
-                .map { u in Inside(key: PlaceKey(.region, u.id), name: u.name,
-                                   line: pop[u.code ?? ""].map { "\(word.prefix(1).uppercased() + word.dropFirst()) · \(Self.big($0)) people" }
+                .map { u in PlacePageState.Inside(key: PlaceKey(.region, u.id), name: u.name,
+                                   line: pop[u.code ?? ""].map { "\(word.prefix(1).uppercased() + word.dropFirst()) · \(PlacePageState.big($0)) people" }
                                        ?? word.prefix(1).uppercased() + word.dropFirst(),
                                    code: u.code) }
         }
@@ -151,26 +175,26 @@ final class PlacePageState {
                 guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue else { return nil }
                 let r = t["r"] as? String ?? ""
                 let ll = t["ll"] as? [NSNumber]
-                return Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
+                return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil })
             }
         }
         // highlights: the country's World Heritage sites (the list the server's country file names)
         if let ids = j["heritage"] as? [String], !ids.isEmpty {
-            if Self.heritage == nil, case .ok(let hd) = await Servers.data.file("heritage.json"),
-               let all = try? JSONSerialization.jsonObject(with: hd) as? [String: [String: Any]] { Self.heritage = all }
+            if PlacePageState.heritage == nil, case .ok(let hd) = await Servers.data.file("heritage.json"),
+               let all = try? JSONSerialization.jsonObject(with: hd) as? [String: [String: Any]] { PlacePageState.heritage = all }
             out.highlights = ids.compactMap { q in
-                guard let h = Self.heritage?[q], let n = h["n"] as? String else { return nil }
+                guard let h = PlacePageState.heritage?[q], let n = h["n"] as? String else { return nil }
                 let year = h["year"] as? String
-                return Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
+                return PlacePageState.Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
                                  photo: (h["img"] as? [String])?.first)
             }
         }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
-        out.activities = await Self.activities(cc, town: nil, first: mainCities)
+        out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
         // (a page opened since this one began loading keeps its own facts)
-        guard key?.id.lowercased() == cc else { return }
+        guard key.id.lowercased() == cc else { return }
         facts = out
         // the visa lines: for each of your nationalities (Profile), what its passport needs here
         let name = (f["name"] as? String) ?? (j["name"] as? String) ?? ""
@@ -181,21 +205,21 @@ final class PlacePageState {
                   let nj = try? JSONSerialization.jsonObject(with: nd) as? [String: Any],
                   let v = (nj["visaFromHere"] as? [String: Any])?[name] as? String else { continue }
             let who = ((nj["facts"] as? [String: Any])?["name"] as? String) ?? (nj["name"] as? String) ?? n.uppercased()
-            visa.append(Self.visa(v) + "\n" + "With your passport from \(who)")
+            visa.append(PlacePageState.visa(v) + "\n" + "With your passport from \(who)")
         }
-        guard key?.id.lowercased() == cc else { return }
+        guard key.id.lowercased() == cc else { return }
         facts?.visa = visa
     }
 
     /// A TOWN'S FACTS (16.4.5: People, Height, Local time, Climate) from the server's cities (D9 as it is), by its
     /// GeoNames id
-    private func loadTown(_ cc: String, id: String) async {
+    fileprivate func loadTown(_ cc: String, id: String) async {
         guard let gid = Int(id.split(separator: "/").last ?? ""),
               case .ok(let d) = await Servers.data.file("cities/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]],
-              let t = all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }), key?.id == id else { return }
-        var out = Facts()
-        if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", Self.big(p.doubleValue))) }
+              let t = all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }), key.id == id else { return }
+        var out = PlacePageState.Facts()
+        if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let e = t["ele"] as? NSNumber { out.rows.append(("Height", "\(e.intValue) m")) }
         if let z = t["tz"] as? String, let tz = TimeZone(identifier: z) {
             let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
@@ -204,24 +228,27 @@ final class PlacePageState {
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
             out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
         }
-        if let n = t["n"] as? String { out.activities = await Self.activities(cc, town: n) }
-        guard key?.id == id else { return }
+        if let n = t["n"] as? String { out.activities = await PlacePageState.activities(cc, town: n) }
+        guard key.id == id else { return }
         facts = out
     }
 
     /// A REGION'S FACTS (16.4.5: People, Area, Capital, its parent) from the server's regions (level 1, by ISO code)
-    private func loadRegion(_ cc: String, code: String) async {
+    fileprivate func loadRegion(_ cc: String, code: String) async {
         guard case .ok(let d) = await Servers.data.file("regions/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
               let r = all[code] as? [String: Any], self.code == code else { return }
-        var out = Facts()
+        var out = PlacePageState.Facts()
         if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
-        if let p = r["pop"] as? NSNumber { out.rows.append(("People", Self.big(p.doubleValue))) }
-        if let a = r["area"] as? NSNumber { out.rows.append(("Area", Self.big(a.doubleValue) + " km²")) }
+        if let p = r["pop"] as? NSNumber { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
+        if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
         facts = out
     }
 
+}
+
+extension PlacePageState {
     /// Wikivoyage's "do" listings (a town's own, see and do; a country's do from every city it has), as rows
     static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
@@ -258,13 +285,6 @@ final class PlacePageState {
         return s
     }
 
-    /// a town's point (from the town index, if it has come) or your own place's
-    static func point(of key: PlaceKey, cc: String) -> SIMD2<Float>? {
-        if key.kind == .yours { return OwnPlaces.shared.place(key.id)?.point }
-        if key.kind == .town, let h = TownIndex.shared.hit(key.id) { return EqualEarth.project(lon: h.lon, lat: h.lat) }
-        return nil
-    }
-
     /// the source's HTML entities as the characters they stand for
     static func plain(_ s: String) -> String {
         var t = s
@@ -292,22 +312,38 @@ final class PlacePageState {
 struct PlacePageView: View {
     let map: MapController
     let water: Water
-    @State private var page = PlacePageState.shared
-    @State private var ground: [Color] = []
+    @State private var stack = PlacePageState.shared
     /// the water's stop before the page came (it goes back there when the page closes)
     @State private var before: Water.Stop?
 
     var body: some View {
-        ZStack { pageBody }
-            .onChange(of: page.key == nil) { _, closed in
-                if !closed { before = water.stop; water.go(.closed) }
-                else if let b = before { water.go(b); before = nil }
+        // every page of the stack, the top one last (the ones under it stay as they were, scrolled where they were)
+        ZStack {
+            ForEach(stack.pages) { page in
+                PageLayer(map: map, water: water, page: page, top: page === stack.top)
             }
+        }
+        .onChange(of: stack.isOpen) { _, open in
+            if open { before = water.stop; water.go(.closed) }
+            else if let b = before { water.go(b); before = nil }
+        }
     }
+}
+
+/// ONE PAGE of the stack, grown from its origin
+private struct PageLayer: View {
+    let map: MapController
+    let water: Water
+    let page: PlacePageState.OnePage
+    let top: Bool
+    @State private var ground: [Color] = []
+
+    var body: some View { pageBody }
 
     @ViewBuilder private var pageBody: some View {
         let L = water.layout
-        if let key = page.key {
+        do {
+            let key = page.key
             let full = CGRect(x: 0, y: 0, width: L.W, height: L.H)
             let p = page.p * (1 - min(0.6, page.drag / (L.H * 1.2)))
             let r = CGRect(x: page.origin.minX + (full.minX - page.origin.minX) * p,
@@ -321,7 +357,7 @@ struct PlacePageView: View {
                 .offset(x: r.minX, y: r.minY)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous).offset(x: r.minX, y: r.minY).size(r.size))
-                .allowsHitTesting(page.p > 0.98)
+                .allowsHitTesting(top && page.p > 0.98)
                 .onAppear { ground = Self.colours(page.country) }
                 .onChange(of: page.country) { _, c in ground = Self.colours(c) }
         }
@@ -335,10 +371,6 @@ struct PlacePageView: View {
             VStack(spacing: 32) {
                 top(key, L: L)
                 marking(key)
-                if let i = map.world?.placeIndex[page.country] {
-                    WhereItIs(map: map, place: i, point: page.point, key: key)
-                        .onTapGesture { page.close() }
-                }
                 if let f = page.facts, !f.prose.isEmpty {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -359,7 +391,7 @@ struct PlacePageView: View {
         .scrollIndicators(.hidden)
         // the one blur under the head, only once words scroll under it (16.3)
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .onChange(of: page.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
+        .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
         }
         .background(Palette.white)
     }
@@ -385,7 +417,7 @@ struct PlacePageView: View {
         .gesture(DragGesture(minimumDistance: 8)
             .onChanged { v in page.drag = max(0, v.translation.height) }
             .onEnded { v in
-                if v.translation.height > 120 || v.predictedEndTranslation.height > 260 { page.close() }
+                if v.translation.height > 120 || v.predictedEndTranslation.height > 260 { PlacePageState.shared.close() }
                 else { withAnimation(.spring(response: 0.42, dampingFraction: 1)) { page.drag = 0 } }
             })
     }
@@ -445,7 +477,7 @@ struct PlacePageView: View {
             ZStack(alignment: .topTrailing) {
                 Group {
                     if let f = h.photo, let u = Self.commons(f, width: 800) {
-                        AsyncImage(url: u) { img in img.resizable().scaledToFill() } placeholder: { Palette.cream }
+                        PagePhoto(url: u)
                     } else { Palette.cream }
                 }
                 .frame(width: w, height: w * 10 / 16)
@@ -480,7 +512,7 @@ struct PlacePageView: View {
     /// WHAT IS IN IT (16.4.8): a list with its own search field, five rows (the most peopled), then Show more; a row is a
     /// flag, its name and one line; its plus stamps it; a tap opens its page
     private func insideList(_ title: String, _ all: [PlacePageState.Inside]) -> some View {
-        InsideList(title: title, all: all, country: page.country, countryName: page.name, map: map)
+        InsideList(title: title, all: all, country: page.country, countryName: page.key.kind == .country ? page.name : (map.world?.placeIndex[page.country].map { map.world!.places[$0].n } ?? ""), map: map)
     }
 
     /// YOUR RECORD (16.4.10, only when stamped): big numbers in the Profile's style (64 pt rounded over 15 pt labels):
@@ -613,6 +645,9 @@ private struct InsideList: View {
     let map: MapController
     @State private var query = ""
     @State private var shown = 5
+    /// each row's frame on screen (the page it pushes grows out of it); a plain box, so scrolling redraws nothing
+    @State private var frames = Frames()
+    final class Frames { var at: [PlaceKey: CGRect] = [:] }
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -673,11 +708,12 @@ private struct InsideList: View {
         }
         .frame(height: 52)
         .contentShape(Rectangle())
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [frames] f in frames.at[r.key] = f }
         .onTapGesture {
-            // its page (pushed pages wait: this one turns into it)
+            // its page, pushed on top, growing out of this row (16.7); closing it goes back into the row
             let page = PlacePageState.shared
-            page.replace(r.key, name: r.name, what: r.key.kind == .town ? "Town in \(r.line), \(countryName)" : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
-                         country: country, code: r.code)
+            page.push(r.key, name: r.name, what: r.key.kind == .town ? "Town in \(r.line), \(countryName)" : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
+                         country: country, code: r.code, from: frames.at[r.key] ?? .zero)
         }
     }
 }
@@ -795,60 +831,6 @@ enum PageGlass {
     @MainActor static var head: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
 }
 
-/// WHERE IT IS (16.4.3): a piece of our map, the content width x 160 pt, corners 22: the place and its neighbours as
-/// the world's outlines draw them (the sea our blue, the land white, borders 0.5 pt black 50%), the place filled in its
-/// stamped or wished colour (else our grey), a town or your own place as a point in it. Drawn from the world's rings,
-/// no live map under the page
-struct WhereItIs: View {
-    let map: MapController
-    /// the country it is in
-    let place: Int
-    /// a point inside it to mark (a town, your own place), in map units
-    var point: SIMD2<Float>?
-    var key: PlaceKey
-
-    var body: some View {
-        Canvas { ctx, size in
-            guard let w = map.world, let f = w.frame(of: place) else { return }
-            // the frame: the place's box with a fifth of room round it, at the canvas's aspect
-            var x0 = Double(f.x), y0 = Double(f.y), x1 = Double(f.z), y1 = Double(f.w)
-            let mx = (x1 - x0) * 0.2 + 0.5, my = (y1 - y0) * 0.2 + 0.5
-            x0 -= mx; x1 += mx; y0 -= my; y1 += my
-            let aspect = Double(size.width / size.height)
-            if (x1 - x0) / (y1 - y0) < aspect {
-                let c = (x0 + x1) / 2, hw = (y1 - y0) * aspect / 2; x0 = c - hw; x1 = c + hw
-            } else {
-                let c = (y0 + y1) / 2, hh = (x1 - x0) / aspect / 2; y0 = c - hh; y1 = c + hh
-            }
-            let sx = Double(size.width) / (x1 - x0)
-            func pt(_ p: SIMD2<Float>) -> CGPoint { CGPoint(x: (Double(p.x) - x0) * sx, y: (Double(p.y) - y0) * sx) }
-            ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Palette.blue.opacity(0.45)))
-            var land = Path(), mine = Path()
-            for r in w.rings where r.unit >= 0 {
-                guard Double(r.box.z) >= x0, Double(r.box.x) <= x1, Double(r.box.w) >= y0, Double(r.box.y) <= y1 else { continue }
-                var p = Path()
-                p.move(to: pt(w.points[r.start]))
-                for i in 1 ..< r.count { p.addLine(to: pt(w.points[r.start + i])) }
-                p.closeSubpath()
-                if w.unitOwner[r.unit] == place { mine.addPath(p) } else { land.addPath(p) }
-            }
-            ctx.fill(land, with: .color(Palette.white), style: FillStyle(eoFill: true))
-            let st = MarkStore.shared.state(key)
-            let fill = st.stamped && key.kind == .country ? Palette.lime : st.wished && key.kind == .country ? Palette.blue : Palette.grey
-            ctx.fill(mine, with: .color(fill), style: FillStyle(eoFill: true))
-            ctx.stroke(land, with: .color(Palette.ink.opacity(0.5)), lineWidth: 0.5)
-            ctx.stroke(mine, with: .color(Palette.ink.opacity(0.5)), lineWidth: 0.5)
-            if let point {
-                let c = pt(point)
-                let mark = MarkStore.shared.state(key)
-                let col = mark.stamped ? Palette.lime : mark.wished ? Palette.blue : Palette.ink
-                ctx.fill(Path(ellipseIn: CGRect(x: c.x - 6, y: c.y - 6, width: 12, height: 12)), with: .color(col))
-            }
-        }
-        .frame(height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-}
 
 /// ACTIVITIES (16.4.7; the word chosen, never "See and do"): its own search field, the first five rows, then Show more; each
 /// row its name and one line (Wikivoyage's words, credited in Sources)
@@ -885,6 +867,28 @@ private struct ActivitiesList: View {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// A PAGE'S PHOTO, fetched once and kept: scrolling a row of them back and forth shows each as it was, never blank
+/// again while it reloads (31 Oct 01:49: "They become white, then they spark up"; AsyncImage keeps nothing)
+struct PagePhoto: View {
+    let url: URL
+    @State private var image: UIImage?
+    private static let kept: NSCache<NSURL, UIImage> = { let c = NSCache<NSURL, UIImage>(); c.countLimit = 120; return c }()
+
+    var body: some View {
+        // a kept photo is drawn at once, before any task runs
+        if let i = image ?? Self.kept.object(forKey: url as NSURL) {
+            Image(uiImage: i).resizable().scaledToFill()
+        } else {
+            Palette.cream.task(id: url) {
+                guard let (d, _) = try? await URLSession.shared.data(from: url), let i = UIImage(data: d) else { return }
+                let ready = await i.byPreparingForDisplay() ?? i
+                Self.kept.setObject(ready, forKey: url as NSURL)
+                image = ready
             }
         }
     }

@@ -290,6 +290,12 @@ final class TestDriver {
                 case "page":
                     if a == "off" { PlacePageState.shared.close() }
                     else if a == "end" { PlacePageState.shared.toEnd += 1 }
+                    // page city: the open page's first city pushed on top (16.7); page back: the top page closed
+                    else if a == "city", let c = PlacePageState.shared.facts?.cities.first {
+                        PlacePageState.shared.push(c.key, name: c.name, what: "Town in \(c.line)", country: PlacePageState.shared.country,
+                                                   from: CGRect(x: 16, y: 520, width: 398, height: 52))
+                    }
+                    else if a == "back" { PlacePageState.shared.close() }
                     else if a == "sources" { PlacePageState.shared.sourcesTest += 1; PlacePageState.shared.toEnd = 5 }
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
