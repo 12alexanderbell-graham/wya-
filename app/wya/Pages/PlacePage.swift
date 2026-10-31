@@ -71,7 +71,7 @@ final class PlacePageState {
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key?.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
         var out = Facts()
-        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = Self.cut(intro, 620) }
+        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = Self.cut(Self.plain(intro), 620) }
         else if let desc = f["desc"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
         func s(_ k: String) -> String? {
             switch f[k] {
@@ -84,7 +84,15 @@ final class PlacePageState {
         if let v = s("capital") { out.rows.append(("Capital", v)) }
         if let v = f["population"] as? NSNumber { out.rows.append(("People", Self.big(v.doubleValue))) }
         if let v = f["area"] as? NSNumber { out.rows.append(("Area", Self.big(v.doubleValue) + " km²")) }
-        if let v = s("timezone") { out.rows.append(("Time zones", v)) }
+        if let v = s("timezone") {
+            // an IANA zone ("Europe/Rome") as its offset now, as the others are written ("UTC+01:00")
+            let zones = v.components(separatedBy: ", ").map { z -> String in
+                guard z.contains("/"), let tz = TimeZone(identifier: z) else { return z }
+                let sec = tz.secondsFromGMT(), h = abs(sec) / 3600, m = abs(sec) % 3600 / 60
+                return String(format: "UTC%@%02d:%02d", sec < 0 ? "-" : "+", h, m)
+            }
+            out.rows.append(("Time zones", zones.joined(separator: ", ")))
+        }
         if let c = f["currency"] as? [[String: Any]], let first = c.first {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
             out.rows.append(("Currency", [n, (first["sym"] as? String).map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")))
@@ -198,6 +206,15 @@ final class PlacePageState {
             }
         }
         return s
+    }
+
+    /// the source's HTML entities as the characters they stand for
+    static func plain(_ s: String) -> String {
+        var t = s
+        for (e, c) in [("&quot;", "\""), ("&amp;", "&"), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " ")] {
+            t = t.replacingOccurrences(of: e, with: c)
+        }
+        return t
     }
 
     /// up to n characters, cut at a whole sentence (16.4: prose)
