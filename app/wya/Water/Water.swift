@@ -79,7 +79,9 @@ final class Water {
     ///)
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
-    func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : layout.top(s) }
+    func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }
+    /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
+    var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
     func openMenu() {
         menuJob += 1

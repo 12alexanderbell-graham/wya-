@@ -81,8 +81,14 @@ struct ContentView: View {
                     // HISTORY (Part 13): the tool on draws the journey (Countries for now); nothing dated, it refuses
                     .onChange(of: head.history) { _, on in
                         if on {
-                            if !map.historyOn() { Feel.refuse(); head.history = false }
-                        } else { map.historyOff(fast: head.searching) }
+                            if !map.historyOn() { Feel.refuse(); head.history = false; return }
+                            // the water to history height from wherever it is (13.4)
+                            water.historyUp = true
+                            water.go(.quarter)
+                        } else {
+                            map.historyOff(fast: head.searching)
+                            if water.historyUp { water.historyUp = false; if water.stop == .quarter { water.go(.quarter) } }
+                        }
                     }
                     // a continent picked: the line runs through its stops only (13.4's states)
                     .onChange(of: map.continent) { _, _ in

@@ -386,15 +386,47 @@ final class MapController {
     @ObservationIgnored var historyShown: CGFloat = 0
     @ObservationIgnored private var historyAnim: (from: CGFloat, to: CGFloat, t0: CFTimeInterval, dur: Double)?
 
+    /// every dated stop of the scope (all time) and what the caption and the range bar show
+    @ObservationIgnored var historyAll: [HistoryTrack.Stop] = []
+    var historyInfo: HistoryInfo?
+
     /// on (A13.1): the line draws along its length in 1.2 s; false when there is nothing dated to draw (the tool refuses)
     func historyOn() -> Bool {
-        guard let w = world, regionScene == nil, !placesMode,
-              let t = HistoryTrack.countries(world: w, continent: continent) else { return false }
-        historyTrack = t
+        guard let w = world, regionScene == nil, !placesMode else { return false }
+        let all = HistoryTrack.countryStops(world: w, continent: continent)
+        let today = LocalDay(Date(), in: .current)
+        guard let r = HistoryTrack.defaultRange(all, today: today) else { return false }
+        historyAll = all
+        let first = HistoryInfo.number(all.first!.from), last = max(HistoryInfo.number(today), HistoryInfo.number(all.last!.from))
+        historyInfo = HistoryInfo(first: first, last: last, lo: HistoryInfo.number(r.0), hi: HistoryInfo.number(r.1), count: 0, km: 0)
+        guard rebuildHistory(land: true) else { historyInfo = nil; return false }
         // (a new scope draws its line from the start again)
         historyShown = 0
         historyAnim = (0, 1, CACurrentMediaTime(), Motion.reduce ? 0.3 : 1.2)
         needsFrame = true
+        return true
+    }
+    /// a handle dragged (live: the land edge waits for the release), a year tapped, a menu row picked
+    func setHistoryRange(lo: Int, hi: Int, live: Bool = false) {
+        guard var info = historyInfo, historyTrack != nil else { return }
+        info.lo = min(lo, hi); info.hi = max(lo, hi)
+        historyInfo = info
+        _ = rebuildHistory(land: !live)
+        if historyAnim == nil { historyShown = 1 }
+        needsFrame = true
+    }
+    @discardableResult private func rebuildHistory(land: Bool) -> Bool {
+        guard let w = world, var info = historyInfo else { return false }
+        let stops = HistoryTrack.within(historyAll, HistoryInfo.day(info.lo), HistoryInfo.day(info.hi))
+        guard !stops.isEmpty else {
+            info.count = 0; info.km = 0; historyInfo = info
+            historyTrack = HistoryTrack(stops: [], world: w, land: false)
+            return historyTrack != nil
+        }
+        let t = HistoryTrack(stops: stops, world: w, land: land)
+        historyTrack = t
+        info.count = stops.count; info.km = t.km
+        if historyInfo != info { historyInfo = info }
         return true
     }
     /// off (A13.3): undrawn into its start in 0.6 s, twice as fast when something else is taking over
@@ -413,7 +445,7 @@ final class MapController {
         if x >= 1 {
             historyShown = a.to
             historyAnim = nil
-            if a.to == 0 { historyTrack = nil }
+            if a.to == 0 { historyTrack = nil; historyInfo = nil }
         }
     }
     @ObservationIgnored var nearbyTowns: [String] = []
