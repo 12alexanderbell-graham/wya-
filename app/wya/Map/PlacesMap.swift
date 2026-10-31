@@ -44,16 +44,22 @@ extension MapController {
     }
     /// a place's towns read (from the data server, kept for the session)
     func loadTowns(_ cc: String) {
+        if retryShapes.contains(cc) { townScenes[cc] = nil }
         guard townScenes[cc] == nil, !townLoading.contains(cc) else { takeTownMarks(); return }
         townLoading.insert(cc)
         Task.detached(priority: .userInitiated) { [weak self] in
             let towns = await TownStore.shared.towns(cc)
             let shapes = await TownStore.shared.shapes(cc)
-            let scene = towns.map { TownScene(cc: cc, towns: $0, shapes: shapes) }
+            let scene = towns.map { TownScene(cc: cc, towns: $0, shapes: shapes ?? []) }
             await MainActor.run {
                 guard let self else { return }
                 self.townLoading.remove(cc)
-                guard let scene, !scene.towns.isEmpty else { return }
+                // shapes that could not be had now: shown without them this time, asked for again next time
+                guard let scene, !scene.towns.isEmpty, shapes != nil else {
+                    if let scene, !scene.towns.isEmpty, shapes == nil { self.townScenes[cc] = scene; self.retryShapes.insert(cc) }
+                    return
+                }
+                self.retryShapes.remove(cc)
                 self.townScenes[cc] = scene
                 self.takeTownMarks()
                 self.needsFrame = true
@@ -152,8 +158,9 @@ enum TownStamps {
         var scene = finest[cc].flatMap { $0.row == row ? $0 : nil }
         if scene == nil {
             guard let f = await RegionCatalog.shared.fetch(cc, row: row) else { return }
-            scene = RegionScene(place: place, id: cc, row: row, file: f)
-            finest[cc] = scene
+            // built off the main thread (France's finest level is 35,000 communes), as the region map's are
+            scene = await Task.detached(priority: .userInitiated) { RegionScene(place: place, id: cc, row: row, file: f) }.value
+            finest = [cc: scene].compactMapValues { $0 }
         }
         guard let scene, let u = scene.unit(at: p) else { return }
         guard !MarkStore.shared.state(PlaceKey(.region, scene.unitIDs[u])).stamped else { return }

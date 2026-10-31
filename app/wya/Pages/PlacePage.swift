@@ -36,8 +36,9 @@ final class PlacePageState {
     /// 0 at the origin to 1 full screen
     var p: CGFloat = 0
     var drag: CGFloat = 0
-    /// the test driver's scroll to the end (checks)
+    /// the test driver's scroll to the end, and its opening of Sources (checks)
     var toEnd = 0
+    var sourcesTest = 0
     var isOpen: Bool { key != nil }
 
     /// a region's ISO 3166-2 code (its facts on the server are keyed by it)
@@ -158,6 +159,8 @@ final class PlacePageState {
                                  photo: (h["img"] as? [String])?.first)
             }
         }
+        // (a page opened since this one began loading keeps its own facts)
+        guard key?.id.lowercased() == cc else { return }
         facts = out
         // the visa lines: for each of your nationalities (Profile), what its passport needs here
         let name = (f["name"] as? String) ?? (j["name"] as? String) ?? ""
@@ -660,6 +663,10 @@ private struct SourcesRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: PlacePageState.shared.sourcesTest) { _, _ in
+            open = true
+            if credits.isEmpty { Task { await loadCredits() } }
+        }
     }
 
     private var lines: [String] {
@@ -688,7 +695,36 @@ private struct SourcesRow: View {
                 out[f] = [c["by"] as? String, c["lic"] as? String].compactMap { $0 }.joined(separator: ", ")
             }
         }
+        // the rest (the World Heritage photos are not in the server's credits) from Commons itself: each file's author and
+        // licence short name, in one request
+        let missing = facts.highlights.compactMap(\.photo).filter { out[$0] == nil }
+        for start in stride(from: 0, to: missing.count, by: 50) {
+            let batch = Array(missing[start ..< min(missing.count, start + 50)])
+            var c = URLComponents(string: "https://commons.wikimedia.org/w/api.php")!
+            c.queryItems = [.init(name: "action", value: "query"), .init(name: "format", value: "json"),
+                            .init(name: "prop", value: "imageinfo"), .init(name: "iiprop", value: "extmetadata"),
+                            .init(name: "titles", value: batch.map { "File:" + $0 }.joined(separator: "|"))]
+            guard let u = c.url, let (d, _) = try? await URLSession.shared.data(from: u),
+                  let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+                  let pages = (j["query"] as? [String: Any])?["pages"] as? [String: Any] else { continue }
+            for case let pg as [String: Any] in pages.values {
+                guard let title = pg["title"] as? String,
+                      let meta = ((pg["imageinfo"] as? [[String: Any]])?.first?["extmetadata"]) as? [String: Any] else { continue }
+                func v(_ k: String) -> String? { ((meta[k] as? [String: Any])?["value"] as? String).map(Self.text) }
+                let file = String(title.dropFirst(5))
+                let key = batch.first { $0.replacingOccurrences(of: "_", with: " ") == file } ?? file
+                out[key] = [v("Artist"), v("LicenseShortName")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+            }
+        }
+        #if DEBUG
+        NSLog("wya credits %d of %d, e.g. %@", out.count, facts.highlights.count, out.first.map { "\($0.key): \($0.value)" } ?? "-")
+        #endif
         credits = out
+    }
+    /// a Commons field's HTML as plain words
+    static func text(_ html: String) -> String {
+        html.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&").trimmingCharacters(in: .whitespacesAndNewlines)
     }
     /// FNV-1a of the file name's UTF-8 bytes, its low byte in hex (the server's shard_of)
     static func shard(_ name: String) -> String {

@@ -68,7 +68,8 @@ final class TownIndex {
             } else if q.count >= 3, r.folded.contains(q) {
                 if mine { if homeIn.count < limit { homeIn.append(r.hit) } } else if awayIn.count < limit { awayIn.append(r.hit) }
             }
-            if home.count >= limit { break }
+            // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
+            if home.count >= limit || (open == nil && away.count >= limit) { break }
         }
         let h = Array((home + homeIn + away + awayIn).prefix(limit))
         last = (q, open, h)

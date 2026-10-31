@@ -290,6 +290,7 @@ final class TestDriver {
                 case "page":
                     if a == "off" { PlacePageState.shared.close() }
                     else if a == "end" { PlacePageState.shared.toEnd += 1 }
+                    else if a == "sources" { PlacePageState.shared.sourcesTest += 1; PlacePageState.shared.toEnd = 5 }
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }

@@ -108,9 +108,12 @@ nonisolated final class TownStore: @unchecked Sendable {
         lock.lock(); towns[cc] = t; lock.unlock()
         return t
     }
-    func shapes(_ cc: String) async -> [UrbanFile.Shape] {
+    /// a place's shapes; nil when they could not be had now (so the town scene is not kept without them)
+    func shapes(_ cc: String) async -> [UrbanFile.Shape]? {
         lock.lock(); if let s = shapes[cc] { lock.unlock(); return s }; lock.unlock()
-        guard case .ok(let d) = await Servers.data.file("native/urban/urban-\(cc).wyau"), let s = UrbanFile.parse(d) else { return [] }
+        let answer = await Servers.data.file("native/urban/urban-\(cc).wyau")
+        guard case .ok(let d) = answer else { return nil }
+        guard let s = UrbanFile.parse(d) else { return [] }
         lock.lock(); shapes[cc] = s; lock.unlock()
         return s
     }
