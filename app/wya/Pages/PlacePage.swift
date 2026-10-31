@@ -22,6 +22,8 @@ final class PlacePageState {
         var highlights: [Highlight] = []
         /// Activities (16.4.7): Wikivoyage's "do" listings (a country's from all its cities, a town's its own)
         var activities: [Activity] = []
+        /// a thing's photo (Wikimedia Commons), shown under the marking block
+        var photo: String?
     }
     struct Activity: Hashable { let name: String; let line: String }
     struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
@@ -54,6 +56,7 @@ final class PlacePageState {
             if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
             if key.kind == .town { Task { await loadTown(country, id: key.id) } }
             if key.kind == .region, let code { Task { await loadRegion(country, code: code) } }
+            if key.kind == .thing { loadThing() }
         }
     }
     private(set) var pages: [OnePage] = []
@@ -103,6 +106,18 @@ final class PlacePageState {
 }
 
 extension PlacePageState.OnePage {
+    /// A THING'S PAGE (16.2 for things, D5 as it is): its photo, its own line as the prose, its kind and where it is
+    fileprivate func loadThing() {
+        guard let (cc, t) = ThingStore.shared.thing(key.id) else { return }
+        var out = PlacePageState.Facts()
+        if !t.photo.isEmpty { out.photo = t.photo }
+        // (its own line is already under its name; no prose repeating it)
+        out.rows.append(("Kind", t.kindName.capitalized))
+        let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+        out.rows.append(("Where", String(format: "%.4f, %.4f", ll.lat, ll.lon)))
+        _ = cc
+        facts = out
+    }
     fileprivate func loadCountry(_ cc: String) async {
         guard case .ok(let d) = await Servers.data.file("country/\(cc).json"),
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
@@ -371,6 +386,13 @@ private struct PageLayer: View {
             VStack(spacing: 32) {
                 top(key, L: L)
                 marking(key)
+                // a thing's photo (Commons; credited in Sources), the content's width, 4:3, corners 22
+                if let f = page.facts, let ph = f.photo, let u = Self.commons(ph, width: 1200) {
+                    Color.clear
+                        .aspectRatio(4 / 3, contentMode: .fit)
+                        .overlay { PagePhoto(url: u) }
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
                 if let f = page.facts, !f.prose.isEmpty {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -758,8 +780,9 @@ private struct SourcesRow: View {
     private var lines: [String] {
         var out: [String] = []
         if kind == .country, !facts.prose.isEmpty { out.append("Text: Wikivoyage, CC BY-SA") }
-        else if !facts.prose.isEmpty { out.append("Text: Wikidata") }
-        if !facts.rows.isEmpty { out.append(kind == .town ? "Facts: GeoNames, CC BY 4.0" : "Facts: Wikidata") }
+        else if !facts.prose.isEmpty { out.append(kind == .thing ? "Text: Wikidata, CC0" : "Text: Wikidata") }
+        if let f = facts.photo { out.append("Photo: " + (credits[f] ?? f) + ", Wikimedia Commons") }
+        if !facts.rows.isEmpty { out.append(kind == .town ? "Facts: GeoNames, CC BY 4.0" : kind == .thing ? "Facts: Wikidata, CC0" : "Facts: Wikidata") }
         for h in facts.highlights {
             guard let f = h.photo else { continue }
             out.append("Photo of \(h.name): " + (credits[f] ?? f) + ", Wikimedia Commons")
@@ -773,8 +796,7 @@ private struct SourcesRow: View {
     private func loadCredits() async {
         var out: [String: String] = [:]
         var shards: [String: [String: Any]] = [:]
-        for h in facts.highlights {
-            guard let f = h.photo else { continue }
+        for f in facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? []) {
             let sh = Self.shard(f)
             if shards[sh] == nil, case .ok(let d) = await Servers.data.file("credits/\(sh).json"),
                let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { shards[sh] = j }
@@ -784,7 +806,7 @@ private struct SourcesRow: View {
         }
         // the rest (the World Heritage photos are not in the server's credits) from Commons itself: each file's author and
         // licence short name, in one request
-        let missing = facts.highlights.compactMap(\.photo).filter { out[$0] == nil }
+        let missing = (facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? [])).filter { out[$0] == nil }
         for start in stride(from: 0, to: missing.count, by: 50) {
             let batch = Array(missing[start ..< min(missing.count, start + 50)])
             var c = URLComponents(string: "https://commons.wikimedia.org/w/api.php")!

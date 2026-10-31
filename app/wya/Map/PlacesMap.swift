@@ -86,6 +86,26 @@ extension MapController {
         }
     }
 
+    /// A THING FOUND BY SEARCH: its country opened (if it isn't), then, once its things have come, the thing framed and
+    /// darkened for two seconds
+    func showThing(file cc: String, id: String) {
+        guard let w = world, let i = w.placeIndex[cc] else { return }
+        if placeOpen != i { openPlace(i) }
+        Task { @MainActor [weak self] in
+            for _ in 0 ..< 150 {
+                if ThingStore.shared.things(cc) != nil { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let self, self.placeOpen == i, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }) else { return }
+            self.thingPressed = id
+            // close enough that its band shows it (the rest of its fame's band: 16x the framing zoom covers every thing)
+            let r: Float = 0.004
+            self.showBox(SIMD4(t.at.x - r, t.at.y - r, t.at.x + r, t.at.y + r), place: i)
+            try? await Task.sleep(for: .milliseconds(2600))
+            if self.thingPressed == id { self.thingPressed = nil; self.needsFrame = true }
+        }
+    }
+
     /// your own place whose mark is under a screen point (within 22 pt of its point)
     func ownHit(at p: CGPoint) -> String? {
         var best: (String, CGFloat)?
