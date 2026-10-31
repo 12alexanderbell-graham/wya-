@@ -289,8 +289,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     /// each place's towns' buffers (points, fan index), made once per scene
     private var townBuffers: [String: (scene: TownScene, points: MTLBuffer, fans: MTLBuffer)] = [:]
     /// the open country's plain towns and its dots, kept until the marks or the pressed town change
-    private var plainCache: (key: String, list: [Int])?
-    private var dotCache: (key: String, buffer: MTLBuffer?, count: Int)?
+    private var plainCache: [String: (key: String, list: [Int])] = [:]
+    private var dotCache: [String: (key: String, buffer: MTLBuffer?, count: Int)] = [:]
     /// a focus key ("place:12", Regions) and its place
     static func focus(_ k: String) -> Int? { k.hasPrefix("place:") ? Int(k.dropFirst(6)) : nil }
 
@@ -749,7 +749,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // once, solid in our grey so neighbours are one colour; yours lime, wished blue; the one under the finger the
         // darker grey (or its colour darkened). They just appear. No circles (30 Oct 23:38); dots only with Map
         // settings' Town dots on
-        if placesOn || controller.regionTowns, let cc = controller.placeOpenID, let sc = controller.townScenes[cc] {
+        // (with no country open, the towns of the countries in view once the map is close enough: PlacesMap's
+        // townCountries; each country's towns drawn as the open one's are)
+        if placesOn { controller.updateNearbyTowns() }
+        for cc in (placesOn || controller.regionTowns ? controller.townCountries : []) {
+            guard let sc = controller.townScenes[cc] else { continue }
             if townBuffers[cc]?.scene !== sc, !sc.fans.isEmpty,
                let pb = device.makeBuffer(bytes: sc.points, length: sc.points.count * MemoryLayout<SIMD2<Float>>.stride),
                let fb = device.makeBuffer(bytes: sc.fans, length: sc.fans.count * 4) {
@@ -757,7 +761,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             }
             let st = controller.townStamped[cc] ?? [], wi = controller.townWished[cc] ?? []
             // darkened while a finger is on it or its card is up (the press's place, as a region's is)
-            let pressedTown = pressed == controller.placeOpen ? controller.townPressed.flatMap { $0.cc == cc ? $0.i : nil } : nil
+            let pressedTown = pressed != nil && pressed == controller.world?.placeIndex[cc] ? controller.townPressed.flatMap { $0.cc == cc ? $0.i : nil } : nil
             let grey = Palette.greyV, greyDark = SIMD4<Float>(0xa1, 0x9e, 0x95, 255) / 255
             func dark(_ c: SIMD4<Float>) -> SIMD4<Float> { SIMD4(c.x * 0.75, c.y * 0.75, c.z * 0.75, 1) }
             if let tb = townBuffers[cc], tb.scene === sc {
@@ -786,12 +790,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 let marked = (controller.showsStamped ? st : []).union(controller.showsWished ? wi : [])
                 // the plain towns' list, made again only when the marks or the pressed town change (not every frame)
                 let plainKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)|\(controller.filter)"
-                if plainCache?.key != plainKey {
+                if plainCache[cc]?.key != plainKey {
                     var plain: [Int] = []
                     for i in sc.runs.indices where !marked.contains(i) && i != pressedTown && !sc.covered[i] { plain.append(i) }
-                    plainCache = (plainKey, plain)
+                    plainCache[cc] = (plainKey, plain)
                 }
-                towns(plainCache?.list ?? [], grey)
+                towns(plainCache[cc]?.list ?? [], grey)
                 if controller.showsStamped { towns(st.filter { $0 != pressedTown }.sorted(), Palette.limeV) }
                 if controller.showsWished { towns(wi.filter { $0 != pressedTown && !st.contains($0) }.sorted(), Palette.blueV) }
                 if let tp = pressedTown {
@@ -803,7 +807,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 struct D { var p: SIMD2<Float>; var r: Float; var pad: Float; var colour: SIMD4<Float> }
                 // made again only when the marks or the pressed town change (review 31 Oct: not every frame)
                 let dotKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)"
-                if dotCache?.key != dotKey {
+                if dotCache[cc]?.key != dotKey {
                     let lo = log(Float(max(1, sc.towns.last?.people ?? 1))), hi = log(Float(max(1, sc.towns.first?.people ?? 1)))
                     let ds: [D] = sc.towns.indices.map { i in
                         let t = hi > lo ? min(1, max(0, (log(Float(max(1, sc.towns[i].people))) - lo) / (hi - lo))) : 0.5
@@ -811,11 +815,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                         if i == pressedTown { col = st.contains(i) ? dark(Palette.limeV) : wi.contains(i) ? dark(Palette.blueV) : greyDark }
                         return D(p: sc.at[i], r: 2.5 + 3.5 * t, pad: 0, colour: col)
                     }
-                    dotCache = (dotKey, ds.isEmpty ? nil : device.makeBuffer(bytes: ds, length: ds.count * MemoryLayout<D>.stride), ds.count)
+                    dotCache[cc] = (dotKey, ds.isEmpty ? nil : device.makeBuffer(bytes: ds, length: ds.count * MemoryLayout<D>.stride), ds.count)
                 }
                 enc.setDepthStencilState(noStencil)
                 enc.setRenderPipelineState(dp)
-                if let c = dotCache, let b = c.buffer, c.count > 0 {
+                if let c = dotCache[cc], let b = c.buffer, c.count > 0 {
                     enc.setVertexBuffer(b, offset: 0, index: 0)
                     enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: c.count)
                 }
