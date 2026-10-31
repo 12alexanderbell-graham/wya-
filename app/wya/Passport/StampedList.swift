@@ -55,8 +55,10 @@ struct StampedList: View {
         /// an event stop's day, for the stops' order
         var day = ""
         enum Kind { case country, town, thing, stop }
+        /// a journey's row: its stop's own key (the row's id carries its place in the journey) and the stop
+        var journey: HistoryTrack.Stop?
         var town: Bool { kind == .town }
-        var key: PlaceKey { kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : .thing, id) }
+        var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : .thing, id)) }
     }
 
     /// a row's words for how often: "Twice", "3 times" ("" for once)
@@ -68,6 +70,8 @@ struct StampedList: View {
         guard let w = map.world else { return [] }
         var index: [String: Int] = [:]
         for (i, p) in w.places.enumerated() { index[p.id] = i }
+        // THE JOURNEY (13.4, the caption's number with history on): its stops in journey order, each with its day
+        if journeyOn { return journeyRows(w) }
         // PLACES (7.6): the Stamped list scoped to the current map, as the caption's number counts it
         if map.placesMode { return placesRows(w, index) }
         return marks.marks.compactMap { k, s -> Row? in
@@ -85,6 +89,23 @@ struct StampedList: View {
             return Row(id: k.id, name: w.places[i].n, place: i, line: line)
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// history is on: the list is the journey's
+    private var journeyOn: Bool { water.historyUp && map.historyTrack != nil }
+    /// THE JOURNEY'S ROWS (13.4): the stops in range, in order, the same place again as its own row; each row's line is
+    /// the day it starts ("7 Jun 2026"); a tap flies to that stop and history stays on
+    private func journeyRows(_ w: World) -> [Row] {
+        guard let t = map.historyTrack else { return [] }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "d MMM yyyy"
+        return t.stops.enumerated().map { n, s in
+            var c = DateComponents(); c.year = s.from.y; c.month = s.from.m; c.day = s.from.d
+            let day = Calendar(identifier: .gregorian).date(from: c).map { f.string(from: $0) } ?? ""
+            let kind: Row.Kind = s.key.kind == .country ? .country : s.key.kind == .town ? .town : .thing
+            let flag = s.place < w.places.count ? w.places[s.place].id : ""
+            return Row(id: "j\(n)|\(s.key.description)", name: s.name, place: s.place, line: day, kind: kind, flag: flag,
+                       day: "", journey: s)
+        }
     }
 
     /// PLACES' ROWS (7.6): a collection's stops you stamped, by their day; with a country open its towns and things you
@@ -249,6 +270,8 @@ struct StampedList: View {
         var ids = Set(rows.map(\.id))
         var out = rows
         for r in last + kept where !ids.contains(r.id) { out.append(r); ids.insert(r.id) }
+        // (a journey keeps its order)
+        if journeyOn { return out }
         return out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
@@ -324,6 +347,8 @@ struct StampedList: View {
     private func open(_ r: Row) {
         Feel.tap()
         water.closeList(to: .quarter)
+        // a journey's row: the camera frames that stop; history stays on, the water back at history height
+        if let s = r.journey { map.frameHistoryStop(s); return }
         // a town: the camera frames it and it darkens (as a town found by search)
         if r.town { map.showTown(file: String(r.id.prefix { $0 != "/" }), id: r.id); return }
         // a thing: its country opens and the camera comes close to it (as a thing found by search)

@@ -477,16 +477,16 @@ final class HistoryCapsule: UIView {
         label.textColor = .black
         glass.contentView.addSubview(label)
         alpha = 1
-        transform = CGAffineTransform(scaleX: 0.001, y: 0.001)
+        isHidden = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
     var isShown: Bool { showing }
-    /// back into its point, words kept as they were
+    /// away, words kept as they were
     func hide() {
         guard showing else { return }
         showing = false
-        UIView.animate(springDuration: 0.42, bounce: 0) { self.transform = CGAffineTransform(scaleX: 0.001, y: 0.001) }
+        isHidden = true
     }
 
     /// where it stands at rest (its frame without the grow)
@@ -533,49 +533,52 @@ final class HistoryCapsule: UIView {
         label.frame = CGRect(x: 10, y: (h - label.bounds.height) / 2, width: label.bounds.width, height: label.bounds.height)
         if visible != showing {
             showing = visible
-            // grows from the stop's point (its anchor at the point's side) and goes back into it
-            UIView.animate(springDuration: 0.42, bounce: 0) {
-                self.transform = visible ? .identity : CGAffineTransform(scaleX: 0.001, y: 0.001)
-            }
+            // (31 Oct: no growing and shrinking for its own sake: it is there, or not)
+            isHidden = !visible
         }
         center = centre
     }
 }
 
-/// THE RANGE BAR (13.4): drawn on the water (no glass of its own), the water's width − 32 and 44 pt tall, its centre
-/// at the water's top + 156. The track a 1 pt black 50% line from your first dated stop's year to today, a 4 pt black
-/// line between the two handles (24 pt black circles, 44 pt to touch), the years under it (13 pt, black inside the
-/// range, black 50% outside; every year while each has 30 pt, else every 2nd, 5th, 10th).
-
+/// THE RANGE BAR (13.4; redrawn 31 Oct 11:40 after "your slider sucks"): an iOS slider with two thumbs, drawn on the
+/// water (no glass of its own), the water's width - 32. The track a 6 pt capsule of black 12% from your first dated stop
+/// to today; the range a 6 pt black capsule between the thumbs; the thumbs white 28 pt circles with Apple's soft
+/// shadow (44 pt to touch), as a UISlider's; the years under the track only when the track spans more than one, each
+/// centred under its own stretch (black inside the range, black 50% outside), every 2nd, 5th or 10th when crowded.
+/// The caption above says the range's dates, so nothing under the thumbs repeats it.
 struct HistoryBar: View {
     let map: MapController
     let width: CGFloat
     @State private var lastEnd = 0
+    /// the track's ends (the thumbs' centres can reach them)
+    private var inset: CGFloat { 14 }
 
     var body: some View {
         if let info = map.historyInfo {
             let span = max(1, Double(info.last - info.first))
-            let x = { (d: Int) -> CGFloat in 12 + CGFloat(Double(d - info.first) / span) * (width - 24) }
+            let x = { (d: Int) -> CGFloat in inset + CGFloat(Double(d - info.first) / span) * (width - 2 * inset) }
             let lo = x(info.lo), hi = x(info.hi)
+            let trackY: CGFloat = 16
             ZStack(alignment: .topLeading) {
-                Rectangle().fill(Palette.ink.opacity(0.5)).frame(width: width - 24, height: 1).position(x: width / 2, y: 22)
-                Rectangle().fill(Palette.ink).frame(width: max(0, hi - lo), height: 4).position(x: (lo + hi) / 2, y: 22)
+                Capsule().fill(Palette.ink.opacity(0.12))
+                    .frame(width: width - 2 * inset + 6, height: 6).position(x: width / 2, y: trackY)
+                Capsule().fill(Palette.ink)
+                    .frame(width: max(6, hi - lo + 6), height: 6).position(x: (lo + hi) / 2, y: trackY)
                 ForEach(years(info), id: \.self) { y in
-                    let d = info.dayNumber(LocalDay(y: y, m: 1, d: 1))
-                    let inside = d >= info.lo && d <= info.hi
-                    Text(String(y)).font(.footnote).foregroundStyle(Palette.ink.opacity(inside ? 1 : 0.5))
-                        .fixedSize().position(x: x(max(info.first, d)) + 14, y: 40)
+                    let a = max(info.first, info.dayNumber(LocalDay(y: y, m: 1, d: 1)))
+                    let b = min(info.last, info.dayNumber(LocalDay(y: y, m: 12, d: 31)))
+                    let inside = b >= info.lo && a <= info.hi
+                    Text(String(y)).font(.footnote.weight(.medium)).foregroundStyle(Palette.ink.opacity(inside ? 1 : 0.5))
+                        .fixedSize().position(x: (x(a) + x(b)) / 2, y: 40)
                         .onTapGesture {
                             Feel.tap()
-                            withAnimation(Motion.settle) {
-                                map.setHistoryRange(lo: max(info.first, d), hi: min(info.last, info.dayNumber(LocalDay(y: y, m: 12, d: 31))))
-                            }
+                            withAnimation(Motion.settle) { map.setHistoryRange(lo: a, hi: b) }
                         }
                 }
-                handle(lo, info: info, isLow: true)
-                handle(hi, info: info, isLow: false)
+                handle(lo, info: info, isLow: true, y: trackY)
+                handle(hi, info: info, isLow: false, y: trackY)
             }
-            .frame(width: width, height: 44)
+            .frame(width: width, height: 50)
             .coordinateSpace(.named("historybar"))
             .contextMenu {
                 Button("Last 12 months") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
@@ -590,19 +593,23 @@ struct HistoryBar: View {
 
     private func years(_ info: HistoryInfo) -> [Int] {
         let first = info.firstYear, last = info.lastYear
+        guard last > first else { return [] }
         let n = max(1, last - first + 1)
-        let each = (width - 24) / CGFloat(n)
+        let each = (width - 2 * inset) / CGFloat(n)
         let step = each >= 30 ? 1 : each * 2 >= 30 ? 2 : each * 5 >= 30 ? 5 : 10
         return stride(from: first, through: last, by: 1).filter { ($0 - first) % step == 0 }
     }
 
-    private func handle(_ at: CGFloat, info: HistoryInfo, isLow: Bool) -> some View {
-        Circle().fill(Palette.ink).frame(width: 24, height: 24)
+    private func handle(_ at: CGFloat, info: HistoryInfo, isLow: Bool, y: CGFloat) -> some View {
+        Circle().fill(Palette.white)
+            .shadow(color: Palette.ink.opacity(0.18), radius: 4, y: 1)
+            .overlay(Circle().stroke(Palette.ink.opacity(0.06), lineWidth: 0.5))
+            .frame(width: 28, height: 28)
             .frame(width: 44, height: 44).contentShape(Rectangle())
-            .position(x: at, y: 22)
+            .position(x: at, y: y)
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("historybar"))
                 .onChanged { v in
-                    let share = Double((v.location.x - 12) / (width - 24))
+                    let share = Double((v.location.x - inset) / (width - 2 * inset))
                     var d = info.first + Int((share * Double(info.last - info.first)).rounded())
                     let end = d <= info.first ? -1 : d >= info.last ? 1 : 0
                     if end != 0, end != lastEnd { Feel.tick() }
