@@ -194,7 +194,12 @@ final class HistoryLineView: UIView {
     private let legCap = HistoryCapsule()
     private var legShown: Int?
     /// what a tap on the journey found (13.4's table): a start or end capsule, or a leg within 12 pt
-    enum Hit { case start, end, leg(Int) }
+    enum Hit { case start, end, leg(Int), edge(Int) }
+    /// THE EDGE CAPSULES (13.3, a leg over the date line): where each half meets the map's edge, a capsule names the
+    /// other end ("Honolulu ›" on the half leaving, "‹ Tokyo" on the half arriving); a tap flies to that end
+    private var edgeCaps: [HistoryCapsule] = []
+    /// for each edge capsule shown, the stop it names
+    private var edgeStop: [Int] = []
     private var track: HistoryTrack?
     private var builtCount = -1
     private let holder = CALayer()
@@ -302,7 +307,29 @@ final class HistoryLineView: UIView {
             let prev = track.points.count > 1 ? m.screenPoint(track.points[track.points.count - 2]) : CGPoint(x: pn.x - 1, y: pn.y)
             endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: shown > 0.999 && m.historyTrack != nil && seen.contains(pn))
         } else { endCap.hide() }
+        edges(track, m, room: room, on: shown > 0.999 && m.historyTrack != nil)
         if m.historyTrack == nil && shown <= 0.001 { self.track = nil; builtCount = -1; isHidden = true }
+    }
+
+    /// the edge capsules for this frame: two per leg over the date line, each just over the line where its half meets
+    /// the edge (over it, so never on the line), named for the leg's other end
+    private func edges(_ t: HistoryTrack, _ m: MapController, room: CGRect, on: Bool) {
+        var want: [(words: String, at: CGPoint, stop: Int)] = []
+        for i in t.breaks.sorted() where i >= 1 && i + 2 < t.points.count {
+            // the leg the jump is in
+            guard let j = t.legStart.lastIndex(where: { $0 <= i }), j + 1 < t.stops.count else { continue }
+            want.append((t.stops[j + 1].name + " \u{203A}", m.screenPoint(t.points[i - 1]), j + 1))
+            want.append(("\u{2039} " + t.stops[j].name, m.screenPoint(t.points[i + 2]), j))
+        }
+        while edgeCaps.count < want.count { let c = HistoryCapsule(); addSubview(c); edgeCaps.append(c) }
+        edgeStop = want.map(\.stop)
+        // seen anywhere across the screen (the edge can be under the zoom column), placed in the room left of it
+        let wide = CGRect(x: 0, y: room.minY, width: bounds.width, height: room.height).insetBy(dx: -24, dy: -24)
+        for (n, c) in edgeCaps.enumerated() {
+            guard n < want.count else { c.hide(); continue }
+            let w = want[n]
+            c.set(w.words, near: w.at, awayFrom: CGPoint(x: w.at.x, y: w.at.y + 1), in: room, visible: on && wide.contains(w.at))
+        }
     }
 
     /// THE JOURNEY'S HOLD MENU (13.4): Share this journey · Open the start · Open the end (the line, a leg or a capsule)
@@ -404,7 +431,7 @@ final class HistoryLineView: UIView {
     /// the capsules up, in this view's points (the map's names and marks keep clear of them)
     var capsuleFrames: [CGRect] {
         guard !isHidden else { return [] }
-        return [startCap, endCap, legCap].filter(\.isShown).map(\.planned)
+        return ([startCap, endCap, legCap] + edgeCaps).filter(\.isShown).map(\.planned)
     }
 
     /// the points of leg `j` (none for two stops in one place)
@@ -421,6 +448,9 @@ final class HistoryLineView: UIView {
         if startCap.isShown, startCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .start }
         if endCap.isShown, endCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .end }
         if legCap.isShown, legCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return legShown.map { .leg($0) } }
+        for (n, c) in edgeCaps.enumerated() where n < edgeStop.count && c.isShown && c.frame.insetBy(dx: -2, dy: -2).contains(p) {
+            return .edge(edgeStop[n])
+        }
         var best: (j: Int, d: CGFloat)?
         for j in 0 ..< track.legStart.count {
             guard let r = Self.legRange(track, j) else { continue }
@@ -442,6 +472,7 @@ final class HistoryLineView: UIView {
         case .start: legShown = nil; m.frameHistoryStop(track.stops[0])
         case .end: legShown = nil; m.frameHistoryStop(track.stops[track.stops.count - 1])
         case .leg(let j): legShown = legShown == j ? nil : j
+        case .edge(let i): legShown = nil; if i < track.stops.count { m.frameHistoryStop(track.stops[i]) }
         }
         m.needsFrame = true
     }

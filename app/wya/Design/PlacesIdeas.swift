@@ -10,7 +10,7 @@ enum PlacesIdeas {
     struct Row: Identifiable { let id = UUID(); let flag: String?; let icon: String?; let title: String; let line: String; let have: Int; let of: Int }
     static let rows: [Row] = [
         Row(flag: nil, icon: "map-places", title: "Formula 1 2026", line: "3 of 23 races", have: 3, of: 23),
-        Row(flag: nil, icon: "map-places", title: "UNESCO World Heritage", line: "5 of 1,248 sites", have: 5, of: 1248),
+        Row(flag: nil, icon: "map-places", title: "UNESCO World Heritage", line: "5 of 1,273 sites", have: 5, of: 1273),
         Row(flag: "de", icon: nil, title: "Germany", line: "6 places", have: 6, of: 0),
         Row(flag: "fr", icon: nil, title: "France", line: "4 places", have: 4, of: 0),
         Row(flag: "ch", icon: nil, title: "Switzerland", line: "2 places", have: 2, of: 0),
@@ -26,7 +26,8 @@ enum PlacesIdeas {
             ReviewItem(id: "D", name: "Circles", view: AnyView(phone(back) { d() })),
             ReviewItem(id: "E", name: "Three groups", view: AnyView(phone(back) { e() })),
         ]
-        ReviewSheet.save("places-ideas", title: "Places sheet: five ideas (at 50%, over the real Places map)", items: items,
+        ReviewSheet.save("places-ideas", title: "Places sheet: five ideas (at 50%, over the real Places map)",
+                         note: "Drawn by the app's own code, at the phone's real size. Each: All my places on top, then the same four maps (Formula 1 2026, UNESCO World Heritage, Germany, France).", items: items,
                          cell: CGSize(width: W, height: H + 34), columns: 3)
         #endif
     }
@@ -85,7 +86,7 @@ enum PlacesIdeas {
     static func a() -> some View {
         VStack(spacing: 0) {
             ForEach(Array(rows.prefix(4).enumerated()), id: \.offset) { n, r in
-                if n > 0 { Rectangle().fill(Palette.ink.opacity(0.12)).frame(height: 0.5).padding(.leading, 76) }
+                if n > 0 { Rectangle().fill(Palette.ink.opacity(0.12)).frame(height: 0.5).padding(.leading, 78).padding(.trailing, 24) }
                 HStack(spacing: 14) {
                     mark(r, 40)
                     VStack(alignment: .leading, spacing: 1) {
@@ -111,13 +112,13 @@ enum PlacesIdeas {
         return LazyVGrid(columns: cols, spacing: 12) {
             ForEach(rows.prefix(4)) { r in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(r.title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    Text(r.title).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2, reservesSpace: true)
                     Spacer(minLength: 0)
                     Text("\(r.have)").font(.system(size: 34, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
                     Text(r.of > 0 ? "of \(r.of.formatted())" : "places").font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
                 }
                 .padding(14)
-                .frame(width: 186, height: 112, alignment: .topLeading)
+                .frame(width: 186, height: 124, alignment: .topLeading)
                 .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Palette.white.opacity(0.75)))
             }
         }
