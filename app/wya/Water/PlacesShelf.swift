@@ -33,7 +33,9 @@ struct PlacesShelf: View {
         let shelfTop = foot + 12 - 4 - 14 - f * (Self.rowH + 40)
         let atlasFrom = foot + 12 - 4 - 14 + Self.rowH + 24
         let atlasTop = atlasFrom + (foot + 12 - 14 - atlasFrom) * f
-        let fade = L.capsule.minY - 2
+        // (the row's last visible line is 44 pt above the tabs' top, so at 25% none of it shows, with room: 31 Oct 02:07,
+        // the cards' tops were peeking behind the tabs; at 50% the whole row is still clear of it)
+        let fade = L.capsule.minY - 44
         ZStack(alignment: .top) {
             shelf(L)
                 .padding(.top, shelfTop)
@@ -48,17 +50,25 @@ struct PlacesShelf: View {
             }
         }
         // under the caption's soft edge at the top (P3) and the soft edge above the tabs at the bottom
-        .mask(alignment: .top) {
-            VStack(spacing: 0) {
-                Color.clear.frame(height: max(0, foot - 20))
-                LinearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom).frame(height: 16)
-                Rectangle().frame(height: max(0, fade - 24 - foot + 4))
-                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom).frame(height: 24)
-                Spacer(minLength: 0)
-            }
-        }
+        .mask { band(top: foot - 20, bottom: fade, H: L.H) }
         .onAppear { TownIndex.shared.load(); work() }
         .onChange(of: water.stop) { _, s in if s == .half { work() } }
+    }
+
+    /// the band the shelf and atlas show in: from under the caption's foot (a 16 pt soft edge) to the soft edge above
+    /// the tabs (24 pt); nothing at all when the caption's foot is below that edge (the water at 25%)
+    @ViewBuilder private func band(top: CGFloat, bottom: CGFloat, H: CGFloat) -> some View {
+        let t1 = top + 16, t2 = max(t1, bottom - 24)
+        if bottom <= t1 || H <= 0 {
+            Color.clear
+        } else {
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0), location: max(0, top / H)),
+                .init(color: .black, location: t1 / H),
+                .init(color: .black, location: t2 / H),
+                .init(color: .black.opacity(0), location: min(1, bottom / H)),
+            ], startPoint: .top, endPoint: .bottom)
+        }
     }
 
     private func shelf(_ L: Layout) -> some View {

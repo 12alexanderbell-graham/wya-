@@ -912,7 +912,16 @@ struct SearchResults: View {
             : Array((hits.prefix(max(4, 8 - anyRegionHits.count)).map { ResultKey.place($0) } + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
         let keys: [ResultKey] = !placesSearch ? mapKeys
             : typed ? { () -> [ResultKey] in
-                let k = townHits.map { ResultKey.town($0.key) } + hits.prefix(max(2, 8 - townHits.count)).map { ResultKey.place($0) }
+                // a country typed by a name people use for it ("UK", "Britain") or by its own whole name leads; then the
+                // towns; then the other countries found
+                let q = head.query.trimmingCharacters(in: .whitespaces).lowercased()
+                let lead = hits.filter { i in
+                    guard let w = map.world else { return false }
+                    return w.aliases[q].flatMap { w.placeIndex[$0] } == i || w.places[i].n.lowercased() == q
+                }
+                let rest = hits.filter { !lead.contains($0) }
+                let k = lead.map { ResultKey.place($0) } + townHits.map { ResultKey.town($0.key) }
+                    + rest.prefix(max(2, 8 - townHits.count - lead.count)).map { ResultKey.place($0) }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
             }() : baseKeys
         let w = width > 0 ? width : fullWidth
