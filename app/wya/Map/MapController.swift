@@ -372,6 +372,8 @@ final class MapController {
     @ObservationIgnored private(set) var territories: [Int] = []
     // MARK: PLACES (Part 7): our map's towns (PlacesMap.swift)
     /// Places is the mode: countries' fills drained; a country tapped opens with its towns
+    /// Pins is the mode: Apple's map is up (PinsMap.swift) and the zoom column works it
+    var pinsMode = false
     var placesMode = false {
         didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace(); placesArea = nil; placesCollection = nil } } }
     }
@@ -887,9 +889,11 @@ final class MapController {
     @ObservationIgnored var holdZoom: Int = 0 { didSet { if holdZoom != oldValue { holdTime = 0; needsFrame = true } } }
     @ObservationIgnored private var holdTime: Double = 0
     func zoomIn() {
+        if pinsMode { PinsMapState.shared.zoom(by: 1.6); return }
         let t = min(kMax, k * 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
     }
     func zoomOut() {
+        if pinsMode { PinsMapState.shared.zoom(by: 1 / 1.6); return }
         let t = max(kMin, k / 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
     }
     /// the continent picked from its planet, nil for the world: the caption names it and counts it

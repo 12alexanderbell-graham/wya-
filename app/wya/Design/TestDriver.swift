@@ -178,6 +178,13 @@ final class TestDriver {
                 case "burst": Snap.burst(ms: Int(a) ?? 1000)
                 case "quiet": break
                 // searchpick <id>: that place's search result picked (Head's pick)
+                // pins drop x y (a hold there) | pins select <n> | pins none: Pins' map without a finger
+                case "pins":
+                    if a == "drop", p.count > 3, let x = Double(p[2]), let y = Double(p[3]), let v = PinsMapState.shared.view {
+                        PinStore.shared.drop(at: v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v))
+                    } else if a == "select", p.count > 2, let n = Int(p[2]), n < PinStore.shared.pins.count {
+                        PinStore.shared.selected = PinStore.shared.pins[n].id
+                    } else if a == "none" { PinStore.shared.selected = nil }
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }

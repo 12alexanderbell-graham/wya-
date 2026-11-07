@@ -33,6 +33,9 @@ struct ContentView: View {
                 Palette.blue
             } else {
                 if !Perf.shared.off.contains("map") { sidewaysMap }
+                // PINS (Part 8): Apple's map over ours while Pins is the mode; it takes our camera when it comes
+                // (the switch is just a switch, 30 Oct 21:42)
+                if head.mode == .pins { PinsMapView(map: map, water: water).ignoresSafeArea() }
 
                 // sideways (1.11) the head goes up past the top edge, the column off the right edge, the water down past
                 // the bottom edge
@@ -334,6 +337,8 @@ struct ContentView: View {
         // still off, so its open country goes with it)
         if old == .regions { map.leaveRegionTowns() }
         map.placesMode = new == .places
+        map.pinsMode = new == .pins
+        if new != .pins { PinStore.shared.selected = nil }
         if new == .places || old == .places { closeCard() }
         if new == .regions {
             closeCard()

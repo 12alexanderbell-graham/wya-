@@ -220,7 +220,11 @@ struct SheetContent: View {
                     .frame(width: L.W, height: L.H, alignment: .top)
                     .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
             }
-            if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet {
+            // PINS (Part 8): its own words where the caption sits: the count, or the chosen pin's name and place
+            if map.pinsMode, !water.pageSheet {
+                PinsWater(water: water, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
+            }
+            if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet, !map.pinsMode {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
@@ -346,8 +350,8 @@ struct SheetContent: View {
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
             || water.pageSheet
-            // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places)
-            || map.placesMode
+            // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places), and Pins' its pins
+            || map.placesMode || map.pinsMode
     }
     @State private var captionShown = false
 }
