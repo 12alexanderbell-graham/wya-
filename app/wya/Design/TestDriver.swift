@@ -17,6 +17,14 @@ final class TestDriver {
     /// the session put back as after the system ended the app (19.2): `session restore`
     var restoreSession: (() -> Void)?
 
+    /// a hold menu's row, found by its words in the menu and its groups, chosen
+    private static func choose(_ title: String, in menu: UIMenu) {
+        for e in menu.children {
+            if let m = e as? UIMenu { choose(title, in: m) }
+            else if let a = e as? UIAction, a.title == title { a.performWithSender(nil, target: nil) }
+        }
+    }
+
     func start(map: MapController, water: Water, head: HeadState) {
         #if targetEnvironment(simulator) && DEBUG
         self.map = map; self.water = water; self.head = head
@@ -189,6 +197,24 @@ final class TestDriver {
                     } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {
                         PinStore.shared.colour(id, ColourPick(hue: h, light: 0.55, strength: 0.9))
                     }
+                // menu country <id> <row> | menu pin <n> <row> | menu at <x> <y> <row>: that hold menu built as a hold
+                // builds it, and the row with those words chosen (as a finger would, after the menu)
+                case "menu":
+                    var row = p.dropFirst(3).joined(separator: " ")
+                    var menu: UIMenu?
+                    if a == "at", p.count > 4, let x = Double(p[2]), let y = Double(p[3]), let m = map, let w = water, let h = head {
+                        row = p.dropFirst(4).joined(separator: " ")
+                        let mp = m.mapPoint(CGPoint(x: x, y: y))
+                        let i = m.world?.place(at: SIMD2(Float(mp.x), Float(mp.y))) ?? -1
+                        menu = ContentView.countryMenu(i, at: CGPoint(x: x, y: y), map: m, water: w, head: h)
+                    }
+                    if a == "country", p.count > 3, let m = map, let w = water, let h = head, let i = m.world?.placeIndex[p[2]] {
+                        let r = m.screenRect(of: i)
+                        menu = ContentView.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: m, water: w, head: h)
+                    } else if a == "pin", p.count > 3, let n = Int(p[2]), n < PinStore.shared.pins.count {
+                        menu = PinAnnotationView.menu(PinStore.shared.pins[n].id)
+                    }
+                    if let menu { Self.choose(row, in: menu) }
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }

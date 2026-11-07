@@ -74,6 +74,16 @@ final class PinStore {
         MarkStore.shared.did("Pin dropped") { [weak self] in self?.remove(p.id, undoable: false) }
         Task { await name(p.id, country: country?.name) }
     }
+    /// DROP A PIN HERE (11.5's town or thing menu): a pin at a place's point, named after it; not chosen, and nothing
+    /// else changes until Pins is opened; the undo drop takes it back
+    func drop(at c: CLLocationCoordinate2D, named: String, country: (id: String, name: String)?) {
+        var p = Pin(lat: c.latitude, lon: c.longitude)
+        p.cc = country?.id
+        p.place = [named, country?.name ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+        pins.append(p)
+        save()
+        MarkStore.shared.did("Pin dropped") { [weak self] in self?.remove(p.id, undoable: false) }
+    }
     func remove(_ id: UUID, undoable: Bool = true) {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         let gone = pins.remove(at: k)
@@ -383,37 +393,39 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         let id = a.id
         PinStore.from = convert(bounds, to: nil)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
-            MainActor.assumeIsolated {
-                guard let p = PinStore.shared.pin(id) else { return nil }
-                // each runs once the menu has gone (as every hold menu's rows)
-                let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
-                let state = PinsMapState.shared
-                let edit = UIAction(title: "Edit") { _ in
-                    after { PinStore.shared.selected = id; state.water?.go(.half) }
-                }
-                let colour = UIAction(title: "Colour") { _ in
-                    after { PinStore.shared.selected = id; PinStore.shared.colourAsked = true; state.water?.go(.half) }
-                }
-                let directions = UIAction(title: "Directions") { _ in PinStore.directions(p) }
-                let open = PinStore.page(p, world: state.map?.world)
-                let page = UIAction(title: "Open its place's page", attributes: open == nil ? .disabled : []) { _ in
-                    after { open?() }
-                }
-                let copy = UIAction(title: "Copy coordinates") { _ in
-                    UIPasteboard.general.string = String(format: "%.5f, %.5f", p.lat, p.lon)
-                }
-                let share = UIAction(title: "Share") { _ in after { PinStore.share(p) } }
-                let delete = UIAction(title: "Delete", attributes: .destructive) { _ in after { Feel.lift(); PinStore.shared.remove(id) } }
-                return UIMenu(title: p.title, children: [
-                    UIMenu(options: .displayInline, children: [edit]),
-                    UIMenu(options: .displayInline, children: [colour]),
-                    UIMenu(options: .displayInline, children: [directions]),
-                    UIMenu(options: .displayInline, children: [page, copy]),
-                    UIMenu(options: .displayInline, children: [share]),
-                    UIMenu(options: .displayInline, children: [delete]),
-                ])
-            }
+            MainActor.assumeIsolated { Self.menu(id) }
         }
+    }
+
+    @MainActor static func menu(_ id: UUID) -> UIMenu? {
+        guard let p = PinStore.shared.pin(id) else { return nil }
+        // each runs once the menu has gone (as every hold menu's rows)
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let state = PinsMapState.shared
+        let edit = UIAction(title: "Edit") { _ in
+            after { PinStore.shared.selected = id; state.water?.go(.half) }
+        }
+        let colour = UIAction(title: "Colour") { _ in
+            after { PinStore.shared.selected = id; PinStore.shared.colourAsked = true; state.water?.go(.full) }
+        }
+        let directions = UIAction(title: "Directions") { _ in PinStore.directions(p) }
+        let open = PinStore.page(p, world: state.map?.world)
+        let page = UIAction(title: "Open its place's page", attributes: open == nil ? .disabled : []) { _ in
+            after { open?() }
+        }
+        let copy = UIAction(title: "Copy coordinates") { _ in
+            UIPasteboard.general.string = String(format: "%.5f, %.5f", p.lat, p.lon)
+        }
+        let share = UIAction(title: "Share") { _ in after { PinStore.share(p) } }
+        let delete = UIAction(title: "Delete", attributes: .destructive) { _ in after { Feel.lift(); PinStore.shared.remove(id) } }
+        return UIMenu(title: p.title, children: [
+            UIMenu(options: .displayInline, children: [edit]),
+            UIMenu(options: .displayInline, children: [colour]),
+            UIMenu(options: .displayInline, children: [directions]),
+            UIMenu(options: .displayInline, children: [page, copy]),
+            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [delete]),
+        ])
     }
 }
 
@@ -534,8 +546,9 @@ struct PinSheet: View {
     var store = PinStore.shared
     @State private var picking = false
     @State private var pick = PinSheet.nearBlack
-    /// where the picker opens for a black pin: its deepest, greyest spot (nothing is picked until the finger moves)
-    static let nearBlack = ColourPick(hue: 0, light: ColourPick.lightBottom, strength: 0)
+    /// where the picker opens for a black pin: its deepest row, the field in full colour (at no strength the whole
+    /// field would be grey); nothing is picked until the finger moves
+    static let nearBlack = ColourPick(hue: 0, light: ColourPick.lightBottom, strength: 0.8)
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -560,7 +573,8 @@ struct PinSheet: View {
                             Feel.tap()
                             pick = p.pick ?? Self.nearBlack
                             picking.toggle()
-                            if picking, water.stop == .quarter { water.go(.half) }
+                            // the picker is taller than the room at 50%: it opens with the water at full
+                            if picking, water.stop != .full { water.go(.full) }
                         } label: {
                             HStack {
                                 // the colour's own name ("deep red"), as the picker names it
@@ -585,19 +599,17 @@ struct PinSheet: View {
                             }
                         }
                     }
-                    // NOTHING CUT AT REST: below full the sheet holds what fits whole (Name, Colour, Note, and not
-                    // Note while the picker is out); Coordinates and Delete pin are at full, where it scrolls
-                    if whole || !picking {
-                        section("Note") {
-                            TextField("", text: Binding(get: { p.note ?? "" }, set: { v in
-                                if v.count > 600 { Feel.refuse() }
-                                store.note(p.id, v)
-                            }), prompt: Text("Add a note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
-                            .font(.body).foregroundStyle(Palette.ink)
-                            .lineLimit(whole ? 1 ... 12 : 1 ... 2)
-                            .focused($typing)
-                            .frame(minHeight: 44)
-                        }
+                    // NOTHING CUT AT REST: below full the sheet holds what fits whole (Name, Colour, Note);
+                    // Coordinates and Delete pin are at full, where it scrolls (as the picker, which needs full)
+                    section("Note") {
+                        TextField("", text: Binding(get: { p.note ?? "" }, set: { v in
+                            if v.count > 600 { Feel.refuse() }
+                            store.note(p.id, v)
+                        }), prompt: Text("Add a note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+                        .font(.body).foregroundStyle(Palette.ink)
+                        .lineLimit(whole ? 1 ... 12 : 1 ... 2)
+                        .focused($typing)
+                        .frame(minHeight: 44)
                     }
                     if whole { fullRows(p) }
                     Color.clear.frame(height: L.H - fade + 24)
@@ -622,6 +634,8 @@ struct PinSheet: View {
             .onChange(of: typing) { _, t in if t { water.go(.full) } }
             .onChange(of: store.selected) { _, _ in picking = false; colourIfAsked() }
             .onChange(of: store.colourAsked) { _, _ in colourIfAsked() }
+            // pulled down below full, the picker goes back into its row
+            .onChange(of: water.stop) { _, s in if s != .full { picking = false } }
             .onAppear { colourIfAsked() }
         }
     }

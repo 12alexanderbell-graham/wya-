@@ -118,9 +118,11 @@ extension MapController {
         return best?.0
     }
     /// A7.11 YOUR OWN PLACE MADE BY QUICK ADD: at the tapped point of the open country, named after the nearest town
-    /// ("Near Kyoto"), stamped as it is made (with its region chain and country)
-    func makeOwnPlace(at p: CGPoint) {
-        guard let open = placeOpen, let cc = placeOpenID else { return }
+    /// ("Near Kyoto"), stamped as it is made (with its region chain and country). From the land's hold menu (Add a
+    /// place here) it is made unstamped, its card to follow.
+    @discardableResult
+    func makeOwnPlace(at p: CGPoint, stamp: Bool = true) -> OwnPlaces.Place? {
+        guard let open = placeOpen, let cc = placeOpenID else { return nil }
         let m = mapPoint(p)
         let ll = EqualEarth.unproject(m)
         let mp = SIMD2(Float(m.x), Float(m.y))
@@ -133,7 +135,8 @@ extension MapController {
         let place = OwnPlaces.shared.make(name: name, lat: ll.lat, lon: ll.lon, cc: cc)
         Feel.tap()
         needsFrame = true
-        Task { await TownStamps.stamp(place.key, name: place.name, cc: cc, source: .quick, place: open, at: mp) }
+        if stamp { Task { await TownStamps.stamp(place.key, name: place.name, cc: cc, source: .quick, place: open, at: mp) } }
+        return place
     }
 
     /// a map box's frame on screen now (where a page grows from, A16.1)

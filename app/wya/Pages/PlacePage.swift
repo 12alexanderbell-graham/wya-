@@ -78,12 +78,22 @@ final class PlacePageState {
     /// the test driver's way into Report a mistake (a reason picked, then Send)
     var reportTest = ""
     var sendTest = 0
+    /// a reason the page's sheet opens on, at Report a mistake (a hold menu's Report a wrong place)
+    var reportAsked: String?
     var isOpen: Bool { !pages.isEmpty }
 
     /// the first page, grown from what opened it on the map, the card or the list (A16.1)
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
         guard pages.isEmpty else { return }
         push(key, name: name, what: what, country: country, code: code, from: origin)
+    }
+    /// REPORT A WRONG PLACE (11.5's town or thing menu): the page opens as from Open its page, then its sheet rises at
+    /// Report a mistake with Wrong place picked (16.6)
+    func openReporting(_ key: PlaceKey, name: String, what: String = "", country: String, from origin: CGRect) {
+        guard pages.isEmpty else { return }
+        open(key, name: name, what: what, country: country, from: origin)
+        reportAsked = "Wrong place"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.sheetAsked += 1 }
     }
     /// a page pushed on top of the one up, grown from the row or card tapped on it (16.7: "its page, pushed on top")
     func push(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect,

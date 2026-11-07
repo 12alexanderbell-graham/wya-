@@ -22,7 +22,8 @@ final class DetailsState {
     /// closing back to the Stamped list (A4.21 reversed): the sheet's words roll out for 0.26 s before it closes
     private(set) var rollingOut = false
 
-    func open(_ key: PlaceKey, name: String, water: Water) {
+    /// `lived`: opened with Lived here on (a hold menu's Lived here, 11.5)
+    func open(_ key: PlaceKey, name: String, water: Water, lived livedOn: Bool = false) {
         // one thing in the water at a time: not over Verify
         guard self.key == nil, !opening, !VerifyState.shared.isOpen else { return }
         opening = true
@@ -31,6 +32,7 @@ final class DetailsState {
             if let x = await MarkStore.shared.details(key) {
                 d = x.details; times = max(1, x.times); lived = x.lived
                 start = (d, times, lived)
+                if livedOn { lived = true }
                 wish = false
             } else if let x = await MarkStore.shared.wishDetails(key) {
                 wd = x.details; want = x.want

@@ -41,6 +41,7 @@ struct PageSheet: View {
             .onChange(of: stack.sendTest) { _, _ in send(page) }
             .task(id: page.key.description) {
                 reporting = false; reason = nil; note = ""; sent = false
+                if let r = stack.reportAsked { stack.reportAsked = nil; reporting = true; reason = r }
                 if let f = page.facts { credits = await SourcesRow.credits(f) }
             }
         }

@@ -50,5 +50,19 @@ final class OwnPlaces {
         all[i].name = String(name.prefix(80))
         save()
     }
+    /// its kind, one of the twelve (7.3)
+    func setKind(_ id: String, _ kind: String) {
+        guard let i = all.firstIndex(where: { $0.id == id }) else { return }
+        all[i].kind = kind
+        save()
+    }
+    /// a removed place back where it was (the undo drop)
+    func restore(_ p: Place, at i: Int) {
+        guard place(p.id) == nil else { return }
+        all.insert(p, at: min(i, all.count))
+        save()
+    }
     func place(_ id: String) -> Place? { all.first { $0.id == id } }
+    /// the twelve kinds (7.3), in the book's order
+    static let kinds = ["city", "area", "landmark", "mountain", "water", "nature", "spot", "stay", "station", "route", "event", "other"]
 }

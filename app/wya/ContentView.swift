@@ -339,7 +339,8 @@ struct ContentView: View {
         map.placesMode = new == .places
         map.pinsMode = new == .pins
         if new != .pins { PinStore.shared.selected = nil }
-        if new == .places || old == .places { closeCard() }
+        // (a card, Details or the book over the map goes with the map it was on: Places' and Pins' maps are their own)
+        if new == .places || old == .places || new == .pins || old == .pins { closeCard() }
         if new == .regions {
             closeCard()
             water.closeList(back: false)
@@ -359,6 +360,11 @@ struct ContentView: View {
             map.regionsMenu = false
             map.closeRegions()
             water.closeMenu(to: .quarter)
+        }
+        // a hold menu's Its places: that map, once the mode is Places
+        if new == .places, let pick = Self.directPlaces {
+            Self.directPlaces = nil
+            map.showPlacesMap(pick)
         }
     }
     /// A6.7 A COUNTRY PICKED FROM THE LIST: the list goes down with the water to 25% while the camera flies into the
@@ -500,6 +506,16 @@ struct ContentView: View {
         Feel.notch()
     }
 
+    /// ITS PLACES (11.5): Places with that map current, straight from the mode change (A11.2), never through the world
+    @MainActor static var directPlaces: MapController.PlacesPick?
+    @MainActor static func openPlaces(_ pick: MapController.PlacesPick, head: HeadState, map: MapController) {
+        if head.mode == .places { map.showPlacesMap(pick); return }
+        directPlaces = pick
+        head.quickStamp = false
+        head.mode = .places
+        Feel.notch()
+    }
+
     /// a link closes everything transient as a tab change does (the AI in use stays)
     private func putAwayForLink() {
         Sideways.shared.leave(feel: false)
@@ -570,10 +586,10 @@ struct ContentView: View {
         RegionCardState.shared.close(map: map)
     }
 
-    /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish | Details, Verify | Show in passport, Share. Rows
-    /// that can't be used now are unavailable (Apple greys them in place). With a card, the book, Details or Verify up,
-    /// or Map settings open, the hold only closes them (one press, one job; MapController.touchClosedAt). Not here yet: Lived here, Open
-    /// its page, Open its region map, Its places, Add to a list, Add to a plan (their parts are not built).
+    /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish, Lived here | Details, Verify | Open its page,
+    /// Open its region map, Its places | Show in passport, Share. Rows that can't be used now are unavailable (Apple
+    /// greys them in place). With a card, the book, Details or Verify up, or Map settings open, the hold only closes them
+    /// (one press, one job; MapController.touchClosedAt). Add to a list and Add to a plan wait for Lists (20).
     /// the disputes that are whole places (Taiwan, Kosovo, Abkhazia, Western Sahara ...): the place's id -> the dispute's
     @MainActor static let placeDisputes: [String: String] = {
         struct D: Decodable { let id: String; let entity: String? }
@@ -592,8 +608,8 @@ struct ContentView: View {
         let now = CACurrentMediaTime()
         if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
         // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
-        //; empty land of the open
-        // country: no menu yet (its land rows, Add a place here · What's here? · Copy coordinates, wait for 7.8)
+        //; your own place its menu
+        // empty land of the open country the land's menu
         // Places close in with no country open: a town or thing of the countries in view held is its own menu
         if map.placesMode, map.placeOpen == nil, !map.nearbyTowns.isEmpty {
             if let t = map.thingHit(at: p), let cc = ThingStore.shared.thing(t.id)?.cc, let pi = w.placeIndex[cc] {
@@ -606,6 +622,11 @@ struct ContentView: View {
             }
         }
         if map.placesMode || map.regionTowns, let open = map.placeOpen {
+            // your own place held: its own menu (its mark sits over the things and towns)
+            if map.placesMode, let id = map.ownHit(at: p), let o = OwnPlaces.shared.place(id) {
+                map.ownPressed = id; map.townPressed = nil; map.thingPressed = nil
+                return ownMenu(o, place: open, map: map)
+            }
             // a thing held: its own menu (its marks sit over the towns)
             if map.placesMode, let t = map.thingHit(at: p), let cc = map.placeOpenID {
                 map.townPressed = nil
@@ -617,14 +638,15 @@ struct ContentView: View {
                 return townMenu(sc.towns[t.i], cc: t.cc, place: open, at: p, map: map, water: water, head: head)
             }
             map.townPressed = nil
-            // the open country's own land: no menu yet; another country keeps its own menu
+            // the open country's own land: its menu; another country keeps its own menu
+            if i == open, map.placesMode { return landMenu(at: p, place: open, map: map) }
             if i == open { return nil }
         }
         // the region map: the region's own menu (11.5's Regions menu)
         if let sc = map.regionScene {
             guard let u = map.regionUnit(at: p), u < sc.unitIDs.count else { return nil }
             map.regionPressed = u
-            return regionMenu(u, in: sc, at: p, map: map, water: water)
+            return regionMenu(u, in: sc, at: p, map: map, water: water, head: head)
         }
         // still up (the press's touch may not have reached the map yet): this press only closes it
         if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
@@ -660,6 +682,19 @@ struct ContentView: View {
                 if st.wished { await MarkStore.shared.unwish(key, name: pl.n) } else { await MarkStore.shared.wish(key, name: pl.n) }
             }
         }
+        // LIVED HERE: the card from the place, then Details with Lived on (4.2, 4.4); stamped first when it is not
+        let lived = UIAction(title: "Lived here") { _ in
+            Task {
+                if !st.stamped { Feel.stamp(); await MarkStore.shared.stamp(key, name: pl.n) }
+                after {
+                    CardState.shared.open(i, at: p, map: map, water: water)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        CardState.shared.heldTop = water.form().top
+                        DetailsState.shared.open(key, name: pl.n, water: water, lived: true)
+                    }
+                }
+            }
+        }
         let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
             after {
                 CardState.shared.open(i, at: p, map: map, water: water)
@@ -687,6 +722,8 @@ struct ContentView: View {
                                  attributes: RegionCatalog.shared.first(pl.id.lowercased()) == nil ? .disabled : []) { _ in
             after { Self.openRegionMap(i, head: head) }
         }
+        // ITS PLACES: Places with this country's map current (A11.2, 7.2)
+        let places = UIAction(title: "Its places") { _ in after { Self.openPlaces(.country(i), head: head, map: map) } }
         let passport = UIAction(title: "Show in passport", attributes: st.stamped ? [] : .disabled) { _ in
             after { BookState.shared.open(showing: pl.id) }
         }
@@ -710,9 +747,9 @@ struct ContentView: View {
             }]))
         }
         sections += [
-            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [stamp, wish, lived]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [page, regionMap]),
+            UIMenu(options: .displayInline, children: [page, regionMap, places]),
             UIMenu(options: .displayInline, children: [passport, share]),
         ]
         // A DISPUTED PIECE (Crimea, the Kashmir pieces) or a disputed place (Taiwan, Kosovo): Whose borders here? opens Map settings at 50% on the Disputes
@@ -730,9 +767,9 @@ struct ContentView: View {
     }
 
     /// A TOWN'S HOLD MENU (11.5, Places mode): Apple's menu with the town's own name (29 Oct 22:13, 11.2), every row
-    /// about the town: Stamp or Unstamp, Wish or Unwish | Details, Verify (its card, then that sheet) | Directions (Apple
-    /// Maps) | Share. Its page, Drop a pin here, Add to a list, Add to a plan and Report a wrong place wait for their parts
-    /// (16, 8, 20); they are left out rather than shown dead.
+    /// about the town: Stamp or Unstamp, Wish or Unwish | Details, Verify (its card, then that sheet) | Open its page,
+    /// Directions (Apple Maps), Drop a pin here | Share, Report a wrong place. Add to a list and Add to a plan wait for
+    /// Lists (20); they are left out rather than shown dead.
     @MainActor static func townMenu(_ town: Town, cc: String, place: Int, at p: CGPoint, map: MapController, water: Water,
                                     head: HeadState) -> UIMenu {
         let key = town.key
@@ -781,6 +818,17 @@ struct ContentView: View {
             item.name = town.name
             item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault])
         }
+        // DROP A PIN HERE: a pin at the town's point, named after it (seen when Pins is opened)
+        let pin = UIAction(title: "Drop a pin here") { _ in
+            Feel.tick()
+            PinStore.shared.drop(at: CLLocationCoordinate2D(latitude: town.lat, longitude: town.lon), named: town.name,
+                                 country: (cc, country))
+        }
+        // REPORT A WRONG PLACE: its page, then the page's report already knowing the place (16.6)
+        let report = UIAction(title: "Report a wrong place") { _ in
+            let from = map.townScenes[cc].flatMap { s in s.index[key.id].map { map.screenRect(s.box($0)) } } ?? map.screenRect(of: place)
+            after { PlacePageState.shared.openReporting(key, name: town.name, what: "Town in \(parents)", country: cc, from: from) }
+        }
         let share = UIAction(title: "Share") { _ in
             after {
                 let vc = UIActivityViewController(activityItems: ["\(town.name), \(country)"], applicationActivities: nil)
@@ -793,13 +841,68 @@ struct ContentView: View {
         return UIMenu(title: town.name, children: [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [page, directions]),
-            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [page, directions, pin]),
+            UIMenu(options: .displayInline, children: [share, report]),
         ])
     }
 
+    /// YOUR OWN PLACE'S HOLD MENU (11.5): Kind (the twelve, inline; its own unavailable, as every menu's current
+    /// row) | Share | Delete (at once, the undo drop). Rename and Move (its card's, 7.8), Open its page (a page for your
+    /// own place, 16) and Add to a list or a plan (20) wait for their parts.
+    @MainActor static func ownMenu(_ o: OwnPlaces.Place, place: Int, map: MapController) -> UIMenu {
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let country = map.world.map { $0.places[place].n } ?? ""
+        let kinds = OwnPlaces.kinds.map { k in
+            UIAction(title: k.prefix(1).uppercased() + k.dropFirst(), attributes: k == o.kind ? .disabled : []) { _ in
+                Feel.tap()
+                OwnPlaces.shared.setKind(o.id, k)
+            }
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                var items: [Any] = ["\(o.name), \(country)"]
+                if let u = URL(string: "https://maps.apple.com/?ll=\(o.lat),\(o.lon)") { items.append(u) }
+                let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+                var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                while let n = top?.presentedViewController { top = n }
+                top?.present(vc, animated: true)
+            }
+        }
+        let delete = UIAction(title: "Delete", attributes: .destructive) { _ in
+            after {
+                Feel.lift()
+                let k = OwnPlaces.shared.all.firstIndex { $0.id == o.id } ?? 0
+                OwnPlaces.shared.remove(o.id)
+                map.needsFrame = true
+                MarkStore.shared.did("\(o.name) deleted") { OwnPlaces.shared.restore(o, at: k); map.needsFrame = true }
+            }
+        }
+        return UIMenu(title: o.name, children: [
+            UIMenu(title: "Kind", children: kinds),
+            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [delete]),
+        ])
+    }
+
+    /// THE OPEN COUNTRY'S EMPTY LAND HELD (11.5's empty-land menu): Add a place here (your own place made there,
+    /// unstamped, its card at once, 7.8) · Copy coordinates ("46.2044, 6.1432"). What's here? waits for A11.4.
+    @MainActor static func landMenu(at p: CGPoint, place: Int, map: MapController) -> UIMenu {
+        let ll = EqualEarth.unproject(map.mapPoint(p))
+        let country = map.world.map { $0.places[place].n } ?? ""
+        let add = UIAction(title: "Add a place here") { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                guard let o = map.makeOwnPlace(at: p, stamp: false) else { return }
+                RegionCardState.shared.open(o.key, name: o.name, parents: "Your place in \(country)", place: place, map: map)
+            }
+        }
+        let copy = UIAction(title: "Copy coordinates") { _ in
+            UIPasteboard.general.string = String(format: "%.4f, %.4f", ll.lat, ll.lon)
+        }
+        return UIMenu(children: [add, copy])
+    }
+
     /// A THING'S HOLD MENU (11.5's town or thing menu): Stamp or Unstamp, Wish or Unwish | Details, Verify | Open its
-    /// page, Directions | Share
+    /// page, Directions, Drop a pin here | Share, Report a wrong place
     @MainActor static func thingMenu(_ t: ThingStore.Thing, cc: String, place: Int, map: MapController, water: Water) -> UIMenu {
         let key = t.key
         let st = MarkStore.shared.state(key)
@@ -843,6 +946,14 @@ struct ContentView: View {
             item.name = t.name
             item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDefault])
         }
+        let pin = UIAction(title: "Drop a pin here") { _ in
+            Feel.tick()
+            PinStore.shared.drop(at: CLLocationCoordinate2D(latitude: ll.lat, longitude: ll.lon), named: t.name, country: (cc, country))
+        }
+        let report = UIAction(title: "Report a wrong place") { _ in
+            let from = map.thingFrames[t.id].map { CGRect(x: $0.minX, y: $0.midY - 22, width: 44, height: 44) } ?? map.screenRect(of: place)
+            after { PlacePageState.shared.openReporting(key, name: t.name, what: line, country: cc, from: from) }
+        }
         let share = UIAction(title: "Share") { _ in
             after {
                 let vc = UIActivityViewController(activityItems: ["\(t.name), \(country)"], applicationActivities: nil)
@@ -855,15 +966,16 @@ struct ContentView: View {
         return UIMenu(title: t.name, children: [
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [page, directions]),
-            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [page, directions, pin]),
+            UIMenu(options: .displayInline, children: [share, report]),
         ])
     }
 
-    /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish | Details, Verify | Go one level down |
-    /// Share. Stamping stamps its parents too (A6.12). Details and Verify: the region card rises, then that sheet (6.7).
-    /// Its places, its page, Add to a list and Add to a plan wait for their parts.
-    @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water) -> UIMenu {
+    /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish, Lived here | Details, Verify | Go one
+    /// level down, Its places | Open its page, Share. Stamping stamps its parents too (A6.12). Details and Verify: the
+    /// region card rises, then that sheet (6.7). Add to a list and Add to a plan wait for Lists (20).
+    @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water,
+                                      head: HeadState) -> UIMenu {
         let key = PlaceKey(.region, sc.unitIDs[u])
         let name = sc.unitNames[u]
         let st = MarkStore.shared.state(key)
@@ -881,6 +993,17 @@ struct ContentView: View {
             Task {
                 if st.wished { await MarkStore.shared.unwish(key, name: name) }
                 else { await MarkStore.shared.wish(key, name: name, cc: sc.id, level: sc.row) }
+            }
+        }
+        let lived = UIAction(title: "Lived here") { _ in
+            Task {
+                if !st.stamped { Feel.stamp(); await RegionStamps.stamp(u, in: sc, source: .hand) }
+                after {
+                    RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        DetailsState.shared.open(key, name: name, water: water, lived: true)
+                    }
+                }
             }
         }
         let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
@@ -903,6 +1026,8 @@ struct ContentView: View {
         let down = UIAction(title: "Go one level down", attributes: next == nil ? .disabled : []) { _ in
             if let next { after { map.openRegions(sc.place, row: next) } }
         }
+        // ITS PLACES: Places has no map of one region yet, so its country's (the region's own map waits for 7.2's areas)
+        let places = UIAction(title: "Its places") { _ in after { Self.openPlaces(.country(sc.place), head: head, map: map) } }
         // OPEN ITS PAGE (16): the region's own page, growing from its shape on screen
         let page = UIAction(title: "Open its page") { _ in
             let from = sc.box(of: u).map { map.screenRect($0) } ?? map.screenRect(of: sc.place)
@@ -923,10 +1048,10 @@ struct ContentView: View {
             }
         }
         return UIMenu(title: name, children: [
-            UIMenu(options: .displayInline, children: [stamp, wish]),
+            UIMenu(options: .displayInline, children: [stamp, wish, lived]),
             UIMenu(options: .displayInline, children: [details, verify]),
-            UIMenu(options: .displayInline, children: [page, down]),
-            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [down, places]),
+            UIMenu(options: .displayInline, children: [page, share]),
         ])
     }
 
