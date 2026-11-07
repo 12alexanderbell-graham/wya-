@@ -146,6 +146,14 @@ struct PassportBook: View {
         let place = map.world?.places.firstIndex { $0.id == id }
         let name = place.flatMap { map.world?.places[$0].n } ?? id.uppercased()
         return [
+            // OPEN ITS PAGE (11.5, first): the book closes, then the page grows from the middle of the screen
+            StampMenuItem(title: "Open its page") {
+                b.close()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    PlacePageState.shared.open(key, name: name, country: id,
+                                               from: CGRect(x: map.view.width / 2 - 22, y: map.view.height / 2 - 22, width: 44, height: 44))
+                }
+            },
             StampMenuItem(title: "Details") {
                 b.close()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }

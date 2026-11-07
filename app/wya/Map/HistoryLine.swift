@@ -635,7 +635,9 @@ struct HistoryBar: View {
             .frame(width: width, height: 50)
             .coordinateSpace(.named("historybar"))
             .contextMenu {
-                Button("Last 12 months") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
+                // LATEST TRIP (13.4): the latest run of days away from home; with no home yet (Profile), the last 12
+                // months, as the book's fallback
+                Button("Latest trip") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
                 Button("This year") { map.setHistoryRange(lo: max(info.first, info.dayNumber(LocalDay(y: info.lastYear, m: 1, d: 1))), hi: info.last) }
                 Button("All time") { map.setHistoryRange(lo: info.first, hi: info.last) }
             }

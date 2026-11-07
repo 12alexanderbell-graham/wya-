@@ -1000,11 +1000,15 @@ struct UploadSheet: View {
                             .tint(r.dropped ? Palette.ink : Palette.red)
                     }
                     .contextMenu {
-                        Button("Show on the map") { u.show(r.place) }
-                        if !r.trips.isEmpty {
-                            Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                        Section(r.name) {
+                            Button("Show on the map") { u.show(r.place) }
+                            if !r.trips.isEmpty {
+                                Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                            }
                         }
-                        Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
+                        Section {
+                            Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
+                        }
                     }
                 if r.open {
                     ForEach(Array(r.trips.enumerated()), id: \.offset) { k, t in

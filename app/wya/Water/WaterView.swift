@@ -280,8 +280,8 @@ struct SheetContent: View {
                     .accessibilityLabel("Stamped list")
                     .accessibilityAddTraits(.isButton)
             }
-            // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, a continent by name; on a
-            // continent, its stamped list or back to the world. The ring follows (the front planet is the map's)
+            // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, Earth's (a continent by name); on
+            // a continent, that planet's (Open it, here unavailable, · Its stamped list). The ring follows
             if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList,
                !water.pageSheet, region == nil {
                 let here = map.continent
@@ -290,9 +290,12 @@ struct SheetContent: View {
                     .contentShape(Rectangle())
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
                     .contextMenu {
-                        if here != nil {
-                            Button("Its stamped list") { if count > 0 { water.openList() } else { Feel.refuse() } }
-                            Button("The world") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.goHome() } }
+                        if let here {
+                            // the planet's own menu (11.5), the continent you are on unavailable as the current row
+                            Section(here) {
+                                Button("Open \(here)") {}.disabled(true)
+                                Button("Its stamped list") { if count > 0 { water.openList() } else { Feel.refuse() } }
+                            }
                         } else {
                             ForEach(["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"], id: \.self) { k in
                                 Button(k) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.show(continent: k) } }

@@ -426,10 +426,14 @@ struct StampMenuItem: Identifiable {
 /// Apple's menu on a stamp, only where it has one (the book; never the card's page)
 struct StampHold: ViewModifier {
     let items: [StampMenuItem]?
+    /// the menu's title, the place's name (11.2)
+    var title = ""
     func body(content: Content) -> some View {
         if let items {
             content.contextMenu {
-                ForEach(items) { m in Button(m.title, role: m.destructive ? .destructive : nil, action: m.act) }
+                Section(title) {
+                    ForEach(items) { m in Button(m.title, role: m.destructive ? .destructive : nil, action: m.act) }
+                }
             }
         } else {
             content
@@ -523,7 +527,7 @@ struct PassportPage: View {
                         .resizable()
                         .frame(width: at.size.width, height: at.size.height)
                         .rotationEffect(.degrees(at.turn))
-                        .modifier(StampHold(items: menu?(pid)))
+                        .modifier(StampHold(items: menu?(pid), title: Locale.current.localizedString(forRegionCode: pid.uppercased()) ?? ""))
                         .position(at.center)
                 }
             }

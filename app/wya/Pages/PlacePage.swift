@@ -492,14 +492,16 @@ private struct PageLayer: View {
                 // THE NAME'S HOLD MENU (16.7), the same actions as the page's sheet: Show in passport (a stamped country),
                 // Share (Its book and Add to a list wait for the books and Lists)
                 .contextMenu {
-                    if key.kind == .country, MarkStore.shared.state(key).stamped {
-                        Button("Show in passport") {
-                            PlacePageState.shared.closeAll()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { BookState.shared.open(showing: key.id) }
+                    Section(page.name) {
+                        if key.kind == .country, MarkStore.shared.state(key).stamped {
+                            Button("Show in passport") {
+                                PlacePageState.shared.closeAll()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { BookState.shared.open(showing: key.id) }
+                            }
                         }
-                    }
-                    if let u = URL(string: "wya://page/\(key.description)") {
-                        ShareLink(item: u, subject: Text(page.name), message: Text(page.name)) { Text("Share") }
+                        if let u = URL(string: "wya://page/\(key.description)") {
+                            ShareLink(item: u, subject: Text(page.name), message: Text(page.name)) { Text("Share") }
+                        }
                     }
                 }
             if !page.what.isEmpty {

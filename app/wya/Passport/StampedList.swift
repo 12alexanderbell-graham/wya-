@@ -182,18 +182,26 @@ struct StampedList: View {
                         // same red as the destructive button)
                         Button { unstamp(r) } label: { Text("Unstamp") }.tint(.red)
                     }
+                    // A ROW'S HOLD MENU (11.5), under the place's name: Show on the map · Show in passport · Open its
+                    // page | Details · Verify | Share | Unstamp (as the swipe; Apple's lists keep the swipe's red row
+                    // in the menu too)
                     .contextMenu {
-                        Button("Show on the map") { open(r) }
-                        // the passport on that stamp's page (11.5); the list closes first
-                        if r.kind == .country {
-                            Button("Show in passport") {
-                                water.closeList(to: .quarter)
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                        Section(r.name) {
+                            Button("Show on the map") { open(r) }
+                            // the passport on that stamp's page (11.5); the list closes first
+                            if r.kind == .country {
+                                Button("Show in passport") {
+                                    water.closeList(to: .quarter)
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                                }
                             }
+                            Button("Open its page") { page(r) }
                         }
-                        Button("Details") { details(r) }
-                        Button("Verify") {
-                            VerifyState.shared.open(r.key, name: r.name, place: r.place, water: water)
+                        Section {
+                            Button("Details") { details(r) }
+                            Button("Verify") {
+                                VerifyState.shared.open(r.key, name: r.name, place: r.place, water: water)
+                            }
                         }
                         // offline for now: the app's own link and the name (11.7)
                         ShareLink(item: URL(string: r.kind == .country ? "wya://country/\(r.id)" : "wya://page/\(r.key.description)")!,
@@ -341,6 +349,16 @@ struct StampedList: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(r.name), \(r.line)")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// its page (16): the list goes down with the water first, then the page grows from the middle of the map
+    private func page(_ r: Row) {
+        water.closeList(to: .quarter)
+        let cc = map.world.flatMap { w in r.place >= 0 && r.place < w.places.count ? w.places[r.place].id : nil } ?? r.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            PlacePageState.shared.open(r.key, name: r.name, what: r.kind == .country ? "" : r.line, country: cc,
+                                       from: CGRect(x: map.view.width / 2 - 22, y: map.view.height / 2 - 22, width: 44, height: 44))
+        }
     }
 
     /// the card from the place: the water to 25%, the camera frames the place, then the card grows out of it

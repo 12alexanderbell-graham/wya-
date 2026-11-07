@@ -94,13 +94,21 @@ struct RegionsMenu: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .contentShape(Rectangle())
         .onTapGesture { pick(r) }
-        // APPLE'S MENU ON A ROW (11.5): Open its region map · Stamp the country (its page and Add to a list wait for
-        // their parts)
+        // APPLE'S MENU ON A ROW (11.5), under the country's name: Open its region map · Open its page · Stamp the
+        // country (Add to a list waits for Lists)
         .contextMenu {
-            Button("Open its region map") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pick(r) } }
-            let stamped = MarkStore.shared.state(.country(r.id)).stamped
-            Button(stamped ? "Unstamp the country" : "Stamp the country", role: stamped ? .destructive : nil) {
-                ContentView.quickStamp(r.place, map: map)
+            Section(r.name) {
+                Button("Open its region map") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pick(r) } }
+                Button("Open its page") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        PlacePageState.shared.open(.country(r.id), name: r.name, country: r.id,
+                                                   from: CGRect(x: map.view.width / 2 - 22, y: map.view.height / 2 - 22, width: 44, height: 44))
+                    }
+                }
+                let stamped = MarkStore.shared.state(.country(r.id)).stamped
+                Button(stamped ? "Unstamp the country" : "Stamp the country", role: stamped ? .destructive : nil) {
+                    ContentView.quickStamp(r.place, map: map)
+                }
             }
         }
         .accessibilityElement(children: .ignore)

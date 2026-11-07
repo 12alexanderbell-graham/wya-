@@ -352,14 +352,16 @@ struct CosmosView: View {
             }
             Button("The world") { select(i) }
         } else {
-            Button("Open \(Self.planets[i].k)") { select(i) }
-            Button("Its stamped list") {
-                // the list is scoped to the continent the map is on, whatever the ring last chose
-                if map.continent != Self.planets[i].k { select(i) }
-                // none stamped there: nothing to list (as the caption's number refuses at 0)
-                guard (map.shares[Self.planets[i].k]?.have ?? 0) > 0 else { Feel.refuse(); return }
-                // once Apple's menu has closed and the flight has started
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { water.openList() }
+            Section(Self.planets[i].k) {
+                Button("Open \(Self.planets[i].k)") { select(i) }
+                Button("Its stamped list") {
+                    // the list is scoped to the continent the map is on, whatever the ring last chose
+                    if map.continent != Self.planets[i].k { select(i) }
+                    // none stamped there: nothing to list (as the caption's number refuses at 0)
+                    guard (map.shares[Self.planets[i].k]?.have ?? 0) > 0 else { Feel.refuse(); return }
+                    // once Apple's menu has closed and the flight has started
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { water.openList() }
+                }
             }
         }
     }
