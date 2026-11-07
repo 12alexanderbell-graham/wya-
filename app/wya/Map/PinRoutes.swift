@@ -278,6 +278,8 @@ final class PinRoutes {
         let kept: [RouteSpot]? = spots.isEmpty ? nil : spots
         if let id = current, let k = routes.firstIndex(where: { $0.id == id }) {
             let was = routes[k].way
+            // the same way again (the route asked once more): nothing changed, so no undo and no word about it
+            if was.from == f, was.to == t, was.distance == r.distance, was.time == r.expectedTravelTime { return }
             routes[k].from = f; routes[k].to = t; routes[k].spots = kept; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
             save()
             MarkStore.shared.did("Route changed") { [weak self] in

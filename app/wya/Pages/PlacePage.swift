@@ -473,6 +473,8 @@ private struct PageLayer: View {
         .scrollIndicators(.hidden)
         // the one blur under the head, only once words scroll under it (16.3)
         .scrollEdgeEffectStyle(.soft, for: .top)
+        // and at the bottom, under the tabs' capsule, so a row there fades instead of being cut by it
+        .scrollEdgeEffectStyle(.soft, for: .bottom)
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
         }
         .background(Palette.white)

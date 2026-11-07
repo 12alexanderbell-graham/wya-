@@ -319,7 +319,8 @@ final class PinsMapState {
     func frame(route id: UUID?, always: Bool = false) {
         guard let v = view, let id, let l = routeOverlays.first(where: { ($0 as? PinRouteLine)?.routeID == id }) else { return }
         let L = water?.layout
-        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 24, left: 32, bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 24, right: 72)
+        // (the line's box ends at the pins' tips: room above for their heads, and at the sides for their names)
+        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 56, left: 76, bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 40, right: 84)
         let seen = v.visibleMapRect
         if always || !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
     }

@@ -81,6 +81,8 @@ final class HeadState {
     @ObservationIgnored private var pullStart: CGFloat = 0
     @ObservationIgnored private var pullGearStart: CGFloat = 0
     func pullBegan() {
+        // (search open: the dot is up in the island, so there is nothing to pull)
+        if searching { return }
         Hints.shared.touched()
         pullStart = pull
         // from the gear (settings open): its first part turns the gear back into the dot, following the finger, then
@@ -94,6 +96,7 @@ final class HeadState {
         }
     }
     func pullMoved(_ dy: CGFloat) {
+        if searching { return }
         var p = pullStart + dy
         if p < 0 { p = -Flow.rubber(-p, 30) }
         let cap = HeadState.aiStop
@@ -112,6 +115,7 @@ final class HeadState {
     /// `speed`: the release's, for the landing (3.7: the `land` haptic by it, the thud above 15%); 900 for a settle
     /// that no finger let go of
     func settlePull(to s: Int, speed: CGFloat = 900) {
+        if searching, s == 1 { return }
         pullStop = s
         withAnimation(Motion.settle) {
             pull = s == 1 ? HeadState.aiStop : 0
