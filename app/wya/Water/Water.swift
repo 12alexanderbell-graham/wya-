@@ -86,7 +86,7 @@ final class Water {
     /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
     var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
-    /// Coming into Regions it is simply there, with no movement (7 Nov 19:22: not everything needs an animation);
+    /// Coming into Regions it is simply there, with no movement (a mode change has no motion);
     /// `instant: false` keeps the move for the Map tab's way back to the list
     func openMenu(instant: Bool = false) {
         menuJob += 1

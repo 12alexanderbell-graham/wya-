@@ -7,7 +7,7 @@ import MapKit
 /// the route is asked for: one solid 3 pt black line with round ends (the two pins are its ends), Apple's other ways
 /// behind it as 2 pt black 50%, and its distance and time in a small frosted capsule over its middle. A tap on another
 /// way makes it the route. The cross closes the row; the route stays, kept with the pins (routes.json; no Save). It
-/// simply appears (no drawing along: 7 Nov, not everything needs an animation). Waiting on the dock's icons: the row's
+/// simply appears (no drawing along). Waiting on the dock's icons: the row's
 /// transport choice (driving until then) and the Route tool in the dock.
 struct PinRoute: Codable, Identifiable, Hashable {
     var id = UUID()
@@ -49,7 +49,7 @@ final class RouteLabel: NSObject, MKAnnotation {
     init(id: UUID, at c: CLLocationCoordinate2D, words: String) { self.id = id; coordinate = c; self.words = words }
 }
 
-/// its view: 13 pt semibold words in a 28 pt frosted capsule (a surface over the map, 7 Nov's glass)
+/// its view: 13 pt semibold words in a 28 pt frosted capsule (a surface over the map)
 final class RouteLabelView: MKAnnotationView {
     static let id = "route"
     private let glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))

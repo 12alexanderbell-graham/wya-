@@ -3,8 +3,8 @@ import SwiftUI
 /// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
 /// nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over the map, its
 /// bottom 12 pt above the held point; each name is a tap to its card. The panel (frosted, as every surface) is simply
-/// there, and a touch anywhere else on the map simply takes it away (A11.4's grow and roll dropped on 7 Nov: no grow,
-/// not everything needs an animation). At sea: "Open sea".
+/// there, and a touch anywhere else on the map simply takes it away (A11.4's grow and roll dropped: no grow,
+/// no roll). At sea: "Open sea".
 @MainActor
 @Observable
 final class WhatsHere {
@@ -38,7 +38,7 @@ final class WhatsHere {
         items = Self.nearest(lat: lat, lon: lon, land: land, map: map)
         job += 1
         point = p
-        // simply there, and simply gone (7 Nov: no grow, no circle, not everything needs an animation)
+        // simply there, and simply gone (no grow, no circle)
         Feel.tap()
         namesIn = true; present = true
         UIAccessibility.post(notification: .announcement, argument: items.map(\.name).joined(separator: ", "))
