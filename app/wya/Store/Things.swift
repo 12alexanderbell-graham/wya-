@@ -40,8 +40,12 @@ final class ThingStore {
         loading.insert(cc)
         Task.detached(priority: .userInitiated) {
             var out: [Thing] = []
+            // nil: the file could not be had now (no network, or the server had none): nothing is kept, so the next
+            // open of the country asks again (an empty country is kept as empty)
+            var read = false
             if case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
+                read = true
                 for r in all {
                     guard r.count >= 8, let id = r[0] as? String, let n = r[1] as? String,
                           let lat = (r[3] as? NSNumber)?.doubleValue, let lon = (r[4] as? NSNumber)?.doubleValue else { continue }
@@ -50,10 +54,12 @@ final class ThingStore {
                                      line: r[6] as? String ?? "", photo: r[7] as? String ?? ""))
                 }
             }
+            let found = read ? out : nil
             await MainActor.run {
                 let me = ThingStore.shared
                 me.loading.remove(cc)
-                me.byCC[cc] = out
+                guard let found else { return }
+                me.byCC[cc] = found
                 me.version += 1
             }
         }
