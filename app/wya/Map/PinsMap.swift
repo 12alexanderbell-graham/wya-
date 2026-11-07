@@ -439,7 +439,9 @@ struct PinsMapView: UIViewRepresentable {
         // Apple's credit (Legal) on the map just above the water, at the sheet's inner left (Apple asks for it to be
         // seen; asked 30 Oct 03:00); at full nothing of the map is seen
         let top = water.y(water.stop == .full ? .half : water.stop)
-        let margins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - top), right: L.sheetInset)
+        // the credit follows the water's edge as it moves (read every frame the water moves), never above 50%
+        let edge = max(water.form().top, water.y(.half))
+        let margins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - edge), right: L.sheetInset)
         if v.layoutMargins != margins { v.layoutMargins = margins }
         context.coordinator.reveal(v, store.selected, top: top, L: L, stop: water.stop)
     }

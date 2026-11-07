@@ -22,7 +22,8 @@ struct PageSheet: View {
 
     var body: some View {
         let L = water.layout
-        let top = form.top + 20
+        // (never under the head: at full the rows start below it)
+        let top = max(L.headBottom + 12, form.top + 20)
         let bottom = L.capsule.minY - 16
         let w = L.W - 2 * L.sheetInset
         if let page = stack.top {

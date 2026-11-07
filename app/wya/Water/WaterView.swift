@@ -160,7 +160,8 @@ struct SheetContent: View {
             Group {
                 // no stars under Regions' list (the whole screen is the list there)
                 // nor in Places or Pins (the stars are the countries you have left: they mean nothing there, 7 Nov)
-                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode {
+                // nor over a place's page and its sheet (the page is the screen there)
+                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode || water.pageSheet {
                     Color.clear
                 } else {
                     PlasmaStars(page: form.page, top: form.top, stars: map.placesLeft, sun: CGPoint(x: L.W / 2, y: L.H / 2), map: map,
