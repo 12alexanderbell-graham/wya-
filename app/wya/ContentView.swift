@@ -255,6 +255,11 @@ struct ContentView: View {
             }
             // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
             map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head) }
+            map.menuForUnit = { [map, water, head] u in
+                guard let sc = map.regionScene, u < sc.unitIDs.count, let b = sc.unitBox(u) else { return nil }
+                let r = map.screenRect(b)
+                return Self.regionMenu(u, in: sc, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head)
+            }
             map.menuForPlace = { [map, water, head] i in
                 let r = map.screenRect(of: i)
                 return Self.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head, fromSearch: true)

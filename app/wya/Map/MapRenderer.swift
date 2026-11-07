@@ -1003,8 +1003,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     // MARK: VoiceOver (1.9's row, 19.4): the places on screen as elements, top to bottom and left to right within a
     // row; each says its name and its state ("France, stamped, 3 times"); a double tap is a tap (its card); its hold
     // menu's rows are its actions; rotors go through Stamped, Wishlist and Not stamped. Worked out again only once the
-    // camera has come to rest or a mark has changed, never while it moves. The Countries map only for now (Regions'
-    // units, Places' towns and Pins have their own, still to build).
+    // camera has come to rest or a mark has changed, never while it moves. The Countries map, and a region map's
+    // regions ("Bouches-du-Rhône, department, stamped", 6.5); Places' towns still to build (Pins are Apple's map, whose
+    // pins say their own names).
     final class PlaceElement: UIAccessibilityElement {
         let place: Int
         var state = MarkState.none
@@ -1029,11 +1030,12 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
 
     private func placeElements() -> [PlaceElement] {
-        guard let c = controller, let w = c.world, !c.placesMode, !c.pinsMode, c.regionScene == nil else { return [] }
+        guard let c = controller, let w = c.world, !c.placesMode, !c.pinsMode else { return [] }
         let key = [c.restVersion, MarkStore.shared.changes, Int(bounds.width), Int(bounds.height), w.places.count,
-                   c.drawnContinent?.hashValue ?? 0]
+                   c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1]
         if key == axKey { return axCache }
         axKey = key
+        if let sc = c.regionScene { axCache = regionElements(sc, c); return axCache }
         var found: [(CGRect, Int)] = []
         for i in w.places.indices {
             if let k = c.drawnContinent, !w.inCont(i, k) { continue }
@@ -1063,6 +1065,38 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             return e
         }
         return axCache
+    }
+
+    /// a region map's regions, in the same reading order; a double tap is a tap on the region (its card, 6.7)
+    private func regionElements(_ sc: RegionScene, _ c: MapController) -> [PlaceElement] {
+        let kind = (RegionCatalog.shared.used(sc.id).first { $0.row == sc.row }?.level.one ?? "region").lowercased()
+        var found: [(CGRect, Int)] = []
+        for u in sc.unitIDs.indices {
+            guard let b = sc.unitBox(u) else { continue }
+            let r = c.screenRect(b).intersection(bounds)
+            guard !r.isNull, r.width >= 4, r.height >= 4 else { continue }
+            found.append((r, u))
+        }
+        found.sort { a, b in
+            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
+            return ra != rb ? ra < rb : a.0.midX < b.0.midX
+        }
+        return found.map { r, u in
+            let e = PlaceElement(container: self, place: u)
+            let st = MarkStore.shared.state(PlaceKey(.region, sc.unitIDs[u]))
+            e.state = st
+            e.accessibilityFrameInContainerSpace = r
+            e.accessibilityLabel = Self.label("\(sc.unitNames[u]), \(kind)", st)
+            e.accessibilityTraits = .button
+            let at = CGPoint(x: r.midX, y: r.midY)
+            e.activate = { [weak c] in
+                guard let c else { return }
+                c.regionPressed = u
+                c.onPlaceTap?(sc.place, at)
+            }
+            e.actions = { [weak c] in c?.menuForUnit?(u).map(Self.actions) ?? [] }
+            return e
+        }
     }
 
     /// "X, lived here", "X, stamped, N times", "X, stamped", "X, not stamped" (1.9)

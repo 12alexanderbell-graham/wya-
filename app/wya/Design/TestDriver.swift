@@ -151,6 +151,17 @@ final class TestDriver {
                 case "maptap": map?.onTouch?()
                 // seatap: a confirmed tap on the sea; placetap <id>: a confirmed tap on that place (its middle)
                 case "seatap": map?.onSeaTap?()
+                // axdump: the map's VoiceOver elements, logged (count, then the first twelve labels and their actions)
+                case "axdump":
+                    func find(_ v: UIView) -> MapMTKView? { (v as? MapMTKView) ?? v.subviews.lazy.compactMap(find).first }
+                    let win = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+                    if let mv = win.flatMap(find) {
+                        let els = (mv.accessibilityElements ?? []).compactMap { $0 as? UIAccessibilityElement }
+                        NSLog("wya ax %d elements", els.count)
+                        for e in els.prefix(12) {
+                            NSLog("wya ax %@ | %@", e.accessibilityLabel ?? "?", (e.accessibilityCustomActions ?? []).map(\.name).joined(separator: ", "))
+                        }
+                    }
                 case "placetap":
                     if let m = map, let i = m.world?.placeIndex[a] { let r = m.screenRect(of: i); m.onPlaceTap?(i, CGPoint(x: r.midX, y: r.midY)) }
                 // whatshere x y | whatshere off: What's here? at that screen point (A11.4), or taken away
@@ -250,6 +261,12 @@ final class TestDriver {
                         let h = m.hit(at: CGPoint(x: x, y: y))
                         NSLog("wya tap %.0f %.0f -> %@", x, y, h.flatMap { m.world?.places[$0].id } ?? "nothing")
                         m.pressed = h
+                    }
+                // unlive <country id>: its Lived taken off, its details and times kept (test data clean-up)
+                case "unlive":
+                    let k = PlaceKey.country(a)
+                    if let d = await MarkStore.shared.details(k), let w = map?.world, let i = w.placeIndex[a] {
+                        await MarkStore.shared.setDetails(k, name: w.places[i].n, details: d.details, times: d.times, lived: false)
                     }
                 case "mark":
                     // mark <place id> stamp|wish|none: the place's marks change (a fill front from its middle)
