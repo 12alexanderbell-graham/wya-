@@ -266,6 +266,19 @@ final class PinsMapState {
         guard let v = view else { return }
         v.setCamera(MKMapCamera(lookingAtCenter: c, fromDistance: 3_000_000, pitch: 0, heading: 0), animated: true)
     }
+    /// Apple's map over a country picked in search: the country framed between the head and the water
+    func show(place i: Int, world: World?) {
+        guard let v = view, let w = world, let f = w.frame(of: i) else { return }
+        let a = EqualEarth.unproject(SIMD2(Double(f.x), Double(f.y))), b = EqualEarth.unproject(SIMD2(Double(f.z), Double(f.w)))
+        let p1 = MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, min(85, a.lat)), longitude: a.lon))
+        let p2 = MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, min(85, b.lat)), longitude: b.lon))
+        let r = MKMapRect(x: min(p1.x, p2.x), y: min(p1.y, p2.y), width: abs(p2.x - p1.x), height: abs(p2.y - p1.y))
+        let L = water?.layout
+        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 16, left: 24,
+                               bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 16, right: 72)
+        v.setVisibleMapRect(r, edgePadding: pad, animated: true)
+    }
+
     /// Apple's map over a pin picked from the list: the pin in the middle, no farther out than 400 km
     func go(to p: Pin) {
         guard let v = view else { return }
@@ -399,10 +412,48 @@ struct PinsMapView: UIViewRepresentable {
             for a in v.annotations.compactMap({ $0 as? PinAnnotation }) {
                 (v.view(for: a) as? PinAnnotationView)?.setChosen(a.id == id)
             }
+            arrange(v)
         }
 
         @objc func tapped(_ g: UITapGestureRecognizer) { WhatsHere.shared.close() }
         func mapView(_ v: MKMapView, regionWillChangeAnimated animated: Bool) { WhatsHere.shared.close() }
+        /// the stacks and names follow the camera as it moves (a pinch in spreads a stack, 8.3)
+        func mapViewDidChangeVisibleRegion(_ v: MKMapView) { arrange(v) }
+
+        /// which pins step back behind another and which have room for their name: the chosen pin first, then the
+        /// newest; a pin within 18 by 24 pt of one already placed is behind it, and neither shows a name
+        func arrange(_ v: MKMapView) {
+            let sel = PinStore.shared.selected
+            var items: [(Pin, PinAnnotationView, CGPoint)] = []
+            for a in v.annotations.compactMap({ $0 as? PinAnnotation }) {
+                guard let p = PinStore.shared.pin(a.id), let pv = v.view(for: a) as? PinAnnotationView else { continue }
+                items.append((p, pv, v.convert(a.coordinate, toPointTo: v)))
+            }
+            items.sort { x, y in x.0.id == sel ? true : y.0.id == sel ? false : x.0.made > y.0.made }
+            var fronts: [(CGPoint, Int)] = []
+            var behindOf: [Int?] = []
+            for (_, _, pt) in items {
+                if let f = fronts.firstIndex(where: { abs($0.0.x - pt.x) < 18 && abs($0.0.y - pt.y) < 24 }) {
+                    behindOf.append(f); fronts[f].1 += 1
+                } else { behindOf.append(nil); fronts.append((pt, 0)) }
+            }
+            var taken: [CGRect] = items.map { CGRect(x: $0.2.x - 12, y: $0.2.y - 30, width: 24, height: 30) }
+            var frontIndex = 0
+            for (k, (p, pv, pt)) in items.enumerated() {
+                let back = behindOf[k] != nil
+                var name: String?
+                if !back {
+                    let stacked = fronts[frontIndex].1 > 0
+                    frontIndex += 1
+                    if !stacked {
+                        let s = PinAnnotationView.nameSize(p.title)
+                        let r = CGRect(x: pt.x - s.width / 2, y: pt.y + 2, width: s.width, height: s.height)
+                        if !taken.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -2)) }) { name = p.title; taken.append(r) }
+                    }
+                }
+                pv.arrange(behind: back && p.id != sel, name: name)
+            }
+        }
 
         @objc func held(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began, let v = g.view as? MKMapView else { return }
@@ -482,6 +533,7 @@ struct PinsMapView: UIViewRepresentable {
         /// A8.2: a pin just dropped falls onto its spot from 57 pt above, at its own size (it never grows; 31 Oct: no
         /// growing circles), on the settle, no overshoot; a notch as it lands
         func mapView(_ v: MKMapView, didAdd views: [MKAnnotationView]) {
+            arrange(v)
             for view in views {
                 guard let a = view.annotation as? PinAnnotation, a.id == PinStore.shared.dropping, let pv = view as? PinAnnotationView else { continue }
                 PinStore.shared.dropping = nil
@@ -561,6 +613,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     override func prepareForReuse() {
         super.prepareForReuse()
         alpha = 1
+        arrange(behind: false, name: nil)
     }
 
     @MainActor func show(_ p: Pin?) {
@@ -580,12 +633,49 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     func setChosen(_ on: Bool, animated: Bool = true) {
         guard on != chosen else { return }
         chosen = on
+        look(animated: animated)
+    }
+    /// chosen: 1.2x about its tip and 4 pt up (A8.4); behind a stack: 0.8x and 4 pt down (8.3); else as drawn
+    private func look(animated: Bool) {
         let h = bounds.height
-        let s: CGFloat = on ? 1.2 : 1
-        let t = CGAffineTransform(translationX: 0, y: h / 2 * (1 - s) - (on ? 4 : 0)).scaledBy(x: s, y: s)
+        let s: CGFloat = chosen ? 1.2 : behind ? 0.8 : 1
+        let lift: CGFloat = chosen ? 4 : behind ? -4 : 0
+        let t = CGAffineTransform(translationX: 0, y: h / 2 * (1 - s) - lift).scaledBy(x: s, y: s)
         if animated {
             UIView.animate(withDuration: Motion.reduce ? 0.2 : 0.26, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.transform = t }
         } else { transform = t }
+    }
+
+    // MANY PINS CLOSE TOGETHER (8.3): the ones behind step back; NAMES under the point (8.3), only where they don't
+    // collide and never on a stack. No number bubbles.
+    private var behind = false
+    private lazy var nameLabel: UILabel = {
+        let l = UILabel()
+        l.font = .systemFont(ofSize: 12, weight: .semibold)
+        l.textColor = UIColor(Palette.ink)
+        l.isHidden = true
+        TownNamesView.glow(l)
+        addSubview(l)
+        return l
+    }()
+    /// the name's size at 12 pt (to test for room before it shows)
+    static func nameSize(_ s: String) -> CGSize {
+        (s as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold)])
+    }
+    func arrange(behind b: Bool, name: String?) {
+        if b != behind {
+            behind = b
+            zPriority = b ? .min : .defaultUnselected
+            look(animated: false)
+        }
+        if let name {
+            if nameLabel.text != name { nameLabel.text = name; nameLabel.sizeToFit() }
+            // centred under the tip (the view's bottom middle), 2 pt below it
+            nameLabel.center = CGPoint(x: bounds.midX, y: bounds.maxY + 2 + nameLabel.bounds.height / 2)
+            nameLabel.isHidden = false
+        } else if nameLabel.superview != nil {
+            nameLabel.isHidden = true
+        }
     }
 
     func fall() {

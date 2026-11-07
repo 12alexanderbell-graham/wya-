@@ -430,6 +430,8 @@ struct HeadView: View {
         if let id = map.world?.places[i].id { SearchResults.remember(id) }
         // Places: a country picked is opened with its towns (7.4)
         if map.placesMode { map.openPlace(i); closeSearch(); return }
+        // Pins: Apple's map frames the country (our map is under it, unseen)
+        if map.pinsMode { PinsMapState.shared.show(place: i, world: map.world); closeSearch(); return }
         // COUNTRIES: the card comes up ready to stamp (7 Nov, the friend's review boards 02 and 12: picking Japan left the user
         // on the map, tapping the country again to find Stamp). The water to 25%, the camera frames the place, and the
         // card grows out of it once the camera has landed, as from the Stamped list
@@ -886,7 +888,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String), thing(String) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String), thing(String), pin(UUID) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -952,7 +954,16 @@ struct SearchResults: View {
         let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
         let mapKeys: [ResultKey] = anyRegionHits.isEmpty ? baseKeys
             : Array((hits.prefix(max(4, 8 - anyRegionHits.count)).map { ResultKey.place($0) } + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
-        let keys: [ResultKey] = !placesSearch ? mapKeys
+        // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
+        // the countries, which Apple's map frames
+        let pinsSearch = map.pinsMode && !head.settingsOpen
+        let pinHits = pinsSearch && typed ? Self.pinMatches(head.query) : []
+        let keys: [ResultKey] = pinsSearch && typed
+            ? { () -> [ResultKey] in
+                let k = pinHits.prefix(5).map { ResultKey.pin($0.id) } + hits.prefix(max(3, 8 - min(5, pinHits.count))).map { .place($0) }
+                return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
+            }()
+            : !placesSearch ? mapKeys
             : typed ? { () -> [ResultKey] in
                 // a country typed by a name people use for it ("UK", "Britain") or by its own whole name leads; then the
                 // towns; then the other countries found
@@ -998,6 +1009,7 @@ struct SearchResults: View {
                                 case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil),
                                                            note: townGuess?.key == k ? "Did you mean?" : nil)
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
+                                case .pin(let id): pinRow(PinStore.shared.pin(id))
                                 }
                             }
                             .frame(height: 44 * open[n], alignment: .top)
@@ -1181,6 +1193,53 @@ struct SearchResults: View {
 
     /// a region found from Countries: its name and its country; a tap closes search and opens its country's region map
     /// on it (A6.14's straight route, then the region shown as on a region map)
+    /// your pins whose name or place holds what was typed: those starting with it first, newest first in each
+    static func pinMatches(_ query: String) -> [Pin] {
+        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        guard !q.isEmpty else { return [] }
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        var starts: [Pin] = [], holds: [Pin] = []
+        for p in PinStore.shared.pins.reversed() {
+            let words = [p.title, p.place, p.note ?? ""].map(fold)
+            if words.contains(where: { $0.hasPrefix(q) || $0.contains(" " + q) }) { starts.append(p) }
+            else if words.contains(where: { $0.contains(q) }) { holds.append(p) }
+        }
+        return starts + holds
+    }
+
+    /// a pin found in Pins: the pin in its colour, its name, its place; a tap closes search, chooses the pin and Apple's
+    /// map goes to it (as a row of the pins' list)
+    private func pinRow(_ p: Pin?) -> some View {
+        Button {
+            guard let p else { return }
+            Feel.tap()
+            head.searching = false
+            PinStore.shared.selected = p.id
+            PinsMapState.shared.go(to: p)
+            if let w = head.water, w.stop != .quarter { w.go(.quarter) }
+        } label: {
+            HStack(spacing: 12) {
+                Group {
+                    if let p {
+                        PinMarker(colour: p.colour.map { SIMD3($0[0], $0[1], $0[2]) } ?? PinColours.standard, p3: p.colour != nil)
+                            .scaleEffect(0.66)
+                    }
+                }
+                .frame(width: 22, height: 22)
+                Text(p?.title ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                Text(p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? "")
+                    .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(p.map { "\($0.title), pin" } ?? "")
+    }
+
     private func anyRegionRow(_ h: RegionIndex.Hit?) -> some View {
         let place = h.flatMap { h in map.world?.placeIndex[h.place] }
         let country = place.flatMap { map.world?.places[$0].n } ?? ""
