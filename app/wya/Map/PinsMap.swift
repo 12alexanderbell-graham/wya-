@@ -490,7 +490,12 @@ struct PinsMapView: UIViewRepresentable {
                 let d = Self.near(p, l, in: v)
                 if l.other { if d < 12, best == nil || d < best!.1 { best = (l, d) } } else { chosen = min(chosen, d) }
             }
-            if let (l, d) = best, d < chosen { PinRoutes.shared.choose(other: l) }
+            if let (l, d) = best, d < chosen { PinRoutes.shared.choose(other: l); return }
+            // a chip waiting: a tap on land fills it with that spot (8.6); at sea there is nothing to route to
+            if PinRoutes.shared.waiting != nil {
+                let c = v.convert(p, toCoordinateFrom: v)
+                if let land = Self.country(map, c) { _ = PinRoutes.shared.landTapped(c, country: land.name) } else { Feel.refuse() }
+            }
         }
         /// a point's distance to a line on the map, in points
         static func near(_ p: CGPoint, _ l: MKPolyline, in v: MKMapView) -> CGFloat {
@@ -1036,7 +1041,8 @@ struct PinsList: View {
     /// a kept route: its own line drawn small (the route icon is still to draw), "From to To", its distance and time;
     /// a tap shows it on the map with the water at 25%; a hold, the route's menu (11.5)
     private func routeRow(_ r: PinRoute) -> some View {
-        let name = "\(store.pin(r.from)?.title ?? "Pin") to \(store.pin(r.to)?.title ?? "Pin")"
+        let ends = PinRoutes.shared
+        let name = "\(ends.end(r.from, r)?.title ?? "Pin") to \(ends.end(r.to, r)?.title ?? "Pin")"
         return HStack(spacing: 12) {
             RouteShape(points: r.points)
                 .stroke(Palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))

@@ -232,11 +232,15 @@ final class TestDriver {
                         // pins look <lat> <lon> <degrees>: Apple's map there, that many degrees tall
                         v.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: la, longitude: lo),
                                                        span: MKCoordinateSpan(latitudeDelta: d, longitudeDelta: d)), animated: false)
+                    } else if a == "routeland", p.count > 3, let la = Double(p[2]), let lo = Double(p[3]) {
+                        // pins routeland <lat> <lon>: a tap on land there while a chip waits
+                        let c = CLLocationCoordinate2D(latitude: la, longitude: lo)
+                        _ = PinRoutes.shared.landTapped(c, country: map.flatMap { PinsMapView.Coordinator.country($0, c)?.name } ?? "Land")
                     } else if a == "routeclose" { PinRoutes.shared.close()
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
                         for (i, r) in PinRoutes.shared.routes.enumerated() {
-                            NSLog("wya route %d %@ -> %@ %@ walk %d", i, PinStore.shared.pin(r.from)?.title ?? "?", PinStore.shared.pin(r.to)?.title ?? "?", r.words, r.walk == true ? 1 : 0)
+                            NSLog("wya route %d %@ -> %@ %@ walk %d", i, PinRoutes.shared.end(r.from, r)?.title ?? "?", PinRoutes.shared.end(r.to, r)?.title ?? "?", r.words, r.walk == true ? 1 : 0)
                         }
                     } else if a == "none" { PinStore.shared.selected = nil
                     } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {

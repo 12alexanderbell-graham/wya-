@@ -21,6 +21,8 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var made = Date()
     /// on foot (nil: by car, the first way)
     var walk: Bool? = nil
+    /// its ends that are not pins: spots on land, each named when it was tapped (8.6)
+    var spots: [RouteSpot]? = nil
 
     var words: String { Self.words(distance: distance, time: time) }
     static func words(distance: Double, time: Double) -> String {
@@ -32,6 +34,14 @@ struct PinRoute: Codable, Identifiable, Hashable {
         f.unitsStyle = .abbreviated
         return "\(d) · \(f.string(from: time) ?? "")"
     }
+}
+
+/// a route's end that is not a pin: a spot on land, kept with its route (no pin is made for it)
+struct RouteSpot: Codable, Hashable {
+    var id = UUID()
+    var lat: Double
+    var lon: Double
+    var name: String
 }
 
 /// a route's line on Apple's map (the chosen one, or one of Apple's other ways)
@@ -116,6 +126,17 @@ final class PinRoutes {
     /// Apple's other ways for the current route (not kept: they are asked again)
     @ObservationIgnored private var others: [MKRoute] = []
     @ObservationIgnored private var asking = 0
+    /// the row's spots on land not yet in a kept route
+    private var temp: [UUID: RouteSpot] = [:]
+
+    /// an end as a route sees it: a pin (where it is now) or a spot
+    struct Place { let lat: Double; let lon: Double; let title: String; let pin: Pin? }
+    func end(_ id: UUID?, _ r: PinRoute? = nil) -> Place? {
+        guard let id else { return nil }
+        if let p = PinStore.shared.pin(id) { return Place(lat: p.lat, lon: p.lon, title: p.title, pin: p) }
+        let s = r?.spots?.first(where: { $0.id == id }) ?? temp[id] ?? routes.lazy.compactMap { $0.spots?.first { $0.id == id } }.first
+        return s.map { Place(lat: $0.lat, lon: $0.lon, title: $0.name, pin: nil) }
+    }
 
     private var url: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("routes.json")
@@ -137,7 +158,7 @@ final class PinRoutes {
 
     /// Route from here / Route to here (the pin's menu): the row opens with that end set, the other waiting
     func start(_ end: End, at pin: UUID) {
-        if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; asking += 1 }
+        if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1 }
         set(end, pin)
     }
     /// a pin tapped while the row waits for an end: it fills that end (true: the tap was the row's)
@@ -145,6 +166,21 @@ final class PinRoutes {
         guard open, let w = waiting else { return false }
         Feel.tap()
         set(w, pin)
+        return true
+    }
+    /// a tap on land while the row waits for an end: a spot there fills it, named after the nearest town within 15 km
+    /// ("Kreuzberg" in it, "Near Kreuzberg" outside it), else the country; no pin is made (true: the tap was the row's)
+    func landTapped(_ c: CLLocationCoordinate2D, country: String) -> Bool {
+        guard open, let w = waiting else { return false }
+        Feel.tap()
+        // in the town (within 3 km of its point) its name alone; further out "Near" it
+        let name = TownIndex.shared.nearest(lat: c.latitude, lon: c.longitude).map { t in
+            CLLocation(latitude: t.lat, longitude: t.lon).distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude)) < 3000
+                ? t.name : "Near \(t.name)"
+        } ?? country
+        let spot = RouteSpot(lat: c.latitude, lon: c.longitude, name: name)
+        temp[spot.id] = spot
+        set(w, spot.id)
         return true
     }
     /// a chip tapped: it waits for a pin
@@ -157,7 +193,7 @@ final class PinRoutes {
     func close() {
         guard open else { return }
         open = false; waiting = nil; noRoute = false
-        from = nil; to = nil; current = nil; others = []
+        from = nil; to = nil; current = nil; others = []; temp = [:]
         // an answer still on its way is for nothing now
         asking += 1
         PinsMapState.shared.redrawRoutes()
@@ -178,7 +214,7 @@ final class PinRoutes {
 
     /// Apple's directions between the two pins (driving until the transport choice comes with its icons)
     private func ask() {
-        guard let f = from.flatMap({ PinStore.shared.pin($0) }), let t = to.flatMap({ PinStore.shared.pin($0) }) else { return }
+        guard let fid = from, let tid = to, let f = end(fid), let t = end(tid) else { return }
         asking += 1
         let me = asking
         noRoute = false
@@ -186,8 +222,8 @@ final class PinRoutes {
         req.requestsAlternateRoutes = true
         Task {
             let answer = try? await MKDirections(request: req).calculate()
-            // still the row's question: open, the same two ends, both pins still there
-            guard me == asking, open, from == f.id, to == t.id, PinStore.shared.pin(f.id) != nil, PinStore.shared.pin(t.id) != nil else { return }
+            // still the row's question: open, the same two ends, both still there
+            guard me == asking, open, from == fid, to == tid, end(fid) != nil, end(tid) != nil else { return }
             guard let routes = answer?.routes, let best = routes.first else {
                 // across an ocean by car: the To chip says so for 2 s
                 Feel.refuse()
@@ -195,7 +231,7 @@ final class PinRoutes {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in if me == asking { noRoute = false } }
                 return
             }
-            keep(best, from: f.id, to: t.id)
+            keep(best, from: fid, to: tid)
             others = Array(routes.dropFirst())
             PinsMapState.shared.redrawRoutes()
             PinsMapState.shared.frame(route: current)
@@ -205,16 +241,20 @@ final class PinRoutes {
     /// the route made or changed by the row: one undo takes it back
     private func keep(_ r: MKRoute, from f: UUID, to t: UUID) {
         let line = Self.points(r.polyline)
+        // the ends that are spots go with the route
+        let spots = [f, t].compactMap { temp[$0] ?? routes.lazy.compactMap { r in r.spots?.first { $0.id == f || $0.id == t } }.first }
+        let kept: [RouteSpot]? = spots.isEmpty ? nil : Array(Set(spots))
         if let id = current, let k = routes.firstIndex(where: { $0.id == id }) {
             let was = routes[k]
-            routes[k].from = f; routes[k].to = t; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
+            routes[k].from = f; routes[k].to = t; routes[k].spots = kept; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
             save()
             MarkStore.shared.did("Route changed") { [weak self] in
                 guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
                 self.routes[j] = was; self.save(); self.undone(id)
             }
         } else {
-            let new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
+            var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
+            new.spots = kept
             current = new.id
             routes.append(new)
             save()
@@ -292,7 +332,7 @@ final class PinRoutes {
         for r in routes where r.from == pin || r.to == pin { reask(r.id, quiet: true) }
     }
 
-    static func request(_ f: Pin, _ t: Pin, walk: Bool) -> MKDirections.Request {
+    static func request(_ f: Place, _ t: Place, walk: Bool) -> MKDirections.Request {
         let req = MKDirections.Request()
         req.source = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil)
         req.destination = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil)
@@ -307,7 +347,7 @@ final class PinRoutes {
         var r = routes[k]
         if reverse { swap(&r.from, &r.to) }
         if let walk { r.walk = walk ? true : nil }
-        guard let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return }
+        guard let f = end(r.from, r), let t = end(r.to, r) else { return }
         let req = Self.request(f, t, walk: r.walk == true)
         Task {
             let answer = try? await MKDirections(request: req).calculate()
@@ -338,7 +378,7 @@ final class PinRoutes {
     /// Delete. The way it goes now is shown but can't be chosen (never a tick). Not yet: Transit (Apple's directions
     /// give no transit lines to draw), Colour (with the route's sheet), lists and plans (with their parts).
     func menu(_ id: UUID) -> UIMenu? {
-        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return nil }
+        guard let r = routes.first(where: { $0.id == id }), let f = end(r.from, r), let t = end(r.to, r) else { return nil }
         // each runs once the menu has gone (as every hold menu's rows)
         let after = { (g: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: g) }
         let walking = r.walk == true
@@ -357,14 +397,14 @@ final class PinRoutes {
 
     /// Directions in Apple Maps: Apple Maps from one end to the other, on foot or by car as the route goes
     func directions(_ id: UUID) {
-        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return }
+        guard let r = routes.first(where: { $0.id == id }), let f = end(r.from, r), let t = end(r.to, r) else { return }
         let a = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil); a.name = f.title
         let b = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil); b.name = t.title
         MKMapItem.openMaps(with: [a, b], launchOptions: [MKLaunchOptionsDirectionsModeKey: r.walk == true ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
     }
     /// Share: Apple Maps' link to the same directions
     func share(_ id: UUID) {
-        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to),
+        guard let r = routes.first(where: { $0.id == id }), let f = end(r.from, r), let t = end(r.to, r),
               let u = URL(string: "https://maps.apple.com/?saddr=\(f.lat),\(f.lon)&daddr=\(t.lat),\(t.lon)&dirflg=\(r.walk == true ? "w" : "d")") else { return }
         var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
         while let next = top?.presentedViewController { top = next }
@@ -406,12 +446,13 @@ struct RouteRow: View {
     }
 
     private func chip(_ end: PinRoutes.End, _ pin: UUID?, word: String, width: CGFloat) -> some View {
-        let p = pin.flatMap { PinStore.shared.pin($0) }
+        let p = r.end(pin)
         let waiting = r.waiting == end
         return Button { r.choose(end) } label: {
             HStack(spacing: 6) {
                 if let p, !(end == .to && r.noRoute) {
-                    Circle().fill(PinRows.colour(p)).frame(width: 12, height: 12)
+                    // a pin's colour dot; a spot on land is its name alone
+                    if let pin = p.pin { Circle().fill(PinRows.colour(pin)).frame(width: 12, height: 12) }
                     Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
                 } else {
                     Text(word).font(.body).foregroundStyle(waiting ? Palette.ink : Palette.ink.opacity(0.5))
@@ -427,7 +468,7 @@ struct RouteRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(end == .from ? "From" : "To")
-        .accessibilityValue(end == .to && r.noRoute ? "No route" : [p?.title, waiting ? "waiting for a pin" : nil].compactMap { $0 }.joined(separator: ", ").ifEmpty("not set"))
+        .accessibilityValue(end == .to && r.noRoute ? "No route" : [p?.title, waiting ? "waiting for a pin or a tap on the map" : nil].compactMap { $0 }.joined(separator: ", ").ifEmpty("not set"))
     }
 }
 
