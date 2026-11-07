@@ -149,6 +149,14 @@ final class TestDriver {
                     if !(p.count > 3 && p[3] == "hold") { h.pullEnded(velocity: 0) }
                 // a finger on the map: the same hook the map's touch calls (ContentView: map.onTouch)
                 case "maptap": map?.onTouch?()
+                // seatap: a confirmed tap on the sea; placetap <id>: a confirmed tap on that place (its middle)
+                case "seatap": map?.onSeaTap?()
+                case "placetap":
+                    if let m = map, let i = m.world?.placeIndex[a] { let r = m.screenRect(of: i); m.onPlaceTap?(i, CGPoint(x: r.midX, y: r.midY)) }
+                // whatshere x y | whatshere off: What's here? at that screen point (A11.4), or taken away
+                case "whatshere":
+                    if a == "off" { WhatsHere.shared.close() }
+                    else if p.count > 2, let x = Double(p[1]), let y = Double(p[2]), let m = map { WhatsHere.shared.show(at: CGPoint(x: x, y: y), map: m) }
                 // wheel <dx> <ms>: a finger turning the dot sideways, through the same path as the capsule's drag
                 case "wheel":
                     guard let h = head else { break }
@@ -193,7 +201,8 @@ final class TestDriver {
                         PinStore.shared.drop(at: c, country: map.flatMap { PinsMapView.Coordinator.country($0, c) })
                     } else if a == "select", p.count > 2, let n = Int(p[2]), n < PinStore.shared.pins.count {
                         PinStore.shared.selected = PinStore.shared.pins[n].id
-                    } else if a == "move", p.count > 4, let n = Int(p[2]), n < PinStore.shared.pins.count,
+                    } else if a == "move", p.count > 4, let n0 = Int(p[2]), case let n = n0 < 0 ? PinStore.shared.pins.count + n0 : n0,
+                              n >= 0, n < PinStore.shared.pins.count,
                               let x = Double(p[3]), let y = Double(p[4]), let v = PinsMapState.shared.view {
                         // pins move <n> <x> <y>: pin n set down at that screen point, as a drag lets it go there
                         let c = v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v)

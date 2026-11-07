@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
-/// nearest first, 15 pt, one a line) in a clear glass panel over the map, its bottom 12 pt above the held point; each
-/// name is a tap to its card. The panel is a 44 pt circle grown from that point (P1, `Motion.quick`) and widened into a
+/// nearest first, 15 pt, one a line) in a glass panel over the map, its bottom 12 pt above the held point; each
+/// name is a tap to its card. The panel (frosted, as every surface) is a 44 pt circle grown from that point (P1, `Motion.quick`) and widened into a
 /// rounded rectangle (0.4 rule 4, the chrome curve, its corner 22 to 18 pt); the names roll in once it is past half way
 /// and out before it narrows back. A touch anywhere else on the map takes it away the same way. At sea: "Open sea".
 @MainActor
@@ -149,7 +149,8 @@ struct WhatsHereView: View {
             .padding(.horizontal, 16)
             .frame(width: width, height: height, alignment: .leading)
             .clipped()
-            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: open ? 18 : 22, style: .continuous))
+            // a surface over the map: the system's frosted glass, as search's results box
+            .glassEffect(PageGlass.surface, in: RoundedRectangle(cornerRadius: open ? 18 : 22, style: .continuous))
             // the circle grows from the point and goes back into it (it is control-sized)
             .scaleEffect(here.stage == 0 ? 0.001 : 1, anchor: .bottom)
             .position(x: x, y: y)
