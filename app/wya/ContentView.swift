@@ -51,6 +51,8 @@ struct ContentView: View {
                 ShaderPrewarm()
                     .position(x: water.layout.W / 2, y: water.layout.capsule.midY)
 
+                // What's here? (A11.4): over the map, under the cards, the water and the head
+                WhatsHereView(layout: water.layout)
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
                 // the region card (6.7): over the map, standing on the 25% water
@@ -179,6 +181,8 @@ struct ContentView: View {
             // with Details up, a touch on the map closes Details only (back to the card); the next one closes the card
             map.onTouch = { [head, water, map] in
                 Hints.shared.touched()
+                // What's here? goes back into its point; the touch goes on
+                WhatsHere.shared.close()
                 // search open: the touch closes it only (a drag still pans), keeping the typed text 10 s (1.10)
                 if head.searching { head.closeSearchFromMap(); return }
                 // anything this touch closes: that press opens no hold menu
@@ -205,6 +209,7 @@ struct ContentView: View {
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
+                WhatsHere.shared.close()
                 head.putAwayAI()
                 BookState.shared.close()
                 if !DetailsState.shared.isOpen && !VerifyState.shared.isOpen { CardState.shared.close(map: map); RegionCardState.shared.close(map: map) }
@@ -349,6 +354,7 @@ struct ContentView: View {
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview() }
+        WhatsHere.shared.close()
         // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
         // still off, so its open country goes with it)
         if old == .regions { map.leaveRegionTowns() }
@@ -908,7 +914,8 @@ struct ContentView: View {
     }
 
     /// THE OPEN COUNTRY'S EMPTY LAND HELD (11.5's empty-land menu): Add a place here (your own place made there,
-    /// unstamped, its card at once, 7.8) · Copy coordinates ("46.2044, 6.1432"). What's here? waits for A11.4.
+    /// unstamped, its card at once, 7.8) · What's here? (the nearest three names, A11.4) · Copy coordinates
+    /// ("46.2044, 6.1432")
     @MainActor static func landMenu(at p: CGPoint, place: Int, map: MapController) -> UIMenu {
         let ll = EqualEarth.unproject(map.mapPoint(p))
         let country = map.world.map { $0.places[place].n } ?? ""
@@ -918,10 +925,13 @@ struct ContentView: View {
                 RegionCardState.shared.open(o.key, name: o.name, parents: "Your place in \(country)", place: place, map: map)
             }
         }
+        let here = UIAction(title: "What's here?") { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { WhatsHere.shared.show(at: p, map: map) }
+        }
         let copy = UIAction(title: "Copy coordinates") { _ in
             UIPasteboard.general.string = String(format: "%.4f, %.4f", ll.lat, ll.lon)
         }
-        return UIMenu(children: [add, copy])
+        return UIMenu(children: [add, here, copy])
     }
 
     /// A THING'S HOLD MENU (11.5's town or thing menu): Stamp or Unstamp, Wish or Unwish | Details, Verify | Open its

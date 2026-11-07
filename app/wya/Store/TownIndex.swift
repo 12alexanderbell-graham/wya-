@@ -135,6 +135,28 @@ final class TownIndex {
         return best
     }
 
+    /// the `count` towns nearest a point, nearest first (What's here?, A11.4), however far
+    func nearest(lat: Double, lon: Double, count: Int) -> [Hit] {
+        guard ready, count > 0 else { return [] }
+        let k = cos(lat * .pi / 180)
+        var best: [(Double, Hit)] = []
+        var worst = Double.infinity
+        for r in rows {
+            let dy = r.hit.lat - lat
+            guard best.count < count || dy * dy < worst else { continue }
+            var dx = r.hit.lon - lon
+            if dx > 180 { dx -= 360 } else if dx < -180 { dx += 360 }
+            dx *= k
+            let d = dx * dx + dy * dy
+            guard best.count < count || d < worst else { continue }
+            best.append((d, r.hit))
+            best.sort { $0.0 < $1.0 }
+            if best.count > count { best.removeLast() }
+            if best.count == count { worst = best[count - 1].0 }
+        }
+        return best.map(\.1)
+    }
+
     /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere
     func hits(_ query: String, open: String?, limit: Int = 6) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded

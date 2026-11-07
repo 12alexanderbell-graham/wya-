@@ -317,6 +317,11 @@ struct PinsMapView: UIViewRepresentable {
         hold.allowableMovement = 8
         hold.delegate = context.coordinator
         v.addGestureRecognizer(hold)
+        // any tap on Apple's map takes What's here? away (the tap goes on)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        v.addGestureRecognizer(tap)
         // a pin moved by a drag is set down on the map (8.4)
         v.addInteraction(UIDropInteraction(delegate: context.coordinator))
         PinsMapState.shared.view = v
@@ -394,8 +399,12 @@ struct PinsMapView: UIViewRepresentable {
             }
         }
 
+        @objc func tapped(_ g: UITapGestureRecognizer) { WhatsHere.shared.close() }
+        func mapView(_ v: MKMapView, regionWillChangeAnimated animated: Bool) { WhatsHere.shared.close() }
+
         @objc func held(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began, let v = g.view as? MKMapView else { return }
+            WhatsHere.shared.close()
             // the lock stops dropping, never looking (as on every map)
             if map.locked { Feel.refuse(); return }
             let p = g.location(in: v)
@@ -580,8 +589,8 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     }
 
     // THE PIN'S HOLD MENU (11.5), its name over the rows built so far, in the book's groups:
-    // Edit | Colour | Directions | Open its place's page · Copy coordinates | Share | Delete
-    // (Icon, routes, Measure, What's here?, lists and plans come with their parts)
+    // Edit | Colour | Directions | What's here? · Open its place's page · Copy coordinates | Share | Delete
+    // (Icon, routes, Measure, lists and plans come with their parts)
     func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
         guard let a = annotation as? PinAnnotation else { return nil }
         let id = a.id
@@ -610,13 +619,22 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         let copy = UIAction(title: "Copy coordinates") { _ in
             UIPasteboard.general.string = String(format: "%.5f, %.5f", p.lat, p.lon)
         }
+        // What's here? (A11.4): the nearest three names from our data, over Apple's map at the pin's tip
+        let here = UIAction(title: "What's here?") { _ in
+            after {
+                guard let v = state.view, let m = state.map, let now = PinStore.shared.pin(id) else { return }
+                let at = v.convert(now.coordinate, toPointTo: nil)
+                let land = PinsMapView.Coordinator.country(m, now.coordinate).flatMap { m.world?.placeIndex[$0.id] }
+                WhatsHere.shared.show(at: at, lat: now.lat, lon: now.lon, land: land, map: m)
+            }
+        }
         let share = UIAction(title: "Share") { _ in after { PinStore.share(p) } }
         let delete = UIAction(title: "Delete", attributes: .destructive) { _ in after { Feel.lift(); PinStore.shared.remove(id) } }
         return UIMenu(title: p.title, children: [
             UIMenu(options: .displayInline, children: [edit]),
             UIMenu(options: .displayInline, children: [colour]),
             UIMenu(options: .displayInline, children: [directions]),
-            UIMenu(options: .displayInline, children: [page, copy]),
+            UIMenu(options: .displayInline, children: [here, page, copy]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: [delete]),
         ])
