@@ -225,7 +225,8 @@ struct SheetContent: View {
             }
             // PINS (Part 8): its own words where the caption sits: the count, or the chosen pin's name and place
             // (settings, details and the upload take the water as they do in every mode: Pins' words step out)
-            if map.pinsMode, !water.pageSheet, !water.settings, !water.details, !water.upload {
+            // (and only where every map's caption fits: never inside the closed capsule over the tabs)
+            if map.pinsMode, captionFits, !water.pageSheet {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
                 // a route's colour being picked takes the water (its name where the pins' caption sits)
                 if PinRoutes.shared.colouring != nil {

@@ -261,6 +261,8 @@ final class PinRoutes {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in if me == asking { noRoute = false } }
                 return
             }
+            // the same two ends already kept (by car): that route is the one changed, never a second copy
+            if current == nil, let same = self.routes.first(where: { $0.from == fid && $0.to == tid && $0.walk != true }) { current = same.id }
             keep(best, from: fid, to: tid)
             others = Array(routes.dropFirst())
             PinsMapState.shared.redrawRoutes()

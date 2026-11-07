@@ -353,7 +353,8 @@ struct ContentView: View {
         .onChange(of: tab) { _, _ in saveSession(after: 0) }
         // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
         .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
-        .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } else { BookState.shared.close() } }
+        // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)
+        .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
             if DetailsState.shared.isOpen || VerifyState.shared.isOpen, water.stampedList {
@@ -380,7 +381,9 @@ struct ContentView: View {
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
         water.modeSwitchedAt = CACurrentMediaTime()
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
-        if water.upload { UploadState.shared.leaveReview() }
+        if water.upload { UploadState.shared.leaveReview(); UploadState.shared.close() }
+        // the Stamped list is the Countries map's: a mode change takes it at once (never two lists, one over the other)
+        if old != new { water.closeList(back: false, instant: true) }
         WhatsHere.shared.close()
         // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
         // still off, so its open country goes with it)
@@ -388,9 +391,13 @@ struct ContentView: View {
         map.placesMode = new == .places
         map.pinsMode = new == .pins
         if new != .pins { PinStore.shared.selected = nil; PinRoutes.shared.close() }
-        // the journey belongs to the map it was drawn on: into or out of Pins it goes
-        if head.history, new == .pins || old == .pins {
-            if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true); water.historyUp = false }
+        // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
+        // drawn on
+        head.toolsOpen = false
+        if head.history, old != new {
+            if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true) }
+            // the water back from history height at once (a mode change moves nothing)
+            if water.historyUp { water.historyUp = false; if water.stop == .quarter { water.jump(.quarter) } }
             head.history = false
         }
         // (a card, Details or the book over the map goes with the map it was on: Places' and Pins' maps are their own)

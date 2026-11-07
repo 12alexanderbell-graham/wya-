@@ -188,9 +188,11 @@ final class Water {
     /// the list stays on screen this long after it is closed, while its rows leave (A4.19 reversed)
     var listLeaving = false
     @ObservationIgnored private var leaveJob = 0
-    func closeList(to: Stop? = nil, back: Bool = true) {
+    func closeList(to: Stop? = nil, back: Bool = true, instant: Bool = false) {
         guard stampedList else { return }
         stampedList = false
+        // (a mode change: simply gone, never leaving over the next mode's own rows)
+        if instant { listLeaving = false; listFrom = nil; return }
         listLeaving = true
         leaveJob += 1
         let job = leaveJob
