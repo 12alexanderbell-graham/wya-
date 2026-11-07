@@ -390,7 +390,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         (view as? MapMTKView)?.townNames.update(controller, moving: moving || controller.touching)
         // the history line (Part 13), drawn along for this frame
         controller.stepHistory(now)
-        if controller.historyTrack != nil || controller.historyShown > 0 { (view as? MapMTKView)?.historyLine.update(controller) }
+        // (and once more after the line has gone back, so its capsules go with it: they stayed on the map after history
+        // was turned off, 7 Nov)
+        if let mv = view as? MapMTKView, controller.historyTrack != nil || controller.historyShown > 0 || !mv.historyLine.isHidden {
+            mv.historyLine.update(controller)
+        }
         // 120 a second while anything moves, 30 for the lights alone
         view.preferredFramesPerSecond = (moving || controller.touching || controller.needsFrame) ? 120 : 30
         controller.needsFrame = false
@@ -1009,11 +1013,15 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     final class PlaceElement: UIAccessibilityElement {
         let place: Int
         var state = MarkState.none
-        var activate: (() -> Void)?
-        var actions: (() -> [UIAccessibilityCustomAction])?
+        var activate: (@MainActor () -> Void)?
+        var actions: (@MainActor () -> [UIAccessibilityCustomAction])?
         init(container: Any, place: Int) { self.place = place; super.init(accessibilityContainer: container) }
-        override func accessibilityActivate() -> Bool { activate?(); return activate != nil }
-        override var accessibilityCustomActions: [UIAccessibilityCustomAction]? { get { actions?() } set {} }
+        // (VoiceOver asks on the main thread)
+        override func accessibilityActivate() -> Bool { MainActor.assumeIsolated { activate?() }; return activate != nil }
+        override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+            get { MainActor.assumeIsolated { actions?() } }
+            set {}
+        }
     }
     private var axKey: [Int] = []
     private var axCache: [PlaceElement] = []
@@ -1084,7 +1092,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             e.accessibilityTraits = .button
             e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((id, nil), c) } }
             let at = CGPoint(x: f.midX, y: f.midY)
-            e.actions = { [weak c] in c?.menuForTown?(cc, i, at).map(Self.actions) ?? [] }
+            e.actions = { [weak c] in c?.menuForTown?(cc, i, at).map { Self.actions($0) } ?? [] }
             out.append((f, e))
         }
         for (id, f) in townNames.thingNameFrames {
@@ -1096,7 +1104,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             e.accessibilityLabel = Self.label(t.name, st)
             e.accessibilityTraits = .button
             e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((nil, id), c) } }
-            e.actions = { [weak c] in c?.menuForThing?(id).map(Self.actions) ?? [] }
+            e.actions = { [weak c] in c?.menuForThing?(id).map { Self.actions($0) } ?? [] }
             out.append((f, e))
         }
         out.sort { a, b in
@@ -1133,7 +1141,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 c.regionPressed = u
                 c.onPlaceTap?(sc.place, at)
             }
-            e.actions = { [weak c] in c?.menuForUnit?(u).map(Self.actions) ?? [] }
+            e.actions = { [weak c] in c?.menuForUnit?(u).map { Self.actions($0) } ?? [] }
             return e
         }
     }
