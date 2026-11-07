@@ -1188,6 +1188,13 @@ final class MapController {
     }
     #endif
 
+    /// AROUND YOU (Reset's menu, 11.5 / 1.12): the camera flies over a point, some 1,700 km across
+    func showAround(lon: Double, lat: Double) {
+        let q = EqualEarth.project(lon: lon, lat: lat)
+        let t = min(kMax, max(kMin, kMin * 24))
+        fly(to: clamped(SIMD2(Double(q.x), Double(q.y)), t), k: t, dur: 0.58)
+    }
+
     private func fly(to p: SIMD2<Double>, k nk: Double, dur: Double, glide: Bool = false, then: (() -> Void)? = nil) {
         // Reduce Motion: the same move, shorter (Part 19; never a fade or a cut)
         flight = (SIMD3(c.x, c.y, log(k)), SIMD3(p.x, p.y, log(nk)), 0, Motion.reduce ? dur * 0.6 : dur, glide)

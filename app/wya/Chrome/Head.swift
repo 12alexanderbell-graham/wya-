@@ -26,6 +26,8 @@ final class HeadState {
     /// Regions' selection menu is up: search filters its rows (no results box), and quick stamping can't be used (6.3)
     var filtersMenu = false
     var quickStamp = false
+    /// the water (a search result's hold menu is the country's, which acts on it)
+    @ObservationIgnored weak var water: Water?
     var history = false
     /// the top pull, in points of finger travel (0 at rest): it brings the AI out of the dot (TopPull)
     var pull: CGFloat = 0
@@ -1141,6 +1143,20 @@ struct SearchResults: View {
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
         .buttonStyle(.plain)
+        // A RESULT HELD (11.5): the menu of what it is, the country's own (the same rows as a hold on the map);
+        // a row that goes somewhere closes search first, Stamp, Wish and Share are done where you are
+        .contextMenu {
+            if let water = head.water, let pl {
+                let r = map.screenRect(of: i)
+                if let m = ContentView.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head,
+                                                   fromSearch: true) {
+                    MenuBridge(menu: m, before: { title in
+                        if !["Stamp", "Unstamp", "Wish", "Unwish", "Share"].contains(title) { head.searching = false }
+                    })
+                    .id(pl.id)
+                }
+            }
+        }
     }
 
     /// a region found on a region map: its name and what it is ("department"); a tap closes search and shows it there

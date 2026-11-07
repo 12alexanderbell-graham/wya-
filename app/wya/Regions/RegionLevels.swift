@@ -36,6 +36,18 @@ struct RegionLevels: View {
                                 pick(l.row)
                             }
                             .accessibilityAddTraits(here ? [.isButton, .isSelected] : .isButton)
+                            // A LEVEL'S WORD HELD (11.5): the country's levels as rows, a quicker pick on a small
+                            // phone; the one shown unavailable (the current row, 11.3)
+                            .contextMenu {
+                                Section(name) {
+                                    ForEach(levels) { m in
+                                        Button(m.word.prefix(1).uppercased() + m.word.dropFirst()) {
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pick(m.row) }
+                                        }
+                                        .disabled(m.row == current)
+                                    }
+                                }
+                            }
                     }
                 }
                 .frame(width: width)

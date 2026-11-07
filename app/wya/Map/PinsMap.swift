@@ -174,6 +174,13 @@ final class PinsMapState {
         v.setCamera(cam, animated: true)
     }
     /// our map's view of the world, on Apple's map: the same middle, the same span of latitude
+    /// Reset on Apple's map: the whole world, as Apple's own map shows it
+    func world() { view?.setVisibleMapRect(.world, animated: true) }
+    /// Reset's Around you on Apple's map: some 1,700 km across over the spot
+    func around(_ c: CLLocationCoordinate2D) {
+        guard let v = view else { return }
+        v.setCamera(MKMapCamera(lookingAtCenter: c, fromDistance: 3_000_000, pitch: 0, heading: 0), animated: true)
+    }
     /// Apple's map over a pin picked from the list: the pin in the middle, no farther out than 400 km
     func go(to p: Pin) {
         guard let v = view else { return }

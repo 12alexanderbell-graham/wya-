@@ -44,14 +44,20 @@ struct ZoomColumn: View {
                 .offset(x: slide(1))
                 .allowsHitTesting(slide(1) < 30)
             // on a region map: back to the country's frame (6.5)
+            // (Pins: Apple's map has its own camera, so Reset is always there for it)
+            let rest = map.atRest && !map.pinsMode
             cell("reset", label: map.regionScene != nil ? "Back to the country" : "Back to the world", ink: ink,
-                 dim: map.regionScene == nil && map.atRest) {
+                 dim: map.regionScene == nil && rest) {
                 // Places with a country open: back to the world, the towns going (7.4)
-                if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.closePlace(); map.goHome() }
+                if map.pinsMode { PinsMapState.shared.world() }
+                else if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.closePlace(); map.goHome() }
             }
-                .disabled(map.atRest)
+                .disabled(rest)
                 // a press on a mark at its limit: `refuse` (Part 0.3; 1.9's table)
-                .overlay { if map.atRest { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
+                .overlay { if rest { Color.clear.contentShape(Rectangle()).onTapGesture { Feel.refuse() }.accessibilityHidden(true) } }
+                // RESET'S HOLD MENU (11.5): The world · Around you · each continent (Apple's map in Pins has no
+                // continents of ours: the world and around you only)
+                .contextMenu { resetMenu }
                 .offset(x: slide(2))
                 .allowsHitTesting(slide(2) < 30)
             cell("lock", on: map.locked, label: map.locked ? "Unlock the map" : "Lock the map", ink: ink, feel: .notch) { map.locked.toggle() }
@@ -71,6 +77,33 @@ struct ZoomColumn: View {
         }
         .frame(width: 44)
         .position(x: W - L.side - 22, y: top + 110)
+    }
+
+    /// (none on a region map, where Reset is Back to the country)
+    @ViewBuilder private var resetMenu: some View {
+        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        if map.regionScene == nil {
+            Button("The world") {
+                after {
+                    if map.pinsMode { PinsMapState.shared.world() } else { map.closePlace(); map.goHome() }
+                }
+            }
+            // asks for your location at the press (only then), as Apple Maps' own button does
+            Button("Around you") {
+                Task {
+                    guard case .fix(let l) = await OneFix.shared.get() else { Feel.refuse(); return }
+                    if map.pinsMode { PinsMapState.shared.around(l.coordinate) }
+                    else { map.closePlace(); map.showAround(lon: l.coordinate.longitude, lat: l.coordinate.latitude) }
+                }
+            }
+            if !map.pinsMode {
+                Section {
+                    ForEach(["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"], id: \.self) { k in
+                        Button(k) { after { map.closePlace(); map.show(continent: k) } }
+                    }
+                }
+            }
+        }
     }
 
     /// plus and minus: a tap is one step; held past a third of a second the zoom keeps going until the finger lifts

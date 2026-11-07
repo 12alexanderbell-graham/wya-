@@ -160,6 +160,7 @@ struct ContentView: View {
         }
         .onAppear {
             water.head = head
+            head.water = water
             RegionsMenuModel.shared.onPick = { r in openRegion(r.place) }
             RegionsMenuModel.shared.openDirect = { i in closeCard(); openRegion(i) }
             TestDriver.shared.start(map: map, water: water, head: head)
@@ -603,15 +604,18 @@ struct ContentView: View {
 
     /// Asked as the press starts, so it changes nothing itself (the press's own touch does the closing, onTouch).
     /// Sideways (1.11), with search open, or on the press that closed search: no menu.
-    @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState) -> UIMenu? {
+    /// `fromSearch`: a search result's row held (11.5: a result's menu is the menu of what it is): always the country's
+    /// own rows (no town, region or review under a point), open search no reason for none, and nothing pressed
+    @MainActor static func countryMenu(_ i: Int, at p: CGPoint, map: MapController, water: Water, head: HeadState,
+                                       fromSearch: Bool = false) -> UIMenu? {
         guard let w = map.world, i >= 0, i < w.places.count else { return nil }
         let now = CACurrentMediaTime()
-        if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
+        if !fromSearch, Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
         // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
         // (30 Oct 23:55: a town held gives that town's own menu and page, not its country's); your own place its menu;
         // empty land of the open country the land's menu
         // Places close in with no country open: a town or thing of the countries in view held is its own menu
-        if map.placesMode, map.placeOpen == nil, !map.nearbyTowns.isEmpty {
+        if !fromSearch, map.placesMode, map.placeOpen == nil, !map.nearbyTowns.isEmpty {
             if let t = map.thingHit(at: p), let cc = ThingStore.shared.thing(t.id)?.cc, let pi = w.placeIndex[cc] {
                 map.townPressed = nil; map.thingPressed = t.id
                 return thingMenu(t, cc: cc, place: pi, map: map, water: water)
@@ -621,7 +625,7 @@ struct ContentView: View {
                 return townMenu(sc.towns[t.i], cc: t.cc, place: pi, at: p, map: map, water: water, head: head)
             }
         }
-        if map.placesMode || map.regionTowns, let open = map.placeOpen {
+        if !fromSearch, map.placesMode || map.regionTowns, let open = map.placeOpen {
             // your own place held: its own menu (its mark sits over the things and towns)
             if map.placesMode, let id = map.ownHit(at: p), let o = OwnPlaces.shared.place(id) {
                 map.ownPressed = id; map.townPressed = nil; map.thingPressed = nil
@@ -643,7 +647,7 @@ struct ContentView: View {
             if i == open { return nil }
         }
         // the region map: the region's own menu (11.5's Regions menu)
-        if let sc = map.regionScene {
+        if !fromSearch, let sc = map.regionScene {
             guard let u = map.regionUnit(at: p), u < sc.unitIDs.count else { return nil }
             map.regionPressed = u
             return regionMenu(u, in: sc, at: p, map: map, water: water, head: head)
@@ -652,7 +656,7 @@ struct ContentView: View {
         if CardState.shared.isOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
             || head.settingsOpen { return nil }
         // THE REVIEW (9.5): a found country's menu is Keep or Drop · Its dates · Show in the list; other places none
-        if water.upload {
+        if water.upload, !fromSearch {
             let u = UploadState.shared
             guard u.reviewing(i), let row = u.rows.first(where: { $0.place == i }) else { return nil }
             let keep = UIAction(title: row.dropped ? "Keep" : "Drop", attributes: row.dropped ? [] : .destructive) { _ in
