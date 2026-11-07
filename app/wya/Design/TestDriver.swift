@@ -215,6 +215,11 @@ final class TestDriver {
                         menu = PinAnnotationView.menu(PinStore.shared.pins[n].id)
                     }
                     if let menu { Self.choose(row, in: menu) }
+                // report <country id>: its page opened at Report a mistake (a hold menu's Report a wrong place)
+                case "report":
+                    if let m = map, let i = m.world?.placeIndex[a] {
+                        PlacePageState.shared.openReporting(.country(a), name: m.world!.places[i].n, country: a, from: m.screenRect(of: i))
+                    }
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }

@@ -39,6 +39,12 @@ struct PageSheet: View {
             .position(x: L.W / 2, y: top + max(0, bottom - top) / 2)
             .onChange(of: stack.reportTest) { _, r in reporting = true; reason = Self.reasons.contains(r) ? r : nil }
             .onChange(of: stack.sendTest) { _, _ in send(page) }
+            // a report asked while the sheet is already up (a fact held, 11.5)
+            .onChange(of: stack.reportAsked) { _, r in
+                guard let r else { return }
+                stack.reportAsked = nil
+                withAnimation(Motion.quick) { reporting = true; reason = r }
+            }
             .task(id: page.key.description) {
                 reporting = false; reason = nil; note = ""; sent = false
                 if let r = stack.reportAsked { stack.reportAsked = nil; reporting = true; reason = r }

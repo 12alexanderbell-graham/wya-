@@ -686,6 +686,20 @@ private struct PageLayer: View {
             Text(f.0).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        // A FACT HELD (11.5): Copy (its value) · Report a mistake (the page's sheet at Report a mistake, Wrong
+        // number picked, 16.6)
+        .contextMenu {
+            Section(f.0) {
+                Button("Copy") { UIPasteboard.general.string = f.1 }
+                Button("Report a mistake") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        PlacePageState.shared.reportAsked = "Wrong number"
+                        PlacePageState.shared.sheetAsked += 1
+                    }
+                }
+            }
+        }
     }
 
     /// THE GROUND (16.3): the flag's colours, each the nearest of the palette's, strong at the top and gentle further
