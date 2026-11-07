@@ -174,6 +174,32 @@ final class PinsMapState {
         v.setCamera(cam, animated: true)
     }
     /// our map's view of the world, on Apple's map: the same middle, the same span of latitude
+    /// HISTORY IN PINS (Part 13's table: your pins by their date): one line through them from the oldest to the newest,
+    /// black to blue as the journey on our own map (2.5 pt, round ends, the short way round the globe); with fewer than
+    /// two pins there is nothing to join and the tool refuses
+    private(set) var historyOn = false
+    private var journey: MKPolyline?
+    @discardableResult func history(_ on: Bool) -> Bool {
+        historyOn = on && PinStore.shared.pins.count > 1
+        redrawHistory()
+        // turned on: the whole journey framed between the head and the water (as on our own map, 13.4)
+        if historyOn, let v = view, let j = journey, let w = water {
+            let L = w.layout
+            let pad = UIEdgeInsets(top: L.headBottom + 40, left: 40, bottom: L.H - w.y(w.stop == .full ? .half : w.stop) + 40, right: 72)
+            v.setVisibleMapRect(j.boundingMapRect, edgePadding: pad, animated: true)
+        }
+        return historyOn || !on
+    }
+    func redrawHistory() {
+        guard let v = view else { return }
+        if let j = journey { v.removeOverlay(j); journey = nil }
+        guard historyOn else { return }
+        let c = PinStore.shared.pins.sorted { $0.made < $1.made }.map(\.coordinate)
+        guard c.count > 1 else { return }
+        let j = MKGeodesicPolyline(coordinates: c, count: c.count)
+        journey = j
+        v.addOverlay(j, level: .aboveRoads)
+    }
     /// Reset on Apple's map: the whole world, as Apple's own map shows it
     func world() { view?.setVisibleMapRect(.world, animated: true) }
     /// Reset's Around you on Apple's map: some 1,700 km across over the spot
@@ -240,6 +266,8 @@ struct PinsMapView: UIViewRepresentable {
         // its town found for "Open its place's page" (the index is read once, in the background)
         TownIndex.shared.load()
         context.coordinator.sync(v, store.pins)
+        // the journey asked for before this map was made (history turned on as Pins opened)
+        PinsMapState.shared.redrawHistory()
         return v
     }
 
@@ -269,6 +297,8 @@ struct PinsMapView: UIViewRepresentable {
             let shown = Set(have.map(\.id))
             let new = pins.filter { !shown.contains($0.id) }.map(PinAnnotation.init)
             if !new.isEmpty { v.addAnnotations(new) }
+            // a pin made or gone while the journey is up joins or leaves its line
+            if (!gone.isEmpty || !new.isEmpty), PinsMapState.shared.historyOn { PinsMapState.shared.redrawHistory() }
             for a in have where ids.contains(a.id) {
                 (v.view(for: a) as? PinAnnotationView)?.show(PinStore.shared.pin(a.id))
             }
@@ -315,6 +345,17 @@ struct PinsMapView: UIViewRepresentable {
             return (w.places[i].id, w.places[i].n)
         }
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+
+        /// the journey's line (history on): black at its start to blue at its end
+        func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {
+            guard let p = o as? MKPolyline else { return MKOverlayRenderer(overlay: o) }
+            let r = MKGradientPolylineRenderer(polyline: p)
+            r.setColors([UIColor(Palette.ink), UIColor(Palette.blue)], locations: [0, 1])
+            r.lineWidth = 2.5
+            r.lineCap = .round
+            r.lineJoin = .round
+            return r
+        }
 
         func mapView(_ v: MKMapView, viewFor a: MKAnnotation) -> MKAnnotationView? {
             guard let a = a as? PinAnnotation else { return nil }

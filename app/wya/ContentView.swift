@@ -87,6 +87,11 @@ struct ContentView: View {
                     }
                     // HISTORY (Part 13): the tool on draws the journey (Countries for now); nothing dated, it refuses
                     .onChange(of: head.history) { _, on in
+                        // Pins: the line through your pins on Apple's map (no range bar: pins have one day each)
+                        if map.pinsMode {
+                            if !PinsMapState.shared.history(on) { Feel.refuse(); head.history = false }
+                            return
+                        }
                         if on {
                             if !map.historyOn() { Feel.refuse(); head.history = false; return }
                             // the water to history height from wherever it is (13.4)
@@ -340,6 +345,11 @@ struct ContentView: View {
         map.placesMode = new == .places
         map.pinsMode = new == .pins
         if new != .pins { PinStore.shared.selected = nil }
+        // the journey belongs to the map it was drawn on: into or out of Pins it goes
+        if head.history, new == .pins || old == .pins {
+            if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true); water.historyUp = false }
+            head.history = false
+        }
         // (a card, Details or the book over the map goes with the map it was on: Places' and Pins' maps are their own)
         if new == .places || old == .places || new == .pins || old == .pins { closeCard() }
         if new == .regions {
