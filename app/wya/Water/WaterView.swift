@@ -39,7 +39,8 @@ struct WaterView: View {
             }
 
             // the OpenStreetMap credit, on the map just above the water (outside the water's own outline)
-            StartCredit(water: water, form: f)
+            // (not over Apple's map in Pins: Apple's own credit is on it)
+            if !map.pinsMode { StartCredit(water: water, form: f) }
 
             // the tabs sit on the water itself; at full the night leaves the capsule's place clear, so they are still
             // on that same glass
@@ -228,6 +229,9 @@ struct SheetContent: View {
                 // the pin's sheet under its name, once the water is above 25% (8.8)
                 if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
                     PinSheet(water: water, top: cy + 36)
+                    PinShare(water: water, captionY: cy)
+                } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
+                    PinsList(water: water, captionY: cy)
                 }
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet, !map.pinsMode {

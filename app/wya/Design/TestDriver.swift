@@ -181,7 +181,8 @@ final class TestDriver {
                 // pins drop x y (a hold there) | pins select <n> | pins none: Pins' map without a finger
                 case "pins":
                     if a == "drop", p.count > 3, let x = Double(p[2]), let y = Double(p[3]), let v = PinsMapState.shared.view {
-                        PinStore.shared.drop(at: v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v))
+                        let c = v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v)
+                        PinStore.shared.drop(at: c, country: map.flatMap { PinsMapView.Coordinator.country($0, c) })
                     } else if a == "select", p.count > 2, let n = Int(p[2]), n < PinStore.shared.pins.count {
                         PinStore.shared.selected = PinStore.shared.pins[n].id
                     } else if a == "none" { PinStore.shared.selected = nil

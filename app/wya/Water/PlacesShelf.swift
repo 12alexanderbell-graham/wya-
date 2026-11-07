@@ -28,14 +28,14 @@ struct PlacesShelf: View {
             .padding(.top, top)
             .frame(width: L.W, height: L.H, alignment: .top)
             // under the caption's soft edge at the top and the soft edge above the tabs at the bottom
-            .mask { band(top: foot - 8, bottom: fade, H: L.H) }
+            .mask { Self.band(top: foot - 8, bottom: fade, H: L.H) }
             .allowsHitTesting(water.stop != .quarter && water.stop != .closed)
             .onAppear { TownIndex.shared.load(); CollectionStore.shared.load() }
     }
 
     /// the band the rows show in: from under the caption's foot (a 16 pt soft edge) to the soft edge above the tabs
     /// (24 pt); nothing at all when the caption's foot is below that edge (the water at 25%)
-    @ViewBuilder private func band(top: CGFloat, bottom: CGFloat, H: CGFloat) -> some View {
+    @ViewBuilder static func band(top: CGFloat, bottom: CGFloat, H: CGFloat) -> some View {
         let t1 = top + 16, t2 = max(t1, bottom - 24)
         if bottom <= t1 || H <= 0 {
             Color.clear

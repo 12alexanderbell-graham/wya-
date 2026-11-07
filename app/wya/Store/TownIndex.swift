@@ -118,6 +118,23 @@ final class TownIndex {
         return p[m]
     }
 
+    /// the town nearest a spot within `km`, or nil (a pin's own place, 11.5's "Open its place's page"); nil until loaded
+    func nearest(lat: Double, lon: Double, km: Double = 15) -> Hit? {
+        guard ready else { return nil }
+        let reach = km / 111.2, k = cos(lat * .pi / 180)
+        var best: Hit?, bd = reach * reach
+        for r in rows {
+            let dy = r.hit.lat - lat
+            guard abs(dy) < reach else { continue }
+            var dx = r.hit.lon - lon
+            if dx > 180 { dx -= 360 } else if dx < -180 { dx += 360 }
+            dx *= k
+            let d = dx * dx + dy * dy
+            if d < bd { bd = d; best = r.hit }
+        }
+        return best
+    }
+
     /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere
     func hits(_ query: String, open: String?, limit: Int = 6) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
