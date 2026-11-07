@@ -224,7 +224,8 @@ struct SheetContent: View {
                     .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
             }
             // PINS (Part 8): its own words where the caption sits: the count, or the chosen pin's name and place
-            if map.pinsMode, !water.pageSheet {
+            // (settings, details and the upload take the water as they do in every mode: Pins' words step out)
+            if map.pinsMode, !water.pageSheet, !water.settings, !water.details, !water.upload {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
                 PinsWater(water: water, form: form, captionY: cy)
                 // the Route row (8.6) where the dock's row will be: near the water's top
