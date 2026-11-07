@@ -1239,6 +1239,14 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                         c.onPlaceTap?(hit, d0)
                     }
                 }
+                else {
+                    // the sea: handed over too, for the few things a tap on the sea ends (the review, 9.5)
+                    let stamp = t.timestamp
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
+                        guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
+                        c.onSeaTap?()
+                    }
+                }
             }
         } else if !cancelled, c.locked, downAt != nil {
             // LOCKED, a hold that didn't move (11.7): refused once, the padlock pressing in

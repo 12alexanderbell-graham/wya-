@@ -200,6 +200,8 @@ struct ContentView: View {
                 else if VerifyState.shared.isOpen { VerifyState.shared.close(water: water) }
                 else { CardState.shared.close(map: map); RegionCardState.shared.close(map: map) }
             }
+            // a tap on the sea at the review leaves it, the finds waiting (9.5)
+            map.onSeaTap = { [water] in if water.upload { UploadState.shared.leaveReview() } }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
@@ -211,7 +213,11 @@ struct ContentView: View {
             map.onPlaceTap = { [head, map, water] i, p in
                 // the upload sheet up: finding owns the map's presses, a tap while choosing has closed it (9.3, 9.4), and
                 // at the review a found country's tap drops or keeps it (9.5)
-                if water.upload { _ = UploadState.shared.tap(i); return }
+                // (the second round's rows are regions: a tap on the map leaves it, its regions waiting, 9.5)
+                if water.upload {
+                    if UploadState.shared.inRound { UploadState.shared.leaveReview() } else { _ = UploadState.shared.tap(i) }
+                    return
+                }
                 guard !map.locked else { return }
                 // the tap that closed search opens nothing (one press, one job)
                 guard CACurrentMediaTime() - head.mapClosedSearchAt > 0.6 else { return }
@@ -314,6 +320,8 @@ struct ContentView: View {
         .onChange(of: water.menuShown, initial: true) { _, v in head.filtersMenu = v }
         .onChange(of: map.continent) { _, _ in saveSession(after: 0.5) }
         .onChange(of: tab) { _, _ in saveSession(after: 0) }
+        // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
+        .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
@@ -339,6 +347,8 @@ struct ContentView: View {
     /// A6.5 entering Regions' menu (Regions always restarts there), and leaving Regions for another mode: the regions
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
+        // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
+        if water.upload { UploadState.shared.leaveReview() }
         // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
         // still off, so its open country goes with it)
         if old == .regions { map.leaveRegionTowns() }

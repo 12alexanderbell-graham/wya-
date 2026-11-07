@@ -23,8 +23,9 @@ struct UndoDrop: View {
             sink()
         } label: {
             HStack(spacing: 8) {
-                // the icon is there only while the drop is out (it just appears; nothing of it inside the water)
-                Icon5(key: "undo-stroke", ink: Palette.ink, size: 15).opacity(up ? 1 : 0)
+                // the icon is there only while the drop is out (it just appears; nothing of it inside the water); with
+                // no undo icon drawn yet in the set, the words alone, centred (no empty slot beside them)
+                if Self.hasIcon { Icon5(key: Self.icon, ink: Palette.ink, size: 15).opacity(up ? 1 : 0) }
                 Text(up ? words : String(repeating: "\u{2002}", count: max(1, words.count)))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
@@ -33,7 +34,7 @@ struct UndoDrop: View {
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
-            // as wide as its words + 28 pt (the icon included), never wider than the tab capsule
+            // as wide as its words + 28 pt (the icon's 23 pt too, once it is drawn), never wider than the tab capsule
             .fixedSize()
             // the water's own kind of glass (frosted over a page, clear on the map), so inside the water it merges away
             .glassEffect(PageGlass.surface, in: .capsule)
@@ -52,6 +53,8 @@ struct UndoDrop: View {
         .onChange(of: card.isOpen) { _, open in if !open, pending { pending = false; rise() } }
     }
     @State private var card = CardState.shared
+    private static let icon = "undo-stroke"
+    private static let hasIcon = IC5.all[icon] != nil || IC5.drawn[icon] != nil
     @State private var pending = false
 
     private func rise() {

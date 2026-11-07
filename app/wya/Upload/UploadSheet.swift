@@ -670,6 +670,15 @@ final class UploadState {
         }
     }
 
+    /// the second round is the review up (its rows are regions)
+    var inRound: Bool { round != nil }
+    /// THE REVIEW LEFT FROM OUTSIDE THE WATER (9.5's table): a tap on the sea, the wheel, a tab; and in the second
+    /// round a tap on the map too. Its finds (or regions) wait, as after a pull down
+    func leaveReview() {
+        guard phase == .review else { return }
+        leave()
+    }
+
     /// LEAVING THE REVIEW (A9.13: a pull down): the go circle shrinks into its centre and the caption rolls back to
     /// your count; the finds stay darkened on the map, waiting, and are kept for the next launch
     private func leave() {
