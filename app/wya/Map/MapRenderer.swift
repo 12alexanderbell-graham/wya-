@@ -1069,7 +1069,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                    c.placeOpen ?? -1, c.regionTowns ? 1 : 0, Int(c.sheetTop / 8), c.locked ? 1 : 0,
                    // (the camera, coarsely: it can move with no rest of its own, a sideways turn or a continent's follow)
                    Int(c.c.x), Int(c.c.y), Int(log(max(c.k, 1e-9)) * 40),
-                   c.historyTrack == nil ? 0 : 1, Int(c.historyShown * 4)]
+                   c.historyTrack == nil ? 0 : 1, Int(c.historyShown * 4), c.placesMode ? OwnPlaces.shared.all.count : 0]
         // the journey's capsules ride on top (they come and go with taps, so they are asked for each time)
         let caps: [Any] = historyLine.spokenCapsules(c)
         if key == axKey { return axCache + caps }
@@ -1150,6 +1150,33 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             }
             out.append((f, e))
         }
+        // your own places (7.8) in Places: their names, a double tap their card, their menu as actions
+        if c.placesMode, let w = c.world {
+            for o in OwnPlaces.shared.all {
+                let q = c.screenPoint(SIMD2(Double(o.point.x), Double(o.point.y)))
+                let f = CGRect(x: q.x - 22, y: q.y - 22, width: 44, height: 44)
+                guard seen.intersects(f), let pi = w.placeIndex[o.cc] ?? w.placeIndex[o.cc.uppercased()] else { continue }
+                let key = "o:" + o.id
+                used.insert(key)
+                let e = element(key, place: pi)
+                let st = MarkStore.shared.state(o.key)
+                e.state = st
+                e.accessibilityFrameInContainerSpace = f
+                e.accessibilityLabel = Self.label("\(o.name), your place", st)
+                e.accessibilityTraits = .button
+                let id = o.id
+                e.activate = { [weak c] in
+                    guard let c else { return }
+                    c.ownPressed = id
+                    c.onPlaceTap?(pi, q)
+                }
+                e.actions = { [weak c] in
+                    guard let c, !c.locked else { return [] }
+                    return c.menuForOwn?(id).map { Self.actions($0) } ?? []
+                }
+                out.append((f, e))
+            }
+        }
         return Self.readingOrder(out).map(\.1)
     }
 
@@ -1195,11 +1222,14 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
 
     /// a hold menu's rows that can be chosen now, as VoiceOver actions (each acts as the row does)
-    static func actions(_ m: UIMenu) -> [UIAccessibilityCustomAction] {
+    static func actions(_ m: UIMenu, _ prefix: String = "") -> [UIAccessibilityCustomAction] {
         m.children.flatMap { e -> [UIAccessibilityCustomAction] in
-            if let sub = e as? UIMenu { return actions(sub) }
+            // a submenu's rows say whose they are ("Kind: Landmark"); an inline group's are plain rows
+            if let sub = e as? UIMenu {
+                return actions(sub, sub.options.contains(.displayInline) || sub.title.isEmpty ? prefix : "\(sub.title): ")
+            }
             guard let a = e as? UIAction, !a.attributes.contains(.disabled) else { return [] }
-            return [UIAccessibilityCustomAction(name: a.title) { _ in a.performWithSender(nil, target: nil); return true }]
+            return [UIAccessibilityCustomAction(name: prefix + a.title) { _ in a.performWithSender(nil, target: nil); return true }]
         }
     }
 

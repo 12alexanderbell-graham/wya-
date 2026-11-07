@@ -272,6 +272,11 @@ struct ContentView: View {
                 else { return nil }
                 return Self.thingMenu(t, cc: cc, place: pi, map: map, water: water)
             }
+            map.menuForOwn = { [map] id in
+                guard let o = OwnPlaces.shared.place(id), let pi = map.world?.placeIndex[o.cc] ?? map.world?.placeIndex[o.cc.uppercased()]
+                else { return nil }
+                return Self.ownMenu(o, place: pi, map: map)
+            }
             map.menuForPlace = { [map, water, head] i in
                 let r = map.screenRect(of: i)
                 return Self.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head, fromSearch: true)
