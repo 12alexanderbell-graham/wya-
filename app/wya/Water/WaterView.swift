@@ -176,6 +176,16 @@ struct SheetContent: View {
                 CosmosView(water: water, map: map, form: form)
                     // (back only once the list's rows have left: never both at once)
                     .offset(y: cosmosOut ? water.layout.H - form.top : 0)
+                    // NEVER OVER THE TABS: as the water moves the system sinks past the tabs' capsule; it fades out
+                    // over the 16 pt above the capsule's top and is never drawn on it
+                    .mask {
+                        VStack(spacing: 0) {
+                            Rectangle().frame(height: max(0, water.layout.capsule.minY - 22))
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(width: water.layout.W, height: water.layout.H)
+                    }
                     // (a mode change swaps it out or back with no movement, 7 Nov 19:22)
                     .animation(water.modeSwitching ? nil : Motion.chrome, value: cosmosOut)
             }

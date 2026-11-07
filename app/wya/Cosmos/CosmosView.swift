@@ -90,7 +90,8 @@ struct CosmosView: View {
         // water and on down past the bottom, faster than the edge, so at 25% it is gone below the screen
         let halfTop = L.top(.half)
         let below = max(0, form.top - halfTop)
-        let lo = halfTop + 130, hi = L.capsule.minY - 20
+        // (its lowest point 44 pt over the tabs' capsule: the front planet is drawn larger and must clear the tabs)
+        let lo = halfTop + 130, hi = L.capsule.minY - 44
         let ringY = (lo + hi) / 2 + below * 1.7
         let cy = Flow.lerp(ringY, L.H * 0.5, p)
         let rx = min(L.W * 0.38, 178)
