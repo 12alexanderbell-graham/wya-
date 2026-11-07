@@ -247,7 +247,8 @@ struct ContentView: View {
                 // a waiting find (9.6), quick stamping off: its review opens instead of the card
                 if !head.quickStamp, UploadState.shared.waits(i) { UploadState.shared.openReview(water: water, map: map); return }
                 // QUICK STAMPING (Part 4.7): the tap toggles the stamp at once, no card
-                if head.quickStamp { Self.quickStamp(i, map: map); return }
+                // (a waiting find is kept with its found trips, 9.6)
+                if head.quickStamp { if !UploadState.shared.stampWaiting(i) { Self.quickStamp(i, map: map) }; return }
                 // the tap that put the book away opens no card (one press, one job)
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
                 CardState.shared.open(i, at: p, map: map, water: water)

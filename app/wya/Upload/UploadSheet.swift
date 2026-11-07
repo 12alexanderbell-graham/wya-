@@ -628,6 +628,37 @@ final class UploadState {
 
     /// a waiting find (not stamped since) at this place
     func waits(_ i: Int) -> Bool { phase == .choosing && order.contains(i) && !dropped.contains(i) }
+    /// QUICK STAMPING ON A WAITING FIND (9.6): that one find is kept, stamped with its found trips (the trips dropped
+    /// alone left out) as any quick stamp, and waits no more; false when the place is not a waiting find
+    func stampWaiting(_ i: Int) -> Bool {
+        guard waits(i), let m = map, let w = m.world, i < w.places.count else { return false }
+        let p = w.places[i]
+        guard let f = finds.first(where: { $0.place == p.id }) else { return false }
+        let off = droppedTrips[p.id] ?? []
+        let row = TravelStore.Found(key: .country(p.id), name: p.n, cc: p.id.uppercased(),
+                                    trips: f.visits.enumerated().filter { !off.contains($0.offset) }
+                                        .map { ($0.element.from.description, $0.element.to.description) })
+        let src = source
+        Feel.stamp()
+        // waits no more (put back if the store refuses the write)
+        let was = (finds, order, dropped, droppedTrips)
+        finds.removeAll { $0.place == p.id }
+        order.removeAll { $0 == i }
+        droppedTrips[p.id] = nil
+        m.found.remove(i)
+        if order.isEmpty { forget() } else { save() }
+        Task {
+            let ok = await MarkStore.shared.importFinds([row], source: src, words: "\(p.n) from your \(src == .photos ? "photos" : "history")")
+            if !ok {
+                Feel.refuse()
+                (finds, order, dropped, droppedTrips) = was
+                m.found = Set(order).subtracting(dropped)
+                save()
+            }
+            UIAccessibility.post(notification: .announcement, argument: "\(p.n) stamped")
+        }
+        return true
+    }
     /// a find of the review on screen (kept or dropped): its hold menu is the review's (11.7)
     func reviewing(_ i: Int) -> Bool { phase == .review && order.contains(i) }
     /// Show in the list (the found country's hold menu): the water to 50%, where the rows are, with its dates opened
