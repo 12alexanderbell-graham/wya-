@@ -317,6 +317,16 @@ struct DetailsSheet: View {
             HStack(spacing: 12) {
                 Text(gone ? Caption.blank("When", "\u{2002}") : "When").font(.body).foregroundStyle(Palette.ink)
                     .contentTransition(.numericText(value: gone ? 0 : 1))
+                    .frame(minHeight: 44).contentShape(Rectangle())
+                    // A VISIT HELD by its first word (11.5; never over its text field, whose own hold moves the
+                    // cursor): Duplicate (a new visit with its how, why and time in words) · Delete (only with more
+                    // than one, as its ×). Copy the dates waits for our own calendar.
+                    .contextMenu {
+                        Section(n > 1 ? "Visit \(i + 1)" : "Visit") {
+                            Button("Duplicate") { addTrip(copy: i) }
+                            if n > 1 { Button("Delete", role: .destructive) { removeTrip(k) } }
+                        }
+                    }
                 Spacer(minLength: 8)
                 if plain {
                     let v = s.d[keyPath: rough] ?? ""
@@ -380,7 +390,8 @@ struct DetailsSheet: View {
     }
 
     /// A4.14: the space opens, then the visit's words roll in; Times goes up to the visits there are when it was lower
-    private func addTrip() {
+    /// `copy`: a visit to duplicate (its row's hold menu, 11.5): the new one takes its how, why and time in words
+    private func addTrip(copy: Int? = nil) {
         Feel.tap()
         let k = UUID().uuidString
         let n = 1 + (s.d.trips?.count ?? 0)
@@ -388,7 +399,7 @@ struct DetailsSheet: View {
         arriving.insert(k); rolling.insert(k)
         withAnimation(Motion.quick) {
             tripIDs.append(k)
-            s.d.trips = (s.d.trips ?? []) + [StampDetails.Trip()]
+            s.d.trips = (s.d.trips ?? []) + [copy.map { s.d[trip: $0] } ?? StampDetails.Trip()]
         }
         if s.times < n + 1 { s.times = n + 1 }
         arrive(k)
