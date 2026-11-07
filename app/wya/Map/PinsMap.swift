@@ -298,6 +298,11 @@ struct PinsMapView: UIViewRepresentable {
         PinsMapState.shared.view = v
         PinsMapState.shared.water = water
         PinsMapState.shared.map = map
+        // OUR MAP STAYS UNTIL APPLE'S FIRST VIEW IS DRAWN (12.5): Apple's map is there but unseen until its first
+        // picture is whole, then it is there at once (30 Oct: the two maps switch with no animation); never empty
+        // squares while its tiles come in. Three seconds at most (offline, or very slow), then it shows as it is.
+        v.alpha = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak v] in v?.alpha = 1 }
         // its town found for "Open its place's page" (the index is read once, in the background)
         TownIndex.shared.load()
         context.coordinator.sync(v, store.pins)
@@ -380,6 +385,10 @@ struct PinsMapView: UIViewRepresentable {
             return (w.places[i].id, w.places[i].n)
         }
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+
+        func mapViewDidFinishRenderingMap(_ v: MKMapView, fullyRendered: Bool) {
+            if fullyRendered, v.alpha < 1 { v.alpha = 1 }
+        }
 
         /// the journey's line (history on): black at its start to blue at its end
         func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {

@@ -24,7 +24,9 @@ import UniformTypeIdentifiers
 /// WAITING FINDS (9.6): a pull down leaves the review and the finds wait, darkened on the map, kept in a small file
 /// beside the store (`waiting-finds.json`; the book's Proposal records wait for a store version); a tap on one, or
 /// the Upload tool, opens the review again (the caption rolls to "found", the go circle grows at its place).
-/// Not here yet (logged): the mode wheel turning to Countries (no other modes yet), the second round.
+/// THE SECOND ROUND (9.5): once the countries land, the regions found inside them (UploadState.round).
+/// Not here yet (logged): the mode wheel turning to Countries (no other modes yet); the second round's finds waiting
+/// when it is left, and towns and places in it.
 @MainActor
 @Observable
 final class UploadState {
@@ -97,6 +99,8 @@ final class UploadState {
         var visits: [Finds.Visit]
     }
     private(set) var round: [RegionFind]?
+    /// the second round being worked out (the working mark shows past 0.4 s)
+    @ObservationIgnored private var workingOut = false
     private(set) var roundDropped: Set<String> = []
 
     var isOpen: Bool { water?.upload ?? false }
@@ -172,7 +176,8 @@ final class UploadState {
     /// another source; its finds join the same review. The water comes to 25% first (the rows roll out as it passes
     /// 50%); the go circle shrinks and the caption rolls out, then the pair grows (A9.3 reversed)
     func addMore() {
-        guard phase == .review, !busy, !moving, let w = water else { return }
+        // (not in the second round: its countries are stamped already)
+        guard phase == .review, round == nil, !busy, !moving, let w = water else { return }
         Feel.tick()
         readToken += 1
         moving = true
@@ -688,6 +693,9 @@ final class UploadState {
         job += 1
         map?.found = []
         forget()
+        // another account never sees these regions either
+        round = nil; roundDropped = []
+        if water?.upload == true { phase = .choosing; step = 0; count = 0; water?.closeUpload() }
     }
     /// nothing waits any more (go, ×): the file goes too
     private func forget() {
@@ -832,10 +840,24 @@ final class UploadState {
             }
             m.found = []
             let read = samples
+            // the trips dropped alone in the first round: a region is not found on those days either
+            var off: [String: [Finds.Visit]] = [:]
+            for f in finds { if let d = droppedTrips[f.place] { off[f.place.lowercased()] = d.sorted().compactMap { $0 < f.visits.count ? f.visits[$0] : nil } } }
             forget()
-            // what else was found inside the countries just stamped (9.5's second round)
+            // what else was found inside the countries just stamped (9.5's second round); past 0.4 s the working mark
+            // says it is being worked out (12.2)
+            workingOut = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [self] in if workingOut, me == job { withAnimation(Motion.quick) { markIn = true } } }
             let more = await Self.regionsFound(in: rows.map { $0.key.id.lowercased() }, samples: read, world: world, source: src)
                 .filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
+                .compactMap { r -> RegionFind? in
+                    guard let gone = off[r.cc], !gone.isEmpty, !r.visits.isEmpty else { return r }
+                    var k = r
+                    k.visits = r.visits.filter { v in !gone.contains { $0.from <= v.to && v.from <= $0.to } }
+                    return k.visits.isEmpty ? nil : k
+                }
+            workingOut = false
+            if markIn { withAnimation(Motion.quick) { markIn = false } }
             if !more.isEmpty, me == job {
                 if stampAtOnce {
                     _ = await Self.importRegions(more, source: src)
@@ -939,7 +961,10 @@ final class UploadState {
                 return RegionFind(id: f.place, name: sc.unitNames[u], cc: sc.id, country: world.places[sc.place].n,
                                   row: sc.row, visits: f.visits)
             }
-            .sorted { $0.country == $1.country ? $0.name.localizedStandardCompare($1.name) == .orderedAscending : $0.country < $1.country }
+            .sorted {
+                $0.country == $1.country ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                    : $0.country.localizedStandardCompare($1.country) == .orderedAscending
+            }
         }.value
     }
     /// regions found, stamped as one write (their level's row kept, so their counts read them)
@@ -1108,9 +1133,10 @@ struct UploadSheet: View {
         // many), as the card's own Stamp capsule; the × until then. There at once, no grow (31 Oct)
         ZStack(alignment: .trailing) {
             if u.goIn {
+                // (with every find dropped there is nothing to stamp: its words in black 50%, and a press refuses)
                 Text(u.count == 1 ? "Stamp" : "Stamp all")
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(Palette.ink)
+                    .foregroundStyle(Palette.ink.opacity(u.count == 0 ? 0.5 : 1))
                     .padding(.horizontal, 16)
                     .frame(height: 44)
                     .glassEffect(.clear, in: .capsule)
@@ -1227,9 +1253,11 @@ struct UploadSheet: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
                     .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
+                    .lineLimit(1)
                     .contentTransition(.numericText(value: shown ? 1 : 0))
                 Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
                     .foregroundStyle(Palette.ink.opacity(0.5))
+                    .lineLimit(1)
                     .contentTransition(.numericText(value: shown ? 1 : 0))
             }
             Spacer(minLength: 0)
@@ -1240,8 +1268,13 @@ struct UploadSheet: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(r.name), \(r.line)\(r.dropped ? ", dropped" : "")")
         .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { u.tapRow(r) }
-        .accessibilityAction(named: "Show on the map") { u.show(r.place) }
-        .accessibilityAction(named: r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+        // (a region of the second round has no place on the Countries map and no dates to open)
+        .accessibilityActions {
+            if r.place >= 0 {
+                Button("Show on the map") { u.show(r.place) }
+                Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+            }
+        }
     }
 
     /// one found trip under its find (Its dates): arrived to left, 15 pt, under the name; its own × (a dropped trip in
