@@ -281,8 +281,27 @@ struct ContentView: View {
                 let r = map.screenRect(of: i)
                 return Self.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head, fromSearch: true)
             }
-            // leaving a tab ends quick stamping too (3.6)
-            water.onTabChange = { [head] in head.quickStamp = false }
+            // LEAVING THE TAB (3.6, 13.4): what is open on the map closes
+            // its changes kept: quick stamping, search, the tools and history, settings, a card, a page, the Stamped
+            // list, the route row and a chosen pin, What's here?, full screen
+            water.onTabChange = { [head, water, map] in
+                head.quickStamp = false
+                head.searching = false
+                head.toolsOpen = false
+                head.history = false
+                head.closeSettings()
+                BookState.shared.close()
+                DetailsState.shared.close(water: water)
+                VerifyState.shared.close(water: water)
+                CardState.shared.close(map: map)
+                RegionCardState.shared.close(map: map)
+                PlacePageState.shared.closeAll()
+                water.closeList(back: false, instant: true)
+                PinRoutes.shared.close()
+                PinStore.shared.selected = nil
+                WhatsHere.shared.close()
+                if Sideways.shared.on { Sideways.shared.leave() }
+            }
             water.currentMode = { [head] in head.mode.rawValue }
             water.onModePick = { [head] m in
                 guard m != head.mode.rawValue, let mode = HeadState.Mode(rawValue: m) else { return }
@@ -346,6 +365,9 @@ struct ContentView: View {
         .onChange(of: water.stop) { _, _ in saveSession(after: 0) }
         .onChange(of: map.locked) { _, _ in saveSession(after: 0) }
         .onChange(of: head.mode) { _, _ in saveSession(after: 0) }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("wyaTestTab"))) { n in if let t = n.object as? Int { tab = t } }
+        #endif
         // THE MODES (6.1): Regions always restarts at its selection menu, the camera
         // flying to the world home under it; leaving it, the water goes to 25%
         .onChange(of: head.mode) { old, new in modeChanged(from: old, to: new) }

@@ -190,6 +190,10 @@ final class TestDriver {
                     if a == "emblems" { ReviewSheet.emblems() }
                     if a == "flagshapes" { ReviewSheet.flagShapes(world: map?.world) }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
+                // tabgo 0|1|2: that tab, as its button does when it is another tab (the tab change's own hook first)
+                case "tabgo":
+                    water?.onTabChange?()
+                    NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: Int(a) ?? 0)
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
                 case "settings": if a == "on" { head?.openSettings() } else { head?.closeSettings() }
