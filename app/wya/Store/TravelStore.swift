@@ -361,6 +361,8 @@ actor TravelStore {
         var cc: String
         /// each trip's first and last day ("2024-08-03")
         var trips: [(String, String)]
+        /// a region's level row (its regions' counts read it); 0 for a country
+        var level: Int = 0
     }
     func importFinds(_ finds: [Found], account: String, source: MarkSource, at: Date = Date()) throws -> Result {
         var res = Result()
@@ -379,6 +381,7 @@ actor TravelStore {
                 r.stamped = true; r.at = at; r.source = source.rawValue; r.via = nil
                 if !f.name.isEmpty { r.name = f.name }
                 if !f.cc.isEmpty { r.cc = f.cc }
+                if f.level > 0 { r.level = f.level }
             }
             var ids: [UUID] = []
             for t in new {

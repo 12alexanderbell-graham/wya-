@@ -215,6 +215,13 @@ final class TestDriver {
                         menu = PinAnnotationView.menu(PinStore.shared.pins[n].id)
                     }
                     if let menu { Self.choose(row, in: menu) }
+                // regionat <cc> <lat> <lon>: the first-level region the upload's second round finds there, logged
+                case "regionat":
+                    if p.count > 3, let m = map, let w = m.world, let la = Double(p[2]), let lo = Double(p[3]) {
+                        let s = HistoryReader.Sample(lat: la, lon: lo, at: Date(), offset: 0, end: nil, asset: nil)
+                        let r = await UploadState.regionsFound(in: [a], samples: [s], world: w, source: .history)
+                        NSLog("wya regionat %@ %.4f %.4f -> %@", a, la, lo, r.map(\.name).joined(separator: ", "))
+                    }
                 // report <country id>: its page opened at Report a mistake (a hold menu's Report a wrong place)
                 case "report":
                     if let m = map, let i = m.world?.placeIndex[a] {
@@ -239,6 +246,13 @@ final class TestDriver {
                         else if p[2] == "wish" { await st.wish(k, source: .hand) }
                         else if st.state(k).stamped { await st.unstamp(k) } else { await st.unwish(k) }
                     }
+                // unmarkregions <cc> [list|<region id>]: that country's stamped regions logged, or one (or all) unstamped
+                // (test data clean-up)
+                case "unmarkregions":
+                    let mine = MarkStore.shared.marks.filter { $0.key.kind == .region && $0.value.stamped && $0.key.id.lowercased().hasPrefix(a + "/") }
+                    NSLog("wya regions stamped in %@: %@", a, mine.keys.map(\.id).sorted().joined(separator: " "))
+                    if p.count > 2, p[2] == "list" { break }
+                    for k in mine.keys where p.count < 3 || k.id == p[2] { await MarkStore.shared.unstamp(k) }
                 case "undo": await MarkStore.shared.undo()
                 // nationality <id> | none: Profile's first nationality, for the home's centre (1.4)
                 case "nationality":

@@ -83,6 +83,22 @@ final class UploadState {
     @ObservationIgnored private var datesJob = 0
     @ObservationIgnored private var moving = false
 
+    // THE SECOND ROUND (9.5, "what else was found"; Q9.1): once the countries are stamped, the regions found inside them
+    // that are not stamped yet, asked about in the review's own form (Regions / n / found, Stamp all); a row tapped is
+    // dropped or kept again. With Map settings' Found places at Stamp them there is no round: they are stamped at once.
+    struct RegionFind: Identifiable, Equatable, Sendable {
+        var id: String
+        var name: String
+        /// its country, as the files name it ("fr"), and the country's name
+        var cc: String
+        var country: String
+        /// its level's row
+        var row: Int
+        var visits: [Finds.Visit]
+    }
+    private(set) var round: [RegionFind]?
+    private(set) var roundDropped: Set<String> = []
+
     var isOpen: Bool { water?.upload ?? false }
     @ObservationIgnored private weak var water: Water?
 
@@ -508,8 +524,19 @@ final class UploadState {
         var tripsDropped: Set<Int>
         var open: Bool
         var datesIn: Bool
+        /// the flag shown (the place's own when empty; a region's country's in the second round)
+        var flag: String = ""
     }
     var rows: [Row] {
+        // the second round: its regions, each under its country's flag, its country and dates under its name
+        if let r = round {
+            let all = r.map { f in
+                Row(id: f.id, place: -1, name: f.name,
+                    line: f.visits.isEmpty ? f.country : "\(f.country) · \(f.visits.count == 1 ? Self.range(f.visits[0]) : "\(f.visits.count) trips")",
+                    dropped: roundDropped.contains(f.id), trips: [], tripsDropped: [], open: false, datesIn: false, flag: f.cc)
+            }
+            return all.filter { !$0.dropped } + all.filter(\.dropped)
+        }
         guard let w = map?.world else { return [] }
         let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
         let all: [Row] = order.compactMap { i in
@@ -611,6 +638,7 @@ final class UploadState {
     /// LEAVING THE REVIEW (A9.13: a pull down): the go circle shrinks into its centre and the caption rolls back to
     /// your count; the finds stay darkened on the map, waiting, and are kept for the next launch
     private func leave() {
+        if round != nil { leaveRound(); return }
         guard let w = water, phase == .review, !busy else { return }
         Feel.land(speed: 0)
         busy = true
@@ -690,6 +718,15 @@ final class UploadState {
         NSLog("wya upload: %d finds waiting", order.count)
     }
 
+    /// a review row tapped, swiped or chosen in its menu: a country of the first round, a region of the second
+    func tapRow(_ r: Row) {
+        guard round != nil else { _ = tap(r.place); return }
+        guard phase == .review, !busy else { return }
+        Feel.tap()
+        if roundDropped.contains(r.id) { roundDropped.remove(r.id) } else { roundDropped.insert(r.id) }
+        withAnimation(Motion.quick) { count = (round?.count ?? 0) - roundDropped.count }
+    }
+
     /// THE REVIEW: a found country tapped is dropped (its darkening goes in one frame, the number rolls down) or kept
     /// again; true when the tap was the review's
     func tap(_ i: Int) -> Bool {
@@ -761,6 +798,7 @@ final class UploadState {
     /// shrinks into its centre, the caption's tail rolls back to "of 263" and the number to your count (the map's
     /// colours change in one frame as the write lands); then the sheet gives the water back
     func go() {
+        if round != nil { goRound(); return }
         guard phase == .review, !busy, let m = map, let world = m.world, let w = water else { return }
         let kept = order.filter { !dropped.contains($0) }
         guard !kept.isEmpty else { Feel.refuse(); return }
@@ -793,21 +831,132 @@ final class UploadState {
                 return
             }
             m.found = []
+            let read = samples
             forget()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            // what else was found inside the countries just stamped (9.5's second round)
+            let more = await Self.regionsFound(in: rows.map { $0.key.id.lowercased() }, samples: read, world: world, source: src)
+                .filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
+            if !more.isEmpty, me == job {
+                if stampAtOnce {
+                    _ = await Self.importRegions(more, source: src)
+                } else {
+                    // the caption has rolled out with the go: it rolls back in as the round's (A9.14)
+                    round = more; roundDropped = []
+                    count = more.count
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+                        busy = false
+                        guard me == job else { return }
+                        withAnimation(Motion.quick) { captionIn = true; goIn = true }
+                    }
+                    return
+                }
+            }
+            finishGo(me, w)
+        }
+    }
+
+    /// the sheet gives the water back once a go has landed
+    private func finishGo(_ me: Int, _ w: Water) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            busy = false
+            guard me == job else { return }
+            Feel.land(speed: 0)
+            round = nil; roundDropped = []
+            phase = .choosing; step = 0; count = 0
+            w.uploadFrom = .quarter
+            w.closeUpload()
+        }
+    }
+
+    /// THE SECOND ROUND'S GO: every kept region becomes a stamp with its found trips, as one write and one undo step
+    private func goRound() {
+        guard phase == .review, !busy, let r = round, let w = water else { return }
+        let keep = r.filter { !roundDropped.contains($0.id) }
+        guard !keep.isEmpty else { Feel.refuse(); return }
+        Feel.stamp()
+        busy = true
+        job += 1
+        let me = job
+        let src = source
+        withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        if w.stop != .quarter { w.go(.quarter) }
+        Task {
+            guard await Self.importRegions(keep, source: src) else {
+                Feel.refuse()
                 busy = false
-                guard me == job else { return }
-                Feel.land(speed: 0)
-                phase = .choosing; step = 0; count = 0
-                w.uploadFrom = .quarter
-                w.closeUpload()
+                withAnimation(Motion.quick) { captionIn = true; goIn = true }
+                return
+            }
+            finishGo(me, w)
+        }
+    }
+    /// leaving the second round (a pull down, ×): nothing more is stamped (they do not wait yet: 9.6 for regions is
+    /// not built), the sheet gives the water back
+    private func leaveRound() {
+        guard let w = water, !busy else { return }
+        Feel.land(speed: 0)
+        busy = true
+        job += 1
+        withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        let me = job
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
+            busy = false
+            guard me == job else { return }
+            round = nil; roundDropped = []
+            phase = .choosing; step = 0; count = 0
+            w.uploadFrom = nil
+            w.closeUpload()
+        }
+    }
+
+    /// the regions (the country's first level) the samples fall in, for each country stamped, with their found trips;
+    /// worked out off the main thread from the bundled level files
+    static func regionsFound(in ids: [String], samples: [HistoryReader.Sample], world: World, source: MarkSource) async -> [RegionFind] {
+        var scenes: [Int: RegionScene] = [:]
+        for cc in ids {
+            guard let pi = world.placeIndex[cc], let first = RegionCatalog.shared.first(cc),
+                  let f = await RegionCatalog.shared.fetch(cc, row: first.row) else { continue }
+            if let sc = await Task.detached(priority: .userInitiated, operation: { RegionScene(place: pi, id: cc, row: first.row, file: f) }).value {
+                scenes[pi] = sc
             }
         }
+        guard !scenes.isEmpty, !samples.isEmpty else { return [] }
+        let found = scenes
+        // a find on the shore the regions' own coast leaves out goes to the nearest region within about 10 km
+        let reach = world.width * 10 / 40_000
+        return await Task.detached(priority: .userInitiated) {
+            // which scene each region id belongs to
+            var whose: [String: (RegionScene, Int)] = [:]
+            let rows = HistoryReader.presence(samples) { lat, lon in
+                let p = EqualEarth.project(lon: lon, lat: lat)
+                guard let pi = world.place(at: p), let sc = found[pi],
+                      let u = sc.unit(at: p) ?? sc.nearestUnit(p, reach: reach) else { return nil }
+                whose[sc.unitIDs[u]] = (sc, u)
+                return sc.unitIDs[u]
+            }
+            return Finds.finds(rows, source: source).compactMap { f in
+                guard let (sc, u) = whose[f.place] else { return nil }
+                return RegionFind(id: f.place, name: sc.unitNames[u], cc: sc.id, country: world.places[sc.place].n,
+                                  row: sc.row, visits: f.visits)
+            }
+            .sorted { $0.country == $1.country ? $0.name.localizedStandardCompare($1.name) == .orderedAscending : $0.country < $1.country }
+        }.value
+    }
+    /// regions found, stamped as one write (their level's row kept, so their counts read them)
+    static func importRegions(_ keep: [RegionFind], source: MarkSource) async -> Bool {
+        let rows = keep.map { f in
+            TravelStore.Found(key: PlaceKey(.region, f.id), name: f.name, cc: f.cc,
+                              trips: f.visits.map { ($0.from.description, $0.to.description) }, level: f.row)
+        }
+        let n = rows.count
+        return await MarkStore.shared.importFinds(rows, source: source,
+                                                  words: "\(n) \(n == 1 ? "region" : "regions") from your \(source == .photos ? "photos" : "history")")
     }
 
     /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls back
     /// to your count and the tail to "of 263" (the sheet closes into the caption); the water stays at 25%
     func cancel() {
+        if round != nil { leaveRound(); return }
         guard let w = water, phase == .finding || phase == .review, !busy else { return }
         Feel.tap()
         job += 1
@@ -928,7 +1077,7 @@ struct UploadSheet: View {
     @ViewBuilder
     private func finding(_ L: Layout) -> some View {
         let y = max(L.headBottom + 12 + 52, form.top + 72)
-        let name = u.map?.continent ?? "World"
+        let name = u.round != nil ? "Regions" : u.map?.continent ?? "World"
         if let words = u.message {
             Text(u.captionIn ? words : Caption.blank(words, "\u{2002}"))
                 .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
@@ -981,7 +1130,7 @@ struct UploadSheet: View {
         .frame(width: 120, height: 44, alignment: .trailing)
         .position(x: L.W - L.sheetInset - 14 - 60, y: y)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(u.phase == .review ? "Stamp \(u.count) \(u.count == 1 ? "place" : "places")" : "Stop")
+        .accessibilityLabel(u.phase == .review ? "Stamp \(u.count) \(u.round != nil ? (u.count == 1 ? "region" : "regions") : (u.count == 1 ? "place" : "places"))" : "Stop")
         .accessibilityAddTraits(.isButton)
     }
 
@@ -1007,18 +1156,21 @@ struct UploadSheet: View {
                         // swipe left: Drop (the palette red), or Keep on a dropped row. Not the destructive role, which
                         // slides the row away; a dropped row stays, at the end, in black 50%
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button { _ = u.tap(r.place) } label: { Text(r.dropped ? "Keep" : "Drop") }
+                            Button { u.tapRow(r) } label: { Text(r.dropped ? "Keep" : "Drop") }
                                 .tint(r.dropped ? Palette.ink : Palette.red)
                         }
                         .contextMenu {
-                            Section(r.name) {
-                                Button("Show on the map") { u.show(r.place) }
-                                if !r.trips.isEmpty {
-                                    Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                            // (a region of the second round has no place of its own on the Countries map)
+                            if r.place >= 0 {
+                                Section(r.name) {
+                                    Button("Show on the map") { u.show(r.place) }
+                                    if !r.trips.isEmpty {
+                                        Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                                    }
                                 }
                             }
-                            Section {
-                                Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
+                            Section(r.place >= 0 ? "" : r.name) {
+                                Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { u.tapRow(r) }
                             }
                         }
                     if r.open {
@@ -1068,7 +1220,7 @@ struct UploadSheet: View {
     private func findRow(_ r: UploadState.Row, shown: Bool) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.id) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.square(r.flag.isEmpty ? r.id : r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
             .scaleEffect(shown ? 1 : 0)
@@ -1084,10 +1236,10 @@ struct UploadSheet: View {
         }
         .frame(height: 56)
         .contentShape(Rectangle())
-        .onTapGesture { _ = u.tap(r.place) }
+        .onTapGesture { u.tapRow(r) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(r.name), \(r.line)\(r.dropped ? ", dropped" : "")")
-        .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { _ = u.tap(r.place) }
+        .accessibilityAction(named: r.dropped ? "Keep" : "Drop") { u.tapRow(r) }
         .accessibilityAction(named: "Show on the map") { u.show(r.place) }
         .accessibilityAction(named: r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
     }

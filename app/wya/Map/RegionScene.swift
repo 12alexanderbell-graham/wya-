@@ -109,6 +109,22 @@ nonisolated final class RegionScene: @unchecked Sendable {
         return best?.0
     }
 
+    /// the region nearest a point that none holds (a coast drawn a little inside the true one: a find on the shore), by
+    /// its parts' boxes, within `reach` map units; nil past it
+    func nearestUnit(_ p: SIMD2<Float>, reach: Float) -> Int? {
+        // (nearest box first; among boxes it is inside, the smallest)
+        var best: (Int, Float, Float)?
+        for e in runs.indices {
+            let b = boxes[e]
+            guard b.x <= b.z else { continue }
+            let dx = max(b.x - p.x, 0, p.x - b.z), dy = max(b.y - p.y, 0, p.y - b.w)
+            let d = (dx * dx + dy * dy).squareRoot(), area = (b.z - b.x) * (b.w - b.y)
+            guard d <= reach else { continue }
+            if best == nil || d < best!.1 || (d == best!.1 && area < best!.2) { best = (entryUnit[e], d, area) }
+        }
+        return best?.0
+    }
+
     /// a region's box in map units (all its parts)
     func box(of unit: Int) -> SIMD4<Float>? {
         var b: SIMD4<Float>?
