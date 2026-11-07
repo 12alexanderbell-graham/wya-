@@ -104,8 +104,14 @@ final class UploadState {
     /// the countries the import just stamped, when the round on screen is that import's (its go joins their undo step);
     /// 0 for a round opened again from waiting
     @ObservationIgnored private var roundJoins = 0
-    /// the second round worked out while the review is up (every found country's regions), so the go never waits on it
+    /// the second round worked out while the review is up (every found country's regions), so the go never waits on it;
+    /// after Add more it holds every read's regions (each read's own worked out, joined to the reads before it)
     @ObservationIgnored private var roundAhead: Task<[RegionFind], Never>?
+    /// the regions of the reads before the one on screen: read back with the waiting finds after a relaunch (whose
+    /// samples are gone), and the latest worked out, kept in the waiting file with the finds
+    @ObservationIgnored private var regionsSoFar: [RegionFind] = []
+    /// which working-out is the current one (a newer read, a go or a × makes the one running stale)
+    @ObservationIgnored private var aheadJob = 0
     private(set) var roundDropped: Set<String> = []
 
     var isOpen: Bool { water?.upload ?? false }
@@ -382,7 +388,6 @@ final class UploadState {
     /// A9.4: the pair out, then the caption (World / 0 / found), the mark and the ×; the samples are worked out once
     /// they are all in place (a file's are still being read: its line grows along the water's top meanwhile)
     private func startFinding() {
-        roundAhead = nil
         job += 1
         let me = job
         moving = true
@@ -516,9 +521,22 @@ final class UploadState {
             phase = .review
             calendarChanged()
             // the regions inside every found country, worked out now, off the main thread, for the go's second round
+            // (joined to the regions of the reads before this one: Add more, or a review kept over a relaunch)
             if let m = map, let w = m.world {
                 let ids = order.map { w.places[$0].id.lowercased() }, read = samples, src = readSource
-                roundAhead = Task { await Self.regionsFound(in: ids, samples: read, world: w, source: src) }
+                let before = roundAhead, soFar = regionsSoFar
+                aheadJob += 1
+                let mine = aheadJob
+                roundAhead = Task { [self] in
+                    let old = await before?.value ?? soFar
+                    let all = Self.joined(old, await Self.regionsFound(in: ids, samples: read, world: w, source: src))
+                    // kept with the finds: the review left now (or already) still has them after a relaunch
+                    if self.aheadJob == mine {
+                        self.regionsSoFar = all
+                        if self.water?.upload != true, !self.order.isEmpty { self.save() }
+                    }
+                    return all
+                }
             }
             // Map settings' Found places = Stamp them: no review, the finds land as stamps at once (9.4)
             if stampAtOnce { go(); return }
@@ -685,6 +703,8 @@ final class UploadState {
         var dropped: [String]
         /// trips dropped alone (older files have none)
         var droppedTrips: [String: [Int]]?
+        /// the regions found inside these places, for the second round (older files have none)
+        var regions: [WaitingRound.Region]?
     }
     private func save() {
         guard let url = Self.waitingURL, let w = map?.world else { return }
@@ -693,7 +713,8 @@ final class UploadState {
                           finds: finds.filter { ids.contains($0.place) }.map { f in
                               .init(place: f.place, visits: f.visits.map { [$0.from.description, $0.to.description] }, home: f.home) },
                           dropped: dropped.map { w.places[$0].id },
-                          droppedTrips: droppedTrips.mapValues { Array($0).sorted() })
+                          droppedTrips: droppedTrips.mapValues { Array($0).sorted() },
+                          regions: regionsSoFar.isEmpty ? nil : Self.encode(regionsSoFar))
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
         calendarChanged()
@@ -713,6 +734,7 @@ final class UploadState {
     /// nothing waits any more (go, ×): the file goes too
     private func forget() {
         order = []; dropped = []; finds = []; droppedTrips = [:]; opened = []; datesIn = []; kept = nil
+        roundAhead = nil; regionsSoFar = []; aheadJob += 1
         if let url = Self.waitingURL { try? FileManager.default.removeItem(at: url) }
         calendarChanged()
     }
@@ -734,6 +756,8 @@ final class UploadState {
         order = finds.compactMap { index[$0.place] }
         dropped = Set(x.dropped.compactMap { index[$0] })
         droppedTrips = (x.droppedTrips ?? [:]).mapValues(Set.init)
+        regionsSoFar = Self.decode(x.regions ?? [])
+        roundAhead = nil; aheadJob += 1
         opened = []; datesIn = []
         m.found = Set(order).subtracting(dropped)
         NSLog("wya upload: %d finds waiting", order.count)
@@ -853,6 +877,7 @@ final class UploadState {
             }
             m.found = []
             let read = samples
+            let ahead = roundAhead, soFar = regionsSoFar
             // the trips dropped alone in the first round: a region is not found on those days either
             var off: [String: [Finds.Visit]] = [:]
             for f in finds { if let d = droppedTrips[f.place] { off[f.place.lowercased()] = d.sorted().compactMap { $0 < f.visits.count ? f.visits[$0] : nil } } }
@@ -862,12 +887,12 @@ final class UploadState {
             workingOut = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [self] in if workingOut, me == job { withAnimation(Motion.quick) { markIn = true } } }
             let keptIDs = Set(rows.map { $0.key.id.lowercased() })
-            let ahead = roundAhead
-            roundAhead = nil
             let found: [RegionFind]
-            if let ahead { found = await ahead.value.filter { keptIDs.contains($0.cc) } }
-            else { found = await Self.regionsFound(in: Array(keptIDs), samples: read, world: world, source: src) }
-            let fresh = found
+            if let ahead { found = await ahead.value }
+            // a review read back after a relaunch: its samples are gone, its regions were kept with it
+            else if read.isEmpty { found = soFar }
+            else { found = Self.joined(soFar, await Self.regionsFound(in: Array(keptIDs), samples: read, world: world, source: src)) }
+            let fresh = found.filter { keptIDs.contains($0.cc) }
                 .filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
                 .compactMap { r -> RegionFind? in
                     guard let gone = off[r.cc], !gone.isEmpty, !r.visits.isEmpty else { return r }
@@ -970,11 +995,37 @@ final class UploadState {
     private func saveRound() {
         guard let url = Self.roundURL, let r = round else { return }
         let out = WaitingRound(source: source.rawValue,
-                               regions: r.map { .init(id: $0.id, name: $0.name, cc: $0.cc, country: $0.country, row: $0.row,
-                                                      visits: $0.visits.map { [$0.from.description, $0.to.description] }) },
+                               regions: Self.encode(r),
                                dropped: Array(roundDropped).sorted())
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
+    }
+    private static func encode(_ r: [RegionFind]) -> [WaitingRound.Region] {
+        r.map { .init(id: $0.id, name: $0.name, cc: $0.cc, country: $0.country, row: $0.row,
+                      visits: $0.visits.map { [$0.from.description, $0.to.description] }) }
+    }
+    private static func decode(_ r: [WaitingRound.Region]) -> [RegionFind] {
+        r.map { x in
+            let v = x.visits.compactMap { p -> Finds.Visit? in
+                guard p.count == 2, let a = LocalDay(p[0]), let b = LocalDay(p[1]) else { return nil }
+                return Finds.Visit(from: a, to: b, count: 1)
+            }
+            return RegionFind(id: x.id, name: x.name, cc: x.cc, country: x.country, row: x.row, visits: v)
+        }
+    }
+    /// two reads' regions as one: a region found by both keeps each trip once, in date order
+    static func joined(_ a: [RegionFind], _ b: [RegionFind]) -> [RegionFind] {
+        guard !a.isEmpty else { return b }
+        var out = a
+        for r in b {
+            guard let k = out.firstIndex(where: { $0.id == r.id }) else { out.append(r); continue }
+            for v in r.visits where !out[k].visits.contains(where: { $0.from == v.from && $0.to == v.to }) { out[k].visits.append(v) }
+            out[k].visits.sort { $0.from < $1.from }
+        }
+        return out.sorted {
+            $0.country == $1.country ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                : $0.country.localizedStandardCompare($1.country) == .orderedAscending
+        }
     }
     private func forgetRound() {
         if let url = Self.roundURL { try? FileManager.default.removeItem(at: url) }
@@ -983,14 +1034,7 @@ final class UploadState {
     private func waitingRound() -> (MarkSource, [RegionFind], Set<String>)? {
         guard let url = Self.roundURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(WaitingRound.self, from: d)
         else { return nil }
-        let regions = x.regions.compactMap { r -> RegionFind? in
-            guard !MarkStore.shared.state(PlaceKey(.region, r.id)).stamped else { return nil }
-            let v = r.visits.compactMap { p -> Finds.Visit? in
-                guard p.count == 2, let a = LocalDay(p[0]), let b = LocalDay(p[1]) else { return nil }
-                return Finds.Visit(from: a, to: b, count: 1)
-            }
-            return RegionFind(id: r.id, name: r.name, cc: r.cc, country: r.country, row: r.row, visits: v)
-        }
+        let regions = Self.decode(x.regions).filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
         if regions.isEmpty { forgetRound(); return nil }
         return (MarkSource(rawValue: x.source) ?? .history, regions, Set(x.dropped).intersection(regions.map(\.id)))
     }
