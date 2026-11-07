@@ -101,7 +101,7 @@ struct ContentView: View {
                             water.historyUp = true
                             water.go(.quarter)
                         } else {
-                            map.historyOff(fast: head.searching)
+                            map.historyOff(fast: head.searching, instant: head.settingsOpen)
                             if water.historyUp { water.historyUp = false; if water.stop == .quarter { water.go(.quarter) } }
                         }
                     }
@@ -334,7 +334,7 @@ struct ContentView: View {
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
             // (the tools close first, and history and quick stamping with them: the book's "the tool closes, then the gear")
-            if open { closeCard(); head.toolsOpen = false; water.openSettings() } else { water.closeSettings() }
+            if open { closeCard(); head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
         .onChange(of: head.searching) { _, v in if v { closeCard() } }
