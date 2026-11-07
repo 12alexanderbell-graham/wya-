@@ -325,6 +325,7 @@ struct SheetContent: View {
         // while another level loads, the one asked for is already the bold one
         let current = map.regionTowns ? Self.townsRow : map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
         return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
+                                    failed: map.regionFailed, loading: map.regionLoading,
                                     width: width, visible: captionShown) { row in
             if row == Self.townsRow { map.showRegionTowns() } else { map.leaveRegionTowns(); map.openRegions(sc.place, row: row) }
         })

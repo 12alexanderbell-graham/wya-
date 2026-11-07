@@ -161,12 +161,25 @@ nonisolated final class RegionCatalog: @unchecked Sendable {
     /// a level's file from wherever it is: the phone, or the data server (Part 17.7), kept once it has come. nil when it
     /// can't be had now (offline, or the server has no such file)
     func fetch(_ place: String, row: Int) async -> RegionFile? {
-        if let f = file(place, row: row) { return f }
-        let key = "\(place)-\(row)"
-        guard case .ok(let d) = await Servers.data.file(Self.path(key)), let f = RegionFile(data: d) else { return nil }
-        lock.lock(); files[key] = f; lock.unlock()
-        return f
+        if case .ok(let f) = await load(place, row: row) { return f }
+        return nil
     }
+    /// the same, saying why when it can't: no network or no server ("Not ready", 6.6), or the server answered with no
+    /// file or one that can't be read ("Couldn't load", 12.5)
+    enum Load: Sendable { case ok(RegionFile), offline, failed }
+    func load(_ place: String, row: Int) async -> Load {
+        if let f = file(place, row: row) { return .ok(f) }
+        let key = "\(place)-\(row)"
+        switch await Servers.data.file(Self.path(key)) {
+        case .offline: return .offline
+        case .missing: return .failed
+        case .ok(let d):
+            guard let f = RegionFile(data: d) else { return .failed }
+            keep(f, key)
+            return .ok(f)
+        }
+    }
+    private func keep(_ f: RegionFile, _ key: String) { lock.lock(); files[key] = f; lock.unlock() }
     /// where a level's file is on the data server
     static func path(_ key: String) -> String { "native/regions/\(key).wyar" }
 }

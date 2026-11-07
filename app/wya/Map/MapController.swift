@@ -529,7 +529,14 @@ final class MapController {
     /// the level asked for (the level line's centre), and a level that could not be had (offline, 6.6)
     private(set) var regionRow = 0
     private(set) var regionNotReady: Int?
+    /// that level could not be had because the server answered wrong, not because there is no network ( in place
+    /// of "Not ready", 12.5)
+    private(set) var regionFailed = false
+    /// a finer level still coming from the server after 0.4 s: the small working mark beside its word (12.5)
+    private(set) var regionLoading: Int?
     @ObservationIgnored private var regionJob = 0
+    /// the last job whose level came back (found or not)
+    @ObservationIgnored private var regionAnswered = 0
 
     /// INTO A COUNTRY'S REGIONS (A6.7): the camera flies to the country framed in the room between the head and the
     /// 25% water, the rest of the world going into the one blue; the regions are read off the main thread (usually
@@ -540,7 +547,7 @@ final class MapController {
         if let focus, let sc = regionScene, sc.place == i, row == nil || row == sc.row {
             // (a level still loading is dropped: this one is the one asked for now)
             regionJob += 1
-            regionRow = sc.row; regionNotReady = nil
+            regionRow = sc.row; regionNotReady = nil; regionLoading = nil
             showRegion(focus, in: sc); return
         }
         regionJob += 1
@@ -555,21 +562,36 @@ final class MapController {
         }
         regionRow = r
         regionNotReady = nil
+        regionLoading = nil
         // the level drawn now, for the borders both share (A6.9)
         let prev = regionScene?.place == i ? regionScene : nil
+        // a level not on the phone comes from the server: past 0.4 s its word gets the working mark (12.2, 12.5)
+        if RegionCatalog.shared.file(id, row: r) == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard let self, self.regionJob == job, self.regionAnswered != job else { return }
+                self.regionLoading = r
+            }
+        }
         Task.detached(priority: .userInitiated) { [weak self] in
-            let file = await RegionCatalog.shared.fetch(id, row: r)
+            let load = await RegionCatalog.shared.load(id, row: r)
+            let file: RegionFile?
+            if case .ok(let f) = load { file = f } else { file = nil }
+            let failed: Bool
+            if case .failed = load { failed = true } else { failed = false }
             let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0) }
             let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {
                 guard let self, self.regionJob == job, self.focusPlace == i else { return }
+                self.regionAnswered = job
+                self.regionLoading = nil
                 // a level that can't be had now: the one shown stays, its word says so (6.6); with nothing shown yet
                 // (a finer level asked for at launch, offline), the country's bundled first level instead
                 guard let scene else {
                     if self.regionScene == nil, let first = RegionCatalog.shared.first(id)?.row, first != r {
                         self.openRegions(i, row: first, focus: focus); return
                     }
-                    self.regionNotReady = r; self.regionRow = self.regionScene?.row ?? r; return
+                    self.regionNotReady = r; self.regionFailed = failed || scene == nil && file != nil
+                    self.regionRow = self.regionScene?.row ?? r; return
                 }
                 // the region under the finger or held by its card, carried to the new level by its id (or let go)
                 if let old = self.regionScene, let u = self.regionPressed, u < old.unitIDs.count {
@@ -592,6 +614,7 @@ final class MapController {
     /// out of the country (back to the menu, or out of Regions): the regions go, the world comes back
     func closeRegions() {
         regionJob += 1
+        regionLoading = nil
         leaveRegionTowns()
         // the inner borders undraw back into the country's outline (A6.13)
         if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }

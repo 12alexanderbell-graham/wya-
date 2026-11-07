@@ -4,13 +4,17 @@ import SwiftUI
 /// country's name, and under it every level the country has, as many to a line as fit (centred, wrapping onto a second
 /// line only when they don't fit), all in ink; the level shown in the heaviest weight, the others lighter, no box and
 /// no colour round it. No flag, no number, nothing to scroll.
-/// A tap on a level shows it. A level that can't be had now says "Not ready" in its place.
+/// A tap on a level shows it. A level that can't be had now says "Not ready" in its place (no network), or
+/// "Couldn't load" (the server answered wrong); a tap on either tries again. A finer level still coming after 0.4 s
+/// has the small working mark beside its word (12.5).
 struct RegionLevels: View {
     struct Level: Identifiable, Equatable { let row: Int; let word: String; var id: Int { row } }
     let name: String
     let levels: [Level]
     let current: Int
     let notReady: Int?
+    var failed = false
+    var loading: Int? = nil
     let width: CGFloat
     let visible: Bool
     let pick: (Int) -> Void
@@ -25,10 +29,21 @@ struct RegionLevels: View {
                 CentredFlow(spacing: 18, lineSpacing: 10) {
                     ForEach(levels) { l in
                         let here = l.row == current
-                        roll(l.row == notReady ? "Not ready" : l.word)
-                            .font(.body.weight(here ? .semibold : .regular))
-                            .multilineTextAlignment(.center)
-                            .frame(minHeight: 20)
+                        let coming = l.row == loading
+                        HStack(spacing: 0) {
+                            roll(l.row == notReady ? (failed ? "Couldn't load" : "Not ready") : l.word)
+                                .font(.body.weight(here ? .semibold : .regular))
+                                .multilineTextAlignment(.center)
+                            // the mark grows from its own centre (A12.2) as its room opens beside the word, and goes
+                            // back into it as the level arrives (A12.3); the words beside it move, never jump
+                            WorkingMark(size: 20, running: coming)
+                                .scaleEffect(coming ? 1 : 0.001)
+                                .frame(width: coming ? 26 : 0, alignment: .trailing)
+                        }
+                        .animation(Motion.quick, value: coming)
+                        .frame(minHeight: 20)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue(coming ? "Loading" : "")
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 guard !here else { return }
