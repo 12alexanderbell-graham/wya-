@@ -427,6 +427,16 @@ final class HistoryLineView: UIView {
         }
     }
 
+    /// the capsules up, for VoiceOver (the map's own elements are its places; these ride on them)
+    func spokenCapsules(_ m: MapController) -> [HistoryCapsule] {
+        guard !isHidden, track != nil else { return [] }
+        startCap.onActivate = { [weak self, weak m] in if let self, let m { self.tapped(.start, m) } }
+        endCap.onActivate = { [weak self, weak m] in if let self, let m { self.tapped(.end, m) } }
+        legCap.onActivate = { [weak self, weak m] in if let self, let m, let j = self.legShown { self.tapped(.leg(j), m) } }
+        for (n, c) in edgeCaps.enumerated() { c.onActivate = { [weak self, weak m] in if let self, let m { self.tapped(.edge(n), m) } } }
+        return ([startCap, endCap, legCap] + edgeCaps).filter(\.isShown)
+    }
+
     /// the capsules up, in this view's points (the map's names and marks keep clear of them)
     var capsuleFrames: [CGRect] {
         guard !isHidden else { return [] }
@@ -530,12 +540,18 @@ final class HistoryCapsule: UIView {
         label.font = .systemFont(ofSize: 13, weight: .semibold)
         label.textColor = .black
         glass.contentView.addSubview(label)
+        // VoiceOver reads it, and a double tap does what a tap does (the map's own hit test owns the finger's)
+        isAccessibilityElement = true
+        accessibilityTraits = .button
         alpha = 1
         isHidden = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
     var isShown: Bool { showing }
+    /// what a tap on it does (set by the journey's view), for VoiceOver's double tap
+    var onActivate: (() -> Void)?
+    override func accessibilityActivate() -> Bool { onActivate?(); return onActivate != nil }
     /// away, words kept as they were
     func hide() {
         guard showing else { return }
@@ -546,7 +562,7 @@ final class HistoryCapsule: UIView {
     /// where it stands at rest (its frame without the grow)
     private(set) var planned: CGRect = .zero
     func set(_ words: String, near p: CGPoint, awayFrom q: CGPoint, in room: CGRect, avoid: CGRect? = nil, visible: Bool) {
-        if label.text != words { label.text = words; label.sizeToFit() }
+        if label.text != words { label.text = words; label.sizeToFit(); accessibilityLabel = words }
         // never wider than the screen less 16 pt each side (a long leg's words end in "…")
         let most = room.width - 32 - 20
         if label.bounds.width > most { label.bounds.size.width = most }

@@ -1059,7 +1059,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         }
     }
 
-    private func placeElements() -> [PlaceElement] {
+    private func placeElements() -> [Any] {
         // Regions' list over the map, or Pins (Apple's map, its own pins): nothing of ours to read
         guard let c = controller, let w = c.world, !c.pinsMode, !c.regionsMenu else { return [] }
         let names = c.placesMode || c.regionTowns
@@ -1068,15 +1068,18 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                    c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1, names,
                    c.placeOpen ?? -1, c.regionTowns ? 1 : 0, Int(c.sheetTop / 8), c.locked ? 1 : 0,
                    // (the camera, coarsely: it can move with no rest of its own, a sideways turn or a continent's follow)
-                   Int(c.c.x), Int(c.c.y), Int(log(max(c.k, 1e-9)) * 40)]
-        if key == axKey { return axCache }
+                   Int(c.c.x), Int(c.c.y), Int(log(max(c.k, 1e-9)) * 40),
+                   c.historyTrack == nil ? 0 : 1, Int(c.historyShown * 4)]
+        // the journey's capsules ride on top (they come and go with taps, so they are asked for each time)
+        let caps: [Any] = historyLine.spokenCapsules(c)
+        if key == axKey { return axCache + caps }
         axKey = key
         let seen = openMap(c)
         var used = Set<String>()
         defer { axPool = axPool.filter { used.contains($0.key) } }
         // a region map's towns level: its town names; a region map: its regions
-        if c.regionTowns { axCache = nameElements(c, seen, &used); return axCache }
-        if let sc = c.regionScene { axCache = regionElements(sc, c, seen, &used); return axCache }
+        if c.regionTowns { axCache = nameElements(c, seen, &used); return axCache + caps }
+        if let sc = c.regionScene { axCache = regionElements(sc, c, seen, &used); return axCache + caps }
         // PLACES (7.4): the town and thing names on the map, each its page on a double tap (as a tap on a name) and its
         // hold menu as actions; then the countries, as on the Countries map
         let named = c.placesMode ? nameElements(c, seen, &used) : []
@@ -1106,7 +1109,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             }
             return e
         }
-        return axCache
+        return axCache + caps
     }
 
     private func nameElements(_ c: MapController, _ seen: CGRect, _ used: inout Set<String>) -> [PlaceElement] {
@@ -1204,7 +1207,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         UIAccessibilityCustomRotor(name: name) { [weak self] p in
             MainActor.assumeIsolated {
                 guard let self else { return nil }
-                let els = self.placeElements()
+                let els = self.placeElements().compactMap { $0 as? PlaceElement }
                 let forward = p.searchDirection == .next
                 let now = (p.currentItem.targetElement as? PlaceElement).flatMap { e in els.firstIndex { $0 === e } }
                 var k = now.map { forward ? $0 + 1 : $0 - 1 } ?? (forward ? 0 : els.count - 1)
