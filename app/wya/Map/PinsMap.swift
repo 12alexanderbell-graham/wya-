@@ -175,30 +175,65 @@ final class PinsMapState {
     }
     /// our map's view of the world, on Apple's map: the same middle, the same span of latitude
     /// HISTORY IN PINS (Part 13's table: your pins by their date): one line through them from the oldest to the newest,
-    /// black to blue as the journey on our own map (2.5 pt, round ends, the short way round the globe); with fewer than
-    /// two pins there is nothing to join and the tool refuses
+    /// as the journey on our own map: straight legs (a leg over 180 degrees goes the short way, across the date line),
+    /// 2.5 pt, round ends, no edge, black at the first pin to blue at the last, each pin one equal step of the colour.
+    /// With fewer than two pins there is nothing to join and the tool refuses.
     private(set) var historyOn = false
     private var journey: MKPolyline?
+    /// the pins' order and places the line was drawn for (a pin moved, re-dated, made or deleted redraws it)
+    private var journeyKey = ""
+    /// each stop's colour and place along the line, for the renderer
+    private(set) var journeyColours: ([UIColor], [CGFloat]) = ([], [])
     @discardableResult func history(_ on: Bool) -> Bool {
         historyOn = on && PinStore.shared.pins.count > 1
         redrawHistory()
-        // turned on: the whole journey framed between the head and the water (as on our own map, 13.4)
+        // turned on: the whole journey framed between the head and the water at its stop (as on our own map, 13.4);
+        // the top clears a pin's own height under the head
         if historyOn, let v = view, let j = journey, let w = water {
             let L = w.layout
-            let pad = UIEdgeInsets(top: L.headBottom + 40, left: 40, bottom: L.H - w.y(w.stop == .full ? .half : w.stop) + 40, right: 72)
+            let pad = UIEdgeInsets(top: L.headBottom + 30 + 16, left: 40,
+                                   bottom: L.H - w.y(w.stop == .full ? .half : w.stop) + 32, right: 72)
             v.setVisibleMapRect(j.boundingMapRect, edgePadding: pad, animated: true)
         }
         return historyOn || !on
     }
+    /// the line as the pins now are (the new one is on the map before the old one goes, so it never blinks)
     func redrawHistory() {
         guard let v = view else { return }
-        if let j = journey { v.removeOverlay(j); journey = nil }
-        guard historyOn else { return }
-        let c = PinStore.shared.pins.sorted { $0.made < $1.made }.map(\.coordinate)
-        guard c.count > 1 else { return }
-        let j = MKGeodesicPolyline(coordinates: c, count: c.count)
-        journey = j
-        v.addOverlay(j, level: .aboveRoads)
+        let old = journey
+        journey = nil
+        let pins = PinStore.shared.pins.sorted { $0.made < $1.made }
+        journeyKey = historyOn ? pins.map { "\($0.id)\($0.lat),\($0.lon)" }.joined(separator: "|") : ""
+        if historyOn, pins.count > 1 {
+            let W = MKMapSize.world.width
+            var pts: [MKMapPoint] = []
+            for p in pins {
+                var m = MKMapPoint(p.coordinate)
+                if let last = pts.last {
+                    while m.x - last.x > W / 2 { m.x -= W }
+                    while last.x - m.x > W / 2 { m.x += W }
+                }
+                pts.append(m)
+            }
+            let j = MKPolyline(points: pts, count: pts.count)
+            let n = pins.count
+            let a = UIColor(Palette.ink), b = UIColor(Palette.blue)
+            journeyColours = ((0 ..< n).map { Self.mix(a, b, CGFloat($0) / CGFloat(n - 1)) },
+                              (0 ..< n).map { j.location(atPointIndex: $0) })
+            journey = j
+            v.addOverlay(j, level: .aboveRoads)
+        }
+        if let old { v.removeOverlay(old) }
+    }
+    /// the line again when the pins changed under it
+    func historyNeedsRedraw(_ pins: [Pin]) -> Bool {
+        historyOn && pins.sorted { $0.made < $1.made }.map { "\($0.id)\($0.lat),\($0.lon)" }.joined(separator: "|") != journeyKey
+    }
+    private static func mix(_ a: UIColor, _ b: UIColor, _ t: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1); b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, alpha: 1)
     }
     /// Reset on Apple's map: the whole world, as Apple's own map shows it
     func world() { view?.setVisibleMapRect(.world, animated: true) }
@@ -297,8 +332,8 @@ struct PinsMapView: UIViewRepresentable {
             let shown = Set(have.map(\.id))
             let new = pins.filter { !shown.contains($0.id) }.map(PinAnnotation.init)
             if !new.isEmpty { v.addAnnotations(new) }
-            // a pin made or gone while the journey is up joins or leaves its line
-            if (!gone.isEmpty || !new.isEmpty), PinsMapState.shared.historyOn { PinsMapState.shared.redrawHistory() }
+            // a pin made, moved, re-dated or gone while the journey is up: its line as the pins now are
+            if PinsMapState.shared.historyNeedsRedraw(pins) { PinsMapState.shared.redrawHistory() }
             for a in have where ids.contains(a.id) {
                 (v.view(for: a) as? PinAnnotationView)?.show(PinStore.shared.pin(a.id))
             }
@@ -350,7 +385,8 @@ struct PinsMapView: UIViewRepresentable {
         func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {
             guard let p = o as? MKPolyline else { return MKOverlayRenderer(overlay: o) }
             let r = MKGradientPolylineRenderer(polyline: p)
-            r.setColors([UIColor(Palette.ink), UIColor(Palette.blue)], locations: [0, 1])
+            let (c, at) = PinsMapState.shared.journeyColours
+            if c.count == p.pointCount { r.setColors(c, locations: at) } else { r.setColors([UIColor(Palette.ink), UIColor(Palette.blue)], locations: [0, 1]) }
             r.lineWidth = 2.5
             r.lineCap = .round
             r.lineJoin = .round
