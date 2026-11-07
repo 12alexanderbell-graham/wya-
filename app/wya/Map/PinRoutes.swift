@@ -345,25 +345,30 @@ final class PinRoutes {
         let reverse = UIAction(title: "Reverse") { [weak self] _ in after { self?.reask(id, reverse: true) } }
         let walk = UIAction(title: "Walk", attributes: walking ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
         let drive = UIAction(title: "Drive", attributes: walking ? [] : .disabled) { [weak self] _ in after { self?.reask(id, walk: false) } }
-        let directions = UIAction(title: "Directions in Apple Maps") { _ in
-            let a = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil); a.name = f.title
-            let b = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil); b.name = t.title
-            MKMapItem.openMaps(with: [a, b], launchOptions: [MKLaunchOptionsDirectionsModeKey: walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
-        }
-        let share = UIAction(title: "Share") { _ in
-            after {
-                guard let u = URL(string: "https://maps.apple.com/?saddr=\(f.lat),\(f.lon)&daddr=\(t.lat),\(t.lon)&dirflg=\(walking ? "w" : "d")") else { return }
-                var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
-                while let next = top?.presentedViewController { top = next }
-                top?.present(UIActivityViewController(activityItems: [u], applicationActivities: nil), animated: true)
-            }
-        }
+        let directions = UIAction(title: "Directions in Apple Maps") { [weak self] _ in self?.directions(id) }
+        let share = UIAction(title: "Share") { [weak self] _ in after { self?.share(id) } }
         let delete = UIAction(title: "Delete", attributes: .destructive) { [weak self] _ in after { Feel.lift(); self?.remove(id) } }
         return UIMenu(title: "\(f.title) to \(t.title)", children: [
             UIMenu(options: .displayInline, children: [reverse, walk, drive]),
             UIMenu(options: .displayInline, children: [directions, share]),
             UIMenu(options: .displayInline, children: [delete]),
         ])
+    }
+
+    /// Directions in Apple Maps: Apple Maps from one end to the other, on foot or by car as the route goes
+    func directions(_ id: UUID) {
+        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return }
+        let a = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil); a.name = f.title
+        let b = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil); b.name = t.title
+        MKMapItem.openMaps(with: [a, b], launchOptions: [MKLaunchOptionsDirectionsModeKey: r.walk == true ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
+    }
+    /// Share: Apple Maps' link to the same directions
+    func share(_ id: UUID) {
+        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to),
+              let u = URL(string: "https://maps.apple.com/?saddr=\(f.lat),\(f.lon)&daddr=\(t.lat),\(t.lon)&dirflg=\(r.walk == true ? "w" : "d")") else { return }
+        var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+        while let next = top?.presentedViewController { top = next }
+        top?.present(UIActivityViewController(activityItems: [u], applicationActivities: nil), animated: true)
     }
 
     static func points(_ l: MKPolyline) -> [[Double]] {

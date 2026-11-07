@@ -308,12 +308,12 @@ final class PinsMapState {
         }
     }
     /// a route just made: Apple's map frames it between the head and the water if it is not all in view
-    func frame(route id: UUID?) {
+    func frame(route id: UUID?, always: Bool = false) {
         guard let v = view, let id, let l = routeOverlays.first(where: { ($0 as? PinRouteLine)?.routeID == id }) else { return }
         let L = water?.layout
         let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 24, left: 32, bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 24, right: 72)
         let seen = v.visibleMapRect
-        if !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
+        if always || !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
     }
 
     /// Reset on Apple's map: the whole world, as Apple's own map shows it
@@ -1006,7 +1006,14 @@ struct PinsList: View {
         let top = foot + 8
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
+                // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%;
+                // the pins need no name of their own: the caption over them already says Pins
+                let routes = PinRoutes.shared.routes
                 ForEach(store.pins.reversed()) { p in row(p) }
+                if !routes.isEmpty {
+                    header("Routes").padding(.top, 12)
+                    ForEach(routes.reversed()) { r in routeRow(r) }
+                }
                 Color.clear.frame(height: L.H - fade + 24)
             }
         }
@@ -1019,6 +1026,51 @@ struct PinsList: View {
         .frame(width: L.W, height: L.H, alignment: .top)
         .mask { PlacesShelf.band(top: foot - 8, bottom: fade, H: L.H) }
         .allowsHitTesting(water.stop != .quarter && water.stop != .closed)
+    }
+
+    private func header(_ t: String) -> some View {
+        Text(t).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+            .frame(minHeight: 32, alignment: .bottom)
+            .accessibilityAddTraits(.isHeader)
+    }
+    /// a kept route: its own line drawn small (the route icon is still to draw), "From to To", its distance and time;
+    /// a tap shows it on the map with the water at 25%; a hold, the route's menu (11.5)
+    private func routeRow(_ r: PinRoute) -> some View {
+        let name = "\(store.pin(r.from)?.title ?? "Pin") to \(store.pin(r.to)?.title ?? "Pin")"
+        return HStack(spacing: 12) {
+            RouteShape(points: r.points)
+                .stroke(Palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .frame(width: 24, height: 24)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                Text(r.words).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 56)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Feel.tap()
+            store.selected = nil
+            water.go(.quarter)
+            PinsMapState.shared.frame(route: r.id, always: true)
+        }
+        .contextMenu {
+            Section {
+                Button("Reverse") { PinRoutes.shared.reask(r.id, reverse: true) }
+                Button("Walk") { PinRoutes.shared.reask(r.id, walk: true) }.disabled(r.walk == true)
+                Button("Drive") { PinRoutes.shared.reask(r.id, walk: false) }.disabled(r.walk != true)
+            }
+            Section {
+                Button("Directions in Apple Maps") { PinRoutes.shared.directions(r.id) }
+                Button("Share") { PinRoutes.shared.share(r.id) }
+            }
+            Button("Delete", role: .destructive) { Feel.lift(); PinRoutes.shared.remove(r.id) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name), \(r.words)")
+        .accessibilityAddTraits(.isButton)
     }
 
     private func row(_ p: Pin) -> some View {
@@ -1216,4 +1268,22 @@ struct PinSheet: View {
 
 private extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/// a route's own line, fitted into its frame (north up, its longer side filling it)
+struct RouteShape: Shape {
+    let points: [[Double]]
+    func path(in rect: CGRect) -> Path {
+        let pts = points.map { MKMapPoint(CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1])) }
+        guard pts.count > 1, let x0 = pts.map(\.x).min(), let x1 = pts.map(\.x).max(),
+              let y0 = pts.map(\.y).min(), let y1 = pts.map(\.y).max() else { return Path() }
+        let k = min(rect.width, rect.height) / max(x1 - x0, y1 - y0, 1)
+        let ox = rect.midX - (x0 + x1) / 2 * k, oy = rect.midY - (y0 + y1) / 2 * k
+        let step = max(1, pts.count / 120)
+        var p = Path()
+        p.move(to: CGPoint(x: pts[0].x * k + ox, y: pts[0].y * k + oy))
+        for i in stride(from: step, to: pts.count, by: step) { p.addLine(to: CGPoint(x: pts[i].x * k + ox, y: pts[i].y * k + oy)) }
+        p.addLine(to: CGPoint(x: pts[pts.count - 1].x * k + ox, y: pts[pts.count - 1].y * k + oy))
+        return p
+    }
 }
