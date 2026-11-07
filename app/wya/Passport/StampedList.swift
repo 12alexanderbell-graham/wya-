@@ -180,7 +180,7 @@ struct StampedList: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         // not the destructive role: that slides the row away at once; the row leaves by A4.20 (the
                         // same red as the destructive button)
-                        Button { unstamp(r) } label: { Text("Unstamp") }.tint(.red)
+                        Button { unstamp(r) } label: { Text("Unstamp") }.tint(Palette.red)
                     }
                     // A ROW'S HOLD MENU (11.5), under the place's name: Show on the map · Show in passport · Open its
                     // page | Details · Verify | Share | Unstamp (as the swipe; Apple's lists keep the swipe's red row
