@@ -172,14 +172,21 @@ nonisolated final class RegionCatalog: @unchecked Sendable {
         let key = "\(place)-\(row)"
         switch await Servers.data.file(Self.path(key)) {
         case .offline: return .offline
-        case .missing: return .failed
+        case .missing, .failed: return .failed
         case .ok(let d):
-            guard let f = RegionFile(data: d) else { return .failed }
+            guard let f = RegionFile(data: d) else { DevDataClient.forget(Self.path(key)); return .failed }
             keep(f, key)
             return .ok(f)
         }
     }
     private func keep(_ f: RegionFile, _ key: String) { lock.lock(); files[key] = f; lock.unlock() }
+    /// is a level's file on the phone (read, bundled or downloaded), without reading it
+    func has(_ place: String, row: Int) -> Bool {
+        let key = "\(place)-\(row)"
+        lock.lock(); let read = files[key] != nil; lock.unlock()
+        return read || Bundle.main.url(forResource: key, withExtension: "wyar") != nil
+            || FileManager.default.fileExists(atPath: DevDataClient.cache(Self.path(key)).path)
+    }
     /// where a level's file is on the data server
     static func path(_ key: String) -> String { "native/regions/\(key).wyar" }
 }

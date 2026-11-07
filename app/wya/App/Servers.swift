@@ -9,6 +9,8 @@ nonisolated enum ServerAnswer<T: Sendable>: Sendable {
     case offline
     /// the server has no such thing (a page that doesn't exist)
     case missing
+    /// the server answered, but wrong (an error status): "Couldn't load", a tap retries (12.5)
+    case failed
 }
 
 /// place pages not bundled (Part 16)

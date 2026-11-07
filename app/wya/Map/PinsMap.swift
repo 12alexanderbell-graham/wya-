@@ -186,9 +186,11 @@ final class PinsMapState {
     weak var map: MapController?
     /// a pin being moved (8.4): the pin's spot from the finger, and the pin's drawn middle from its spot, as it was
     /// picked up (so it is set down tip first where the finger lets go, and lands where it is drawn)
-    var held: (spot: CGPoint, middle: CGPoint)?
-    /// where the pin being moved was set down (Apple's map points)
-    var landing: CGPoint?
+    /// (one per pin: two fingers can move two pins at once). `middle` is the view's own centre, without its transform,
+    /// which is kept to land with (a chosen pin lands still chosen)
+    var held: [UUID: (spot: CGPoint, middle: CGPoint, transform: CGAffineTransform)] = [:]
+    /// where each pin being moved was set down (Apple's map points)
+    var landing: [UUID: CGPoint] = [:]
     func zoom(by f: Double) {
         guard let v = view else { return }
         let cam = v.camera.copy() as! MKMapCamera
@@ -432,24 +434,26 @@ struct PinsMapView: UIViewRepresentable {
         }
         func dropInteraction(_ i: UIDropInteraction, performDrop s: UIDropSession) {
             guard let v = i.view as? MKMapView, let id = s.localDragSession?.items.first?.localObject as? UUID,
-                  let held = PinsMapState.shared.held else { return }
+                  let held = PinsMapState.shared.held[id] else { return }
             let f = s.location(in: v)
             let spot = CGPoint(x: f.x + held.spot.x, y: f.y + held.spot.y)
-            PinsMapState.shared.landing = spot
+            PinsMapState.shared.landing[id] = spot
             let c = v.convert(spot, toCoordinateFrom: v)
             // the pin on the map moves at once, under the picture that lands on it
             if let a = v.annotations.lazy.compactMap({ $0 as? PinAnnotation }).first(where: { $0.id == id }) { a.coordinate = c }
             PinStore.shared.move(id, to: c, country: Self.country(map, c))
         }
         func dropInteraction(_ i: UIDropInteraction, previewForDropping item: UIDragItem, withDefault d: UITargetedDragPreview) -> UITargetedDragPreview? {
-            guard let v = i.view, let spot = PinsMapState.shared.landing, let held = PinsMapState.shared.held else { return nil }
-            return d.retargetedPreview(with: UIDragPreviewTarget(container: v, center: CGPoint(x: spot.x + held.middle.x, y: spot.y + held.middle.y)))
+            guard let v = i.view, let id = item.localObject as? UUID, let spot = PinsMapState.shared.landing[id],
+                  let held = PinsMapState.shared.held[id] else { return nil }
+            return d.retargetedPreview(with: UIDragPreviewTarget(container: v, center: CGPoint(x: spot.x + held.middle.x, y: spot.y + held.middle.y),
+                                                                 transform: held.transform))
         }
         func dropInteraction(_ i: UIDropInteraction, item: UIDragItem, willAnimateDropWith a: UIDragAnimating) {
             a.addCompletion { _ in Feel.notch() }
         }
         func dropInteraction(_ i: UIDropInteraction, concludeDrop s: UIDropSession) {
-            PinsMapState.shared.landing = nil
+            if let id = s.localDragSession?.items.first?.localObject as? UUID { PinsMapState.shared.landing[id] = nil }
         }
 
         func mapViewDidFinishRenderingMap(_ v: MKMapView, fullyRendered: Bool) {
@@ -511,19 +515,19 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         addInteraction(UIContextMenuInteraction(delegate: self))
         // MOVE A PIN (8.4): held, its menu opens with it lifted; moving the finger before letting go closes the menu
         // and the pin follows the finger (iOS's context menu with a drag, as Home Screen icons do)
-        let drag = UIDragInteraction(delegate: self)
+        drag = UIDragInteraction(delegate: self)
         drag.isEnabled = true
         addInteraction(drag)
     }
+    private var drag: UIDragInteraction!
 
     func dragInteraction(_ i: UIDragInteraction, itemsForBeginning s: UIDragSession) -> [UIDragItem] {
-        guard let a = annotation as? PinAnnotation, let v = PinsMapState.shared.view else { return [] }
-        // the lock stops moving pins as it stops dropping them
-        if PinsMapState.shared.map?.locked == true { Feel.refuse(); return [] }
+        // (the lock turns the drag off as the press starts: contextMenuInteraction)
+        guard let a = annotation as? PinAnnotation, let v = PinsMapState.shared.view, let sv = superview else { return [] }
         let spot = v.convert(a.coordinate, toPointTo: v)
         let f = s.location(in: v)
-        let mid = convert(CGPoint(x: bounds.midX, y: bounds.midY), to: v)
-        PinsMapState.shared.held = (CGPoint(x: spot.x - f.x, y: spot.y - f.y), CGPoint(x: mid.x - spot.x, y: mid.y - spot.y))
+        let mid = sv.convert(center, to: v)
+        PinsMapState.shared.held[a.id] = (CGPoint(x: spot.x - f.x, y: spot.y - f.y), CGPoint(x: mid.x - spot.x, y: mid.y - spot.y), transform)
         let item = UIDragItem(itemProvider: NSItemProvider())
         item.localObject = a.id
         return [item]
@@ -535,11 +539,14 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         p.shadowPath = UIBezierPath()
         return UITargetedDragPreview(view: self, parameters: p)
     }
+    /// let go anywhere but the map: the picture goes back onto the pin where it was (nil, the system's own, when the
+    /// pin has left the screen's views)
     func dragInteraction(_ i: UIDragInteraction, previewForCancelling item: UIDragItem, withDefault d: UITargetedDragPreview) -> UITargetedDragPreview? {
-        let p = UIDragPreviewParameters()
-        p.backgroundColor = .clear
-        p.shadowPath = UIBezierPath()
-        return UITargetedDragPreview(view: self, parameters: p)
+        guard window != nil, let sv = superview, (annotation as? PinAnnotation)?.id == item.localObject as? UUID else { return nil }
+        return d.retargetedPreview(with: UIDragPreviewTarget(container: sv, center: center, transform: transform))
+    }
+    func dragInteraction(_ i: UIDragInteraction, item: UIDragItem, willAnimateCancelWith a: UIDragAnimating) {
+        a.addCompletion { [weak self] _ in self?.alpha = 1 }
     }
     // the one under the finger is the pin: its place on the map stays empty until it lands
     func dragInteraction(_ i: UIDragInteraction, sessionWillBegin s: UIDragSession) {
@@ -548,7 +555,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     }
     func dragInteraction(_ i: UIDragInteraction, session s: UIDragSession, didEndWith o: UIDropOperation) {
         alpha = 1
-        PinsMapState.shared.held = nil
+        if let id = s.items.first?.localObject as? UUID { PinsMapState.shared.held[id] = nil }
     }
     required init?(coder: NSCoder) { fatalError() }
     override func prepareForReuse() {
@@ -595,6 +602,8 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
         guard let a = annotation as? PinAnnotation else { return nil }
         let id = a.id
+        // the lock: the menu, but no moving (8.4)
+        drag.isEnabled = PinsMapState.shared.map?.locked != true
         PinStore.from = convert(bounds, to: nil)
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
             MainActor.assumeIsolated { Self.menu(id) }

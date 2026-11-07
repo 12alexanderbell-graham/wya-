@@ -23,7 +23,7 @@ extension MapController {
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
-        ThingStore.shared.load(w.places[i].id.lowercased())
+        ThingStore.shared.load(w.places[i].id.lowercased(), opened: true)
     }
     /// REGIONS' TOWNS LEVEL (6.6, the level line's last word "towns"): the level that was up kept, drawn as borders
     /// only (the book's finest level was tried on 31 Oct: France's 35,000 communes' borders buried the towns), and the

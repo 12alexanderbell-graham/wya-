@@ -568,7 +568,7 @@ final class MapController {
         // the level drawn now, for the borders both share (A6.9)
         let prev = regionScene?.place == i ? regionScene : nil
         // a level not on the phone comes from the server: past 0.4 s its word gets the working mark (12.2, 12.5)
-        if RegionCatalog.shared.file(id, row: r) == nil {
+        if !RegionCatalog.shared.has(id, row: r) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                 guard let self, self.regionJob == job, self.regionAnswered != job else { return }
                 self.regionLoading = r
@@ -583,9 +583,10 @@ final class MapController {
             let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0) }
             let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {
-                guard let self, self.regionJob == job, self.focusPlace == i else { return }
+                guard let self, self.regionJob == job else { return }
                 self.regionAnswered = job
                 self.regionLoading = nil
+                guard self.focusPlace == i else { return }
                 // a level that can't be had now: the one shown stays, its word says so (6.6); with nothing shown yet
                 // (a finer level asked for at launch, offline), the country's bundled first level instead
                 guard let scene else {

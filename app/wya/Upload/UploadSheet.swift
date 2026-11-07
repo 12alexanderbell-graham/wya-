@@ -79,6 +79,8 @@ final class UploadState {
     @ObservationIgnored private var busy = false
     /// the review as it was when Add more left it: × on the next finding puts it back (only the new read is cancelled)
     @ObservationIgnored private var kept: (finds: [Finds.Find], order: [Int], dropped: Set<Int>, trips: [String: Set<Int>])?
+    /// the second round's working-out and samples as they were before Add more (a × on the new read puts them back)
+    @ObservationIgnored private var keptRound: (ahead: Task<[RegionFind], Never>?, soFar: [RegionFind], samples: [HistoryReader.Sample])?
     /// the source of the read being found (a review joined by Add more keeps its first source's words)
     @ObservationIgnored private var readSource: MarkSource = .photos
     /// Its dates' own counter, so opening dates never cancels the sheet's other steps
@@ -196,6 +198,7 @@ final class UploadState {
         job += 1
         let me = job
         kept = (finds, order, dropped, droppedTrips)
+        keptRound = (roundAhead, regionsSoFar, samples)
         opened = []; datesIn = []
         if w.stop != .quarter { w.go(.quarter) }
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
@@ -533,7 +536,9 @@ final class UploadState {
                     // kept with the finds: the review left now (or already) still has them after a relaunch
                     if self.aheadJob == mine {
                         self.regionsSoFar = all
-                        if self.water?.upload != true, !self.order.isEmpty { self.save() }
+                        if !self.order.isEmpty, self.water?.upload != true || Self.waitingURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
+                            self.save()
+                        }
                     }
                     return all
                 }
@@ -676,8 +681,11 @@ final class UploadState {
     /// round a tap on the map too. Its finds (or regions) wait, as after a pull down
     func leaveReview() {
         guard phase == .review else { return }
+        // a go being written: the round that comes of it is left as it would have been (it waits)
+        if busy { leaveAsked = true; return }
         leave()
     }
+    @ObservationIgnored private var leaveAsked = false
 
     /// LEAVING THE REVIEW (A9.13: a pull down): the go circle shrinks into its centre and the caption rolls back to
     /// your count; the finds stay darkened on the map, waiting, and are kept for the next launch
@@ -859,6 +867,7 @@ final class UploadState {
         Feel.stamp()
         // from here until the write has landed, taps, pulls and a second go wait
         busy = true
+        leaveAsked = false
         job += 1
         let me = job
         let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
@@ -924,6 +933,8 @@ final class UploadState {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
                         busy = false
                         guard me == job else { return }
+                        // left (a tab, the wheel, the sea) while the go was written: the round waits for next time
+                        if leaveAsked { leaveAsked = false; phase = .review; leaveRound(); return }
                         withAnimation(Motion.quick) { captionIn = true; goIn = true }
                     }
                     return
@@ -935,6 +946,7 @@ final class UploadState {
 
     /// the sheet gives the water back once a go has landed
     private func finishGo(_ me: Int, _ w: Water) {
+        leaveAsked = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
             busy = false
             guard me == job else { return }
@@ -1028,8 +1040,16 @@ final class UploadState {
         var out = a
         for r in b {
             guard let k = out.firstIndex(where: { $0.id == r.id }) else { out.append(r); continue }
-            for v in r.visits where !out[k].visits.contains(where: { $0.from == v.from && $0.to == v.to }) { out[k].visits.append(v) }
-            out[k].visits.sort { $0.from < $1.from }
+            // trips that overlap or touch become one, as a country's do (joinFinds)
+            var joinedTrips: [Finds.Visit] = []
+            for x in (out[k].visits + r.visits).sorted(by: { $0.from < $1.from }) {
+                if var last = joinedTrips.last, x.from <= last.to.plus(1) {
+                    if x.to > last.to { last.to = x.to }
+                    last.count += x.count
+                    joinedTrips[joinedTrips.count - 1] = last
+                } else { joinedTrips.append(x) }
+            }
+            out[k].visits = joinedTrips
         }
         return out.sorted {
             $0.country == $1.country ? $0.name.localizedStandardCompare($1.name) == .orderedAscending
@@ -1135,6 +1155,9 @@ final class UploadState {
             // only the new read goes: the finds kept by Add more wait again, as before it
             finds = k.finds; order = k.order; dropped = k.dropped; droppedTrips = k.trips; opened = []; datesIn = []
             kept = nil
+            // nor do its regions or its samples count towards the second round
+            if let r = keptRound { roundAhead = r.ahead; regionsSoFar = r.soFar; samples = r.samples; aheadJob += 1 }
+            keptRound = nil
             map?.found = Set(order).subtracting(dropped)
             if order.isEmpty { forget() } else { save() }
         } else {

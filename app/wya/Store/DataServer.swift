@@ -17,7 +17,7 @@ nonisolated struct DevDataClient: DataClient {
         var req = URLRequest(url: Self.base.appending(path: path), timeoutInterval: 20)
         req.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
         if let (d, r) = try? await URLSession.shared.data(for: req), let h = r as? HTTPURLResponse {
-            answer = h.statusCode == 200 ? .ok(d) : h.statusCode == 404 ? .missing : .offline
+            answer = h.statusCode == 200 ? .ok(d) : h.statusCode == 404 ? .missing : .failed
         }
         #if targetEnvironment(simulator)
         if case .offline = answer, let d = Self.fromServerFolder(path) { answer = .ok(d) }
@@ -29,6 +29,9 @@ nonisolated struct DevDataClient: DataClient {
         }
         return answer
     }
+
+    /// a kept file that turned out unreadable goes, so the next ask downloads it again (never "Couldn't load" for ever)
+    static func forget(_ path: String) { try? FileManager.default.removeItem(at: cache(path)) }
 
     /// where a file is kept once it has come (Application Support/data/v1/<path>)
     static func cache(_ path: String) -> URL {

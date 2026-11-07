@@ -35,16 +35,29 @@ final class ThingStore {
         return nil
     }
 
-    func load(_ cc: String) {
+    /// countries whose file could not be had, and when (a pan over them doesn't ask again for a minute)
+    @ObservationIgnored private var failedAt: [String: Date] = [:]
+
+    /// `opened`: the country itself opened in Places, which always asks again
+    func load(_ cc: String, opened: Bool = false) {
         guard byCC[cc] == nil, !loading.contains(cc) else { return }
+        if !opened, let t = failedAt[cc], Date().timeIntervalSince(t) < 60 { return }
         loading.insert(cc)
         Task.detached(priority: .userInitiated) {
             var out: [Thing] = []
-            // nil: the file could not be had now (no network, or the server had none): nothing is kept, so the next
-            // open of the country asks again (an empty country is kept as empty)
+            // nil: the file could not be had now (no network, or the server failed): nothing is kept, so the country
+            // is asked for again (an empty country, or one the server has no file for, is kept as empty)
+            let path = "native/things/things-\(cc)-3.wyth"
             var read = false
-            if case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
-               let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
+            switch await Servers.data.file(path) {
+            case .missing: read = true
+            case .offline, .failed: break
+            case .ok(let d):
+                guard let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] else {
+                    // kept but unreadable: it goes, so the next ask downloads it again
+                    DevDataClient.forget(path)
+                    break
+                }
                 read = true
                 for r in all {
                     guard r.count >= 8, let id = r[0] as? String, let n = r[1] as? String,
@@ -58,7 +71,8 @@ final class ThingStore {
             await MainActor.run {
                 let me = ThingStore.shared
                 me.loading.remove(cc)
-                guard let found else { return }
+                guard let found else { me.failedAt[cc] = Date(); return }
+                me.failedAt[cc] = nil
                 me.byCC[cc] = found
                 me.version += 1
             }
