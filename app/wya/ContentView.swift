@@ -666,9 +666,7 @@ struct ContentView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { u.showInList(row.id) }
             }
             let list = UIAction(title: "Show in the list") { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    if water.stop == .quarter || water.stop == .closed { water.go(.half) }
-                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { u.scrollToRow(row.id) }
             }
             return UIMenu(title: row.name, children: [UIMenu(options: .displayInline, children: [keep]),
                                                       UIMenu(options: .displayInline, children: [dates, list])])

@@ -564,9 +564,19 @@ final class UploadState {
     /// a find of the review on screen (kept or dropped): its hold menu is the review's (11.7)
     func reviewing(_ i: Int) -> Bool { phase == .review && order.contains(i) }
     /// Show in the list (the found country's hold menu): the water to 50%, where the rows are, with its dates opened
+    /// a find's row asked into view: its id, and a count that changes with each ask (the same row can be asked again)
+    var scrollID: String?
+    var scrollAsk = 0
+    /// SHOW IN THE LIST (the map's menu on a found country, 11.5): the water at 50% or above, the row scrolled to
+    func scrollToRow(_ id: String) {
+        guard phase == .review, let w = water else { return }
+        if w.stop == .quarter || w.stop == .closed { w.go(.half) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [self] in scrollID = id; scrollAsk += 1 }
+    }
     func showInList(_ id: String) {
         guard phase == .review, let w = water else { return }
         if w.stop == .quarter || w.stop == .closed { w.go(.half) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [self] in scrollID = id; scrollAsk += 1 }
         if !opened.contains(id) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
                 if !opened.contains(id) { toggleDates(id) }
@@ -987,47 +997,54 @@ struct UploadSheet: View {
         // the soft edge over their empty margins) and a scroll stops on a row boundary (0.7: nothing sits cut off)
         let n = max(1, Int((h - 8) / 56))
         let vh = CGFloat(n) * 56 + 8
-        List {
-            ForEach(u.rows) { r in
-                findRow(r, shown: shown)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    // swipe left: Drop (the palette red), or Keep on a dropped row. Not the destructive role, which
-                    // slides the row away; a dropped row stays, at the end, in black 50%
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button { _ = u.tap(r.place) } label: { Text(r.dropped ? "Keep" : "Drop") }
-                            .tint(r.dropped ? Palette.ink : Palette.red)
-                    }
-                    .contextMenu {
-                        Section(r.name) {
-                            Button("Show on the map") { u.show(r.place) }
-                            if !r.trips.isEmpty {
-                                Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+        ScrollViewReader { proxy in
+            List {
+                ForEach(u.rows) { r in
+                    findRow(r, shown: shown)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        // swipe left: Drop (the palette red), or Keep on a dropped row. Not the destructive role, which
+                        // slides the row away; a dropped row stays, at the end, in black 50%
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button { _ = u.tap(r.place) } label: { Text(r.dropped ? "Keep" : "Drop") }
+                                .tint(r.dropped ? Palette.ink : Palette.red)
+                        }
+                        .contextMenu {
+                            Section(r.name) {
+                                Button("Show on the map") { u.show(r.place) }
+                                if !r.trips.isEmpty {
+                                    Button(r.open ? "Hide its dates" : "Its dates") { u.toggleDates(r.id) }
+                                }
+                            }
+                            Section {
+                                Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
                             }
                         }
-                        Section {
-                            Button(r.dropped ? "Keep" : "Drop", role: r.dropped ? nil : .destructive) { _ = u.tap(r.place) }
+                    if r.open {
+                        ForEach(Array(r.trips.enumerated()), id: \.offset) { k, t in
+                            tripRow(r, k, t, shown: shown && r.datesIn)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
                         }
-                    }
-                if r.open {
-                    ForEach(Array(r.trips.enumerated()), id: \.offset) { k, t in
-                        tripRow(r, k, t, shown: shown && r.datesIn)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
                     }
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .environment(\.defaultMinListRowHeight, 56)
+            .contentMargins(.top, 0, for: .scrollContent)
+            .contentMargins(.bottom, 8, for: .scrollContent)
+            .scrollTargetBehavior(RowSnap(row: 56))
+            .animation(Motion.chrome, value: u.rows.map(\.id))
+            .scrollIndicators(.hidden)
+            // SHOW IN THE LIST / ITS DATES from the map's menu: the list scrolls the find's row to its top
+            .onChange(of: u.scrollAsk) { _, _ in
+                guard let id = u.scrollID else { return }
+                withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .top) }
+            }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .environment(\.defaultMinListRowHeight, 56)
-        .contentMargins(.top, 0, for: .scrollContent)
-        .contentMargins(.bottom, 8, for: .scrollContent)
-        .scrollTargetBehavior(RowSnap(row: 56))
-        .animation(Motion.chrome, value: u.rows.map(\.id))
-        .scrollIndicators(.hidden)
         // the soft bottom edge, 16 pt over the last whole row's empty bottom margin and the next row's empty top one
         .mask(alignment: .top) {
             VStack(spacing: 0) {

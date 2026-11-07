@@ -138,6 +138,23 @@ private struct SettingsList: View {
                     }
                     .buttonStyle(.plain)
                     .simultaneousGesture(TapGesture().onEnded { Feel.tap() })
+                    // A PAGE ROW'S HOLD MENU (11.5, as a value row's): Reset to default. Borders back to de facto;
+                    // Disputes every piece given back to the borders view. Unavailable when nothing is changed.
+                    .contextMenu {
+                        if page == "borders" {
+                            Button("Reset to default") {
+                                Feel.tap()
+                                Task { await MapSettingsRows.set("borders", "deFacto", map: map) }
+                            }
+                            .disabled(row.get(s) == "deFacto")
+                        } else if page == "disputes" {
+                            Button("Reset to default") {
+                                Feel.tap()
+                                Task { for k in s.disputes.keys { await MapSettingsRows.pick(k, nil, map: map) } }
+                            }
+                            .disabled(s.disputes.isEmpty)
+                        }
+                    }
                 }
             } else {
                 RowWords(name: row.name, value: row.valueName(s))
