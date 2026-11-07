@@ -96,6 +96,22 @@ final class PinStore {
             }
         }
     }
+    /// MOVE A PIN (8.4): set down somewhere else by a drag; its place is read again there (a name you gave it stays);
+    /// the undo puts it back where it was, with its old place
+    func move(_ id: UUID, to c: CLLocationCoordinate2D, country: (id: String, name: String)?) {
+        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+        let was = pins[k]
+        pins[k].lat = c.latitude
+        pins[k].lon = c.longitude
+        pins[k].cc = country?.id
+        save()
+        MarkStore.shared.did("\(was.title) moved") { [weak self] in
+            guard let self, let j = self.pins.firstIndex(where: { $0.id == id }) else { return }
+            self.pins[j].lat = was.lat; self.pins[j].lon = was.lon; self.pins[j].cc = was.cc; self.pins[j].place = was.place
+            self.save()
+        }
+        Task { await name(id, country: country?.name) }
+    }
     func rename(_ id: UUID, _ name: String) {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         pins[k].name = String(name.prefix(60))
@@ -154,7 +170,8 @@ final class PinStore {
         var parts: [String] = []
         for x in [near.contains(where: \.isNumber) ? "" : near, city, country] where !x.isEmpty && !parts.contains(x) { parts.append(x) }
         let place = parts.joined(separator: ", ")
-        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+        // the pin still where it was read (a move, or its undo, while Apple was answering, reads it again)
+        guard let k = pins.firstIndex(where: { $0.id == id }), pins[k].lat == p.lat, pins[k].lon == p.lon else { return }
         pins[k].place = place
         save()
     }
@@ -167,6 +184,11 @@ final class PinsMapState {
     weak var view: MKMapView?
     weak var water: Water?
     weak var map: MapController?
+    /// a pin being moved (8.4): the pin's spot from the finger, and the pin's drawn middle from its spot, as it was
+    /// picked up (so it is set down tip first where the finger lets go, and lands where it is drawn)
+    var held: (spot: CGPoint, middle: CGPoint)?
+    /// where the pin being moved was set down (Apple's map points)
+    var landing: CGPoint?
     func zoom(by f: Double) {
         guard let v = view else { return }
         let cam = v.camera.copy() as! MKMapCamera
@@ -295,6 +317,8 @@ struct PinsMapView: UIViewRepresentable {
         hold.allowableMovement = 8
         hold.delegate = context.coordinator
         v.addGestureRecognizer(hold)
+        // a pin moved by a drag is set down on the map (8.4)
+        v.addInteraction(UIDropInteraction(delegate: context.coordinator))
         PinsMapState.shared.view = v
         PinsMapState.shared.water = water
         PinsMapState.shared.map = map
@@ -324,7 +348,7 @@ struct PinsMapView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate, UIDropInteractionDelegate {
         let water: Water
         let map: MapController
         init(water: Water, map: MapController) { self.water = water; self.map = map }
@@ -340,7 +364,10 @@ struct PinsMapView: UIViewRepresentable {
             // a pin made, moved, re-dated or gone while the journey is up: its line as the pins now are
             if PinsMapState.shared.historyNeedsRedraw(pins) { PinsMapState.shared.redrawHistory() }
             for a in have where ids.contains(a.id) {
-                (v.view(for: a) as? PinAnnotationView)?.show(PinStore.shared.pin(a.id))
+                let p = PinStore.shared.pin(a.id)
+                // a move undone: the pin back on its old spot
+                if let p, a.coordinate.latitude != p.lat || a.coordinate.longitude != p.lon { a.coordinate = p.coordinate }
+                (v.view(for: a) as? PinAnnotationView)?.show(p)
             }
         }
 
@@ -385,6 +412,36 @@ struct PinsMapView: UIViewRepresentable {
             return (w.places[i].id, w.places[i].n)
         }
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith o: UIGestureRecognizer) -> Bool { true }
+
+        // A PIN SET DOWN (8.4, A8.5): only our own pins are taken; its tip lands where the finger lets go, the
+        // drag's own picture settling onto the pin in its new place, a notch as it lands
+        func dropInteraction(_ i: UIDropInteraction, canHandle s: UIDropSession) -> Bool {
+            s.localDragSession?.items.first?.localObject is UUID
+        }
+        func dropInteraction(_ i: UIDropInteraction, sessionDidUpdate s: UIDropSession) -> UIDropProposal {
+            UIDropProposal(operation: s.localDragSession == nil ? .cancel : .move)
+        }
+        func dropInteraction(_ i: UIDropInteraction, performDrop s: UIDropSession) {
+            guard let v = i.view as? MKMapView, let id = s.localDragSession?.items.first?.localObject as? UUID,
+                  let held = PinsMapState.shared.held else { return }
+            let f = s.location(in: v)
+            let spot = CGPoint(x: f.x + held.spot.x, y: f.y + held.spot.y)
+            PinsMapState.shared.landing = spot
+            let c = v.convert(spot, toCoordinateFrom: v)
+            // the pin on the map moves at once, under the picture that lands on it
+            if let a = v.annotations.lazy.compactMap({ $0 as? PinAnnotation }).first(where: { $0.id == id }) { a.coordinate = c }
+            PinStore.shared.move(id, to: c, country: Self.country(map, c))
+        }
+        func dropInteraction(_ i: UIDropInteraction, previewForDropping item: UIDragItem, withDefault d: UITargetedDragPreview) -> UITargetedDragPreview? {
+            guard let v = i.view, let spot = PinsMapState.shared.landing, let held = PinsMapState.shared.held else { return nil }
+            return d.retargetedPreview(with: UIDragPreviewTarget(container: v, center: CGPoint(x: spot.x + held.middle.x, y: spot.y + held.middle.y)))
+        }
+        func dropInteraction(_ i: UIDropInteraction, item: UIDragItem, willAnimateDropWith a: UIDragAnimating) {
+            a.addCompletion { _ in Feel.notch() }
+        }
+        func dropInteraction(_ i: UIDropInteraction, concludeDrop s: UIDropSession) {
+            PinsMapState.shared.landing = nil
+        }
 
         func mapViewDidFinishRenderingMap(_ v: MKMapView, fullyRendered: Bool) {
             if fullyRendered, v.alpha < 1 { v.alpha = 1 }
@@ -432,7 +489,7 @@ struct PinsMapView: UIViewRepresentable {
 }
 
 /// a pin's view on Apple's map: our pin (PinLook), its tip on the spot; chosen, 1.2x about its tip and 4 pt up (A8.4)
-final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegate {
+final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegate, UIDragInteractionDelegate {
     static let id = "pin"
     private static var images: [String: UIImage] = [:]
     private var chosen = false
@@ -443,8 +500,52 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         // Apple's own selection would grow it again: ours is the one change (setChosen)
         collisionMode = .rectangle
         addInteraction(UIContextMenuInteraction(delegate: self))
+        // MOVE A PIN (8.4): held, its menu opens with it lifted; moving the finger before letting go closes the menu
+        // and the pin follows the finger (iOS's context menu with a drag, as Home Screen icons do)
+        let drag = UIDragInteraction(delegate: self)
+        drag.isEnabled = true
+        addInteraction(drag)
+    }
+
+    func dragInteraction(_ i: UIDragInteraction, itemsForBeginning s: UIDragSession) -> [UIDragItem] {
+        guard let a = annotation as? PinAnnotation, let v = PinsMapState.shared.view else { return [] }
+        // the lock stops moving pins as it stops dropping them
+        if PinsMapState.shared.map?.locked == true { Feel.refuse(); return [] }
+        let spot = v.convert(a.coordinate, toPointTo: v)
+        let f = s.location(in: v)
+        let mid = convert(CGPoint(x: bounds.midX, y: bounds.midY), to: v)
+        PinsMapState.shared.held = (CGPoint(x: spot.x - f.x, y: spot.y - f.y), CGPoint(x: mid.x - spot.x, y: mid.y - spot.y))
+        let item = UIDragItem(itemProvider: NSItemProvider())
+        item.localObject = a.id
+        return [item]
+    }
+    /// the pin alone, no plate and no shadow under it (8.3: no outline, no shadow)
+    func dragInteraction(_ i: UIDragInteraction, previewForLifting item: UIDragItem, session: UIDragSession) -> UITargetedDragPreview? {
+        let p = UIDragPreviewParameters()
+        p.backgroundColor = .clear
+        p.shadowPath = UIBezierPath()
+        return UITargetedDragPreview(view: self, parameters: p)
+    }
+    func dragInteraction(_ i: UIDragInteraction, previewForCancelling item: UIDragItem, withDefault d: UITargetedDragPreview) -> UITargetedDragPreview? {
+        let p = UIDragPreviewParameters()
+        p.backgroundColor = .clear
+        p.shadowPath = UIBezierPath()
+        return UITargetedDragPreview(view: self, parameters: p)
+    }
+    // the one under the finger is the pin: its place on the map stays empty until it lands
+    func dragInteraction(_ i: UIDragInteraction, sessionWillBegin s: UIDragSession) {
+        Feel.tick()
+        alpha = 0
+    }
+    func dragInteraction(_ i: UIDragInteraction, session s: UIDragSession, didEndWith o: UIDropOperation) {
+        alpha = 1
+        PinsMapState.shared.held = nil
     }
     required init?(coder: NSCoder) { fatalError() }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        alpha = 1
+    }
 
     @MainActor func show(_ p: Pin?) {
         let c = p?.colour.map { SIMD3($0[0], $0[1], $0[2]) } ?? PinColours.standard
