@@ -333,7 +333,8 @@ struct ContentView: View {
         // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
-            if open { closeCard(); water.openSettings() } else { water.closeSettings() }
+            // (the tools close first, and history and quick stamping with them: the book's "the tool closes, then the gear")
+            if open { closeCard(); head.toolsOpen = false; water.openSettings() } else { water.closeSettings() }
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
         .onChange(of: head.searching) { _, v in if v { closeCard() } }
@@ -357,6 +358,11 @@ struct ContentView: View {
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
+            // the water raised over a card (no Details or Verify from it): the card goes, its changes kept, rather than
+            // squeezed into what is left of the map
+            if CardState.shared.isOpen, s == .half || s == .full, !DetailsState.shared.isOpen, !VerifyState.shared.isOpen {
+                CardState.shared.close(map: map)
+            }
             if DetailsState.shared.isOpen || VerifyState.shared.isOpen, water.stampedList {
                 // Details or Verify opened from the list: a pull down closes them, back to the list at full (A4.21
                 // reversed)
@@ -394,6 +400,8 @@ struct ContentView: View {
         // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
         // drawn on
         head.toolsOpen = false
+        head.quickStamp = false
+        if Sideways.shared.on { Sideways.shared.leave() }
         if head.history, old != new {
             if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true) }
             // the water back from history height at once (a mode change moves nothing)

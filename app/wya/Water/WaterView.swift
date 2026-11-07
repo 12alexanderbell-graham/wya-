@@ -183,9 +183,11 @@ struct SheetContent: View {
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
             // HISTORY'S RANGE BAR (13.4) on the water, its centre at the water's top + 156
             // (not under the journey's rows at full: it rode up over the head, 31 Oct 11:32)
-            if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving {
+            // (84 pt under the caption's middle, so at full it stays under the caption, never in the head's row; and not
+            // under settings, Details or the upload, which take the water)
+            if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving, !water.settings, !water.details, !water.upload {
                 HistoryBar(map: map, width: L.W - 2 * L.sheetInset - 32)
-                    .position(x: L.W / 2, y: form.top + 156)
+                    .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72) + 84)
             }
             // THE PAGE'S OWN SHEET (16.6) over a place's page, in the water at 50%
             if water.pageSheet { PageSheet(water: water, map: map, form: form).transition(.identity) }
@@ -210,7 +212,8 @@ struct SheetContent: View {
             }
             // THE STAMPED LIST (Part 4.6) under the caption, which stays; hidden while Details from a row is up
             let captionY = max(L.headBottom + 12 + 52, form.top + 72)
-            if (water.stampedList || water.listLeaving) && !water.details && !water.pageSheet {
+            // (settings take the water over it; the list is there again when they close)
+            if (water.stampedList || water.listLeaving) && !water.details && !water.pageSheet && !water.settings {
                 StampedList(water: water, map: map, form: form, top: captionY + 56).transition(.identity)
             }
 
