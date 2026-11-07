@@ -53,7 +53,8 @@ final class PinStore {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("pins.json")
     }
     init() {
-        if let u = url, let d = try? Data(contentsOf: u), let p = try? JSONDecoder().decode([Pin].self, from: d) { pins = p }
+        guard let u = url, let d = try? Data(contentsOf: u) else { return }
+        if let p = try? JSONDecoder().decode([Pin].self, from: d) { pins = p } else { PinRoutes.putAside(u) }
     }
     private func save() {
         guard let u = url else { return }
@@ -88,12 +89,13 @@ final class PinStore {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         let gone = pins.remove(at: k)
         if selected == id { selected = nil }
-        PinRoutes.shared.pinGone(id)
+        let routes = PinRoutes.shared.pinGone(id)
         save()
         if undoable {
             MarkStore.shared.did("\(gone.title) deleted") { [weak self] in
                 guard let self else { return }
                 self.pins.insert(gone, at: min(k, self.pins.count)); self.save()
+                PinRoutes.shared.restore(routes)
             }
         }
     }
@@ -110,7 +112,9 @@ final class PinStore {
             guard let self, let j = self.pins.firstIndex(where: { $0.id == id }) else { return }
             self.pins[j].lat = was.lat; self.pins[j].lon = was.lon; self.pins[j].cc = was.cc; self.pins[j].place = was.place
             self.save()
+            PinRoutes.shared.pinMoved(id)
         }
+        PinRoutes.shared.pinMoved(id)
         Task { await name(id, country: country?.name) }
     }
     func rename(_ id: UUID, _ name: String) {
@@ -268,11 +272,11 @@ final class PinsMapState {
         let r = PinRoutes.shared
         var lines: [MKOverlay] = [], labels: [RouteLabel] = []
         // the other ways first, under the chosen one
-        for (pl, d, t) in r.otherWays {
+        for (n, (pl, d, t)) in r.otherWays.enumerated() {
             var c = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pl.pointCount)
             pl.getCoordinates(&c, range: NSRange(location: 0, length: pl.pointCount))
             let l = PinRouteLine(coordinates: c, count: c.count)
-            l.other = true; l.distance = d; l.time = t
+            l.other = true; l.index = n; l.distance = d; l.time = t
             lines.append(l)
         }
         for route in r.routes where route.points.count > 1 {
@@ -288,6 +292,20 @@ final class PinsMapState {
         v.removeOverlays(routeOverlays)
         v.removeAnnotations(routeLabels)
         routeOverlays = lines; routeLabels = labels
+    }
+    /// a kept route's capsule on the map, if it is drawn
+    func labelView(_ id: UUID) -> RouteLabelView? {
+        guard let v = view, let l = routeLabels.first(where: { $0.id == id }) else { return nil }
+        return v.view(for: l) as? RouteLabelView
+    }
+    /// a word in a route's capsule for 2 s ("No walking route"), then its distance and time again
+    func note(_ id: UUID, _ words: String) {
+        guard let v = view, let l = routeLabels.first(where: { $0.id == id }), let lv = v.view(for: l) as? RouteLabelView else { return }
+        lv.show(words)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak lv] in
+            guard let lv, (lv.annotation as? RouteLabel) === l else { return }
+            lv.show(l.words)
+        }
     }
     /// a route just made: Apple's map frames it between the head and the water if it is not all in view
     func frame(route id: UUID?) {
@@ -378,6 +396,8 @@ struct PinsMapView: UIViewRepresentable {
         v.addGestureRecognizer(tap)
         // a pin moved by a drag is set down on the map (8.4)
         v.addInteraction(UIDropInteraction(delegate: context.coordinator))
+        // a hold on a route's line or its capsule: the route's own menu (11.5)
+        v.addInteraction(UIContextMenuInteraction(delegate: context.coordinator))
         PinsMapState.shared.view = v
         PinsMapState.shared.water = water
         PinsMapState.shared.map = map
@@ -408,7 +428,7 @@ struct PinsMapView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate, UIDropInteractionDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate, UIDropInteractionDelegate, UIContextMenuInteractionDelegate {
         let water: Water
         let map: MapController
         init(water: Water, map: MapController) { self.water = water; self.map = map }
@@ -449,6 +469,7 @@ struct PinsMapView: UIViewRepresentable {
         }
 
         func select(_ v: MKMapView, _ id: UUID?) {
+            for a in v.selectedAnnotations where (a as? PinAnnotation)?.id != id { v.deselectAnnotation(a, animated: false) }
             for a in v.annotations.compactMap({ $0 as? PinAnnotation }) {
                 (v.view(for: a) as? PinAnnotationView)?.setChosen(a.id == id)
             }
@@ -457,19 +478,85 @@ struct PinsMapView: UIViewRepresentable {
 
         @objc func tapped(_ g: UITapGestureRecognizer) {
             WhatsHere.shared.close()
-            // a tap within 12 pt of one of Apple's other ways makes it the route (8.6)
+            // a tap on one of Apple's other ways makes it the route (8.6): only off the pins, and only when that way is
+            // nearer the finger (within 12 pt) than the route itself, so a tap on a shared road or an end changes nothing
             guard PinRoutes.shared.open, let v = g.view as? MKMapView else { return }
             let p = g.location(in: v)
+            var hit = v.hitTest(p, with: nil)
+            while let h = hit, !(h is MKMapView) { if h is PinAnnotationView || h is RouteLabelView { return }; hit = h.superview }
             var best: (PinRouteLine, CGFloat)?
-            for case let l as PinRouteLine in v.overlays where l.other {
-                for i in 0 ..< max(0, l.pointCount - 1) {
-                    let a = v.convert(l.points()[i].coordinate, toPointTo: v), b = v.convert(l.points()[i + 1].coordinate, toPointTo: v)
-                    let d = Self.distance(p, a, b)
-                    if d < 12, best == nil || d < best!.1 { best = (l, d) }
-                }
+            var chosen = CGFloat.infinity
+            for case let l as PinRouteLine in v.overlays where l.other || l.routeID == PinRoutes.shared.currentID {
+                let d = Self.near(p, l, in: v)
+                if l.other { if d < 12, best == nil || d < best!.1 { best = (l, d) } } else { chosen = min(chosen, d) }
             }
-            if let (l, _) = best { PinRoutes.shared.choose(other: l) }
+            if let (l, d) = best, d < chosen { PinRoutes.shared.choose(other: l) }
         }
+        /// a point's distance to a line on the map, in points
+        static func near(_ p: CGPoint, _ l: MKPolyline, in v: MKMapView) -> CGFloat {
+            let pts = l.points()
+            var d = CGFloat.infinity
+            for i in 0 ..< max(0, l.pointCount - 1) {
+                let a = v.convert(pts[i].coordinate, toPointTo: v), b = v.convert(pts[i + 1].coordinate, toPointTo: v)
+                d = min(d, distance(p, a, b))
+            }
+            return d
+        }
+        /// the kept route under a point: its capsule, else its line within 12 pt (the nearest); never under a pin
+        func route(at p: CGPoint, in v: MKMapView) -> PinRouteLine? {
+            var hit = v.hitTest(p, with: nil)
+            while let h = hit, !(h is MKMapView) {
+                if h is PinAnnotationView { return nil }
+                if let lv = h as? RouteLabelView, let id = lv.routeID {
+                    return v.overlays.lazy.compactMap { $0 as? PinRouteLine }.first { $0.routeID == id }
+                }
+                hit = h.superview
+            }
+            var best: (PinRouteLine, CGFloat)?
+            for case let l as PinRouteLine in v.overlays where !l.other && l.routeID != nil {
+                let d = Self.near(p, l, in: v)
+                if d < 12, best == nil || d < best!.1 { best = (l, d) }
+            }
+            return best?.0
+        }
+        // THE ROUTE'S HOLD MENU (11.5): what lifts is its distance and time capsule, where the finger is
+        private var routeHeld: (id: UUID, at: CGPoint)?
+        func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
+            guard let v = i.view as? MKMapView, let line = route(at: l, in: v), let id = line.routeID else { return nil }
+            // on the capsule: it lifts from its own place
+            let label = PinsMapState.shared.labelView(id)
+            routeHeld = (id, label.map { v.convert($0.center, from: $0.superview) } ?? l)
+            return UIContextMenuConfiguration(identifier: id.uuidString as NSString, previewProvider: nil) { _ in
+                MainActor.assumeIsolated { PinRoutes.shared.menu(id) }
+            }
+        }
+        func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration,
+                                    highlightPreviewForItemWithIdentifier _: any NSCopying) -> UITargetedPreview? {
+            preview(i)
+        }
+        func contextMenuInteraction(_ i: UIContextMenuInteraction, configuration c: UIContextMenuConfiguration,
+                                    dismissalPreviewForItemWithIdentifier _: any NSCopying) -> UITargetedPreview? {
+            preview(i)
+        }
+        private func preview(_ i: UIContextMenuInteraction) -> UITargetedPreview? {
+            guard let v = i.view, let h = routeHeld, let r = PinRoutes.shared.routes.first(where: { $0.id == h.id }) else { return nil }
+            let lv = RouteLabelView(annotation: nil, reuseIdentifier: nil)
+            lv.show(r.words)
+            let p = UIPreviewParameters()
+            p.backgroundColor = .clear
+            p.visiblePath = UIBezierPath(roundedRect: lv.bounds, cornerRadius: 14)
+            return UITargetedPreview(view: lv, parameters: p, target: UIPreviewTarget(container: v, center: h.at))
+        }
+        // the capsule on the map steps out while its lifted copy is up (never two of it)
+        func contextMenuInteraction(_ i: UIContextMenuInteraction, willDisplayMenuFor c: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
+            if let id = routeHeld?.id { PinsMapState.shared.labelView(id)?.alpha = 0 }
+        }
+        func contextMenuInteraction(_ i: UIContextMenuInteraction, willEndFor c: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
+            let id = routeHeld?.id
+            let back = { if let id { PinsMapState.shared.labelView(id)?.alpha = 1 } }
+            if let animator { animator.addCompletion(back) } else { back() }
+        }
+
         /// a point's distance to a segment
         static func distance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
             let dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
@@ -513,6 +600,42 @@ struct PinsMapView: UIViewRepresentable {
                 }
                 pv.arrange(behind: back && p.id != sel, name: name)
             }
+            // THE ROUTES' CAPSULES (8.3): each on its own line where the line is seen, clear of the pins, their names,
+            // the head, the water and each other; one stays where it is while its spot is still clear (no hopping)
+            // (from our own layout: the map's layout margins also hold the safe area, which would count it twice)
+            let L = water.layout
+            let room = CGRect(x: L.sheetInset + 8, y: L.headBottom + 8, width: L.W - 2 * L.sheetInset - 8 - 52,
+                              height: max(0, L.top(water.stop == .full ? .half : water.stop) - L.headBottom - 16))
+            var lines: [UUID: PinRouteLine] = [:]
+            for case let l as PinRouteLine in v.overlays where !l.other { if let id = l.routeID { lines[id] = l } }
+            for case let lab as RouteLabel in v.annotations {
+                guard let line = lines[lab.id] else { continue }
+                let size = (v.view(for: lab) as? RouteLabelView)?.bounds.size ?? CGSize(width: 140, height: 28)
+                func box(_ c: CGPoint) -> CGRect { CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height) }
+                func clear(_ c: CGPoint) -> Bool {
+                    let b = box(c)
+                    return room.contains(b) && !taken.contains { $0.intersects(b.insetBy(dx: -4, dy: -4)) }
+                }
+                let view = v.view(for: lab)
+                let now = v.convert(lab.coordinate, toPointTo: v)
+                if clear(now), view?.isHidden != true { taken.append(box(now)); continue }
+                // the line's points on screen (at most about 200 looked at), tried from the middle of what is seen outwards
+                let pts = line.points(), n = line.pointCount, step = max(1, n / 200)
+                var seen: [CGPoint] = []
+                for i in stride(from: 0, to: n, by: step) {
+                    let c = v.convert(pts[i].coordinate, toPointTo: v)
+                    if room.contains(c) { seen.append(c) }
+                }
+                let mid = seen.count / 2
+                let order = seen.indices.sorted { abs($0 - mid) < abs($1 - mid) }.map { seen[$0] }
+                // on the line, else just beside it (above, then below); with no clear spot it waits unseen until there
+                // is one (a capsule over a pin or a name is worse than none: the distance is in the route's menu)
+                let tries = order + order.map { CGPoint(x: $0.x, y: $0.y - 22) } + order.map { CGPoint(x: $0.x, y: $0.y + 22) }
+                guard let pick = tries.first(where: clear) else { view?.isHidden = true; continue }
+                view?.isHidden = false
+                lab.coordinate = v.convert(pick, toCoordinateFrom: v)
+                taken.append(box(pick))
+            }
         }
 
         @objc func held(_ g: UILongPressGestureRecognizer) {
@@ -521,8 +644,8 @@ struct PinsMapView: UIViewRepresentable {
             // the lock stops dropping, never looking (as on every map)
             if map.locked { Feel.refuse(); return }
             let p = g.location(in: v)
-            // on a pin: its own menu, not a new pin
-            if v.hitTest(p, with: nil) is PinAnnotationView { return }
+            // on a pin: its own menu, not a new pin; on a route: the route's menu
+            if v.hitTest(p, with: nil) is PinAnnotationView || route(at: p, in: v) != nil { return }
             Feel.tick()
             let c = v.convert(p, toCoordinateFrom: v)
             PinStore.shared.drop(at: c, country: Self.country(map, c))
@@ -597,6 +720,7 @@ struct PinsMapView: UIViewRepresentable {
                 let view = (v.dequeueReusableAnnotationView(withIdentifier: RouteLabelView.id) as? RouteLabelView)
                     ?? RouteLabelView(annotation: l, reuseIdentifier: RouteLabelView.id)
                 view.annotation = l
+                view.routeID = l.id
                 view.show(l.words)
                 return view
             }
@@ -851,8 +975,8 @@ struct PinsWater: View {
                 // (capped where the caption is, so the name stays on its line at the largest sizes)
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             } else {
-                // none chosen: the caption every map has (Places'), how to drop one under a 0
-                Caption(name: "All my pins", count: store.pins.count, tail: store.pins.isEmpty ? "Hold the map to drop a pin" : "",
+                // none chosen: the caption every map has (Places' "Everywhere 4"), how to drop one under a 0
+                Caption(name: "Pins", count: store.pins.count, tail: store.pins.isEmpty ? "Hold the map to drop a pin" : "",
                         night: FullView.night(form.page))
             }
         }
@@ -998,7 +1122,7 @@ struct PinSheet: View {
                                 Button {
                                     Feel.tap(); store.colour(p.id, nil); picking = false
                                 } label: {
-                                    Text("Back to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                                    Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -1058,7 +1182,7 @@ struct PinSheet: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Copies them")
+            .accessibilityHint("Copies the coordinates")
         }
         Button { Feel.lift(); store.remove(p.id); water.go(.quarter) } label: {
             Text("Delete pin").font(.body).foregroundStyle(Palette.red)

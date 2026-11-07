@@ -113,7 +113,7 @@ struct RegionsMenu: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(r.name), \(r.sub)")
-        .accessibilityHint("Shows its regions")
+        .accessibilityHint("Opens its regions")
         .accessibilityAddTraits(.isButton)
     }
 

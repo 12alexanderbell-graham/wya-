@@ -157,7 +157,7 @@ extension MapController {
         case everywhere, country(Int), continent(String), region(String), collection(String)
         @MainActor var title: String {
             switch self {
-            case .everywhere: "All my places"
+            case .everywhere: "Everywhere"
             case .continent(let k), .region(let k): k
             case .country: ""
             case .collection(let id): CollectionStore.shared.collection(id)?.title ?? ""

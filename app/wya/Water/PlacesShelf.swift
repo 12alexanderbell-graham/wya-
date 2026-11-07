@@ -5,7 +5,7 @@ import simd
 /// What Places is about is your towns, things and own places, and the maps you look at them on, so that is what the
 /// water holds. At 25% the caption: the map you are on and your number on it (its number opens your stamped places,
 /// as before). At 50% and full: your maps, as rows on the water, the same rows as the Stamped list (a 28 pt mark, the
-/// name in body, one grey line under it, 56 pt a row): All my places; the countries you have places in, most first;
+/// name in body, one grey line under it, 56 pt a row): Everywhere; the countries you have places in, most first;
 /// the collections. The map you are on has its name in semibold. A tap shows that map and the water goes to 25%, so it
 /// is framed where it is seen. Any other country is found with the head's search (no second search here, no section
 /// words). The rows scroll only at full; below full a drag moves the water.
@@ -90,7 +90,7 @@ struct PlacesMaps: View {
         return n
     }
 
-    /// All my places; the countries you have places in (most first, then A to Z); the collections
+    /// Everywhere; the countries you have places in (most first, then A to Z); the collections
     private func picks(_ counts: [String: Int]) -> [MapController.PlacesPick] {
         guard let w = map.world else { return [.everywhere] }
         let n = { (i: Int) in counts[w.places[i].id.lowercased()] ?? 0 }
@@ -122,7 +122,7 @@ struct PlacesMaps: View {
         .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
     }
 
-    /// a country's square flag (as the Stamped list's); All my places the Places mark; a collection the list mark, or
+    /// a country's square flag (as the Stamped list's); Everywhere the Places mark; a collection the list mark, or
     /// its country's flag when it is all in one country
     @ViewBuilder private func mark(_ p: MapController.PlacesPick) -> some View {
         switch p {

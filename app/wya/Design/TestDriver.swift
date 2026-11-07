@@ -228,9 +228,16 @@ final class TestDriver {
                         // pins route <n> <m>: Route from here on pin n, then pin m tapped (8.6)
                         PinRoutes.shared.start(.from, at: PinStore.shared.pins[n].id)
                         _ = PinRoutes.shared.pinTapped(PinStore.shared.pins[k].id)
+                    } else if a == "look", p.count > 4, let la = Double(p[2]), let lo = Double(p[3]), let d = Double(p[4]), let v = PinsMapState.shared.view {
+                        // pins look <lat> <lon> <degrees>: Apple's map there, that many degrees tall
+                        v.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: la, longitude: lo),
+                                                       span: MKCoordinateSpan(latitudeDelta: d, longitudeDelta: d)), animated: false)
                     } else if a == "routeclose" { PinRoutes.shared.close()
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
+                        for (i, r) in PinRoutes.shared.routes.enumerated() {
+                            NSLog("wya route %d %@ -> %@ %@ walk %d", i, PinStore.shared.pin(r.from)?.title ?? "?", PinStore.shared.pin(r.to)?.title ?? "?", r.words, r.walk == true ? 1 : 0)
+                        }
                     } else if a == "none" { PinStore.shared.selected = nil
                     } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {
                         PinStore.shared.colour(id, ColourPick(hue: h, light: 0.55, strength: 0.9))
@@ -251,6 +258,9 @@ final class TestDriver {
                         menu = ContentView.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: m, water: w, head: h)
                     } else if a == "pin", p.count > 3, let n = Int(p[2]), n < PinStore.shared.pins.count {
                         menu = PinAnnotationView.menu(PinStore.shared.pins[n].id)
+                    } else if a == "route", p.count > 3, let n = Int(p[2]), n < PinRoutes.shared.routes.count {
+                        // menu route <n> <row>: the kept route n's hold menu (11.5)
+                        menu = PinRoutes.shared.menu(PinRoutes.shared.routes[n].id)
                     }
                     if let menu { Self.choose(row, in: menu) }
                 // regionat <cc> <lat> <lon>: the first-level region the upload's second round finds there, logged

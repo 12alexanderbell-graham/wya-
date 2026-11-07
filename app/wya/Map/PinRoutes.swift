@@ -19,6 +19,8 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var distance: Double
     var time: Double
     var made = Date()
+    /// on foot (nil: by car, the first way)
+    var walk: Bool? = nil
 
     var words: String { Self.words(distance: distance, time: time) }
     static func words(distance: Double, time: Double) -> String {
@@ -36,6 +38,8 @@ struct PinRoute: Codable, Identifiable, Hashable {
 final class PinRouteLine: MKPolyline {
     var routeID: UUID?
     var other = false
+    /// for another way: which of Apple's other ways it is
+    var index = 0
     /// for another way: its own distance and time, kept to make it the route when tapped
     var distance: Double = 0
     var time: Double = 0
@@ -77,6 +81,20 @@ final class RouteLabelView: MKAnnotationView {
         label.center = CGPoint(x: w / 2, y: 14)
         accessibilityLabel = words
     }
+    /// the route's hold menu, for VoiceOver as actions (the same rows)
+    var routeID: UUID?
+    override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+        get {
+            guard let id = routeID else { return nil }
+            let r = PinRoutes.shared
+            // the route being made: Apple's other ways can be chosen here too (a tap on a line is the only other way)
+            let ways = id == r.currentID ? r.otherWays.enumerated().map { n, w in
+                UIAccessibilityCustomAction(name: "Other way: \(PinRoute.words(distance: w.1, time: w.2))") { _ in r.choose(other: n); return true }
+            } : []
+            return ways + (r.menu(id).map { MapMTKView.actions($0) } ?? [])
+        }
+        set {}
+    }
 }
 
 @MainActor
@@ -103,7 +121,13 @@ final class PinRoutes {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("routes.json")
     }
     init() {
-        if let u = url, let d = try? Data(contentsOf: u), let r = try? JSONDecoder().decode([PinRoute].self, from: d) { routes = r }
+        guard let u = url, let d = try? Data(contentsOf: u) else { return }
+        if let r = try? JSONDecoder().decode([PinRoute].self, from: d) { routes = r } else { Self.putAside(u) }
+    }
+    /// a file that can't be read is moved beside itself ("routes.json.unreadable-<time>"), never written over
+    nonisolated static func putAside(_ u: URL) {
+        let to = u.appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970))")
+        try? FileManager.default.moveItem(at: u, to: to)
     }
     private func save() {
         guard let u = url else { return }
@@ -113,7 +137,7 @@ final class PinRoutes {
 
     /// Route from here / Route to here (the pin's menu): the row opens with that end set, the other waiting
     func start(_ end: End, at pin: UUID) {
-        if !open { open = true; from = nil; to = nil; current = nil; others = [] }
+        if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; asking += 1 }
         set(end, pin)
     }
     /// a pin tapped while the row waits for an end: it fills that end (true: the tap was the row's)
@@ -134,6 +158,8 @@ final class PinRoutes {
         guard open else { return }
         open = false; waiting = nil; noRoute = false
         from = nil; to = nil; current = nil; others = []
+        // an answer still on its way is for nothing now
+        asking += 1
         PinsMapState.shared.redrawRoutes()
     }
 
@@ -145,6 +171,8 @@ final class PinRoutes {
         // the same pin at both ends is no route: the other end waits again
         if from == to { if end == .from { to = nil } else { from = nil } }
         waiting = from == nil ? .from : to == nil ? .to : nil
+        // the ends changed: an answer on its way is for the old ones
+        asking += 1
         if from != nil, to != nil { ask() }
     }
 
@@ -153,14 +181,13 @@ final class PinRoutes {
         guard let f = from.flatMap({ PinStore.shared.pin($0) }), let t = to.flatMap({ PinStore.shared.pin($0) }) else { return }
         asking += 1
         let me = asking
-        let req = MKDirections.Request()
-        req.source = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil)
-        req.destination = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil)
-        req.transportType = .automobile
+        noRoute = false
+        let req = Self.request(f, t, walk: false)
         req.requestsAlternateRoutes = true
         Task {
             let answer = try? await MKDirections(request: req).calculate()
-            guard me == asking, open else { return }
+            // still the row's question: open, the same two ends, both pins still there
+            guard me == asking, open, from == f.id, to == t.id, PinStore.shared.pin(f.id) != nil, PinStore.shared.pin(t.id) != nil else { return }
             guard let routes = answer?.routes, let best = routes.first else {
                 // across an ocean by car: the To chip says so for 2 s
                 Feel.refuse()
@@ -184,7 +211,7 @@ final class PinRoutes {
             save()
             MarkStore.shared.did("Route changed") { [weak self] in
                 guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
-                self.routes[j] = was; self.save(); PinsMapState.shared.redrawRoutes()
+                self.routes[j] = was; self.save(); self.undone(id)
             }
         } else {
             let new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
@@ -195,9 +222,9 @@ final class PinRoutes {
         }
     }
     /// another way tapped: it becomes the route (the old one is let go: Apple's ways are asked for again next time)
-    func choose(other line: PinRouteLine) {
-        guard let id = current, let k = routes.firstIndex(where: { $0.id == id }),
-              let i = others.firstIndex(where: { Self.points($0.polyline) == Self.points(line) }) else { return }
+    func choose(other line: PinRouteLine) { choose(other: line.index) }
+    func choose(other i: Int) {
+        guard let id = current, let k = routes.firstIndex(where: { $0.id == id }), others.indices.contains(i) else { return }
         Feel.tap()
         let was = routes[k]
         let picked = others.remove(at: i)
@@ -205,7 +232,17 @@ final class PinRoutes {
         save()
         MarkStore.shared.did("Route changed") { [weak self] in
             guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
-            self.routes[j] = was; self.save(); PinsMapState.shared.redrawRoutes()
+            self.routes[j] = was; self.save(); self.undone(id)
+        }
+        PinsMapState.shared.redrawRoutes()
+    }
+    /// an undo touched the route the row is making: Apple's other ways no longer belong to it; the row shows what is
+    /// kept now (or, for a route taken back, its ends with nothing made)
+    private func undone(_ id: UUID) {
+        if open, current == id {
+            others = []
+            if let r = routes.first(where: { $0.id == id }) { from = r.from; to = r.to } else { current = nil }
+            asking += 1
         }
         PinsMapState.shared.redrawRoutes()
     }
@@ -218,7 +255,8 @@ final class PinRoutes {
     func remove(_ id: UUID, undoable: Bool = true) {
         guard let k = routes.firstIndex(where: { $0.id == id }) else { return }
         let gone = routes.remove(at: k)
-        if current == id { current = nil }
+        // the route the row was making: its other ways go with it
+        if current == id { current = nil; others = []; asking += 1 }
         save()
         PinsMapState.shared.redrawRoutes()
         if undoable {
@@ -228,13 +266,104 @@ final class PinRoutes {
             }
         }
     }
-    /// a pin deleted: its routes go with it (and come back with its undo, which restores the pin only)
-    func pinGone(_ pin: UUID) {
-        let before = routes.count
+    /// a pin deleted: its routes go with it (given back to the pin's undo, which brings them back with it)
+    @discardableResult func pinGone(_ pin: UUID) -> [PinRoute] {
+        let gone = routes.filter { $0.from == pin || $0.to == pin }
         routes.removeAll { $0.from == pin || $0.to == pin }
-        if from == pin { from = nil }
-        if to == pin { to = nil }
-        if routes.count != before { save(); PinsMapState.shared.redrawRoutes() }
+        if open, from == pin || to == pin || gone.contains(where: { $0.id == current }) {
+            if from == pin { from = nil }
+            if to == pin { to = nil }
+            if gone.contains(where: { $0.id == current }) { current = nil }
+            others = []; noRoute = false; asking += 1
+            waiting = from == nil ? .from : to == nil ? .to : nil
+        }
+        if !gone.isEmpty { save() }
+        PinsMapState.shared.redrawRoutes()
+        return gone
+    }
+    /// the pin's undo: its routes come back as they were
+    func restore(_ back: [PinRoute]) {
+        let have = Set(routes.map(\.id))
+        routes += back.filter { !have.contains($0.id) }
+        if !back.isEmpty { save(); PinsMapState.shared.redrawRoutes() }
+    }
+    /// a pin moved (or moved back): its routes are asked again from where it is now
+    func pinMoved(_ pin: UUID) {
+        for r in routes where r.from == pin || r.to == pin { reask(r.id, quiet: true) }
+    }
+
+    static func request(_ f: Pin, _ t: Pin, walk: Bool) -> MKDirections.Request {
+        let req = MKDirections.Request()
+        req.source = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil)
+        req.destination = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil)
+        req.transportType = walk ? .walking : .automobile
+        return req
+    }
+
+    /// a kept route asked again from its menu (Reverse, Walk, Drive): the same route, its line and numbers replaced,
+    /// one undo; Apple finding no such way leaves it as it was and its capsule says so for 2 s
+    func reask(_ id: UUID, reverse: Bool = false, walk: Bool? = nil, quiet: Bool = false) {
+        guard let k = routes.firstIndex(where: { $0.id == id }) else { return }
+        var r = routes[k]
+        if reverse { swap(&r.from, &r.to) }
+        if let walk { r.walk = walk ? true : nil }
+        guard let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return }
+        let req = Self.request(f, t, walk: r.walk == true)
+        Task {
+            let answer = try? await MKDirections(request: req).calculate()
+            guard let j = routes.firstIndex(where: { $0.id == id }) else { return }
+            guard let best = answer?.routes.first else {
+                if !quiet { Feel.refuse() }
+                PinsMapState.shared.note(id, r.walk == true ? "No walking route" : "No route")
+                return
+            }
+            let was = routes[j]
+            r.points = Self.points(best.polyline); r.distance = best.distance; r.time = best.expectedTravelTime
+            r.made = was.made
+            routes[j] = r
+            // the row making this route follows it (Apple's other ways were for the old ends)
+            if current == id, open { from = r.from; to = r.to; others = [] }
+            save()
+            PinsMapState.shared.redrawRoutes()
+            // a pin's move carries its own undo (which asks again); a menu row's change is one undo of its own
+            guard !quiet else { return }
+            MarkStore.shared.did("Route changed") { [weak self] in
+                guard let self, let i = self.routes.firstIndex(where: { $0.id == id }) else { return }
+                self.routes[i] = was; self.save(); self.undone(id)
+            }
+        }
+    }
+
+    /// THE ROUTE'S HOLD MENU (11.5), in the book's groups: Reverse · Walk · Drive | Directions in Apple Maps · Share |
+    /// Delete. The way it goes now is shown but can't be chosen (never a tick). Not yet: Transit (Apple's directions
+    /// give no transit lines to draw), Colour (with the route's sheet), lists and plans (with their parts).
+    func menu(_ id: UUID) -> UIMenu? {
+        guard let r = routes.first(where: { $0.id == id }), let f = PinStore.shared.pin(r.from), let t = PinStore.shared.pin(r.to) else { return nil }
+        // each runs once the menu has gone (as every hold menu's rows)
+        let after = { (g: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: g) }
+        let walking = r.walk == true
+        let reverse = UIAction(title: "Reverse") { [weak self] _ in after { self?.reask(id, reverse: true) } }
+        let walk = UIAction(title: "Walk", attributes: walking ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
+        let drive = UIAction(title: "Drive", attributes: walking ? [] : .disabled) { [weak self] _ in after { self?.reask(id, walk: false) } }
+        let directions = UIAction(title: "Directions in Apple Maps") { _ in
+            let a = MKMapItem(location: CLLocation(latitude: f.lat, longitude: f.lon), address: nil); a.name = f.title
+            let b = MKMapItem(location: CLLocation(latitude: t.lat, longitude: t.lon), address: nil); b.name = t.title
+            MKMapItem.openMaps(with: [a, b], launchOptions: [MKLaunchOptionsDirectionsModeKey: walking ? MKLaunchOptionsDirectionsModeWalking : MKLaunchOptionsDirectionsModeDriving])
+        }
+        let share = UIAction(title: "Share") { _ in
+            after {
+                guard let u = URL(string: "https://maps.apple.com/?saddr=\(f.lat),\(f.lon)&daddr=\(t.lat),\(t.lon)&dirflg=\(walking ? "w" : "d")") else { return }
+                var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                while let next = top?.presentedViewController { top = next }
+                top?.present(UIActivityViewController(activityItems: [u], applicationActivities: nil), animated: true)
+            }
+        }
+        let delete = UIAction(title: "Delete", attributes: .destructive) { [weak self] _ in after { Feel.lift(); self?.remove(id) } }
+        return UIMenu(title: "\(f.title) to \(t.title)", children: [
+            UIMenu(options: .displayInline, children: [reverse, walk, drive]),
+            UIMenu(options: .displayInline, children: [directions, share]),
+            UIMenu(options: .displayInline, children: [delete]),
+        ])
     }
 
     static func points(_ l: MKPolyline) -> [[Double]] {
@@ -267,6 +396,7 @@ struct RouteRow: View {
             chip(.from, r.from, word: "From", width: chipW)
             chip(.to, r.to, word: r.noRoute ? "No route" : "To", width: chipW)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .position(x: L.W / 2, y: captionY)
     }
 
@@ -286,10 +416,13 @@ struct RouteRow: View {
             .frame(width: width, height: 36)
             // the one waiting for a pin: filled lime, ink words; the others a quiet ground on the water (no glass, no edge)
             .background(Capsule().fill(waiting ? Palette.lime : Palette.ink.opacity(0.06)))
-            .contentShape(Capsule())
+            // the touch is the full 44 pt row height
+            .frame(height: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(end == .from ? "From" : "To"), \(p?.title ?? (waiting ? "waiting for a pin" : "not set"))")
+        .accessibilityLabel(end == .from ? "From" : "To")
+        .accessibilityValue(end == .to && r.noRoute ? "No route" : [p?.title, waiting ? "waiting for a pin" : nil].compactMap { $0 }.joined(separator: ", ").ifEmpty("not set"))
     }
 }
 
@@ -299,4 +432,8 @@ enum PinRows {
         guard let c = p.colour else { return Palette.ink }
         return Color(.displayP3, red: c[0], green: c[1], blue: c[2])
     }
+}
+
+private extension String {
+    func ifEmpty(_ s: String) -> String { isEmpty ? s : self }
 }
