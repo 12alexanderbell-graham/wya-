@@ -664,8 +664,15 @@ struct PinsWater: View {
         VStack(spacing: 4) {
             // (the words change at once: only a count rolls, never a name being typed)
             if let p = store.pin(store.selected) {
-                Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                // its name on the caption's own name line (a caption laid out unseen under it gives the place), so the
+                // title sits where every map's name sits at each stop
+                ZStack(alignment: .top) {
+                    Caption(name: " ", count: 0, tail: " ", night: false).hidden()
+                    VStack(spacing: 4) {
+                        Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                    }
+                }
             } else {
                 // none chosen: the caption every map has (Places'), how to drop one under a 0
                 Caption(name: "All my pins", count: store.pins.count, tail: store.pins.isEmpty ? "Hold the map to drop a pin" : "",

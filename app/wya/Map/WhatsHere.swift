@@ -2,10 +2,9 @@ import SwiftUI
 
 /// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
 /// nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over the map, its
-/// bottom 12 pt above the held point; each name is a tap to its card. The panel (frosted, as every surface) is a 44 pt
-/// circle grown from that point (P1, `Motion.quick`) and widened into a rounded rectangle (0.4 rule 4, the chrome curve,
-/// its corner 22 to 18 pt); the names roll in once it is past half way and out before it narrows back. A touch
-/// anywhere else on the map takes it away the same way. At sea: "Open sea".
+/// bottom 12 pt above the held point; each name is a tap to its card. The panel (frosted, as every surface) is simply
+/// there, and a touch anywhere else on the map simply takes it away (A11.4's grow and roll dropped on 7 Nov: no grow,
+/// not everything needs an animation). At sea: "Open sea".
 @MainActor
 @Observable
 final class WhatsHere {
@@ -19,14 +18,12 @@ final class WhatsHere {
     /// the held point on screen
     private(set) var point: CGPoint = .zero
     private(set) var items: [Item] = []
-    /// 0 gone into the point, 1 the 44 pt circle, 2 the panel
-    private(set) var stage = 0
-    /// drawn at all (still while it goes back into the point)
+    /// up on the map
     private(set) var present = false
     private(set) var namesIn = false
     @ObservationIgnored private var job = 0
 
-    var isOpen: Bool { stage > 0 }
+    var isOpen: Bool { present }
 
     /// on our own map: the point held on screen
     func show(at p: CGPoint, map: MapController) {
@@ -40,41 +37,17 @@ final class WhatsHere {
     func show(at p: CGPoint, lat: Double, lon: Double, land: Int?, map: MapController) {
         items = Self.nearest(lat: lat, lon: lon, land: land, map: map)
         job += 1
-        let me = job
         point = p
-        namesIn = false
-        present = true
-        withAnimation(Motion.quick) { stage = 1 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [self] in
-            guard me == job else { return }
-            withAnimation(Motion.chrome) { stage = 2 }
-            // the names start once the shape is past half way; the tap haptic at half way
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.19) { [self] in
-                guard me == job else { return }
-                Feel.tap()
-                withAnimation(Motion.quick) { namesIn = true }
-            }
-        }
+        // simply there, and simply gone (7 Nov: no grow, no circle, not everything needs an animation)
+        Feel.tap()
+        namesIn = true; present = true
         UIAccessibility.post(notification: .announcement, argument: items.map(\.name).joined(separator: ", "))
     }
 
-    /// the names roll out, the panel narrows back into its circle, the circle goes back into the point
     func close() {
-        guard stage > 0 else { return }
+        guard present else { return }
         job += 1
-        let me = job
-        withAnimation(Motion.quick) { namesIn = false }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
-            guard me == job else { return }
-            withAnimation(Motion.quick) { stage = 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [self] in
-                guard me == job else { return }
-                withAnimation(Motion.quick) { stage = 0 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [self] in
-                    if me == job { present = false }
-                }
-            }
-        }
+        namesIn = false; present = false
     }
 
     /// the three nearest of the towns (the index of every town) and the things of the country under the point
@@ -124,7 +97,7 @@ struct WhatsHereView: View {
     @State private var here = WhatsHere.shared
 
     var body: some View {
-        let open = here.stage == 2
+        let open = here.present
         let widest = layout.W - 32
         let width = open ? min(widest, panelWidth + 32) : 44
         let height = open ? CGFloat(here.items.count) * lineHeight + CGFloat(max(0, here.items.count - 1)) * 8 + 28 : 44
@@ -152,10 +125,8 @@ struct WhatsHereView: View {
             .clipped()
             // a surface over the map: the system's frosted glass, as search's results box
             .glassEffect(PageGlass.surface, in: RoundedRectangle(cornerRadius: open ? 18 : 22, style: .continuous))
-            // the circle grows from the point and goes back into it (it is control-sized)
-            .scaleEffect(here.stage == 0 ? 0.001 : 1, anchor: .bottom)
             .position(x: x, y: y)
-            .allowsHitTesting(here.stage == 2)
+            .allowsHitTesting(here.present)
             .transition(.identity)
         }
     }

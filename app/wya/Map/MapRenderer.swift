@@ -288,9 +288,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private func flatNow(_ now: CFTimeInterval) -> Float {
         flatFrom + (flatTo - flatFrom) * Float(Motion.blend((now - flatAt) / 0.5))
     }
-    /// REGIONS' SELECTION MENU (A6.5): the aurora's bands move out past the screen's top and bottom edges and the
-    /// diamonds shrink into their points while the menu is up, and come back the same way; on the water's settle
-    /// (critically damped, 0.47 / 0.82 / 0.95 of the way at 25 / 50 / 75% of 0.42 s), from wherever they are
+    /// REGIONS' SELECTION MENU (A6.5): the aurora's bands and the diamonds are away while the menu is up, and back when
+    /// it goes; at once, with no movement (7 Nov 19:22: going into Regions needs no animation)
     private var menuFrom: Float = 0, menuTo: Float = 0, menuAt: CFTimeInterval = -10
     private func menuNow(_ now: CFTimeInterval) -> Float {
         let x = max(0, now - menuAt) * 15.2
@@ -561,7 +560,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let flat = flatNow(now)
         if now - flatAt < 0.55 { controller.needsFrame = true }
         let menuGoal: Float = controller.regionsMenu ? 1 : 0
-        if menuGoal != menuTo { menuFrom = menuNow(now); menuTo = menuGoal; menuAt = now }
+        // (at once: going into Regions moves nothing, 7 Nov 19:22)
+        if menuGoal != menuTo { menuFrom = menuGoal; menuTo = menuGoal; menuAt = now }
         let menu = menuNow(now)
         if now - menuAt < 0.7 { controller.needsFrame = true }
 

@@ -42,9 +42,8 @@ struct ContentView: View {
                 if !Perf.shared.off.contains("zoom") {
                     ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
                         .offset(x: side.chromeOut ? 90 : 0)
-                        // no zoom column under Regions' menu (6.3): it slides off the right edge and back
+                        // no zoom column under Regions' menu (6.3): it is off the right edge while the menu is up (no slide)
                         .offset(x: water.regions ? 90 : 0)
-                        .animation(Motion.chrome, value: water.regions)
                 }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)
@@ -371,6 +370,7 @@ struct ContentView: View {
     /// A6.5 entering Regions' menu (Regions always restarts there), and leaving Regions for another mode: the regions
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
+        water.modeSwitchedAt = CACurrentMediaTime()
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview() }
         WhatsHere.shared.close()
@@ -390,7 +390,7 @@ struct ContentView: View {
         if new == .regions {
             closeCard()
             water.closeList(back: false)
-            map.closeRegions()
+            map.closeRegions(instant: true)
             map.regionsMenu = true
             // A6.14: straight into a country (a country's "Open its region map"), never through the list or the world
             if let i = Self.directRegion {
@@ -399,13 +399,14 @@ struct ContentView: View {
                 openRegion(i, row: row, focus: focus)
                 return
             }
-            water.openMenu()
-            map.goHome()
+            // the list and the world under it are simply there: a mode change swaps the content, it moves nothing
+            water.openMenu(instant: true)
+            map.goHome(animated: false)
         } else if old == .regions {
             closeCard()
             map.regionsMenu = false
-            map.closeRegions()
-            water.closeMenu(to: .quarter)
+            map.closeRegions(instant: true)
+            water.closeMenu(to: .quarter, instant: true)
         }
         // a hold menu's Its places: that map, once the mode is Places
         if new == .places, let pick = Self.directPlaces {

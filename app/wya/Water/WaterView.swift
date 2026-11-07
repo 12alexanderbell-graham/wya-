@@ -176,7 +176,8 @@ struct SheetContent: View {
                 CosmosView(water: water, map: map, form: form)
                     // (back only once the list's rows have left: never both at once)
                     .offset(y: cosmosOut ? water.layout.H - form.top : 0)
-                    .animation(Motion.chrome, value: cosmosOut)
+                    // (a mode change swaps it out or back with no movement, 7 Nov 19:22)
+                    .animation(water.modeSwitching ? nil : Motion.chrome, value: cosmosOut)
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
@@ -242,7 +243,7 @@ struct SheetContent: View {
                     Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "All my places") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
                             tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                            night: FullView.night(form.page), visible: captionShown)
+                            night: FullView.night(form.page), visible: captionShown, quiet: water.modeSwitching)
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -312,7 +313,11 @@ struct SheetContent: View {
         }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
-            if captionShown != fits { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
+            // (a mode change swaps the caption with no roll)
+            if captionShown != fits {
+                if water.modeSwitching { captionShown = fits }
+                else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
+            }
         }
     }
 
@@ -537,6 +542,8 @@ struct Caption: View {
     /// A2.5: the words there (rolled in) or not (each line a placeholder of spaces of about its width, never an empty
     /// string, which SwiftUI would insert with a blur and a fade); in rises, out goes down
     var visible = true
+    /// a mode change: the new name, number and tail are simply there (no roll)
+    var quiet = false
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
 
     var body: some View {
@@ -548,13 +555,13 @@ struct Caption: View {
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(ink)
                 .contentTransition(.numericText(value: way))
-                .animation(Motion.quick, value: name)
+                .animation(quiet ? nil : Motion.quick, value: name)
             Text(visible ? "\(count)" : Self.blank("\(count)", "\u{2007}"))
                 .font(.system(size: big, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(ink)
                 .contentTransition(.numericText(value: visible ? Double(count) : -1))
-                .animation(Motion.quick, value: count)
+                .animation(quiet ? nil : Motion.quick, value: count)
                 .padding(.top, -6)
             // an empty tail (Everywhere) keeps its line as a space, so the caption keeps its place and sizes
             Text(visible && !tail.isEmpty ? tail : Self.blank(tail, "\u{2002}"))

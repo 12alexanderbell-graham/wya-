@@ -92,6 +92,7 @@ private struct SettingsList: View {
     let width: CGFloat
     @State private var nav = SettingsNav.shared
     @State private var settings = MapSettingsStore.shared
+    @State private var scrolled = false
     private var open: String? {
         get { nav.open }
         nonmutating set { nav.open = newValue }
@@ -119,6 +120,10 @@ private struct SettingsList: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
+        // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
+        // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, now in scrolled = now }
+        .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
     }
@@ -258,6 +263,7 @@ private struct SettingsPage: View {
     @State private var settings = MapSettingsStore.shared
     @State private var open: String?
     @State private var nav = SettingsNav.shared
+    @State private var scrolled = false
 
     var body: some View {
         let s = settings.value
@@ -294,6 +300,10 @@ private struct SettingsPage: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
+        // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
+        // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, now in scrolled = now }
+        .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
     }

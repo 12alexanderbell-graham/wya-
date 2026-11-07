@@ -68,6 +68,9 @@ final class Water {
     /// `regions` is on from the wheel landing on Regions until a country is picked or another mode comes; while
     /// settings or the upload sheet are up over it the water goes where they need it, and back to the menu after.
     var regions = false
+    /// when the map's mode last changed: what the change swaps in and out of the water goes with no movement
+    @ObservationIgnored var modeSwitchedAt: CFTimeInterval = 0
+    var modeSwitching: Bool { CACurrentMediaTime() - modeSwitchedAt < 0.2 }
     /// the menu's rows are still on screen, leaving through the list's bottom edge as the water goes down
     var menuLeaving = false
     @ObservationIgnored private var menuJob = 0
@@ -83,19 +86,27 @@ final class Water {
     /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
     var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
-    func openMenu() {
+    /// Coming into Regions it is simply there, with no movement (7 Nov 19:22: not everything needs an animation);
+    /// `instant: false` keeps the move for the Map tab's way back to the list
+    func openMenu(instant: Bool = false) {
         menuJob += 1
         menuLeaving = false
         regions = true
-        go(.half)
+        if instant { jump(.half) } else { go(.half) }
     }
     /// leaving the menu (another mode, or a country picked): the water goes to `to` while the rows leave through the
     /// list's bottom soft edge; they are kept on screen until the water is down
-    func closeMenu(to s: Stop = .quarter) {
+    func closeMenu(to s: Stop = .quarter, instant: Bool = false) {
         guard regions else { return }
-        // the rows leave only if they were showing (not from under settings or the upload sheet)
-        if menuShown { leaveMenuRows() }
+        // the rows leave only if they were showing (not from under settings or the upload sheet); leaving Regions for
+        // another mode, they simply go with it
+        if menuShown, !instant { leaveMenuRows() }
         regions = false
+        if instant, !settings, !upload {
+            if settingsFrom == .half { settingsFrom = .quarter }
+            if uploadFrom == .half { uploadFrom = .quarter }
+            jump(s); return
+        }
         // what settings or the upload go back to when they close: never the list's stop
         if settingsFrom == .half { settingsFrom = .quarter }
         if uploadFrom == .half { uploadFrom = .quarter }
@@ -424,6 +435,16 @@ final class Water {
             self.body.response = 0.42
             self.run()
         }
+    }
+
+    /// the water at a stop at once, no movement (a mode's own content swapped in, not moved)
+    func jump(_ s: Stop) {
+        pendingGo = nil
+        stop = s
+        body.target = restTop(s)
+        body.snap()
+        pubLevel = body.value
+        level = body.value
     }
 
     func go(_ s: Stop, speed: CGFloat = 0, released: Bool = false) {

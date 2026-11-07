@@ -622,12 +622,13 @@ final class MapController {
         }
     }
     /// out of the country (back to the menu, or out of Regions): the regions go, the world comes back
-    func closeRegions() {
+    func closeRegions(instant: Bool = false) {
         regionJob += 1
         regionLoading = nil
         leaveRegionTowns()
-        // the inner borders undraw back into the country's outline (A6.13)
-        if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }
+        // the inner borders undraw back into the country's outline (A6.13); out of Regions altogether they simply go
+        if instant { regionLines = nil }
+        else if let sc = regionScene { regionLines = RegionLines(shared: [], new: [], old: sc.segs, start: CACurrentMediaTime(), delay: 0) }
         regionScene = nil
         regionPressed = nil
         regionStamped = []; regionWished = []; regionStampedEntries = []; regionWishedEntries = []
