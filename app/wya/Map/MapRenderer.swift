@@ -64,6 +64,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         guard let d = MTLCreateSystemDefaultDevice(), let q = d.makeCommandQueue() else { return nil }
         device = d; queue = q; self.controller = controller
         super.init()
+        // Increase Contrast switched while the map is at rest: drawn again with its lines (19.4)
+        NotificationCenter.default.addObserver(forName: UIAccessibility.darkerSystemColorsStatusDidChangeNotification, object: nil,
+                                               queue: .main) { [weak controller] _ in
+            MainActor.assumeIsolated { controller?.needsFrame = true }
+        }
     }
 
     func configure(_ view: MTKView) {
@@ -403,8 +408,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let tiles = detail?.visible(c: controller.c, k: controller.k, view: view.bounds.size)
         // a level that came in late settles over 0.35 s: drawn at the full rate until it has
         if detail?.settling == true { controller.needsFrame = true }
-        // borders and coasts: one thickness at every zoom (BUILD-BOOK 1.4), 50% black
-        var ls = LineStyle(colour: SIMD4(0, 0, 0, 0.5), width: 0.5, feather: 0.6, dash: 3, gap: 2)
+        // borders and coasts: one thickness at every zoom (BUILD-BOOK 1.4), 50% black; with Increase Contrast the one
+        // darker step, full ink, at the same 0.5 pt (19.4)
+        let ink: Float = UIAccessibility.isDarkerSystemColorsEnabled ? 1 : 0.5
+        var ls = LineStyle(colour: SIMD4(0, 0, 0, ink), width: 0.5, feather: 0.6, dash: 3, gap: 2)
         // 0. the lines' coverage first, in a pass of its own (see lineCoverage)
         let tw = drawable.texture.width, th = drawable.texture.height
         if coverage == nil || coverage!.width != tw || coverage!.height != th {
