@@ -227,8 +227,12 @@ struct SheetContent: View {
             if map.pinsMode, !water.pageSheet {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
                 PinsWater(water: water, form: form, captionY: cy)
+                // the Route row (8.6) where the dock's row will be: near the water's top
+                if PinRoutes.shared.open {
+                    RouteRow(water: water, captionY: cy - 30)
+                }
                 // the pin's sheet under its name, once the water is above 25% (8.8)
-                if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
+                else if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
                     // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
                     // under it: the Share circle beside the name, the sheet's rows 10 pt under the place line)
                     PinSheet(water: water, top: cy + 6)

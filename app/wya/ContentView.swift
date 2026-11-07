@@ -387,7 +387,7 @@ struct ContentView: View {
         if old == .regions { map.leaveRegionTowns() }
         map.placesMode = new == .places
         map.pinsMode = new == .pins
-        if new != .pins { PinStore.shared.selected = nil }
+        if new != .pins { PinStore.shared.selected = nil; PinRoutes.shared.close() }
         // the journey belongs to the map it was drawn on: into or out of Pins it goes
         if head.history, new == .pins || old == .pins {
             if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true); water.historyUp = false }

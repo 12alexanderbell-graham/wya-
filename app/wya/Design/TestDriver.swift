@@ -224,6 +224,13 @@ final class TestDriver {
                         let k = map.flatMap { PinsMapView.Coordinator.country($0, c) }
                         NSLog("wya pins dropat %.3f %.3f: our country %@", la, lo, k?.name ?? "none")
                         PinStore.shared.drop(at: c, country: k)
+                    } else if a == "route", p.count > 3, let n = Int(p[2]), let k = Int(p[3]), n < PinStore.shared.pins.count, k < PinStore.shared.pins.count {
+                        // pins route <n> <m>: Route from here on pin n, then pin m tapped (8.6)
+                        PinRoutes.shared.start(.from, at: PinStore.shared.pins[n].id)
+                        _ = PinRoutes.shared.pinTapped(PinStore.shared.pins[k].id)
+                    } else if a == "routeclose" { PinRoutes.shared.close()
+                    } else if a == "list" {
+                        for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
                     } else if a == "none" { PinStore.shared.selected = nil
                     } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {
                         PinStore.shared.colour(id, ColourPick(hue: h, light: 0.55, strength: 0.9))

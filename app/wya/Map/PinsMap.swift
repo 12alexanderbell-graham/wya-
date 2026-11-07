@@ -88,6 +88,7 @@ final class PinStore {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         let gone = pins.remove(at: k)
         if selected == id { selected = nil }
+        PinRoutes.shared.pinGone(id)
         save()
         if undoable {
             MarkStore.shared.did("\(gone.title) deleted") { [weak self] in
@@ -259,6 +260,44 @@ final class PinsMapState {
         a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1); b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
         return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, alpha: 1)
     }
+    // ROUTES (8.3): the kept routes' lines and labels on Apple's map, and while the Route row is open Apple's other ways
+    @ObservationIgnored private var routeOverlays: [MKOverlay] = []
+    @ObservationIgnored private var routeLabels: [RouteLabel] = []
+    func redrawRoutes() {
+        guard let v = view else { return }
+        let r = PinRoutes.shared
+        var lines: [MKOverlay] = [], labels: [RouteLabel] = []
+        // the other ways first, under the chosen one
+        for (pl, d, t) in r.otherWays {
+            var c = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pl.pointCount)
+            pl.getCoordinates(&c, range: NSRange(location: 0, length: pl.pointCount))
+            let l = PinRouteLine(coordinates: c, count: c.count)
+            l.other = true; l.distance = d; l.time = t
+            lines.append(l)
+        }
+        for route in r.routes where route.points.count > 1 {
+            let c = route.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
+            let l = PinRouteLine(coordinates: c, count: c.count)
+            l.routeID = route.id
+            lines.append(l)
+            labels.append(RouteLabel(id: route.id, at: c[c.count / 2], words: route.words))
+        }
+        // the new ones on before the old ones go (never a blink)
+        v.addOverlays(lines, level: .aboveRoads)
+        v.addAnnotations(labels)
+        v.removeOverlays(routeOverlays)
+        v.removeAnnotations(routeLabels)
+        routeOverlays = lines; routeLabels = labels
+    }
+    /// a route just made: Apple's map frames it between the head and the water if it is not all in view
+    func frame(route id: UUID?) {
+        guard let v = view, let id, let l = routeOverlays.first(where: { ($0 as? PinRouteLine)?.routeID == id }) else { return }
+        let L = water?.layout
+        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 24, left: 32, bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 24, right: 72)
+        let seen = v.visibleMapRect
+        if !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
+    }
+
     /// Reset on Apple's map: the whole world, as Apple's own map shows it
     func world() { view?.setVisibleMapRect(.world, animated: true) }
     /// Reset's Around you on Apple's map: some 1,700 km across over the spot
@@ -350,8 +389,9 @@ struct PinsMapView: UIViewRepresentable {
         // its town found for "Open its place's page" (the index is read once, in the background)
         TownIndex.shared.load()
         context.coordinator.sync(v, store.pins)
-        // the journey asked for before this map was made (history turned on as Pins opened)
+        // the journey asked for before this map was made (history turned on as Pins opened), and the kept routes
         PinsMapState.shared.redrawHistory()
+        PinsMapState.shared.redrawRoutes()
         return v
     }
 
@@ -415,7 +455,27 @@ struct PinsMapView: UIViewRepresentable {
             arrange(v)
         }
 
-        @objc func tapped(_ g: UITapGestureRecognizer) { WhatsHere.shared.close() }
+        @objc func tapped(_ g: UITapGestureRecognizer) {
+            WhatsHere.shared.close()
+            // a tap within 12 pt of one of Apple's other ways makes it the route (8.6)
+            guard PinRoutes.shared.open, let v = g.view as? MKMapView else { return }
+            let p = g.location(in: v)
+            var best: (PinRouteLine, CGFloat)?
+            for case let l as PinRouteLine in v.overlays where l.other {
+                for i in 0 ..< max(0, l.pointCount - 1) {
+                    let a = v.convert(l.points()[i].coordinate, toPointTo: v), b = v.convert(l.points()[i + 1].coordinate, toPointTo: v)
+                    let d = Self.distance(p, a, b)
+                    if d < 12, best == nil || d < best!.1 { best = (l, d) }
+                }
+            }
+            if let (l, _) = best { PinRoutes.shared.choose(other: l) }
+        }
+        /// a point's distance to a segment
+        static func distance(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+            let dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy
+            let t = l2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0
+            return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+        }
         func mapView(_ v: MKMapView, regionWillChangeAnimated animated: Bool) { WhatsHere.shared.close() }
         /// the stacks and names follow the camera as it moves (a pinch in spreads a stack, 8.3)
         func mapViewDidChangeVisibleRegion(_ v: MKMapView) { arrange(v) }
@@ -513,6 +573,15 @@ struct PinsMapView: UIViewRepresentable {
 
         /// the journey's line (history on): black at its start to blue at its end
         func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {
+            // a route: 3 pt black, round ends and joins, no casing; another way 2 pt black 50% (8.3)
+            if let l = o as? PinRouteLine {
+                let r = MKPolylineRenderer(polyline: l)
+                r.strokeColor = UIColor(Palette.ink).withAlphaComponent(l.other ? 0.5 : 1)
+                r.lineWidth = l.other ? 2 : 3
+                r.lineCap = .round
+                r.lineJoin = .round
+                return r
+            }
             guard let p = o as? MKPolyline else { return MKOverlayRenderer(overlay: o) }
             let r = MKGradientPolylineRenderer(polyline: p)
             let (c, at) = PinsMapState.shared.journeyColours
@@ -524,6 +593,13 @@ struct PinsMapView: UIViewRepresentable {
         }
 
         func mapView(_ v: MKMapView, viewFor a: MKAnnotation) -> MKAnnotationView? {
+            if let l = a as? RouteLabel {
+                let view = (v.dequeueReusableAnnotationView(withIdentifier: RouteLabelView.id) as? RouteLabelView)
+                    ?? RouteLabelView(annotation: l, reuseIdentifier: RouteLabelView.id)
+                view.annotation = l
+                view.show(l.words)
+                return view
+            }
             guard let a = a as? PinAnnotation else { return nil }
             let view = v.dequeueReusableAnnotationView(withIdentifier: PinAnnotationView.id, for: a) as! PinAnnotationView
             view.show(PinStore.shared.pin(a.id))
@@ -541,7 +617,10 @@ struct PinsMapView: UIViewRepresentable {
             }
         }
         func mapView(_ v: MKMapView, didSelect a: MKAnnotation) {
+            if a is RouteLabel { v.deselectAnnotation(a, animated: false); return }
             guard let a = a as? PinAnnotation else { return }
+            // the Route row waiting for an end: the pin fills it, nothing else happens
+            if PinRoutes.shared.pinTapped(a.id) { v.deselectAnnotation(a, animated: false); return }
             Feel.tap()
             PinStore.shared.selected = a.id
             if water.stop != .quarter { water.go(.quarter) }
@@ -712,6 +791,9 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
             after { PinStore.shared.selected = id; PinStore.shared.colourAsked = true; state.water?.go(.full) }
         }
         let directions = UIAction(title: "Directions") { _ in PinStore.directions(p) }
+        // Route from here / Route to here (11.5): the Route row opens with that end set (8.6)
+        let routeFrom = UIAction(title: "Route from here") { _ in after { PinStore.shared.selected = nil; PinRoutes.shared.start(.from, at: id) } }
+        let routeTo = UIAction(title: "Route to here") { _ in after { PinStore.shared.selected = nil; PinRoutes.shared.start(.to, at: id) } }
         let open = PinStore.page(p, world: state.map?.world)
         let page = UIAction(title: "Open its place's page", attributes: open == nil ? .disabled : []) { _ in
             after { open?() }
@@ -733,7 +815,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         return UIMenu(title: p.title, children: [
             UIMenu(options: .displayInline, children: [edit]),
             UIMenu(options: .displayInline, children: [colour]),
-            UIMenu(options: .displayInline, children: [directions]),
+            UIMenu(options: .displayInline, children: [routeFrom, routeTo, directions]),
             UIMenu(options: .displayInline, children: [here, page, copy]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: [delete]),
@@ -753,7 +835,10 @@ struct PinsWater: View {
         let L = water.layout
         VStack(spacing: 4) {
             // (the words change at once: only a count rolls, never a name being typed)
-            if let p = store.pin(store.selected) {
+            if PinRoutes.shared.open {
+                // the Route row is in this place (RouteRow, over the water)
+                Color.clear.frame(height: 1)
+            } else if let p = store.pin(store.selected) {
                 // its name on the caption's own name line (a caption laid out unseen under it gives the place), so the
                 // title sits where every map's name sits at each stop
                 ZStack(alignment: .top) {
