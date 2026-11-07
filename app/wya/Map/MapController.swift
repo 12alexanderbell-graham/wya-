@@ -122,6 +122,9 @@ final class MapController {
     @ObservationIgnored var menuForPlace: ((Int) -> UIMenu?)?
     /// the same for a region of the open region map (its unit)
     @ObservationIgnored var menuForUnit: ((Int) -> UIMenu?)?
+    /// the same for a town (its country's file and index) and a thing (its id), for Places' names
+    @ObservationIgnored var menuForTown: ((String, Int, CGPoint) -> UIMenu?)?
+    @ObservationIgnored var menuForThing: ((String) -> UIMenu?)?
     /// when a touch on the map last closed something (a card, the book, Details, Verify, Map settings, the upload
     /// sheet): that press does nothing else, so it opens no hold menu (one press, one job)
     @ObservationIgnored var touchClosedAt: CFTimeInterval = 0

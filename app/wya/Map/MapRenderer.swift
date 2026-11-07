@@ -1003,9 +1003,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     // MARK: VoiceOver (1.9's row, 19.4): the places on screen as elements, top to bottom and left to right within a
     // row; each says its name and its state ("France, stamped, 3 times"); a double tap is a tap (its card); its hold
     // menu's rows are its actions; rotors go through Stamped, Wishlist and Not stamped. Worked out again only once the
-    // camera has come to rest or a mark has changed, never while it moves. The Countries map, and a region map's
-    // regions ("Bouches-du-Rhône, department, stamped", 6.5); Places' towns still to build (Pins are Apple's map, whose
-    // pins say their own names).
+    // camera has come to rest or a mark has changed, never while it moves. The Countries map, a region map's regions
+    // ("Bouches-du-Rhône, department, stamped", 6.5) and Places' town and thing names (Pins are Apple's map, whose pins
+    // say their own names).
     final class PlaceElement: UIAccessibilityElement {
         let place: Int
         var state = MarkState.none
@@ -1030,12 +1030,16 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
 
     private func placeElements() -> [PlaceElement] {
-        guard let c = controller, let w = c.world, !c.placesMode, !c.pinsMode else { return [] }
+        guard let c = controller, let w = c.world, !c.pinsMode else { return [] }
         let key = [c.restVersion, MarkStore.shared.changes, Int(bounds.width), Int(bounds.height), w.places.count,
-                   c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1]
+                   c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1,
+                   c.placesMode ? townNames.nameFrames.count * 1000 + townNames.thingNameFrames.count : -1, c.placeOpen ?? -1]
         if key == axKey { return axCache }
         axKey = key
         if let sc = c.regionScene { axCache = regionElements(sc, c); return axCache }
+        // PLACES (7.4): the town and thing names on the map, each its page on a double tap (as a tap on a name) and its
+        // hold menu as actions; then the countries, as on the Countries map
+        let names = c.placesMode ? nameElements(c) : []
         var found: [(CGRect, Int)] = []
         for i in w.places.indices {
             if let k = c.drawnContinent, !w.inCont(i, k) { continue }
@@ -1049,7 +1053,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
             return ra != rb ? ra < rb : a.0.midX < b.0.midX
         }
-        axCache = found.map { r, i in
+        axCache = names + found.map { r, i in
             let e = PlaceElement(container: self, place: i)
             let st = MarkStore.shared.state(.country(w.places[i].id))
             e.state = st
@@ -1065,6 +1069,41 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             return e
         }
         return axCache
+    }
+
+    private func nameElements(_ c: MapController) -> [PlaceElement] {
+        var out: [(CGRect, PlaceElement)] = []
+        for (id, f) in townNames.nameFrames {
+            guard let (cc, i) = townNames.townOf(id), let sc = c.townScenes[cc], i < sc.towns.count else { continue }
+            let t = sc.towns[i]
+            let e = PlaceElement(container: self, place: -1)
+            let st = MarkStore.shared.state(t.key)
+            e.state = st
+            e.accessibilityFrameInContainerSpace = f
+            e.accessibilityLabel = Self.label(t.name, st)
+            e.accessibilityTraits = .button
+            e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((id, nil), c) } }
+            let at = CGPoint(x: f.midX, y: f.midY)
+            e.actions = { [weak c] in c?.menuForTown?(cc, i, at).map(Self.actions) ?? [] }
+            out.append((f, e))
+        }
+        for (id, f) in townNames.thingNameFrames {
+            guard let (_, t) = ThingStore.shared.thing(id) else { continue }
+            let e = PlaceElement(container: self, place: -1)
+            let st = MarkStore.shared.state(t.key)
+            e.state = st
+            e.accessibilityFrameInContainerSpace = f
+            e.accessibilityLabel = Self.label(t.name, st)
+            e.accessibilityTraits = .button
+            e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((nil, id), c) } }
+            e.actions = { [weak c] in c?.menuForThing?(id).map(Self.actions) ?? [] }
+            out.append((f, e))
+        }
+        out.sort { a, b in
+            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
+            return ra != rb ? ra < rb : a.0.midX < b.0.midX
+        }
+        return out.map(\.1)
     }
 
     /// a region map's regions, in the same reading order; a double tap is a tap on the region (its card, 6.7)

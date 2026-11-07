@@ -260,6 +260,16 @@ struct ContentView: View {
                 let r = map.screenRect(b)
                 return Self.regionMenu(u, in: sc, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head)
             }
+            map.menuForTown = { [map, water, head] cc, i, p in
+                guard let sc = map.townScenes[cc], i < sc.towns.count, let w = map.world,
+                      let pi = w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()] else { return nil }
+                return Self.townMenu(sc.towns[i], cc: cc, place: pi, at: p, map: map, water: water, head: head)
+            }
+            map.menuForThing = { [map, water] id in
+                guard let (cc, t) = ThingStore.shared.thing(id), let pi = map.world?.placeIndex[cc] ?? map.world?.placeIndex[cc.uppercased()]
+                else { return nil }
+                return Self.thingMenu(t, cc: cc, place: pi, map: map, water: water)
+            }
             map.menuForPlace = { [map, water, head] i in
                 let r = map.screenRect(of: i)
                 return Self.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head, fromSearch: true)
