@@ -577,13 +577,14 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         let s: CGFloat = on ? 1.2 : 1
         let t = CGAffineTransform(translationX: 0, y: h / 2 * (1 - s) - (on ? 4 : 0)).scaledBy(x: s, y: s)
         if animated {
-            UIView.animate(withDuration: 0.26, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.transform = t }
+            UIView.animate(withDuration: Motion.reduce ? 0.2 : 0.26, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.transform = t }
         } else { transform = t }
     }
 
     func fall() {
         transform = CGAffineTransform(translationX: 0, y: -57)
-        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: []) {
+        // (Reduce Motion: the same fall on the tight spring, 0.2 s, 0.4)
+        UIView.animate(withDuration: Motion.reduce ? 0.2 : 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: []) {
             self.transform = .identity
         } completion: { _ in Feel.notch() }
     }
@@ -603,7 +604,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     @MainActor static func menu(_ id: UUID) -> UIMenu? {
         guard let p = PinStore.shared.pin(id) else { return nil }
         // each runs once the menu has gone (as every hold menu's rows)
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let state = PinsMapState.shared
         let edit = UIAction(title: "Edit") { _ in
             after { PinStore.shared.selected = id; state.water?.go(.half) }
