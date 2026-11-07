@@ -293,6 +293,14 @@ final class PinsMapState {
         v.removeAnnotations(routeLabels)
         routeOverlays = lines; routeLabels = labels
     }
+    /// a route's line takes its colour at once (live while the picker moves; no redraw of the line)
+    func recolour(_ id: UUID) {
+        guard let v = view, let l = routeOverlays.first(where: { ($0 as? PinRouteLine)?.routeID == id }),
+              let r = v.renderer(for: l) as? MKPolylineRenderer,
+              let ink = PinRoutes.shared.routes.first(where: { $0.id == id })?.ink else { return }
+        r.strokeColor = ink
+        r.setNeedsDisplay()
+    }
     /// a kept route's capsule on the map, if it is drawn
     func labelView(_ id: UUID) -> RouteLabelView? {
         guard let v = view, let l = routeLabels.first(where: { $0.id == id }) else { return nil }
@@ -366,6 +374,10 @@ final class PinAnnotation: NSObject, MKAnnotation {
 
 /// APPLE'S MAP IN PINS
 struct PinsMapView: UIViewRepresentable {
+    /// every tap recognizer on Apple's map and the views inside it
+    static func taps(in v: UIView) -> [UITapGestureRecognizer] {
+        (v.gestureRecognizers ?? []).compactMap { $0 as? UITapGestureRecognizer } + v.subviews.flatMap { taps(in: $0) }
+    }
     let map: MapController
     let water: Water
     var store = PinStore.shared
@@ -394,6 +406,11 @@ struct PinsMapView: UIViewRepresentable {
         tap.cancelsTouchesInView = false
         tap.delegate = context.coordinator
         v.addGestureRecognizer(tap)
+        // a double tap is Apple's zoom, never two single taps (its first tap must not fill a chip or pick a way)
+        DispatchQueue.main.async {
+            let doubles = Self.taps(in: v).filter { $0 !== tap && $0.numberOfTapsRequired == 2 }
+            for d in doubles { tap.require(toFail: d) }
+        }
         // a pin moved by a drag is set down on the map (8.4)
         v.addInteraction(UIDropInteraction(delegate: context.coordinator))
         // a hold on a route's line or its capsule: the route's own menu (11.5)
@@ -476,8 +493,12 @@ struct PinsMapView: UIViewRepresentable {
             arrange(v)
         }
 
+        /// the camera is moving (a fling still gliding, a flight): a tap then only stops it
+        private var moving = false
         @objc func tapped(_ g: UITapGestureRecognizer) {
-            WhatsHere.shared.close()
+            // a tap that takes What's here? away, or stops the map, does only that
+            if WhatsHere.shared.isOpen { WhatsHere.shared.close(); return }
+            if moving { return }
             // a tap on one of Apple's other ways makes it the route (8.6): only off the pins, and only when that way is
             // nearer the finger (within 12 pt) than the route itself, so a tap on a shared road or an end changes nothing
             guard PinRoutes.shared.open, let v = g.view as? MKMapView else { return }
@@ -497,15 +518,22 @@ struct PinsMapView: UIViewRepresentable {
                 if let land = Self.country(map, c) { _ = PinRoutes.shared.landTapped(c, country: land.name) } else { Feel.refuse() }
             }
         }
-        /// a point's distance to a line on the map, in points
-        static func near(_ p: CGPoint, _ l: MKPolyline, in v: MKMapView) -> CGFloat {
+        /// a point's distance to a line on the map, in points (worked in Apple's map points, a line whose box is farther
+        /// than `within` skipped at once, so a hold or a tap never converts every point of every route)
+        static func near(_ p: CGPoint, _ l: MKPolyline, in v: MKMapView, within: CGFloat = 40) -> CGFloat {
+            guard v.bounds.width > 0 else { return .infinity }
+            let per = v.visibleMapRect.size.width / Double(v.bounds.width)
+            let m = MKMapPoint(v.convert(p, toCoordinateFrom: v))
+            let reach = Double(within) * per
+            guard l.boundingMapRect.insetBy(dx: -reach, dy: -reach).contains(m) else { return .infinity }
             let pts = l.points()
-            var d = CGFloat.infinity
+            var d = Double.infinity
+            let q = CGPoint(x: m.x, y: m.y)
             for i in 0 ..< max(0, l.pointCount - 1) {
-                let a = v.convert(pts[i].coordinate, toPointTo: v), b = v.convert(pts[i + 1].coordinate, toPointTo: v)
-                d = min(d, distance(p, a, b))
+                let a = CGPoint(x: pts[i].x, y: pts[i].y), b = CGPoint(x: pts[i + 1].x, y: pts[i + 1].y)
+                d = min(d, Double(distance(q, a, b)))
             }
-            return d
+            return CGFloat(d / per)
         }
         /// the kept route under a point: its capsule, else its line within 12 pt (the nearest); never under a pin
         func route(at p: CGPoint, in v: MKMapView) -> PinRouteLine? {
@@ -526,10 +554,13 @@ struct PinsMapView: UIViewRepresentable {
         }
         // THE ROUTE'S HOLD MENU (11.5): what lifts is its distance and time capsule, where the finger is
         private var routeHeld: (id: UUID, at: CGPoint)?
+        /// the capsule stepped out while its lifted copy is up (put back exactly, even if MapKit has moved it on)
+        private weak var routeHeldView: RouteLabelView?
         func contextMenuInteraction(_ i: UIContextMenuInteraction, configurationForMenuAtLocation l: CGPoint) -> UIContextMenuConfiguration? {
             guard let v = i.view as? MKMapView, let line = route(at: l, in: v), let id = line.routeID else { return nil }
             // on the capsule: it lifts from its own place
-            let label = PinsMapState.shared.labelView(id)
+            // (a capsule not seen: at the finger)
+            let label = PinsMapState.shared.labelView(id).flatMap { $0.isHidden ? nil : $0 }
             routeHeld = (id, label.map { v.convert($0.center, from: $0.superview) } ?? l)
             return UIContextMenuConfiguration(identifier: id.uuidString as NSString, previewProvider: nil) { _ in
                 MainActor.assumeIsolated { PinRoutes.shared.menu(id) }
@@ -554,11 +585,12 @@ struct PinsMapView: UIViewRepresentable {
         }
         // the capsule on the map steps out while its lifted copy is up (never two of it)
         func contextMenuInteraction(_ i: UIContextMenuInteraction, willDisplayMenuFor c: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
-            if let id = routeHeld?.id { PinsMapState.shared.labelView(id)?.alpha = 0 }
+            if let id = routeHeld?.id, let lv = PinsMapState.shared.labelView(id), !lv.isHidden { lv.alpha = 0; routeHeldView = lv }
         }
         func contextMenuInteraction(_ i: UIContextMenuInteraction, willEndFor c: UIContextMenuConfiguration, animator: (any UIContextMenuInteractionAnimating)?) {
-            let id = routeHeld?.id
-            let back = { if let id { PinsMapState.shared.labelView(id)?.alpha = 1 } }
+            let lv = routeHeldView
+            routeHeldView = nil
+            let back: () -> Void = { if let lv { lv.alpha = 1 } }
             if let animator { animator.addCompletion(back) } else { back() }
         }
 
@@ -568,7 +600,8 @@ struct PinsMapView: UIViewRepresentable {
             let t = l2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2)) : 0
             return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
         }
-        func mapView(_ v: MKMapView, regionWillChangeAnimated animated: Bool) { WhatsHere.shared.close() }
+        func mapView(_ v: MKMapView, regionWillChangeAnimated animated: Bool) { WhatsHere.shared.close(); moving = true }
+        func mapView(_ v: MKMapView, regionDidChangeAnimated animated: Bool) { moving = false }
         /// the stacks and names follow the camera as it moves (a pinch in spreads a stack, 8.3)
         func mapViewDidChangeVisibleRegion(_ v: MKMapView) { arrange(v) }
 
@@ -623,13 +656,27 @@ struct PinsMapView: UIViewRepresentable {
                 }
                 let view = v.view(for: lab)
                 let now = v.convert(lab.coordinate, toPointTo: v)
-                if clear(now), view?.isHidden != true { taken.append(box(now)); continue }
-                // the line's points on screen (at most about 200 looked at), tried from the middle of what is seen outwards
-                let pts = line.points(), n = line.pointCount, step = max(1, n / 200)
+                // kept while clear and still by its line (a spot beside it drifts off as the map zooms in)
+                if clear(now), view?.isHidden != true, Self.near(now, line, in: v, within: 30) <= 26 { taken.append(box(now)); continue }
+                // the line's points in view (its seen stretch, every point of it up to about 200), tried from the middle
+                // of what is seen outwards; between points far apart on screen, points along the way too
+                let c0 = MKMapPoint(v.convert(CGPoint(x: room.minX, y: room.minY), toCoordinateFrom: v))
+                let c1 = MKMapPoint(v.convert(CGPoint(x: room.maxX, y: room.maxY), toCoordinateFrom: v))
+                let rect = MKMapRect(x: min(c0.x, c1.x), y: min(c0.y, c1.y), width: abs(c1.x - c0.x), height: abs(c1.y - c0.y))
+                let mp = line.points(), n = line.pointCount
+                var inView: [Int] = []
+                for i in 0 ..< n where rect.contains(mp[i]) || (i + 1 < n && rect.intersects(MKMapRect(x: min(mp[i].x, mp[i + 1].x), y: min(mp[i].y, mp[i + 1].y), width: abs(mp[i + 1].x - mp[i].x), height: abs(mp[i + 1].y - mp[i].y)))) { inView.append(i) }
+                let step = max(1, inView.count / 200)
                 var seen: [CGPoint] = []
-                for i in stride(from: 0, to: n, by: step) {
-                    let c = v.convert(pts[i].coordinate, toPointTo: v)
-                    if room.contains(c) { seen.append(c) }
+                for k in stride(from: 0, to: inView.count, by: step) {
+                    let i = inView[k]
+                    let a = v.convert(mp[i].coordinate, toPointTo: v)
+                    if room.contains(a) { seen.append(a) }
+                    if i + 1 < n {
+                        let b = v.convert(mp[i + 1].coordinate, toPointTo: v)
+                        let gap = hypot(b.x - a.x, b.y - a.y)
+                        if gap > 40 { for t in stride(from: 40.0, to: Double(gap), by: 40) { let f = CGFloat(t) / gap; let c = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f); if room.contains(c) { seen.append(c) } } }
+                    }
                 }
                 let mid = seen.count / 2
                 let order = seen.indices.sorted { abs($0 - mid) < abs($1 - mid) }.map { seen[$0] }
@@ -646,11 +693,12 @@ struct PinsMapView: UIViewRepresentable {
         @objc func held(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began, let v = g.view as? MKMapView else { return }
             WhatsHere.shared.close()
+            let p = g.location(in: v)
+            // on a pin: its own menu, not a new pin; on a route: the route's menu (the lock keeps menus: it only refuses
+            // a new pin)
+            if v.hitTest(p, with: nil) is PinAnnotationView || route(at: p, in: v) != nil { return }
             // the lock stops dropping, never looking (as on every map)
             if map.locked { Feel.refuse(); return }
-            let p = g.location(in: v)
-            // on a pin: its own menu, not a new pin; on a route: the route's menu
-            if v.hitTest(p, with: nil) is PinAnnotationView || route(at: p, in: v) != nil { return }
             Feel.tick()
             let c = v.convert(p, toCoordinateFrom: v)
             PinStore.shared.drop(at: c, country: Self.country(map, c))
@@ -704,7 +752,9 @@ struct PinsMapView: UIViewRepresentable {
             // a route: 3 pt black, round ends and joins, no casing; another way 2 pt black 50% (8.3)
             if let l = o as? PinRouteLine {
                 let r = MKPolylineRenderer(polyline: l)
-                r.strokeColor = UIColor(Palette.ink).withAlphaComponent(l.other ? 0.5 : 1)
+                // a kept route in its own colour (black unless you gave it one); another way always black 50%
+                let ink = l.routeID.flatMap { id in PinRoutes.shared.routes.first { $0.id == id }?.ink } ?? UIColor(Palette.ink)
+                r.strokeColor = l.other ? UIColor(Palette.ink).withAlphaComponent(0.5) : ink
                 r.lineWidth = l.other ? 2 : 3
                 r.lineCap = .round
                 r.lineJoin = .round
@@ -1045,12 +1095,12 @@ struct PinsList: View {
         let name = "\(ends.end(r.from, r)?.title ?? "Pin") to \(ends.end(r.to, r)?.title ?? "Pin")"
         return HStack(spacing: 12) {
             RouteShape(points: r.points)
-                .stroke(Palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .stroke(r.pick?.color ?? Palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .frame(width: 24, height: 24)
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
-                Text(r.words).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(PinRoutes.shared.notes[r.id] ?? r.words).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -1067,6 +1117,7 @@ struct PinsList: View {
                 Button("Reverse") { PinRoutes.shared.reask(r.id, reverse: true) }
                 Button("Walk") { PinRoutes.shared.reask(r.id, walk: true) }.disabled(r.walk == true)
                 Button("Drive") { PinRoutes.shared.reask(r.id, walk: false) }.disabled(r.walk != true)
+                Button("Colour") { store.selected = nil; PinRoutes.shared.colouring = r.id; water.go(.full) }
             }
             Section {
                 Button("Directions in Apple Maps") { PinRoutes.shared.directions(r.id) }

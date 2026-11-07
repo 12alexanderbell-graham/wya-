@@ -227,19 +227,24 @@ struct SheetContent: View {
             // (settings, details and the upload take the water as they do in every mode: Pins' words step out)
             if map.pinsMode, !water.pageSheet, !water.settings, !water.details, !water.upload {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
-                PinsWater(water: water, form: form, captionY: cy)
-                // the Route row (8.6) where the dock's row will be: near the water's top
-                if PinRoutes.shared.open {
-                    RouteRow(water: water, captionY: cy - 30)
-                }
-                // the pin's sheet under its name, once the water is above 25% (8.8)
-                else if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
-                    // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
-                    // under it: the Share circle beside the name, the sheet's rows 10 pt under the place line)
-                    PinSheet(water: water, top: cy + 6)
-                    PinShare(water: water, captionY: cy - 42)
-                } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
-                    PinsList(water: water, captionY: cy)
+                // a route's colour being picked takes the water (its name where the pins' caption sits)
+                if PinRoutes.shared.colouring != nil {
+                    RouteColourSheet(water: water, captionY: cy)
+                } else {
+                    PinsWater(water: water, form: form, captionY: cy)
+                    // the Route row (8.6) where the dock's row will be: near the water's top
+                    if PinRoutes.shared.open {
+                        RouteRow(water: water, captionY: cy - 30)
+                    }
+                    // the pin's sheet under its name, once the water is above 25% (8.8)
+                    else if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
+                        // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
+                        // under it: the Share circle beside the name, the sheet's rows 10 pt under the place line)
+                        PinSheet(water: water, top: cy + 6)
+                        PinShare(water: water, captionY: cy - 42)
+                    } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
+                        PinsList(water: water, captionY: cy)
+                    }
                 }
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet, !map.pinsMode {

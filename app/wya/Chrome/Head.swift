@@ -1212,8 +1212,10 @@ struct SearchResults: View {
     private func pinRow(_ p: Pin?) -> some View {
         Button {
             guard let p else { return }
-            Feel.tap()
             head.searching = false
+            // the Route row waiting for an end: the pin found fills it (8.6)
+            if PinRoutes.shared.pinTapped(p.id) { return }
+            Feel.tap()
             PinStore.shared.selected = p.id
             PinsMapState.shared.go(to: p)
             if let w = head.water, w.stop != .quarter { w.go(.quarter) }

@@ -236,6 +236,9 @@ final class TestDriver {
                         // pins routeland <lat> <lon>: a tap on land there while a chip waits
                         let c = CLLocationCoordinate2D(latitude: la, longitude: lo)
                         _ = PinRoutes.shared.landTapped(c, country: map.flatMap { PinsMapView.Coordinator.country($0, c)?.name } ?? "Land")
+                    } else if a == "routecolour", p.count > 3, let n = Int(p[2]), n < PinRoutes.shared.routes.count, let h = Double(p[3]) {
+                        // pins routecolour <n> <hue>: route n in that colour, as the picker sets it
+                        PinRoutes.shared.colour(PinRoutes.shared.routes[n].id, ColourPick(hue: h, light: 0.55, strength: 0.9))
                     } else if a == "routeclose" { PinRoutes.shared.close()
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }

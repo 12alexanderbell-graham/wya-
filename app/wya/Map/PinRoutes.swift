@@ -23,6 +23,16 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var walk: Bool? = nil
     /// its ends that are not pins: spots on land, each named when it was tapped (8.6)
     var spots: [RouteSpot]? = nil
+    /// the colour you gave it (the picker's own value); nil: black (8.3)
+    var pick: ColourPick? = nil
+    /// its way as directions gave it, with the ends and travel asked for (its name and colour are not part of it)
+    struct Way: Equatable { var from: UUID; var to: UUID; var walk: Bool?; var spots: [RouteSpot]?; var points: [[Double]]; var distance: Double; var time: Double }
+    var way: Way {
+        get { Way(from: from, to: to, walk: walk, spots: spots, points: points, distance: distance, time: time) }
+        set { from = newValue.from; to = newValue.to; walk = newValue.walk; spots = newValue.spots; points = newValue.points; distance = newValue.distance; time = newValue.time }
+    }
+    /// its line's colour on the map
+    var ink: UIColor { pick.map { UIColor($0.color) } ?? UIColor(Palette.ink) }
 
     var words: String { Self.words(distance: distance, time: time) }
     static func words(distance: Double, time: Double) -> String {
@@ -82,6 +92,12 @@ final class RouteLabelView: MKAnnotationView {
         isAccessibilityElement = true
     }
     required init?(coder: NSCoder) { fatalError() }
+    /// a view MapKit hands on to another route comes back seen (a menu or a full map may have hidden it)
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        alpha = 1
+        isHidden = false
+    }
     func show(_ words: String) {
         label.text = words
         label.sizeToFit()
@@ -128,6 +144,19 @@ final class PinRoutes {
     @ObservationIgnored private var asking = 0
     /// the row's spots on land not yet in a kept route
     private var temp: [UUID: RouteSpot] = [:]
+    /// the route whose colour is being picked in the water (its hold menu's Colour)
+    var colouring: UUID?
+    /// words a route shows for 2 s in place of its distance ("No walking route"), on the map and in the list
+    private(set) var notes: [UUID: String] = [:]
+    /// the newest re-ask of each route, and the way it was asked for (a second one starts from the first's ends)
+    @ObservationIgnored private var asked: [UUID: (Int, PinRoute)] = [:]
+    @ObservationIgnored private var askedCount = 0
+    func note(_ id: UUID, _ words: String) {
+        notes[id] = words
+        PinsMapState.shared.note(id, words)
+        UIAccessibility.post(notification: .announcement, argument: words)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in if self?.notes[id] == words { self?.notes[id] = nil } }
+    }
 
     /// an end as a route sees it: a pin (where it is now) or a spot
     struct Place { let lat: Double; let lon: Double; let title: String; let pin: Pin? }
@@ -191,6 +220,7 @@ final class PinRoutes {
     }
     /// the cross: the row closes; the route stays (no Save)
     func close() {
+        colouring = nil
         guard open else { return }
         open = false; waiting = nil; noRoute = false
         from = nil; to = nil; current = nil; others = []; temp = [:]
@@ -242,15 +272,15 @@ final class PinRoutes {
     private func keep(_ r: MKRoute, from f: UUID, to t: UUID) {
         let line = Self.points(r.polyline)
         // the ends that are spots go with the route
-        let spots = [f, t].compactMap { temp[$0] ?? routes.lazy.compactMap { r in r.spots?.first { $0.id == f || $0.id == t } }.first }
-        let kept: [RouteSpot]? = spots.isEmpty ? nil : Array(Set(spots))
+        let spots = [f, t].compactMap { id in temp[id] ?? routes.lazy.compactMap { r in r.spots?.first { $0.id == id } }.first }
+        let kept: [RouteSpot]? = spots.isEmpty ? nil : spots
         if let id = current, let k = routes.firstIndex(where: { $0.id == id }) {
-            let was = routes[k]
+            let was = routes[k].way
             routes[k].from = f; routes[k].to = t; routes[k].spots = kept; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
             save()
             MarkStore.shared.did("Route changed") { [weak self] in
                 guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
-                self.routes[j] = was; self.save(); self.undone(id)
+                self.routes[j].way = was; self.save(); self.undone(id)
             }
         } else {
             var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
@@ -266,13 +296,13 @@ final class PinRoutes {
     func choose(other i: Int) {
         guard let id = current, let k = routes.firstIndex(where: { $0.id == id }), others.indices.contains(i) else { return }
         Feel.tap()
-        let was = routes[k]
+        let was = routes[k].way
         let picked = others.remove(at: i)
         routes[k].points = Self.points(picked.polyline); routes[k].distance = picked.distance; routes[k].time = picked.expectedTravelTime
         save()
         MarkStore.shared.did("Route changed") { [weak self] in
             guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
-            self.routes[j] = was; self.save(); self.undone(id)
+            self.routes[j].way = was; self.save(); self.undone(id)
         }
         PinsMapState.shared.redrawRoutes()
     }
@@ -292,9 +322,20 @@ final class PinRoutes {
     }
     var currentID: UUID? { current }
 
+    /// live while the finger moves in the picker; kept as it changes (no Save, as a pin's colour)
+    /// (written to the file when the finger lifts, on Reset and when the sheet goes, not on every move)
+    func colour(_ id: UUID, _ c: ColourPick?, keep: Bool = true) {
+        guard let k = routes.firstIndex(where: { $0.id == id }) else { return }
+        routes[k].pick = c
+        if keep { save() }
+        PinsMapState.shared.recolour(id)
+    }
+    func keepColours() { save() }
+
     func remove(_ id: UUID, undoable: Bool = true) {
         guard let k = routes.firstIndex(where: { $0.id == id }) else { return }
         let gone = routes.remove(at: k)
+        if colouring == id { colouring = nil }
         // the route the row was making: its other ways go with it
         if current == id { current = nil; others = []; asking += 1 }
         save()
@@ -310,6 +351,7 @@ final class PinRoutes {
     @discardableResult func pinGone(_ pin: UUID) -> [PinRoute] {
         let gone = routes.filter { $0.from == pin || $0.to == pin }
         routes.removeAll { $0.from == pin || $0.to == pin }
+        if gone.contains(where: { $0.id == colouring }) { colouring = nil }
         if open, from == pin || to == pin || gone.contains(where: { $0.id == current }) {
             if from == pin { from = nil }
             if to == pin { to = nil }
@@ -344,39 +386,47 @@ final class PinRoutes {
     /// one undo; Apple finding no such way leaves it as it was and its capsule says so for 2 s
     func reask(_ id: UUID, reverse: Bool = false, walk: Bool? = nil, quiet: Bool = false) {
         guard let k = routes.firstIndex(where: { $0.id == id }) else { return }
-        var r = routes[k]
+        // from the newest way asked for (a Walk right after a Reverse walks the reversed route), else as it is now
+        var r = asked[id]?.1 ?? routes[k]
         if reverse { swap(&r.from, &r.to) }
         if let walk { r.walk = walk ? true : nil }
         guard let f = end(r.from, r), let t = end(r.to, r) else { return }
+        askedCount += 1
+        let me = askedCount
+        asked[id] = (me, r)
         let req = Self.request(f, t, walk: r.walk == true)
         Task {
             let answer = try? await MKDirections(request: req).calculate()
+            // only the newest question about this route is answered (an older answer is for a way no longer asked)
+            guard asked[id]?.0 == me else { return }
+            asked[id] = nil
             guard let j = routes.firstIndex(where: { $0.id == id }) else { return }
             guard let best = answer?.routes.first else {
                 if !quiet { Feel.refuse() }
-                PinsMapState.shared.note(id, r.walk == true ? "No walking route" : "No route")
+                note(id, r.walk == true ? "No walking route" : "No route")
                 return
             }
-            let was = routes[j]
-            r.points = Self.points(best.polyline); r.distance = best.distance; r.time = best.expectedTravelTime
-            r.made = was.made
-            routes[j] = r
+            let was = routes[j].way
+            var way = r.way
+            way.points = Self.points(best.polyline); way.distance = best.distance; way.time = best.expectedTravelTime
+            // only its way changes (a colour picked meanwhile stays)
+            routes[j].way = way
             // the row making this route follows it (Apple's other ways were for the old ends)
-            if current == id, open { from = r.from; to = r.to; others = [] }
+            if current == id, open { from = way.from; to = way.to; others = [] }
             save()
             PinsMapState.shared.redrawRoutes()
             // a pin's move carries its own undo (which asks again); a menu row's change is one undo of its own
             guard !quiet else { return }
             MarkStore.shared.did("Route changed") { [weak self] in
                 guard let self, let i = self.routes.firstIndex(where: { $0.id == id }) else { return }
-                self.routes[i] = was; self.save(); self.undone(id)
+                self.routes[i].way = was; self.save(); self.undone(id)
             }
         }
     }
 
-    /// THE ROUTE'S HOLD MENU (11.5), in the book's groups: Reverse · Walk · Drive | Directions in Apple Maps · Share |
+    /// THE ROUTE'S HOLD MENU (11.5), in the book's groups: Reverse · Walk · Drive · Colour | Directions in Apple Maps · Share |
     /// Delete. The way it goes now is shown but can't be chosen (never a tick). Not yet: Transit (Apple's directions
-    /// give no transit lines to draw), Colour (with the route's sheet), lists and plans (with their parts).
+    /// give no transit lines to draw), lists and plans (with their parts).
     func menu(_ id: UUID) -> UIMenu? {
         guard let r = routes.first(where: { $0.id == id }), let f = end(r.from, r), let t = end(r.to, r) else { return nil }
         // each runs once the menu has gone (as every hold menu's rows)
@@ -385,11 +435,19 @@ final class PinRoutes {
         let reverse = UIAction(title: "Reverse") { [weak self] _ in after { self?.reask(id, reverse: true) } }
         let walk = UIAction(title: "Walk", attributes: walking ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
         let drive = UIAction(title: "Drive", attributes: walking ? [] : .disabled) { [weak self] _ in after { self?.reask(id, walk: false) } }
+        // Colour: the picker in the water at full, the line taking each colour as the finger moves (8.3)
+        let colour = UIAction(title: "Colour") { [weak self] _ in
+            after {
+                PinStore.shared.selected = nil
+                self?.colouring = id
+                PinsMapState.shared.water?.go(.full)
+            }
+        }
         let directions = UIAction(title: "Directions in Apple Maps") { [weak self] _ in self?.directions(id) }
         let share = UIAction(title: "Share") { [weak self] _ in after { self?.share(id) } }
         let delete = UIAction(title: "Delete", attributes: .destructive) { [weak self] _ in after { Feel.lift(); self?.remove(id) } }
         return UIMenu(title: "\(f.title) to \(t.title)", children: [
-            UIMenu(options: .displayInline, children: [reverse, walk, drive]),
+            UIMenu(options: .displayInline, children: [reverse, walk, drive, colour]),
             UIMenu(options: .displayInline, children: [directions, share]),
             UIMenu(options: .displayInline, children: [delete]),
         ])
@@ -482,4 +540,59 @@ enum PinRows {
 
 private extension String {
     func ifEmpty(_ s: String) -> String { isEmpty ? s : self }
+    var firstUp: String { prefix(1).uppercased() + dropFirst() }
+}
+
+/// A ROUTE'S COLOUR in the water at full (its hold menu's Colour, 8.3): its name and distance where a pin's name sits,
+/// the colour picker under them, the line taking each colour live; Reset to black once it has one. The water going
+/// below full puts it away (the colour is kept as it was last picked)
+struct RouteColourSheet: View {
+    let water: Water
+    let captionY: CGFloat
+    @State private var r = PinRoutes.shared
+    @State private var pick = PinSheet.nearBlack
+
+    var body: some View {
+        let L = water.layout
+        if let id = r.colouring, let route = r.routes.first(where: { $0.id == id }) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(spacing: 4) {
+                    Text("\(r.end(route.from, route)?.title ?? "Pin") to \(r.end(route.to, route)?.title ?? "Pin")")
+                        .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                    Text(route.words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                HStack {
+                    Text(route.pick.map { ColourNames.name($0).firstUp } ?? "Black").font(.body).foregroundStyle(Palette.ink)
+                    Spacer(minLength: 8)
+                    Circle().fill(route.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
+                }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .combine)
+                ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; r.colour(id, c, keep: false) }),
+                             suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c); r.keepColours() }
+                if route.pick != nil {
+                    Button {
+                        // (the picker back where a black route starts, so a nudge never brings the old colour back)
+                        Feel.tap(); r.colour(id, nil); pick = PinSheet.nearBlack
+                    } label: {
+                        Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(width: L.W - 2 * L.sheetInset)
+            // its name on the line a pin's name takes at full (about 42 pt over the caption's middle)
+            .padding(.top, captionY - 58)
+            .frame(width: L.W, height: L.H, alignment: .top)
+            .onAppear { pick = route.pick ?? PinSheet.nearBlack }
+            .onDisappear { r.keepColours() }
+            .onChange(of: water.stop) { _, s in if s != .full { r.colouring = nil } }
+        } else if r.colouring != nil {
+            // its route gone: the water is the pins' again
+            Color.clear.onAppear { r.colouring = nil }
+        }
+    }
 }
