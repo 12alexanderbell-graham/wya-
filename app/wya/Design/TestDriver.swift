@@ -184,7 +184,10 @@ final class TestDriver {
                         PinStore.shared.drop(at: v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v))
                     } else if a == "select", p.count > 2, let n = Int(p[2]), n < PinStore.shared.pins.count {
                         PinStore.shared.selected = PinStore.shared.pins[n].id
-                    } else if a == "none" { PinStore.shared.selected = nil }
+                    } else if a == "none" { PinStore.shared.selected = nil
+                    } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {
+                        PinStore.shared.colour(id, ColourPick(hue: h, light: 0.55, strength: 0.9))
+                    }
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }

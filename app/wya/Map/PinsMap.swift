@@ -16,9 +16,13 @@ struct Pin: Codable, Identifiable, Hashable {
     var name = ""
     /// the finest place it is in ("Kreuzberg, Berlin"), filled once the phone has named it
     var place = ""
-    /// gamma-encoded P3 once you have given it a colour; nil: the plain black
-    var colour: [Double]? = nil
+    /// the colour you gave it (the picker's own value); nil: the plain black
+    var pick: ColourPick? = nil
+    /// up to 600 characters
+    var note: String? = nil
     var made = Date()
+    /// gamma-encoded P3, or nil for the plain black
+    var colour: [Double]? { pick.map { let v = $0.p3; return [v.x, v.y, v.z] } }
 
     var title: String { !name.isEmpty ? name : place.components(separatedBy: ", ").first.flatMap { $0.isEmpty ? nil : $0 } ?? "Pin" }
     var line: String {
@@ -79,6 +83,17 @@ final class PinStore {
         pins[k].name = String(name.prefix(60))
         save()
     }
+    /// live while the finger moves in the picker; kept as it changes (no Save)
+    func colour(_ id: UUID, _ c: ColourPick?) {
+        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+        pins[k].pick = c
+        save()
+    }
+    func note(_ id: UUID, _ n: String) {
+        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+        pins[k].note = n.isEmpty ? nil : String(n.prefix(600))
+        save()
+    }
 
     /// the finest place a pin is in, from Apple's reverse geocoding: "Kreuzberg, Berlin"; a town alone; a region and
     /// its country; the sea's name at sea
@@ -89,7 +104,7 @@ final class PinStore {
         let city = a?.cityName ?? ""
         let near = item.name ?? ""
         let country = a?.regionName ?? ""
-        // the finest place, its town, its country, each once: "Kreuzberg, Berlin, Germany"; "Bordj Omar Driss, Algeria"
+        // the finest place, its town, its country, each once: "Kreuzberg, Berlin, Germany"; "Mayo-Belwa, Nigeria"
         var parts: [String] = []
         for x in [near.contains(where: \.isNumber) ? "" : near, city, country] where !x.isEmpty && !parts.contains(x) { parts.append(x) }
         let place = parts.joined(separator: ", ")
@@ -338,4 +353,130 @@ struct PinsWater: View {
         .position(x: L.W / 2, y: captionY)
         .allowsHitTesting(false)
     }
+}
+
+
+/// THE PIN'S SHEET (8.8) at 50% and full, under its name and place: the same sections and rows as Details (Part 4.4),
+/// on the water: Name, Colour (the circle opens the colour picker under it, the pin following live), Note; then Share
+/// and Delete, the app's icons in 44 pt slots, Delete's red. Every change is kept as it happens (no Save). Scrolls at full.
+struct PinSheet: View {
+    let water: Water
+    let top: CGFloat
+    var store = PinStore.shared
+    @State private var picking = false
+    @State private var pick = ColourPick(hue: 250, light: 0.5, strength: 0.8)
+    @FocusState private var typing: Bool
+
+    var body: some View {
+        let L = water.layout
+        let fade = L.capsule.minY - 24
+        if let p = store.pin(store.selected) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 24) {
+                    section("Name") {
+                        TextField("", text: Binding(get: { p.name }, set: { v in
+                            if v.count > 60 { Feel.refuse() }
+                            store.rename(p.id, v)
+                        }), prompt: Text(p.title).foregroundStyle(Palette.ink.opacity(0.5)))
+                        .font(.body).foregroundStyle(Palette.ink)
+                        .focused($typing)
+                        .submitLabel(.done)
+                        .frame(minHeight: 52)
+                    }
+                    section("Colour") {
+                        Button {
+                            Feel.tap()
+                            pick = p.pick ?? ColourPick(hue: 250, light: 0.5, strength: 0.8)
+                            picking.toggle()
+                            if picking, water.stop == .quarter { water.go(.half) }
+                        } label: {
+                            HStack {
+                                // the colour's own name ("deep red"), as the picker names it
+                                Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.body).foregroundStyle(Palette.ink)
+                                Spacer(minLength: 8)
+                                Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
+                            }
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if picking {
+                            ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; store.colour(p.id, c) }),
+                                         suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c) }
+                            if p.pick != nil {
+                                Button {
+                                    Feel.tap(); store.colour(p.id, nil); picking = false
+                                } label: {
+                                    Text("Back to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    section("Note") {
+                        TextField("", text: Binding(get: { p.note ?? "" }, set: { v in
+                            if v.count > 600 { Feel.refuse() }
+                            store.note(p.id, v)
+                        }), prompt: Text("Add a note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+                        .font(.body).foregroundStyle(Palette.ink)
+                        .lineLimit(1 ... 12)
+                        .focused($typing)
+                        .frame(minHeight: 52)
+                    }
+                    HStack(spacing: 0) {
+                        Spacer()
+                        Button { share(p) } label: {
+                            Icon5(key: "share", ink: Palette.ink, size: 22).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain).accessibilityLabel("Share")
+                        Spacer()
+                        Button { Feel.lift(); store.remove(p.id); water.go(.quarter) } label: {
+                            Icon5(key: "bin", ink: Palette.red, size: 22).frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain).accessibilityLabel("Delete")
+                        Spacer()
+                    }
+                    Color.clear.frame(height: L.H - fade + 24)
+                }
+                .padding(.horizontal, 16)
+            }
+            .scrollIndicators(.hidden)
+            .scrollDisabled(water.stop != .full)
+            .scrollDismissesKeyboard(.immediately)
+            .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - top))
+            // the rows go out through a soft edge above the tabs, never cut by a hard line (P3)
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Rectangle().frame(height: max(0, fade - top - 24))
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 24)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: max(0, L.H - top))
+            }
+            .position(x: L.W / 2, y: top + max(0, L.H - top) / 2)
+            // typing: the water goes to full (Part 4.4's rule), the keyboard under it
+            .onChange(of: typing) { _, t in if t { water.go(.full) } }
+            .onChange(of: store.selected) { _, _ in picking = false }
+        }
+    }
+
+    private func section<C: View>(_ name: String, @ViewBuilder _ c: () -> C) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(name).font(.headline).foregroundStyle(Palette.ink).frame(minHeight: 32, alignment: .bottom)
+                .accessibilityAddTraits(.isHeader)
+            c()
+        }
+    }
+
+    private func share(_ p: Pin) {
+        Feel.tap()
+        guard let u = URL(string: "https://maps.apple.com/?ll=\(p.lat),\(p.lon)&q=\(p.title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Pin")"),
+              let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first?.rootViewController
+        else { return }
+        root.present(UIActivityViewController(activityItems: [u], applicationActivities: nil), animated: true)
+    }
+}
+
+private extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }

@@ -158,7 +158,8 @@ struct SheetContent: View {
             // capsule's place as the water's own clear glass
             Group {
                 // no stars under Regions' list (the whole screen is the list there)
-                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving {
+                // nor in Places or Pins (the stars are the countries you have left: they mean nothing there, 7 Nov)
+                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode {
                     Color.clear
                 } else {
                     PlasmaStars(page: form.page, top: form.top, stars: map.placesLeft, sun: CGPoint(x: L.W / 2, y: L.H / 2), map: map,
@@ -222,7 +223,12 @@ struct SheetContent: View {
             }
             // PINS (Part 8): its own words where the caption sits: the count, or the chosen pin's name and place
             if map.pinsMode, !water.pageSheet {
-                PinsWater(water: water, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
+                let cy = max(L.headBottom + 12 + 52, form.top + 72)
+                PinsWater(water: water, form: form, captionY: cy)
+                // the pin's sheet under its name, once the water is above 25% (8.8)
+                if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
+                    PinSheet(water: water, top: cy + 36)
+                }
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet, !map.pinsMode {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
