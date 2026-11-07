@@ -1,10 +1,11 @@
 import SwiftUI
 
 /// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
-/// nearest first, 15 pt, one a line) in a glass panel over the map, its bottom 12 pt above the held point; each
-/// name is a tap to its card. The panel (frosted, as every surface) is a 44 pt circle grown from that point (P1, `Motion.quick`) and widened into a
-/// rounded rectangle (0.4 rule 4, the chrome curve, its corner 22 to 18 pt); the names roll in once it is past half way
-/// and out before it narrows back. A touch anywhere else on the map takes it away the same way. At sea: "Open sea".
+/// nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over the map, its
+/// bottom 12 pt above the held point; each name is a tap to its card. The panel (frosted, as every surface) is a 44 pt
+/// circle grown from that point (P1, `Motion.quick`) and widened into a rounded rectangle (0.4 rule 4, the chrome curve,
+/// its corner 22 to 18 pt); the names roll in once it is past half way and out before it narrows back. A touch
+/// anywhere else on the map takes it away the same way. At sea: "Open sea".
 @MainActor
 @Observable
 final class WhatsHere {
@@ -126,7 +127,7 @@ struct WhatsHereView: View {
         let open = here.stage == 2
         let widest = layout.W - 32
         let width = open ? min(widest, panelWidth + 32) : 44
-        let height = open ? CGFloat(here.items.count) * 22 + CGFloat(max(0, here.items.count - 1)) * 8 + 28 : 44
+        let height = open ? CGFloat(here.items.count) * lineHeight + CGFloat(max(0, here.items.count - 1)) * 8 + 28 : 44
         // its bottom 12 pt above the point, kept on the screen
         let x = min(max(here.point.x, width / 2 + 16), layout.W - width / 2 - 16)
         let y = max(here.point.y - 12 - height / 2, layout.headBottom + 8 + height / 2)
@@ -162,18 +163,21 @@ struct WhatsHereView: View {
     /// one name, rolled in and out by the text roll (never scaled, never faded)
     private func name(_ item: WhatsHere.Item) -> some View {
         Text(here.namesIn ? item.name : Caption.blank(item.name, "\u{2002}"))
-            .font(.system(size: 15))
+            .font(.subheadline)
             .foregroundStyle(Palette.ink)
             .lineLimit(1)
             .contentTransition(.numericText(value: here.namesIn ? 1 : 0))
-            .frame(height: 22, alignment: .leading)
+            .frame(height: lineHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
     }
 
-    /// the longest name's width at 15 pt
+    /// one name's line: the subheadline style's own (15 pt at the default size, larger with larger text: 19.4)
+    private var lineHeight: CGFloat { max(22, UIFont.preferredFont(forTextStyle: .subheadline).lineHeight.rounded(.up) + 2) }
+
+    /// the longest name's width in that style
     private var panelWidth: CGFloat {
-        let font = UIFont.systemFont(ofSize: 15)
+        let font = UIFont.preferredFont(forTextStyle: .subheadline)
         return here.items.map { ($0.name as NSString).size(withAttributes: [.font: font]).width.rounded(.up) }.max() ?? 0
     }
 }

@@ -1486,7 +1486,10 @@ struct UploadSheet: View {
             }
             .frame(width: 22, height: 22)
             Text(u.words ? name : Caption.blank(name, "\u{2002}"))
-                .font(.system(size: 15, weight: .semibold))
+                // the subheadline style (15 pt at the default size), growing with larger text up to the size the
+                // choice's 96 pt still holds in two lines (19.4)
+                .font(.subheadline.weight(.semibold))
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
