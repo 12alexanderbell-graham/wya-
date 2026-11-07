@@ -157,7 +157,7 @@ final class TestDriver {
                     let win = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
                     if let mv = win.flatMap(find) {
                         let els = (mv.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-                        NSLog("wya ax %d elements", els.count)
+                        NSLog("wya ax %d elements; rotors %@", els.count, (mv.accessibilityCustomRotors ?? []).map(\.name).joined(separator: ", "))
                         for e in els.prefix(12) + els.suffix(3) {
                             NSLog("wya ax %@ | %@", e.accessibilityLabel ?? "?", (e.accessibilityCustomActions ?? []).map(\.name).joined(separator: ", "))
                         }

@@ -399,6 +399,7 @@ final class UploadState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
             phase = .finding
+            speakCount(me)
             // after Add more the number rolls on from the finds kept
             count = order.count - dropped.count
             withAnimation(Motion.quick) { captionIn = true }
@@ -409,6 +410,16 @@ final class UploadState {
                 findingIn = true
                 if !reading { deliver() }
             }
+        }
+    }
+    /// VOICEOVER WHILE FINDING (9.4): every 5 s the count so far ("12 places found"); the end says "Done" itself
+    private func speakCount(_ me: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [self] in
+            guard me == job, phase == .finding else { return }
+            if UIAccessibility.isVoiceOverRunning {
+                UIAccessibility.post(notification: .announcement, argument: "\(count) \(count == 1 ? "place" : "places") found")
+            }
+            speakCount(me)
         }
     }
     private func deliver() {

@@ -1013,6 +1013,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     final class PlaceElement: UIAccessibilityElement {
         let place: Int
         var state = MarkState.none
+        /// a country of the map (its place index), not a region, a town or your own place
+        var country = false
         var activate: (@MainActor () -> Void)?
         var actions: (@MainActor () -> [UIAccessibilityCustomAction])?
         init(container: Any, place: Int) { self.place = place; super.init(accessibilityContainer: container) }
@@ -1035,7 +1037,11 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
     override var accessibilityCustomRotors: [UIAccessibilityCustomRotor]? {
         get {
-            [rotor("Stamped") { $0.stamped }, rotor("Wishlist") { $0.wished && !$0.stamped }, rotor("Not stamped") { !$0.stamped }]
+            var r = [rotor("Stamped") { $0.state.stamped }, rotor("Wishlist") { $0.state.wished && !$0.state.stamped },
+                     rotor("Not stamped") { !$0.state.stamped }]
+            // an upload's finds on the map (9.4, 9.5): the countries found, waiting or at the review
+            if let c = controller, !c.found.isEmpty { r.insert(rotor("Found") { [weak c] e in e.country && c?.found.contains(e.place) == true }, at: 0) }
+            return r
         }
         set {}
     }
@@ -1095,6 +1101,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             let id = "c:" + w.places[i].id
             used.insert(id)
             let e = element(id, place: i)
+            e.country = true
             let st = MarkStore.shared.state(.country(w.places[i].id))
             e.state = st
             e.accessibilityFrameInContainerSpace = r
@@ -1233,7 +1240,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         }
     }
 
-    private func rotor(_ name: String, _ match: @escaping (MarkState) -> Bool) -> UIAccessibilityCustomRotor {
+    private func rotor(_ name: String, _ match: @escaping @MainActor (PlaceElement) -> Bool) -> UIAccessibilityCustomRotor {
         UIAccessibilityCustomRotor(name: name) { [weak self] p in
             MainActor.assumeIsolated {
                 guard let self else { return nil }
@@ -1242,7 +1249,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 let now = (p.currentItem.targetElement as? PlaceElement).flatMap { e in els.firstIndex { $0 === e } }
                 var k = now.map { forward ? $0 + 1 : $0 - 1 } ?? (forward ? 0 : els.count - 1)
                 while k >= 0, k < els.count {
-                    if match(els[k].state) { return UIAccessibilityCustomRotorItemResult(targetElement: els[k], targetRange: nil) }
+                    if match(els[k]) { return UIAccessibilityCustomRotorItemResult(targetElement: els[k], targetRange: nil) }
                     k += forward ? 1 : -1
                 }
                 return nil
