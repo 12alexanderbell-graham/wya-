@@ -70,7 +70,7 @@ final class Water {
     var regions = false
     /// when the map's mode last changed: what the change swaps in and out of the water goes with no movement
     @ObservationIgnored var modeSwitchedAt: CFTimeInterval = 0
-    var modeSwitching: Bool { CACurrentMediaTime() - modeSwitchedAt < 0.2 }
+    var modeSwitching: Bool { CACurrentMediaTime() - modeSwitchedAt < 0.4 }
     /// the menu's rows are still on screen, leaving through the list's bottom edge as the water goes down
     var menuLeaving = false
     @ObservationIgnored private var menuJob = 0
@@ -440,6 +440,7 @@ final class Water {
     /// the water at a stop at once, no movement (a mode's own content swapped in, not moved)
     func jump(_ s: Stop) {
         pendingGo = nil
+        landingSpeed = 0
         stop = s
         body.target = restTop(s)
         body.snap()

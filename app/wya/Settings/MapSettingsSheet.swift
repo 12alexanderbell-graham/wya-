@@ -122,7 +122,10 @@ private struct SettingsList: View {
         .scrollIndicators(.hidden)
         // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
         // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, now in scrolled = now }
+        // (and not at the end either, where the last row is at rest above the edge)
+        .onScrollGeometryChange(for: Bool.self) { g in
+            g.contentOffset.y + g.contentInsets.top > 1 && g.contentOffset.y + g.containerSize.height < g.contentSize.height + g.contentInsets.bottom - 1
+        } action: { _, now in scrolled = now }
         .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
@@ -302,7 +305,10 @@ private struct SettingsPage: View {
         .scrollIndicators(.hidden)
         // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
         // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 1 } action: { _, now in scrolled = now }
+        // (and not at the end either, where the last row is at rest above the edge)
+        .onScrollGeometryChange(for: Bool.self) { g in
+            g.contentOffset.y + g.contentInsets.top > 1 && g.contentOffset.y + g.containerSize.height < g.contentSize.height + g.contentInsets.bottom - 1
+        } action: { _, now in scrolled = now }
         .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)

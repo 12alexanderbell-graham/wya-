@@ -1025,6 +1025,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
     private var axKey: [Int] = []
     private var axCache: [PlaceElement] = []
+    /// the elements by what they stand for ("c:fr", "u:FR-IDF", "t:…", "w:Q…"), kept from one rebuild to the next so the
+    /// one VoiceOver is on stays the same object (its focus never jumps when the map comes to rest or a mark changes)
+    private var axPool: [String: PlaceElement] = [:]
 
     override var accessibilityElements: [Any]? {
         get { placeElements() }
@@ -1037,32 +1040,58 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         set {}
     }
 
+    /// the element for `id`, made once
+    private func element(_ id: String, place: Int) -> PlaceElement {
+        if let e = axPool[id], e.place == place { return e }
+        let e = PlaceElement(container: self, place: place)
+        axPool[id] = e
+        return e
+    }
+    /// what is seen of the map: between the head and the water's top (nothing at full)
+    private func openMap(_ c: MapController) -> CGRect {
+        let r = c.layout.room(sheetTop: c.sheetTop > 0 ? c.sheetTop : c.layout.top(.quarter))
+        return CGRect(x: 0, y: r.lowerBound, width: bounds.width, height: max(0, r.upperBound - r.lowerBound))
+    }
+    private static func readingOrder<T>(_ a: [(CGRect, T)]) -> [(CGRect, T)] {
+        a.sorted { x, y in
+            let rx = Int(x.0.midY / 80), ry = Int(y.0.midY / 80)
+            return rx != ry ? rx < ry : x.0.midX < y.0.midX
+        }
+    }
+
     private func placeElements() -> [PlaceElement] {
-        guard let c = controller, let w = c.world, !c.pinsMode else { return [] }
+        // Regions' list over the map, or Pins (Apple's map, its own pins): nothing of ours to read
+        guard let c = controller, let w = c.world, !c.pinsMode, !c.regionsMenu else { return [] }
+        let names = c.placesMode || c.regionTowns
+            ? (townNames.nameFrames.keys.sorted() + townNames.thingNameFrames.keys.sorted()).joined(separator: "|").hashValue : 0
         let key = [c.restVersion, MarkStore.shared.changes, Int(bounds.width), Int(bounds.height), w.places.count,
-                   c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1,
-                   c.placesMode ? townNames.nameFrames.count * 1000 + townNames.thingNameFrames.count : -1, c.placeOpen ?? -1]
+                   c.drawnContinent?.hashValue ?? 0, c.regionScene.map { $0.place * 100 + $0.row } ?? -1, names,
+                   c.placeOpen ?? -1, c.regionTowns ? 1 : 0, Int(c.sheetTop / 8), c.locked ? 1 : 0,
+                   // (the camera, coarsely: it can move with no rest of its own, a sideways turn or a continent's follow)
+                   Int(c.c.x), Int(c.c.y), Int(log(max(c.k, 1e-9)) * 40)]
         if key == axKey { return axCache }
         axKey = key
-        if let sc = c.regionScene { axCache = regionElements(sc, c); return axCache }
+        let seen = openMap(c)
+        var used = Set<String>()
+        defer { axPool = axPool.filter { used.contains($0.key) } }
+        // a region map's towns level: its town names; a region map: its regions
+        if c.regionTowns { axCache = nameElements(c, seen, &used); return axCache }
+        if let sc = c.regionScene { axCache = regionElements(sc, c, seen, &used); return axCache }
         // PLACES (7.4): the town and thing names on the map, each its page on a double tap (as a tap on a name) and its
         // hold menu as actions; then the countries, as on the Countries map
-        let names = c.placesMode ? nameElements(c) : []
+        let named = c.placesMode ? nameElements(c, seen, &used) : []
         var found: [(CGRect, Int)] = []
         for i in w.places.indices {
             if let k = c.drawnContinent, !w.inCont(i, k) { continue }
             guard let f = w.frame(of: i) else { continue }
-            let r = c.screenRect(f).intersection(bounds)
+            let r = c.screenRect(f).intersection(seen)
             guard !r.isNull, r.width >= 4, r.height >= 4 else { continue }
             found.append((r, i))
         }
-        // reading order: rows of 80 pt from the top, left to right in each
-        found.sort { a, b in
-            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
-            return ra != rb ? ra < rb : a.0.midX < b.0.midX
-        }
-        axCache = names + found.map { r, i in
-            let e = PlaceElement(container: self, place: i)
+        axCache = named + Self.readingOrder(found).map { r, i in
+            let id = "c:" + w.places[i].id
+            used.insert(id)
+            let e = element(id, place: i)
             let st = MarkStore.shared.state(.country(w.places[i].id))
             e.state = st
             e.accessibilityFrameInContainerSpace = r
@@ -1070,8 +1099,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             e.accessibilityTraits = .button
             let at = CGPoint(x: r.midX, y: r.midY)
             e.activate = { [weak c] in c?.onPlaceTap?(i, at) }
+            // (the lock: no menu, so no actions, as the hold gives none)
             e.actions = { [weak c] in
-                guard let menu = c?.menuForPlace?(i) else { return [] }
+                guard let c, !c.locked, let menu = c.menuForPlace?(i) else { return [] }
                 return Self.actions(menu)
             }
             return e
@@ -1079,12 +1109,14 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         return axCache
     }
 
-    private func nameElements(_ c: MapController) -> [PlaceElement] {
+    private func nameElements(_ c: MapController, _ seen: CGRect, _ used: inout Set<String>) -> [PlaceElement] {
         var out: [(CGRect, PlaceElement)] = []
-        for (id, f) in townNames.nameFrames {
+        for (id, f) in townNames.nameFrames where seen.intersects(f) {
             guard let (cc, i) = townNames.townOf(id), let sc = c.townScenes[cc], i < sc.towns.count else { continue }
             let t = sc.towns[i]
-            let e = PlaceElement(container: self, place: -1)
+            let key = "t:" + id
+            used.insert(key)
+            let e = element(key, place: -1)
             let st = MarkStore.shared.state(t.key)
             e.state = st
             e.accessibilityFrameInContainerSpace = f
@@ -1092,44 +1124,46 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             e.accessibilityTraits = .button
             e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((id, nil), c) } }
             let at = CGPoint(x: f.midX, y: f.midY)
-            e.actions = { [weak c] in c?.menuForTown?(cc, i, at).map { Self.actions($0) } ?? [] }
+            e.actions = { [weak c] in
+                guard let c, !c.locked else { return [] }
+                return c.menuForTown?(cc, i, at).map { Self.actions($0) } ?? []
+            }
             out.append((f, e))
         }
-        for (id, f) in townNames.thingNameFrames {
+        for (id, f) in townNames.thingNameFrames where seen.intersects(f) {
             guard let (_, t) = ThingStore.shared.thing(id) else { continue }
-            let e = PlaceElement(container: self, place: -1)
+            let key = "w:" + id
+            used.insert(key)
+            let e = element(key, place: -1)
             let st = MarkStore.shared.state(t.key)
             e.state = st
             e.accessibilityFrameInContainerSpace = f
             e.accessibilityLabel = Self.label(t.name, st)
             e.accessibilityTraits = .button
             e.activate = { [weak self, weak c] in if let self, let c { _ = self.townNames.openPage((nil, id), c) } }
-            e.actions = { [weak c] in c?.menuForThing?(id).map { Self.actions($0) } ?? [] }
+            e.actions = { [weak c] in
+                guard let c, !c.locked else { return [] }
+                return c.menuForThing?(id).map { Self.actions($0) } ?? []
+            }
             out.append((f, e))
         }
-        out.sort { a, b in
-            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
-            return ra != rb ? ra < rb : a.0.midX < b.0.midX
-        }
-        return out.map(\.1)
+        return Self.readingOrder(out).map(\.1)
     }
 
     /// a region map's regions, in the same reading order; a double tap is a tap on the region (its card, 6.7)
-    private func regionElements(_ sc: RegionScene, _ c: MapController) -> [PlaceElement] {
+    private func regionElements(_ sc: RegionScene, _ c: MapController, _ seen: CGRect, _ used: inout Set<String>) -> [PlaceElement] {
         let kind = (RegionCatalog.shared.used(sc.id).first { $0.row == sc.row }?.level.one ?? "region").lowercased()
         var found: [(CGRect, Int)] = []
         for u in sc.unitIDs.indices {
             guard let b = sc.unitBox(u) else { continue }
-            let r = c.screenRect(b).intersection(bounds)
+            let r = c.screenRect(b).intersection(seen)
             guard !r.isNull, r.width >= 4, r.height >= 4 else { continue }
             found.append((r, u))
         }
-        found.sort { a, b in
-            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
-            return ra != rb ? ra < rb : a.0.midX < b.0.midX
-        }
-        return found.map { r, u in
-            let e = PlaceElement(container: self, place: u)
+        return Self.readingOrder(found).map { r, u in
+            let key = "u:" + sc.unitIDs[u]
+            used.insert(key)
+            let e = element(key, place: u)
             let st = MarkStore.shared.state(PlaceKey(.region, sc.unitIDs[u]))
             e.state = st
             e.accessibilityFrameInContainerSpace = r
@@ -1141,7 +1175,10 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 c.regionPressed = u
                 c.onPlaceTap?(sc.place, at)
             }
-            e.actions = { [weak c] in c?.menuForUnit?(u).map { Self.actions($0) } ?? [] }
+            e.actions = { [weak c] in
+                guard let c, !c.locked else { return [] }
+                return c.menuForUnit?(u).map { Self.actions($0) } ?? []
+            }
             return e
         }
     }

@@ -229,8 +229,10 @@ struct SheetContent: View {
                 PinsWater(water: water, form: form, captionY: cy)
                 // the pin's sheet under its name, once the water is above 25% (8.8)
                 if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
-                    PinSheet(water: water, top: cy + 36)
-                    PinShare(water: water, captionY: cy)
+                    // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
+                    // under it: the Share circle beside the name, the sheet's rows 10 pt under the place line)
+                    PinSheet(water: water, top: cy + 6)
+                    PinShare(water: water, captionY: cy - 42)
                 } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
                     PinsList(water: water, captionY: cy)
                 }

@@ -42,8 +42,10 @@ struct ContentView: View {
                 if !Perf.shared.off.contains("zoom") {
                     ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
                         .offset(x: side.chromeOut ? 90 : 0)
-                        // no zoom column under Regions' menu (6.3): it is off the right edge while the menu is up (no slide)
+                        // no zoom column under Regions' menu (6.3): off the right edge while the menu is up (no slide on a
+                        // mode change; with the water's own move otherwise)
                         .offset(x: water.regions ? 90 : 0)
+                        .animation(water.modeSwitching ? nil : Motion.chrome, value: water.regions)
                 }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)

@@ -31,7 +31,8 @@ nonisolated final class RegionScene: @unchecked Sendable {
     /// each region's box (all its entries), for VoiceOver's elements
     func unitBox(_ u: Int) -> SIMD4<Float>? {
         var out: SIMD4<Float>?
-        for (e, owner) in entryUnit.enumerated() where owner == u {
+        guard u >= 0, u < unitEntries.count else { return nil }
+        for e in unitEntries[u] {
             let b = boxes[e]
             out = out.map { SIMD4(min($0.x, b.x), min($0.y, b.y), max($0.z, b.z), max($0.w, b.w)) } ?? b
         }

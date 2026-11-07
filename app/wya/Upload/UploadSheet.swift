@@ -633,29 +633,33 @@ final class UploadState {
     func stampWaiting(_ i: Int) -> Bool {
         guard waits(i), let m = map, let w = m.world, i < w.places.count else { return false }
         let p = w.places[i]
-        guard let f = finds.first(where: { $0.place == p.id }) else { return false }
+        // stamped since: the quick tap is the plain toggle (it unstamps)
+        guard !MarkStore.shared.state(.country(p.id)).stamped,
+              let f = finds.first(where: { $0.place == p.id }) else { return false }
         let off = droppedTrips[p.id] ?? []
         let row = TravelStore.Found(key: .country(p.id), name: p.n, cc: p.id.uppercased(),
                                     trips: f.visits.enumerated().filter { !off.contains($0.offset) }
                                         .map { ($0.element.from.description, $0.element.to.description) })
         let src = source
         Feel.stamp()
-        // waits no more (put back if the store refuses the write)
-        let was = (finds, order, dropped, droppedTrips)
+        // it waits no more on the map at once; the waiting file follows once the write has landed (put back alone if the
+        // store refuses it, whatever else changed meanwhile)
         finds.removeAll { $0.place == p.id }
         order.removeAll { $0 == i }
         droppedTrips[p.id] = nil
         m.found.remove(i)
-        if order.isEmpty { forget() } else { save() }
         Task {
             let ok = await MarkStore.shared.importFinds([row], source: src, words: "\(p.n) from your \(src == .photos ? "photos" : "history")")
-            if !ok {
+            if ok {
+                if order.allSatisfy({ dropped.contains($0) }) { m.found = []; forget() } else { save() }
+                UIAccessibility.post(notification: .announcement, argument: "\(p.n) stamped")
+            } else {
                 Feel.refuse()
-                (finds, order, dropped, droppedTrips) = was
+                if !finds.contains(where: { $0.place == p.id }) { finds.append(f) }
+                if !order.contains(i) { order.append(i) }
+                if !off.isEmpty { droppedTrips[p.id] = off }
                 m.found = Set(order).subtracting(dropped)
-                save()
             }
-            UIAccessibility.post(notification: .announcement, argument: "\(p.n) stamped")
         }
         return true
     }

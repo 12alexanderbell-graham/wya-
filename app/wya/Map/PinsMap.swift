@@ -673,6 +673,8 @@ struct PinsWater: View {
                         Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                     }
                 }
+                // (capped where the caption is, so the name stays on its line at the largest sizes)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             } else {
                 // none chosen: the caption every map has (Places'), how to drop one under a 0
                 Caption(name: "All my pins", count: store.pins.count, tail: store.pins.isEmpty ? "Hold the map to drop a pin" : "",

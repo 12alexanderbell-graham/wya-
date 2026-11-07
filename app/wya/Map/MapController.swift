@@ -978,7 +978,13 @@ final class MapController {
         continent = nil
         offContinent()
         let target = clamped(SIMD2(homeX, (Self.north + bottom) / 2), worldKMin)
-        if animated { fly(to: target, k: worldKMin, dur: Self.flight) } else { k = worldKMin; c = target; updateHome() }
+        if animated { fly(to: target, k: worldKMin, dur: Self.flight) }
+        else {
+            // at once: any flight or glide still running is dropped with what it would have done after
+            flight = nil; afterFlight = nil
+            k = worldKMin; c = target; updateHome()
+            restVersion &+= 1; needsFrame = true
+        }
     }
     private func offContinent() {
         drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil; followMid = nil; focusPlace = nil
