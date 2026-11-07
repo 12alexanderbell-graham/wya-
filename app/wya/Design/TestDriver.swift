@@ -177,6 +177,10 @@ final class TestDriver {
                     }
                 case "burst": Snap.burst(ms: Int(a) ?? 1000)
                 case "quiet": break
+                // searchpick <id>: that place's search result picked (Head's pick)
+                // cardtap stamp: the open country card's Stamp / Stamped pressed
+                case "cardtap": if a == "stamp" { CardTest.stamp?() }
+                case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }
                 case "tap":
                     // tap x y (screen points): what a finger there would press, logged and pressed
                     if p.count > 2, let x = Double(p[1]), let y = Double(p[2]), let m = map {

@@ -260,27 +260,7 @@ struct StampCard: View {
 
     private func stampButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
         Button {
-            if !s.stamped {
-                Feel.tap()
-                Task {
-                    await MarkStore.shared.stamp(key, name: name)
-                    card.stampedHere = true
-                    card.order = await MarkStore.shared.passportOrder()
-                    card.land()
-                }
-            } else if card.stampedHere {
-                guard !card.flying else { return }
-                card.lift {
-                    Task {
-                        await MarkStore.shared.unstamp(key, name: name)
-                        card.stampedHere = false
-                        card.order = await MarkStore.shared.passportOrder()
-                    }
-                }
-            } else {
-                // stamped before this card: removing a stamp (with its visits) is Verify's last row, never one tap
-                Feel.refuse()
-            }
+            stampTap(s, key: key, name: name)
         } label: {
             Text(s.stamped ? "Stamped" : "Stamp")
                 .font(.body.weight(.semibold))
@@ -290,21 +270,44 @@ struct StampCard: View {
                 .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
         }
         .buttonStyle(.plain)
+        #if DEBUG
+        // the test driver's `cardtap stamp|wish`: the card's own buttons, through the same code as a tap
+        .onAppear { CardTest.stamp = { stampTap(MarkStore.shared.state(key), key: key, name: name) } }
+        #endif
     }
 
-    private func wishButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
-        let blocked = s.stamped && !card.stampedHere
-        return Button {
-            if blocked { Feel.refuse(); return }
+    private func stampTap(_ s: MarkState, key: PlaceKey, name: String) {
+        if !s.stamped {
+            Feel.tap()
             Task {
-                if s.stamped {
+                await MarkStore.shared.stamp(key, name: name)
+                card.stampedHere = true
+                card.order = await MarkStore.shared.passportOrder()
+                card.land()
+            }
+        } else {
+            // ONE MEANING EVERYWHERE (7 Nov, the friend's review boards 03 and 12: "Stamped" took the stamp off right
+            // after stamping, but did nothing on a card opened later): a tap on Stamped always takes the stamp off,
+            // its visits with it, and the undo drop puts all of it back
+            guard !card.flying else { return }
+            card.lift {
+                Task {
                     await MarkStore.shared.unstamp(key, name: name)
                     card.stampedHere = false
                     card.order = await MarkStore.shared.passportOrder()
-                    Feel.lift()
-                    await MarkStore.shared.wish(key, name: name)
-                    Feel.tap()
-                } else if s.wished {
+                }
+            }
+        }
+    }
+
+    private func wishButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
+        // a place you have been is never on your wishlist (Q4.4),
+        // the same on every card (7 Nov: one meaning everywhere)
+        let blocked = s.stamped
+        return Button {
+            if blocked { Feel.refuse(); return }
+            Task {
+                if s.wished {
                     card.showGhost()
                     await MarkStore.shared.unwish(key, name: name); Feel.lift()
                 } else {
@@ -542,3 +545,7 @@ struct PassportPage: View {
         return Int(h)
     }
 }
+
+#if DEBUG
+@MainActor enum CardTest { static var stamp: (() -> Void)? }
+#endif

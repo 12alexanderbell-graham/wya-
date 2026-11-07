@@ -106,7 +106,7 @@ final class MarkStore {
         guard let store else { return }
         let acc = account
         guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { return }
-        apply(r, words: "\(label(key, name)) stamped", origin: origin, who: who)
+        apply(r, words: "\(both(r, key, name)) stamped", origin: origin, who: who)
     }
 
     func unstamp(_ key: PlaceKey, name: String = "", who: Who = .you, origin: CGPoint? = nil) async {
@@ -115,7 +115,7 @@ final class MarkStore {
         guard let store else { return }
         let acc = account
         guard let r = try? await store.unstamp(key, account: acc) else { return }
-        apply(r, words: "\(label(key, name)) unstamped", origin: origin, who: who)
+        apply(r, words: "\(both(r, key, name)) unstamped", origin: origin, who: who)
     }
 
     func wish(_ key: PlaceKey, want: Int = 3, name: String = "", cc: String = "", level: Int = 0,
@@ -279,6 +279,13 @@ final class MarkStore {
     }
 
     private func label(_ key: PlaceKey, _ name: String) -> String { name.isEmpty ? key.id.uppercased() : name }
+    /// a place and the country that came or went with it, both in the undo drop's words (7 Nov, the friend's review
+    /// board 14): "Western Australia and Australia stamped"
+    private func both(_ r: TravelStore.Result, _ key: PlaceKey, _ name: String) -> String {
+        guard key.kind != .country, let c = r.changed.keys.first(where: { $0.kind == .country && $0 != key }) else { return label(key, name) }
+        let country = Locale.current.localizedString(forRegionCode: c.id.uppercased()) ?? c.id.uppercased()
+        return "\(label(key, name)) and \(country)"
+    }
 
     #if DEBUG
     /// THE DEMO ACCOUNT, in the store (it was hard-coded in the map, MapController's DemoAccount): the same 34 stamped

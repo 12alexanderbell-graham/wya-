@@ -40,7 +40,8 @@ enum MapSettingsRows {
         .init(id: "projection", name: "Projection", group: 0,
               choices: c([("equalearth", "Equal Earth"), ("classic", "Classic"), ("mercator", "Mercator")]), page: nil, defaultValue: "equalearth",
               shows: { $0.map == "native" }, get: { $0.projection }, set: { s, v in s.projection = v }),
-        .init(id: "diamonds", name: "Diamonds", group: 0,
+        // (7 Nov 16:49: diamonds are the map's small places, so the row says that, in two words)
+        .init(id: "diamonds", name: "Small places", group: 0,
               choices: c([("main", "Main map"), ("everywhere", "Everywhere"), ("nowhere", "Nowhere")]), page: nil, defaultValue: "main",
               shows: { _ in true }, get: { $0.diamonds }, set: { s, v in s.diamonds = v }),
         .init(id: "townDots", name: "Town dots", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",

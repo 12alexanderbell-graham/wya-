@@ -337,8 +337,10 @@ final class UploadState {
         NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
         // a read from a sheet or step that has gone since is dropped
         guard token == nil || token == readToken, let w = water, w.upload else { return }
-        // a file's finding has already started (its line growing): the samples go to it
-        if phase == .finding, reading {
+        // a file's finding has already started (its line growing): the samples go to it. (Also while finding is still
+        // coming in: a tiny file is read before the 0.42 s it takes, and its samples were dropped, the caption left at
+        // "0 found" for good; 7 Nov, the friend's review board 15. Kept here, finding delivers them when it is in.)
+        if reading {
             pending = (s, src, why)
             reading = false
             withAnimation(Motion.quick) { fileShare = 0 }
@@ -942,23 +944,32 @@ struct UploadSheet: View {
         WorkingMark(size: 20, running: u.markIn)
             .scaleEffect(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
-        ZStack {
-            // the stamp glyph (the app's own set) once the review is up, bare (no coloured circle behind it); the × until then
+        // once the review is up, the go says what it does (7 Nov, the friend's review board 15: the bare stamp glyph
+        // saved the visit without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
+        // many), as the card's own Stamp capsule; the × until then. There at once, no grow (31 Oct)
+        ZStack(alignment: .trailing) {
             if u.goIn {
-                Icon5Still(key: "stamp", progress: 0, ink: Palette.ink, size: 22)
-                    .transition(.scale)
+                Text(u.count == 1 ? "Stamp" : "Stamp all")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 16)
+                    .frame(height: 44)
+                    .glassEffect(.clear, in: .capsule)
+                    .transition(.identity)
             } else {
                 Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 22)
-                    .scaleEffect(u.xIn ? 1 : 0)
-                    .transition(.scale)
+                    .frame(width: 44, height: 44)
+                    .opacity(u.xIn ? 1 : 0)
+                    .transition(.identity)
             }
         }
-        .frame(width: 44, height: 44)
-        .contentShape(Rectangle())
+        // (only what is drawn takes the tap: the capsule, or the ×'s 44 pt; its right edge mirrors the mark's left)
+        .contentShape(Capsule())
         .onTapGesture {
             if u.phase == .review { u.go() } else if u.phase == .finding { u.cancel() }
         }
-        .position(x: L.W - L.sheetInset - 44, y: y)
+        .frame(width: 120, height: 44, alignment: .trailing)
+        .position(x: L.W - L.sheetInset - 14 - 60, y: y)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(u.phase == .review ? "Stamp \(u.count) \(u.count == 1 ? "place" : "places")" : "Stop")
         .accessibilityAddTraits(.isButton)

@@ -225,7 +225,7 @@ struct SheetContent: View {
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
                     let hc = water.historyUp ? map.historyInfo?.caption : nil
-                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
+                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "All my places") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
                             tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
                             night: FullView.night(form.page), visible: captionShown)
@@ -346,7 +346,7 @@ struct SheetContent: View {
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
             || water.pageSheet
-            // Places' 50% holds the shelf (7.5), so the solar system is down out of the water there
+            // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places)
             || map.placesMode
     }
     @State private var captionShown = false

@@ -43,12 +43,13 @@ enum PinLight {
     }
 }
 
-/// THE DEFAULT PIN SEQUENCE (15.7, Q15.3): a new pin takes the next of these (the order the author's call, from the
-/// palette); a pin you colour keeps yours
-enum PinSequence {
-    static let colours: [(String, SIMD3<Double>)] = [("red", Palette.redV), ("blue", Palette.blueV), ("yellow", Palette.yellowV),
-                                                     ("lime", Palette.limeV), ("teal", Palette.tealV), ("brown", Palette.brownV),
-                                                     ("ink", Palette.inkV)].map { ($0.0, PinLight.v3($0.1)) }
+/// A PIN'S COLOUR (Q15.3, as decided 7 Nov 16:37: one simple black until the colour is changed): every new
+/// pin is plain ink; a pin you colour keeps yours. No sequence.
+enum PinColours {
+    static let standard: SIMD3<Double> = PinLight.v3(Palette.inkV)
+    /// for the review sheet only: what a pin looks like once you have given it a colour
+    static let examples: [(String, SIMD3<Double>)] = [("Black", Palette.inkV), ("Red", Palette.redV), ("Blue", Palette.blueV),
+                                                      ("Yellow", Palette.yellowV)].map { ($0.0, PinLight.v3($0.1)) }
 }
 
 struct PinMarker: View {
@@ -195,7 +196,7 @@ struct PinReviewHost: View {
 
     @ViewBuilder private var scene: some View {
         let W = L.W
-        let seq = PinSequence.colours
+        let seq = PinColours.examples
         switch r.scene {
         case "stacked":
             // three stacks: the back ones step back, no names while stacked, no number bubbles
@@ -227,7 +228,7 @@ struct PinReviewHost: View {
             // in a capsule; a measure (2 pt ink, the distance on its middle)
             catmullRom([CGPoint(x: W * 0.1, y: 520), CGPoint(x: W * 0.25, y: 500), CGPoint(x: W * 0.35, y: 560),
                         CGPoint(x: W * 0.5, y: 540), CGPoint(x: W * 0.6, y: 590)])
-                .stroke(PinLight.mix(seq[4].1, seq[4].1, 0), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                .stroke(PinLight.mix(seq[1].1, seq[1].1, 0), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             let area = catmullRom([CGPoint(x: W * 0.62, y: 500), CGPoint(x: W * 0.85, y: 490), CGPoint(x: W * 0.9, y: 580),
                                    CGPoint(x: W * 0.7, y: 610), CGPoint(x: W * 0.6, y: 560), CGPoint(x: W * 0.62, y: 500)])
             area.fill(PinLight.mix(seq[2].1, seq[2].1, 0)).blendMode(.multiply)
@@ -236,10 +237,10 @@ struct PinReviewHost: View {
                 .stroke(Palette.ink, style: StrokeStyle(lineWidth: 2, lineCap: .round))
             MapCapsule(s: "1.8 km").position(x: W * 0.35, y: 650)
         default:
-            // every colour of the sequence, spread, with names
+            // the plain black pin, and a few once you have chosen their colour, with names
             ForEach(Array(seq.enumerated()), id: \.offset) { i, c in
                 let col = i % 4, row = i / 4
-                PinMarker(colour: c.1, name: c.0.prefix(1).uppercased() + c.0.dropFirst())
+                PinMarker(colour: c.1, name: c.0)
                     .position(x: W * (0.16 + 0.22 * CGFloat(col)), y: 280 + CGFloat(row) * 110)
             }
         }

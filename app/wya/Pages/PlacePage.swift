@@ -903,8 +903,10 @@ enum PageGlass {
     static var control: SwiftUI.Glass { clearControls ? .clear : .regular }
     /// the head's circles (search, the plus and its tools): navigation, clear on the map and over a page
     @MainActor static var head: SwiftUI.Glass { clearControls ? .clear : surface }
-    /// the water and what rises out of it, and search's results box: frosted while a page is up, clear on the map
-    @MainActor static var surface: SwiftUI.Glass { PlacePageState.shared.isOpen ? .regular : .clear }
+    /// the water and what rises out of it, search's results box, the map's word capsules: the system's own frosted
+    /// glass everywhere (7 Nov 16:49: Apple's frosted levels), so it follows iOS 27's Liquid Glass slider
+    /// and its legibility. (The passport's pages stay clear, 30 Oct.)
+    @MainActor static var surface: SwiftUI.Glass { .regular }
 }
 
 

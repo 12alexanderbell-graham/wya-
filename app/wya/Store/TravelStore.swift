@@ -270,7 +270,30 @@ actor TravelStore {
         for x in visits { modelContext.delete(x) }
         res.undo.append(snap)
         res.changed[key] = (state(r, visits: v), .none)
+        let cc = r.cc.lowercased()
         modelContext.delete(r)
+        // ITS COUNTRY WITH IT (7 Nov, the friend's review board 14: Western Australia unstamped, Australia still counted
+        // as a visit): a country stamped only through its places (via) goes too when no other place of it is still
+        // stamped and it has no visits of its own, in the same undo step; a country you stamped yourself stays
+        if key.kind != .country, !cc.isEmpty, let c = try record(account, .country(cc)), c.stamped, c.via != nil {
+            // (the country codes compared without case: places are saved with their file's code as it came)
+            let others = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+            let held = others.contains { !$0.key.hasPrefix("c:") && $0.key != k && $0.cc.lowercased() == cc }
+            let ck = PlaceKey.country(cc)
+            let cv = try visitCount(account, ck)
+            // (a country with visits of its own, dates you gave it, is yours: it stays)
+            if !held && cv == 0 {
+                var csnap = snapshot(ck, c)
+                let kk = ck.description
+                let cvisits = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account && $0.key == kk }))
+                csnap.visits = cvisits.map { .init(id: $0.id, arrived: $0.arrived, left: $0.left, rough: $0.rough, lived: $0.lived,
+                                                   transit: $0.transit, planId: $0.planId, source: $0.source) }
+                for x in cvisits { modelContext.delete(x) }
+                res.undo.append(csnap)
+                res.changed[ck] = (state(c, visits: cv), .none)
+                modelContext.delete(c)
+            }
+        }
         try modelContext.save()
         return res
     }

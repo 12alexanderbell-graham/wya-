@@ -428,9 +428,17 @@ struct HeadView: View {
         if let id = map.world?.places[i].id { SearchResults.remember(id) }
         // Places: a country picked is opened with its towns (7.4)
         if map.placesMode { map.openPlace(i); closeSearch(); return }
-        let f = water.form()
-        map.show(place: i, sheetTop: f.page > 0.5 ? water.layout.top(.quarter) : f.top)
+        // COUNTRIES: the card comes up ready to stamp (7 Nov, the friend's review boards 02 and 12: picking Japan left the user
+        // on the map, tapping the country again to find Stamp). The water to 25%, the camera frames the place, and the
+        // card grows out of it once the camera has landed, as from the Stamped list
+        if water.stop != .quarter && water.stop != .closed { water.go(.quarter) }
+        map.show(place: i, sheetTop: water.layout.top(.quarter))
         closeSearch()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + 0.1) {
+            guard let w = map.world, !map.placesMode, map.regionScene == nil else { return }
+            let p = w.places[i]
+            CardState.shared.open(i, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map, water: water)
+        }
     }
 
     // MARK: plus and its tools
@@ -458,6 +466,10 @@ struct HeadView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(page.isOpen && !head.searching ? "Share" : head.searching ? "Close search" : head.toolsOpen ? "Close tools" : "Tools")
+        #if DEBUG
+        // the test driver's `searchpick <id>`: a search result picked, through the same code as a tap on its row
+        .onAppear { HeadTest.pick = { i in pick(i) } }
+        #endif
     }
 
     /// a page's Share: the system share sheet with its name and the page's link (16.6; `wya://page/<key>`)
@@ -1274,16 +1286,21 @@ struct SearchResults: View {
     /// a name as search compares it: no case, no accents ("Curacao" finds Curaçao)
     static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
 
+    /// edits between two names, two letters swapped counting as one (7 Nov, the friend's review board 10: "Japna" found
+    /// nothing, two edits from "japan" under plain edit distance; with swaps it is one, so "Did you mean?" offers Japan)
     private static func distance(_ a: [Character], _ b: [Character]) -> Int {
         if a.isEmpty { return b.count }
         if b.isEmpty { return a.count }
+        var before = [Int](repeating: 0, count: b.count + 1)
         var prev = Array(0 ... b.count), cur = [Int](repeating: 0, count: b.count + 1)
         for i in 1 ... a.count {
             cur[0] = i
             for j in 1 ... b.count {
                 cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+                if i > 1, j > 1, a[i - 1] == b[j - 2], a[i - 2] == b[j - 1] { cur[j] = min(cur[j], before[j - 2] + 1) }
             }
-            swap(&prev, &cur)
+            before = prev
+            prev = cur
         }
         return prev[b.count]
     }
@@ -1372,3 +1389,8 @@ struct SearchResults: View {
         return Array((alias + own + other + contains + language).prefix(6))
     }
 }
+
+#if DEBUG
+/// the test driver's way into the head's own actions
+@MainActor enum HeadTest { static var pick: ((Int) -> Void)? }
+#endif

@@ -154,7 +154,7 @@ extension MapController {
         case everywhere, country(Int), continent(String), region(String), collection(String)
         @MainActor var title: String {
             switch self {
-            case .everywhere: "Everywhere"
+            case .everywhere: "All my places"
             case .continent(let k), .region(let k): k
             case .country: ""
             case .collection(let id): CollectionStore.shared.collection(id)?.title ?? ""
@@ -248,14 +248,11 @@ extension MapController {
             return CollectionStore.shared.collection(id)?.items.filter { MarkStore.shared.state($0.key).stamped }.count ?? 0
         }
         let ids: Set<String>? = members(of: pick).map { Set($0.compactMap { world?.places[$0].id.lowercased() }) }
-        var n = 0
-        for (k, s) in MarkStore.shared.marks where s.stamped && (k.kind == .town || k.kind == .yours || k.kind == .thing) {
-            guard let ids else { n += 1; continue }
-            let cc = k.kind == .town ? String(k.id.prefix { $0 != "/" })
-                : k.kind == .thing ? (ThingStore.shared.thing(k.id)?.cc ?? "") : OwnPlaces.shared.place(k.id)?.cc ?? ""
-            if ids.contains(cc) { n += 1 }
+        guard let ids else {
+            return MarkStore.shared.marks.filter { $0.value.stamped && [.town, .yours, .thing].contains($0.key.kind) }.count
         }
-        return n
+        // (one count for the caption and Places' rows: PlacesMaps.counts, which also finds a collection stop's country)
+        return PlacesMaps.counts().reduce(0) { ids.contains($1.key) ? $0 + $1.value : $0 }
     }
 
     /// back to the world: the towns go, the world comes back (the camera stays where it is)

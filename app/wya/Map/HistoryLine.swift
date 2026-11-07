@@ -520,7 +520,8 @@ final class HistoryCapsule: UIView {
     private var showing = false
 
     init() {
-        glass = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
+        // a word on the map: the system's frosted glass, as every surface (7 Nov 16:49)
+        glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
         super.init(frame: .zero)
         isUserInteractionEnabled = false
         glass.layer.cornerRadius = 14

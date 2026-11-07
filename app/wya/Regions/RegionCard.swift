@@ -147,7 +147,9 @@ struct RegionCard: View {
                     }
                     card.stampedHere = true
                 }
-            } else if card.stampedHere {
+            } else {
+                // one meaning everywhere, as the country card's (7 Nov): a tap on Stamped always takes the stamp off, the
+                // undo drop puts it back
                 Feel.lift()
                 Task {
                     if key.kind == .town { await TownStamps.unstamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" })) }
@@ -155,8 +157,6 @@ struct RegionCard: View {
                     else { await MarkStore.shared.unstamp(key, name: card.name) }
                     card.stampedHere = false
                 }
-            } else {
-                Feel.refuse()
             }
         } label: {
             Text(words ? (s.stamped ? "Stamped" : "Stamp") : " ")
@@ -171,20 +171,12 @@ struct RegionCard: View {
     }
 
     private func wishButton(_ s: MarkState, key: PlaceKey, w: CGFloat, words: Bool) -> some View {
-        let blocked = s.stamped && !card.stampedHere
+        // a place you have been is never on your wishlist (Q4.4), the same on every card (7 Nov)
+        let blocked = s.stamped
         return Button {
             if blocked { Feel.refuse(); return }
             Task {
-                if s.stamped {
-                    // with the parents stamped only through it (the unstamp rule, 6.5)
-                    if key.kind == .town { await TownStamps.unstamp(key, name: card.name, cc: String(key.id.prefix { $0 != "/" })) }
-                    else if let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) { await RegionStamps.unstamp(u, in: sc) }
-                    else { await MarkStore.shared.unstamp(key, name: card.name) }
-                    card.stampedHere = false
-                    Feel.lift()
-                    await MarkStore.shared.wish(key, name: card.name)
-                    Feel.tap()
-                } else if s.wished {
+                if s.wished {
                     await MarkStore.shared.unwish(key, name: card.name); Feel.lift()
                 } else {
                     // a stop still to come is wished with its day (D7)
