@@ -149,10 +149,21 @@ final class MarkStore {
     /// AN UPLOAD'S FINDS STAMPED with their found trips (Part 9.5's go): one write, one undo step
     /// false when the store refused the write (nothing was changed)
     @discardableResult
-    func importFinds(_ finds: [TravelStore.Found], source: MarkSource, words: String) async -> Bool {
+    /// `join`: this write joins the last undo step instead of making its own (an import's second round: one undo takes
+    /// the whole import back, its countries and its regions), the step taking the new words
+    func importFinds(_ finds: [TravelStore.Found], source: MarkSource, words: String, join: Bool = false) async -> Bool {
         guard let store else { return false }
         let acc = account
         guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return false }
+        if join, !r.changed.isEmpty, let last = undoStack.last, last.run == nil {
+            undoStack[undoStack.count - 1] = (last.snaps + r.undo, words, nil)
+            take(r)
+            redoStack = []
+            lastWords = words
+            changes += 1
+            emit(MarksChanged(changed: r.changed, origin: nil, who: .importer))
+            return true
+        }
         apply(r, words: words, origin: nil, who: .importer)
         return true
     }

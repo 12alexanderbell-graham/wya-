@@ -101,6 +101,9 @@ final class UploadState {
     private(set) var round: [RegionFind]?
     /// the second round being worked out (the working mark shows past 0.4 s)
     @ObservationIgnored private var workingOut = false
+    /// the countries the import just stamped, when the round on screen is that import's (its go joins their undo step);
+    /// 0 for a round opened again from waiting
+    @ObservationIgnored private var roundJoins = 0
     private(set) var roundDropped: Set<String> = []
 
     var isOpen: Bool { water?.upload ?? false }
@@ -114,8 +117,9 @@ final class UploadState {
         guard !w.upload else { return }
         readToken += 1
         moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0
-        // finds waiting: the Upload tool opens straight on their review (9.2)
+        // finds waiting: the Upload tool opens straight on their review (9.2); then a round of regions left waiting
         if !order.isEmpty { openReview(water: w, map: m); return }
+        if let wr = waitingRound() { openRound(water: w, map: m, wr); return }
         water = w; map = m
         phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
         step = 0; note = [:]; locating = false
@@ -695,6 +699,7 @@ final class UploadState {
         forget()
         // another account never sees these regions either
         round = nil; roundDropped = []
+        forgetRound()
         if water?.upload == true { phase = .choosing; step = 0; count = 0; water?.closeUpload() }
     }
     /// nothing waits any more (go, ×): the file goes too
@@ -848,7 +853,7 @@ final class UploadState {
             // says it is being worked out (12.2)
             workingOut = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [self] in if workingOut, me == job { withAnimation(Motion.quick) { markIn = true } } }
-            let more = await Self.regionsFound(in: rows.map { $0.key.id.lowercased() }, samples: read, world: world, source: src)
+            let fresh = await Self.regionsFound(in: rows.map { $0.key.id.lowercased() }, samples: read, world: world, source: src)
                 .filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
                 .compactMap { r -> RegionFind? in
                     guard let gone = off[r.cc], !gone.isEmpty, !r.visits.isEmpty else { return r }
@@ -858,12 +863,15 @@ final class UploadState {
                 }
             workingOut = false
             if markIn { withAnimation(Motion.quick) { markIn = false } }
+            // regions left waiting by an earlier round join this one (so stamping it never loses them)
+            let have = Set(fresh.map(\.id))
+            let more = fresh + (waitingRound()?.1 ?? []).filter { !have.contains($0.id) }
             if !more.isEmpty, me == job {
                 if stampAtOnce {
-                    _ = await Self.importRegions(more, source: src)
+                    _ = await Self.importRegions(more, source: src, places: n)
                 } else {
                     // the caption has rolled out with the go: it rolls back in as the round's (A9.14)
-                    round = more; roundDropped = []
+                    round = more; roundDropped = []; roundJoins = n
                     count = more.count
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
                         busy = false
@@ -883,6 +891,7 @@ final class UploadState {
             busy = false
             guard me == job else { return }
             Feel.land(speed: 0)
+            if round != nil { forgetRound() }
             round = nil; roundDropped = []
             phase = .choosing; step = 0; count = 0
             w.uploadFrom = .quarter
@@ -903,7 +912,7 @@ final class UploadState {
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
         if w.stop != .quarter { w.go(.quarter) }
         Task {
-            guard await Self.importRegions(keep, source: src) else {
+            guard await Self.importRegions(keep, source: src, places: roundJoins) else {
                 Feel.refuse()
                 busy = false
                 withAnimation(Motion.quick) { captionIn = true; goIn = true }
@@ -912,14 +921,16 @@ final class UploadState {
             finishGo(me, w)
         }
     }
-    /// leaving the second round (a pull down, ×): nothing more is stamped (they do not wait yet: 9.6 for regions is
-    /// not built), the sheet gives the water back
+    /// leaving the second round (a pull down, ×): nothing more is stamped; the regions wait (9.6: not drawn on the
+    /// Countries map, their countries are stamped) and the next Upload opens on this round (9.2); the sheet gives the
+    /// water back
     private func leaveRound() {
         guard let w = water, !busy else { return }
         Feel.land(speed: 0)
         busy = true
         job += 1
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
+        saveRound()
         let me = job
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
             busy = false
@@ -928,6 +939,68 @@ final class UploadState {
             phase = .choosing; step = 0; count = 0
             w.uploadFrom = nil
             w.closeUpload()
+        }
+    }
+
+    // MARK: the second round waiting (9.6 for regions)
+
+    private static var roundURL: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("waiting-regions.json")
+    }
+    private struct WaitingRound: Codable {
+        struct Region: Codable { var id, name, cc, country: String; var row: Int; var visits: [[String]] }
+        var source: String
+        var regions: [Region]
+        var dropped: [String]
+    }
+    private func saveRound() {
+        guard let url = Self.roundURL, let r = round else { return }
+        let out = WaitingRound(source: source.rawValue,
+                               regions: r.map { .init(id: $0.id, name: $0.name, cc: $0.cc, country: $0.country, row: $0.row,
+                                                      visits: $0.visits.map { [$0.from.description, $0.to.description] }) },
+                               dropped: Array(roundDropped).sorted())
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
+    }
+    private func forgetRound() {
+        if let url = Self.roundURL { try? FileManager.default.removeItem(at: url) }
+    }
+    /// the regions left waiting by a round, or nil (a region stamped since is left out)
+    private func waitingRound() -> (MarkSource, [RegionFind], Set<String>)? {
+        guard let url = Self.roundURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(WaitingRound.self, from: d)
+        else { return nil }
+        let regions = x.regions.compactMap { r -> RegionFind? in
+            guard !MarkStore.shared.state(PlaceKey(.region, r.id)).stamped else { return nil }
+            let v = r.visits.compactMap { p -> Finds.Visit? in
+                guard p.count == 2, let a = LocalDay(p[0]), let b = LocalDay(p[1]) else { return nil }
+                return Finds.Visit(from: a, to: b, count: 1)
+            }
+            return RegionFind(id: r.id, name: r.name, cc: r.cc, country: r.country, row: r.row, visits: v)
+        }
+        if regions.isEmpty { forgetRound(); return nil }
+        return (MarkSource(rawValue: x.source) ?? .history, regions, Set(x.dropped).intersection(regions.map(\.id)))
+    }
+    /// THE ROUND AGAIN (the Upload tool with regions waiting): straight onto it, as a waiting review opens (A9.7's last
+    /// half): the water to 25%, Regions / n / found, then Stamp all
+    private func openRound(water w: Water, map m: MapController, _ wr: (MarkSource, [RegionFind], Set<String>)) {
+        Feel.tap()
+        moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0; kept = nil
+        water = w; map = m
+        source = wr.0; round = wr.1; roundDropped = wr.2; roundJoins = 0
+        let at25 = w.stop == .quarter
+        w.openUpload()
+        phase = .review
+        captionIn = false; markIn = false; xIn = false; goIn = false; message = nil
+        count = wr.1.count - wr.2.count
+        job += 1
+        let me = job
+        DispatchQueue.main.asyncAfter(deadline: .now() + (at25 ? 0.36 : 0.45)) { [self] in
+            guard me == job else { return }
+            withAnimation(Motion.quick) { captionIn = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
+                guard me == job else { return }
+                withAnimation(Motion.quick) { goIn = true }
+            }
         }
     }
 
@@ -967,15 +1040,18 @@ final class UploadState {
             }
         }.value
     }
-    /// regions found, stamped as one write (their level's row kept, so their counts read them)
-    static func importRegions(_ keep: [RegionFind], source: MarkSource) async -> Bool {
+    /// regions found, stamped as one write (their level's row kept, so their counts read them); with `places` (the
+    /// countries the same import just stamped) it joins their undo step, one undo for the whole import
+    static func importRegions(_ keep: [RegionFind], source: MarkSource, places: Int = 0) async -> Bool {
         let rows = keep.map { f in
             TravelStore.Found(key: PlaceKey(.region, f.id), name: f.name, cc: f.cc,
                               trips: f.visits.map { ($0.from.description, $0.to.description) }, level: f.row)
         }
         let n = rows.count
-        return await MarkStore.shared.importFinds(rows, source: source,
-                                                  words: "\(n) \(n == 1 ? "region" : "regions") from your \(source == .photos ? "photos" : "history")")
+        let regions = "\(n) \(n == 1 ? "region" : "regions")"
+        let what = places > 0 ? "\(places) \(places == 1 ? "place" : "places") and \(regions)" : regions
+        return await MarkStore.shared.importFinds(rows, source: source, words: "\(what) from your \(source == .photos ? "photos" : "history")",
+                                                  join: places > 0)
     }
 
     /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls back
