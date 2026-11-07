@@ -104,6 +104,8 @@ final class UploadState {
     /// the countries the import just stamped, when the round on screen is that import's (its go joins their undo step);
     /// 0 for a round opened again from waiting
     @ObservationIgnored private var roundJoins = 0
+    /// the second round worked out while the review is up (every found country's regions), so the go never waits on it
+    @ObservationIgnored private var roundAhead: Task<[RegionFind], Never>?
     private(set) var roundDropped: Set<String> = []
 
     var isOpen: Bool { water?.upload ?? false }
@@ -380,6 +382,7 @@ final class UploadState {
     /// A9.4: the pair out, then the caption (World / 0 / found), the mark and the ×; the samples are worked out once
     /// they are all in place (a file's are still being read: its line grows along the water's top meanwhile)
     private func startFinding() {
+        roundAhead = nil
         job += 1
         let me = job
         moving = true
@@ -512,6 +515,11 @@ final class UploadState {
             guard me == job else { return }
             phase = .review
             calendarChanged()
+            // the regions inside every found country, worked out now, off the main thread, for the go's second round
+            if let m = map, let w = m.world {
+                let ids = order.map { w.places[$0].id.lowercased() }, read = samples, src = readSource
+                roundAhead = Task { await Self.regionsFound(in: ids, samples: read, world: w, source: src) }
+            }
             // Map settings' Found places = Stamp them: no review, the finds land as stamps at once (9.4)
             if stampAtOnce { go(); return }
             withAnimation(Motion.quick) { goIn = true }
@@ -853,7 +861,13 @@ final class UploadState {
             // says it is being worked out (12.2)
             workingOut = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [self] in if workingOut, me == job { withAnimation(Motion.quick) { markIn = true } } }
-            let fresh = await Self.regionsFound(in: rows.map { $0.key.id.lowercased() }, samples: read, world: world, source: src)
+            let keptIDs = Set(rows.map { $0.key.id.lowercased() })
+            let ahead = roundAhead
+            roundAhead = nil
+            let found: [RegionFind]
+            if let ahead { found = await ahead.value.filter { keptIDs.contains($0.cc) } }
+            else { found = await Self.regionsFound(in: Array(keptIDs), samples: read, world: world, source: src) }
+            let fresh = found
                 .filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
                 .compactMap { r -> RegionFind? in
                     guard let gone = off[r.cc], !gone.isEmpty, !r.visits.isEmpty else { return r }
