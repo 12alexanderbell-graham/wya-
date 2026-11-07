@@ -451,13 +451,10 @@ struct PinsWater: View {
             if let p = store.pin(store.selected) {
                 Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                 Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
-            } else if store.pins.isEmpty {
-                Text("Hold the map to drop a pin").font(.title3).foregroundStyle(Palette.ink.opacity(0.5))
             } else {
-                // the count in the chosen pin's name's place and size, so the caption keeps its size
-                Text(store.pins.count == 1 ? "1 pin" : "\(store.pins.count) pins").font(.title2.weight(.semibold))
-                    .foregroundStyle(Palette.ink)
-                    .contentTransition(.numericText(value: Double(store.pins.count)))
+                // none chosen: the caption every map has (Places'), how to drop one under a 0
+                Caption(name: "All my pins", count: store.pins.count, tail: store.pins.isEmpty ? "Hold the map to drop a pin" : "",
+                        night: FullView.night(form.page))
             }
         }
         .animation(Motion.quick, value: store.selected)
@@ -480,7 +477,8 @@ struct PinsList: View {
 
     var body: some View {
         let L = water.layout
-        let foot = captionY + 28
+        // (under the caption's foot, as Places' rows)
+        let foot = captionY + 65
         let fade = L.capsule.minY - 44
         let top = foot + 8
         ScrollView(.vertical) {
@@ -489,7 +487,8 @@ struct PinsList: View {
                 Color.clear.frame(height: L.H - fade + 24)
             }
         }
-        .contentMargins(.horizontal, 16 - L.sheetInset, for: .scrollContent)
+        // 16 pt inside the water, as the Stamped list's rows (the box already starts at the water's edge)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
         .scrollIndicators(.hidden)
         .scrollDisabled(water.stop != .full)
         .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - top))

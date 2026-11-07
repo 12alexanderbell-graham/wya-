@@ -254,7 +254,8 @@ struct SheetContent: View {
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
+            // (not in Pins: its caption is its own, and its number is not your stamps)
+            if captionShown, !map.pinsMode, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
@@ -282,7 +283,7 @@ struct SheetContent: View {
             }
             // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, Earth's (a continent by name); on
             // a continent, that planet's (Open it, here unavailable, · Its stamped list). The ring follows
-            if captionShown, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList,
+            if captionShown, !map.pinsMode, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.stampedList,
                !water.pageSheet, region == nil {
                 let here = map.continent
                 Color.clear

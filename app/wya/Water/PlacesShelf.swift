@@ -68,7 +68,8 @@ struct PlacesMaps: View {
                 Color.clear.frame(height: bottom)
             }
         }
-        .contentMargins(.horizontal, 16 - L.sheetInset, for: .scrollContent)
+        // 16 pt inside the water, as the Stamped list's rows (the box already starts at the water's edge)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
         .scrollIndicators(.hidden)
         // below full a drag is the water's, not the rows'
         .scrollDisabled(water.stop != .full)
