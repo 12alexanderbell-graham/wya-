@@ -608,7 +608,7 @@ struct ContentView: View {
         let now = CACurrentMediaTime()
         if Sideways.shared.on || head.searching || now - head.mapClosedSearchAt < 0.6 || now - map.touchClosedAt < 0.6 { return nil }
         // PLACES with a country open (11.5's Places menu): a town held is that town's own menu, never its country's
-        // (30 Oct 23:55: a town held gives that town's things, not its country's); your own place its menu;
+        // (30 Oct 23:55: a town held gives that town's own menu and page, not its country's); your own place its menu;
         // empty land of the open country the land's menu
         // Places close in with no country open: a town or thing of the countries in view held is its own menu
         if map.placesMode, map.placeOpen == nil, !map.nearbyTowns.isEmpty {

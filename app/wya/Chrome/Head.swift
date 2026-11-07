@@ -834,6 +834,10 @@ private struct FirstTool: View, Animatable {
                 Icon5(key: "stamp", ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
                     .opacity(Double(t))
             }
+        } else if lit > 0.5 {
+            // quick stamping left on with the tools away: its stamp stays on the dot in white, so a tap on the map is
+            // seen to stamp (7 Nov review, board 17: nothing showed it was on)
+            Icon5(key: "stamp", ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
         }
     }
 }
