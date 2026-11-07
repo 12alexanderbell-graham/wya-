@@ -81,7 +81,7 @@ struct ZoomColumn: View {
 
     /// (none on a region map, where Reset is Back to the country)
     @ViewBuilder private var resetMenu: some View {
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         if map.regionScene == nil {
             Button("The world") {
                 after {

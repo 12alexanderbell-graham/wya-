@@ -1000,6 +1000,105 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     private var zoomStartY: CGFloat = 0
     private var zoomLast: Double = 1
 
+    // MARK: VoiceOver (1.9's row, 19.4): the places on screen as elements, top to bottom and left to right within a
+    // row; each says its name and its state ("France, stamped, 3 times"); a double tap is a tap (its card); its hold
+    // menu's rows are its actions; rotors go through Stamped, Wishlist and Not stamped. Worked out again only once the
+    // camera has come to rest or a mark has changed, never while it moves. The Countries map only for now (Regions'
+    // units, Places' towns and Pins have their own, still to build).
+    final class PlaceElement: UIAccessibilityElement {
+        let place: Int
+        var state = MarkState.none
+        var activate: (() -> Void)?
+        var actions: (() -> [UIAccessibilityCustomAction])?
+        init(container: Any, place: Int) { self.place = place; super.init(accessibilityContainer: container) }
+        override func accessibilityActivate() -> Bool { activate?(); return activate != nil }
+        override var accessibilityCustomActions: [UIAccessibilityCustomAction]? { get { actions?() } set {} }
+    }
+    private var axKey: [Int] = []
+    private var axCache: [PlaceElement] = []
+
+    override var accessibilityElements: [Any]? {
+        get { placeElements() }
+        set {}
+    }
+    override var accessibilityCustomRotors: [UIAccessibilityCustomRotor]? {
+        get {
+            [rotor("Stamped") { $0.stamped }, rotor("Wishlist") { $0.wished && !$0.stamped }, rotor("Not stamped") { !$0.stamped }]
+        }
+        set {}
+    }
+
+    private func placeElements() -> [PlaceElement] {
+        guard let c = controller, let w = c.world, !c.placesMode, !c.pinsMode, c.regionScene == nil else { return [] }
+        let key = [c.restVersion, MarkStore.shared.changes, Int(bounds.width), Int(bounds.height), w.places.count,
+                   c.drawnContinent?.hashValue ?? 0]
+        if key == axKey { return axCache }
+        axKey = key
+        var found: [(CGRect, Int)] = []
+        for i in w.places.indices {
+            if let k = c.drawnContinent, !w.inCont(i, k) { continue }
+            guard let f = w.frame(of: i) else { continue }
+            let r = c.screenRect(f).intersection(bounds)
+            guard !r.isNull, r.width >= 4, r.height >= 4 else { continue }
+            found.append((r, i))
+        }
+        // reading order: rows of 80 pt from the top, left to right in each
+        found.sort { a, b in
+            let ra = Int(a.0.midY / 80), rb = Int(b.0.midY / 80)
+            return ra != rb ? ra < rb : a.0.midX < b.0.midX
+        }
+        axCache = found.map { r, i in
+            let e = PlaceElement(container: self, place: i)
+            let st = MarkStore.shared.state(.country(w.places[i].id))
+            e.state = st
+            e.accessibilityFrameInContainerSpace = r
+            e.accessibilityLabel = Self.label(w.places[i].n, st)
+            e.accessibilityTraits = .button
+            let at = CGPoint(x: r.midX, y: r.midY)
+            e.activate = { [weak c] in c?.onPlaceTap?(i, at) }
+            e.actions = { [weak c] in
+                guard let menu = c?.menuForPlace?(i) else { return [] }
+                return Self.actions(menu)
+            }
+            return e
+        }
+        return axCache
+    }
+
+    /// "X, lived here", "X, stamped, N times", "X, stamped", "X, not stamped" (1.9)
+    static func label(_ name: String, _ s: MarkState) -> String {
+        if s.lived { return "\(name), lived here" }
+        if s.stamped { return s.visits > 1 ? "\(name), stamped, \(s.visits) times" : "\(name), stamped" }
+        if s.wished { return "\(name), on your wishlist" }
+        return "\(name), not stamped"
+    }
+
+    /// a hold menu's rows that can be chosen now, as VoiceOver actions (each acts as the row does)
+    static func actions(_ m: UIMenu) -> [UIAccessibilityCustomAction] {
+        m.children.flatMap { e -> [UIAccessibilityCustomAction] in
+            if let sub = e as? UIMenu { return actions(sub) }
+            guard let a = e as? UIAction, !a.attributes.contains(.disabled) else { return [] }
+            return [UIAccessibilityCustomAction(name: a.title) { _ in a.performWithSender(nil, target: nil); return true }]
+        }
+    }
+
+    private func rotor(_ name: String, _ match: @escaping (MarkState) -> Bool) -> UIAccessibilityCustomRotor {
+        UIAccessibilityCustomRotor(name: name) { [weak self] p in
+            MainActor.assumeIsolated {
+                guard let self else { return nil }
+                let els = self.placeElements()
+                let forward = p.searchDirection == .next
+                let now = (p.currentItem.targetElement as? PlaceElement).flatMap { e in els.firstIndex { $0 === e } }
+                var k = now.map { forward ? $0 + 1 : $0 - 1 } ?? (forward ? 0 : els.count - 1)
+                while k >= 0, k < els.count {
+                    if match(els[k].state) { return UIAccessibilityCustomRotorItemResult(targetElement: els[k], targetRange: nil) }
+                    k += forward ? 1 : -1
+                }
+                return nil
+            }
+        }
+    }
+
     func installGestures() {
         isMultipleTouchEnabled = true
         // APPLE'S HOLD MENU ON THE MAP (Part 11.3): the one interaction on the map view; our own touches carry on and

@@ -118,6 +118,8 @@ final class MapController {
     @ObservationIgnored var menuHeld: Int? { didSet { if menuHeld != oldValue { needsFrame = true } } }
     /// the menu for a held place at a point (the map's hold, Part 11.3/11.5), nil for none; set by the screen
     @ObservationIgnored var menuFor: ((Int, CGPoint) -> UIMenu?)?
+    /// a place's own menu with no point and nothing pressed (a search result's, 11.5), for VoiceOver's actions
+    @ObservationIgnored var menuForPlace: ((Int) -> UIMenu?)?
     /// when a touch on the map last closed something (a card, the book, Details, Verify, Map settings, the upload
     /// sheet): that press does nothing else, so it opens no hold menu (one press, one job)
     @ObservationIgnored var touchClosedAt: CFTimeInterval = 0

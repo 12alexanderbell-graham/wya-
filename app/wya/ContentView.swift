@@ -255,6 +255,10 @@ struct ContentView: View {
             }
             // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
             map.menuFor = { [map, water, head] i, p in Self.countryMenu(i, at: p, map: map, water: water, head: head) }
+            map.menuForPlace = { [map, water, head] i in
+                let r = map.screenRect(of: i)
+                return Self.countryMenu(i, at: CGPoint(x: r.midX, y: r.midY), map: map, water: water, head: head, fromSearch: true)
+            }
             // leaving a tab ends quick stamping too (3.6)
             water.onTabChange = { [head] in head.quickStamp = false }
             water.currentMode = { [head] in head.mode.rawValue }
@@ -701,7 +705,7 @@ struct ContentView: View {
         let key = PlaceKey.country(pl.id)
         let st = MarkStore.shared.state(key)
         // anything that moves a big thing starts once Apple's menu has closed
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
             quickStamp(i, map: map)
         }
@@ -803,7 +807,7 @@ struct ContentView: View {
                                     head: HeadState) -> UIMenu {
         let key = town.key
         let st = MarkStore.shared.state(key)
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let country = map.world.map { $0.places[place].n } ?? ""
         let parents = town.region.isEmpty ? country : "\(town.region), \(country)"
         let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
@@ -879,7 +883,7 @@ struct ContentView: View {
     /// row) | Share | Delete (at once, the undo drop). Rename and Move (its card's, 7.8), Open its page (a page for your
     /// own place, 16) and Add to a list or a plan (20) wait for their parts.
     @MainActor static func ownMenu(_ o: OwnPlaces.Place, place: Int, map: MapController) -> UIMenu {
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let country = map.world.map { $0.places[place].n } ?? ""
         let kinds = OwnPlaces.kinds.map { k in
             UIAction(title: k.prefix(1).uppercased() + k.dropFirst(), attributes: k == o.kind ? .disabled : []) { _ in
@@ -939,7 +943,7 @@ struct ContentView: View {
     @MainActor static func thingMenu(_ t: ThingStore.Thing, cc: String, place: Int, map: MapController, water: Water) -> UIMenu {
         let key = t.key
         let st = MarkStore.shared.state(key)
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let country = map.world.map { $0.places[place].n } ?? ""
         let line = t.line.isEmpty ? country : t.line.prefix(1).uppercased() + t.line.dropFirst()
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
@@ -1012,7 +1016,7 @@ struct ContentView: View {
         let key = PlaceKey(.region, sc.unitIDs[u])
         let name = sc.unitNames[u]
         let st = MarkStore.shared.state(key)
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let country = map.world.map { $0.places[sc.place].n } ?? ""
         let stamp = UIAction(title: st.stamped ? "Unstamp" : "Stamp", attributes: st.stamped ? .destructive : []) { _ in
             if st.stamped { Feel.lift() } else { Feel.stamp() }

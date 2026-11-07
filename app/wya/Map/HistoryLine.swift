@@ -334,7 +334,7 @@ final class HistoryLineView: UIView {
     /// THE JOURNEY'S HOLD MENU (13.4): Share this journey · Open the start · Open the end (the line, a leg or a capsule)
     func menu(_ m: MapController) -> UIMenu? {
         guard let track, let first = track.stops.first, let last = track.stops.last else { return nil }
-        let after = { (f: @escaping () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let share = UIAction(title: "Share this journey") { [weak self] _ in after { self?.shareJourney(m) } }
         let start = UIAction(title: "Open the start") { _ in after { Self.openPage(first, m) } }
         let end = UIAction(title: "Open the end", attributes: track.stops.count > 1 ? [] : .disabled) { _ in
