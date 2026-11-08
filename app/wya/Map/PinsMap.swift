@@ -820,6 +820,12 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     private static var images: [String: UIImage] = [:]
     private var chosen = false
 
+    /// touched over 44 pt round the pin's head (the marker is drawn 24 x 30, smaller behind another pin, 8 Nov)
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        let head = CGPoint(x: bounds.midX, y: bounds.minY + min(bounds.height, 30) * 0.4)
+        return abs(point.x - head.x) <= 22 && abs(point.y - head.y) <= 22
+    }
+
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         canShowCallout = false
@@ -1168,6 +1174,8 @@ struct PinShare: View {
         if let p = store.pin(store.selected) {
             Button { Feel.tap(); PinStore.share(p) } label: {
                 Icon5(key: "share", ink: Palette.ink, size: 20).frame(width: 44, height: 44)
+                    // the whole circle touches (only the glyph's strokes did)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .glassEffect(PageGlass.control, in: .circle)
@@ -1234,7 +1242,7 @@ struct PinSheet: View {
                                 Button {
                                     Feel.tap(); store.colour(p.id, nil); picking = false
                                 } label: {
-                                    Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                                    Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                             }

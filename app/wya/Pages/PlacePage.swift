@@ -610,6 +610,7 @@ private struct PageLayer: View {
                         .glassEffect(st.wished ? PageGlass.control.tint(Palette.blue) : PageGlass.control, in: .circle)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(st.wished ? "Remove \(h.name) from your wishlist" : "Add \(h.name) to your wishlist")
                 .padding(8)
             }
             Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
@@ -795,7 +796,7 @@ private struct InsideList: View {
             ForEach(rows.prefix(shown), id: \.self) { r in row(r) }
             if rows.count > shown {
                 Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
-                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
+                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -837,6 +838,7 @@ private struct InsideList: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(s.stamped ? "Take the stamp off \(r.name)" : "Stamp \(r.name)")
         }
         .frame(height: 52)
         // the 52 pt rows hold their two lines up to the largest standard size
@@ -989,7 +991,7 @@ private struct ActivitiesList: View {
             }
             if rows.count > shown {
                 Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
-                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
+                    Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

@@ -45,6 +45,9 @@ struct UndoDrop: View {
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             // the water's own kind of glass (frosted over a page, clear on the map), so inside the water it merges away
             .glassEffect(PageGlass.surface, in: .capsule)
+            // touched over 44 pt (the pill is drawn 36 pt high)
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at

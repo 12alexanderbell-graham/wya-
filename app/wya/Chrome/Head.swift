@@ -705,7 +705,9 @@ struct ModeWheel: View {
             .allowsHitTesting(false)
         }
         .frame(width: 88, height: 44)
-        .contentShape(Rectangle())
+        // with the tools out the dot is one slot of the capsule: it touches over its own 44 pt only (its 88 pt took
+        // half the Passport tool beside it, 8 Nov)
+        .contentShape(tools ? AnyShape(Rectangle().size(width: 44, height: 44).offset(x: 22)) : AnyShape(Rectangle()))
         .gesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { g in turn(g.translation.width) }

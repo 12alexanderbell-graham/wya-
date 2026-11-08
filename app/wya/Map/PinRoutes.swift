@@ -581,7 +581,7 @@ struct RouteColourSheet: View {
                         // (the picker back where a black route starts, so a nudge never brings the old colour back)
                         Feel.tap(); r.colour(id, nil); pick = PinSheet.nearBlack
                     } label: {
-                        Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                        Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }

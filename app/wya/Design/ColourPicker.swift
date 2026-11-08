@@ -265,7 +265,8 @@ struct ColourPicker: View {
                 .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
-        .accessibilityValue(ColourNames.name(c))
+        // (VoiceOver says the colour's name: a swatch had only a value)
+        .accessibilityLabel(ColourNames.name(c))
     }
 
     private func keep() {

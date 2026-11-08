@@ -765,6 +765,8 @@ struct DetailsSheet: View {
                 .frame(width: 36, height: 36).background(Palette.ink, in: .circle)
                 .opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .frame(width: 44, height: 44)
+                // the whole 44 pt touches (only the drawn circle did)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -774,6 +776,8 @@ struct DetailsSheet: View {
             Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
                 .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
                 .frame(width: 44, height: 44)
+                // the whole 44 pt touches (only the 24 pt circle did)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Remove")
