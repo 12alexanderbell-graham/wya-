@@ -166,7 +166,9 @@ struct TopPullView: View {
                 .gesture(pullGesture)
                 // sideways (1.11) the strip would be one of the map's side edges: the map's own
                 .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on)
-                .onChange(of: sheetHigh) { _, high in if high { head.putAway() } }
+                // (the AI only: settings pulled up to full are still the water's, Part 3.9; closing them here took
+                // the rows away as the sheet reached the top, 8 Nov)
+                .onChange(of: sheetHigh) { _, high in if high { head.putAwayAI() } }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
     }

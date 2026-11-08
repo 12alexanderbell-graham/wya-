@@ -60,8 +60,11 @@ private struct RowWords: View {
                 // shown with the row's words (in one frame: a flag is not a word to roll)
                 img.resizable().frame(width: 28, height: 28).opacity(shown ? 1 : 0).padding(.trailing, 4)
             }
+            // (one line in the 48 pt row: a long name gets a little smaller rather than wrap or be cut)
             Text(shown ? name : blank(name))
                 .foregroundStyle(dim ? Palette.ink.opacity(0.5) : ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
             Spacer(minLength: 12)
             if !value.isEmpty {
                 Text(shown ? value : blank(value))
@@ -76,6 +79,7 @@ private struct RowWords: View {
         .padding(.horizontal, 16)
         .frame(height: height)
         .frame(maxWidth: .infinity)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // the current choice: the black band, the water's width; it just appears
         .background(band && shown ? Palette.ink : .clear)
         .contentShape(Rectangle())

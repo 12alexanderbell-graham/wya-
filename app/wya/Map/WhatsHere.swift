@@ -137,6 +137,7 @@ struct WhatsHereView: View {
             .font(.subheadline)
             .foregroundStyle(Palette.ink)
             .lineLimit(1)
+            .minimumScaleFactor(0.75)
             .contentTransition(.numericText(value: here.namesIn ? 1 : 0))
             .frame(height: lineHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
