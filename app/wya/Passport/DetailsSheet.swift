@@ -702,10 +702,13 @@ struct DetailsSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: blank ? 0 : 1))
-                .frame(minHeight: 44, alignment: .leading).edgeRow()
+                .frame(minHeight: 44, alignment: .leading)
             chips(items, chosen: chosen, blank: blank) { set(chosen == $0 ? nil : $0) }
                 .padding(.bottom, 8)
         }
+        // the name and its choices are one row: the sheet's edge never stops under a name with its choices cut off
+        // ("Trip" stood alone at the bottom of Details at 50%)
+        .edgeRow()
     }
     /// 17 pt words, 36 pt capsules with 44 pt touch areas, 8 pt apart; the first word lines up with the names above
     private func chips(_ items: [(String, String)], chosen: String?, blank: Bool = false, tap: @escaping (String) -> Void) -> some View {
