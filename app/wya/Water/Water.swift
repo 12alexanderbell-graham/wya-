@@ -366,6 +366,8 @@ final class Water {
         // pulled up, it stays at its own height
         if upload, UploadState.shared.phase != .review { t = max(t, L.top(.quarter)) }
         if historyUp, !stampedList, !details { t = max(t, restTop(.quarter)) }
+        // the Route row (Pins) is the caption's line at 25%: nothing above it to show (its 50% was empty glass)
+        if PinRoutes.shared.open { t = max(t, L.top(.quarter)) }
         // over the plain Countries map the water goes no higher than 50% (no full-screen solar system); full is for
         // what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
         if !fullAllowed { t = max(t, L.top(.half)) }
@@ -423,6 +425,7 @@ final class Water {
         let projected = fingerTop + v * 0.1
         var best = order.min(by: { abs(layout.top($0) - projected) < abs(layout.top($1) - projected) }) ?? .quarter
         if best == .full, !fullAllowed { best = .half }
+        if PinRoutes.shared.open, best == .half || best == .full { best = .quarter }
         if abs(best.rawValue - g.from.rawValue) > 1 {
             best = order[g.from.rawValue + (best.rawValue > g.from.rawValue ? 1 : -1)]
         }

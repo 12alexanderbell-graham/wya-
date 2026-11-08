@@ -62,9 +62,28 @@ struct PlacesMaps: View {
         let _ = map.townsVersion
         let _ = MarkStore.shared.changes
         let counts = Self.counts()
+        let pick = map.placesPick
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(picks(counts), id: \.self) { p in row(p, counts) }
+                if pick == .everywhere {
+                    // EVERYWHERE: your countries, then your collections, each under its own heading (the map you are on is
+                    // the caption's; it is not a row of itself, 8 Nov)
+                    let all = picks(counts)
+                    let countries = all.filter { if case .country = $0 { return true } else { return false } }
+                    let collections = all.filter { if case .collection = $0 { return true } else { return false } }
+                    if !countries.isEmpty { heading("Countries"); ForEach(countries, id: \.self) { p in row(p, counts) } }
+                    if !collections.isEmpty { heading("Collections"); ForEach(collections, id: \.self) { p in row(p, counts) } }
+                } else {
+                    // INSIDE A COUNTRY, A COLLECTION OR A CONTINENT: the way back up first, then your places on this map
+                    backRow
+                    let rows = placeRows(pick)
+                    heading("Your places")
+                    if rows.isEmpty {
+                        Text("None stamped yet").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                            .frame(minHeight: 44, alignment: .leading)
+                    }
+                    ForEach(rows, id: \.key) { r in placeRow(r) }
+                }
                 Color.clear.frame(height: bottom)
             }
         }
@@ -73,6 +92,100 @@ struct PlacesMaps: View {
         .scrollIndicators(.hidden)
         // below full a drag is the water's, not the rows'
         .scrollDisabled(water.stop != .full)
+    }
+
+    /// a section's heading, as the Stamped list's ("Countries", "Collections", "Your places")
+    private func heading(_ w: String) -> some View {
+        Text(w).font(.headline).foregroundStyle(Palette.ink)
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .bottomLeading)
+            .padding(.bottom, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// back up to Everywhere (the map's own path: Everywhere, then a country, a collection or a continent)
+    private var backRow: some View {
+        HStack(spacing: 12) {
+            Icon5(key: "back", ink: Palette.ink, size: 20).frame(width: 28, height: 28)
+            Text("Everywhere").font(.body).foregroundStyle(Palette.ink)
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { Feel.tap(); water.go(.quarter); map.showPlacesMap(.everywhere) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Back to Everywhere")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    struct PlaceRow { let key: PlaceKey; let name: String; let line: String; let cc: String }
+
+    /// your stamped towns, things, own places (and a collection's stops) on this map, A to Z
+    private func placeRows(_ pick: MapController.PlacesPick) -> [PlaceRow] {
+        guard let w = map.world else { return [] }
+        let marks = MarkStore.shared
+        if case .collection(let id) = pick, let c = CollectionStore.shared.collection(id) {
+            return c.items.filter { marks.state($0.key).stamped }
+                .map { PlaceRow(key: $0.key, name: $0.name, line: CollectionStore.line($0), cc: $0.cc.lowercased()) }
+        }
+        let ids: Set<String>? = map.members(of: pick).map { Set($0.map { w.places[$0].id.lowercased() }) }
+        func country(_ cc: String) -> String { w.placeIndex[cc].map { w.places[$0].n } ?? "" }
+        var out: [PlaceRow] = []
+        for (k, st) in marks.marks where st.stamped {
+            switch k.kind {
+            case .town:
+                let cc = String(k.id.prefix { $0 != "/" })
+                guard ids?.contains(cc) ?? true else { continue }
+                let name = map.townScenes[cc].flatMap { sc in sc.index[k.id].map { sc.towns[$0].name } } ?? TownIndex.shared.hit(k.id)?.name
+                if let name { out.append(PlaceRow(key: k, name: name, line: "Town · \(country(cc))", cc: cc)) }
+            case .thing:
+                // (a collection's stop that isn't among the things, a circuit, is found in its collection)
+                let found = ThingStore.shared.thing(k.id).map { ($0.0, $0.1.name) } ?? ThingIndex.shared.hit(k.id).map { ($0.file, $0.name) }
+                    ?? CollectionStore.shared.item(k).map { ($0.cc, $0.name) }
+                guard let (cc, name) = found, ids?.contains(cc.lowercased()) ?? true else { continue }
+                out.append(PlaceRow(key: k, name: name, line: country(cc.lowercased()), cc: cc.lowercased()))
+            case .yours:
+                guard let o = OwnPlaces.shared.place(k.id), ids?.contains(o.cc.lowercased()) ?? true else { continue }
+                out.append(PlaceRow(key: k, name: o.name, line: "Your place · \(country(o.cc.lowercased()))", cc: o.cc.lowercased()))
+            default: continue
+            }
+        }
+        return out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private func placeRow(_ r: PlaceRow) -> some View {
+        HStack(spacing: 12) {
+            Group {
+                if let f = Flags.square(r.cc) { f.resizable().interpolation(.high) } else { Color.clear }
+            }
+            .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(r.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 56)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Feel.tap()
+            water.go(.quarter)
+            switch r.key.kind {
+            case .town: map.showTown(file: r.cc, id: r.key.id)
+            case .thing:
+                // a collection's stop with no thing behind it (a circuit): the camera comes to its own point
+                if ThingStore.shared.thing(r.key.id) == nil, let it = CollectionStore.shared.item(r.key), let i = map.world?.placeIndex[r.cc] {
+                    let d: Float = 2
+                    map.showBox(SIMD4(it.at.x - d, it.at.y - d, it.at.x + d, it.at.y + d), place: i)
+                } else {
+                    map.showThing(file: r.cc, id: String(r.key.id.dropFirst(3)))
+                }
+            case .yours: map.showOwn(r.key.id)
+            default: break
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(r.name), \(r.line)")
+        .accessibilityAddTraits(.isButton)
     }
 
     /// your stamped towns, things and own places by country, in one pass over the marks
@@ -96,7 +209,7 @@ struct PlacesMaps: View {
         let n = { (i: Int) in counts[w.places[i].id.lowercased()] ?? 0 }
         let mine = w.places.indices.filter { w.places[$0].id != "aq" && n($0) > 0 }
             .sorted { n($0) != n($1) ? n($0) > n($1) : w.places[$0].n.localizedStandardCompare(w.places[$1].n) == .orderedAscending }
-        return [.everywhere] + mine.map { .country($0) } + CollectionStore.shared.all.map { .collection($0.id) }
+        return mine.map { .country($0) } + CollectionStore.shared.all.map { .collection($0.id) }
     }
 
     private func row(_ p: MapController.PlacesPick, _ counts: [String: Int]) -> some View {

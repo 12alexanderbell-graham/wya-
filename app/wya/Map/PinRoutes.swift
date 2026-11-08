@@ -543,7 +543,8 @@ struct RouteRow: View {
                 if let p, !(end == .to && r.noRoute) {
                     // a pin's colour dot; a spot on land is its name alone
                     if let pin = p.pin { Circle().fill(PinRows.colour(pin)).frame(width: 12, height: 12) }
-                    Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                    // (a little smaller before it is ever cut; cut at its end, never its middle: "Caus...lérans")
+                    Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.75).truncationMode(.tail)
                 } else {
                     Text(word).font(.body).foregroundStyle(waiting ? Palette.ink : Palette.ink.opacity(0.5))
                 }

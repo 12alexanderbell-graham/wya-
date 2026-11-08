@@ -175,12 +175,14 @@ struct SheetContent: View {
             .frame(width: L.W, height: L.H)
             .mask(CapsuleHole(capsule: L.capsule).fill(style: FillStyle(eoFill: true)))
 
-            // MAP SETTINGS OPEN (Part 5, A5.1): the solar system moves down as one piece out through the
-            // water's bottom, under the tabs, its own motion untouched (default), and back up on close
+            // THE SOLAR SYSTEM in the water (50%), the water's own content when nothing else is
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
-                    // (back only once the list's rows have left: never both at once)
-                    .offset(y: cosmosOut ? water.layout.H - form.top : 0)
+                    // something else the water's content (settings, a list, Details, upload): the system is simply not
+                    // there, and simply there again when it goes; no sliding down out of the water and no rising back
+                    // up through its frosted bottom
+                    .opacity(cosmosOut ? 0 : 1)
+                    .animation(nil, value: cosmosOut)
                     // NEVER OVER THE TABS: as the water moves the system sinks past the tabs' capsule; it fades out
                     // over the 16 pt above the capsule's top and is never drawn on it
                     .mask {
@@ -191,8 +193,7 @@ struct SheetContent: View {
                         }
                         .frame(width: water.layout.W, height: water.layout.H)
                     }
-                    // (a mode change swaps it out or back with no movement, 7 Nov 19:22)
-                    .animation(water.modeSwitching ? nil : Motion.chrome, value: cosmosOut)
+
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
@@ -274,7 +275,7 @@ struct SheetContent: View {
                     let hc = water.historyUp ? map.historyInfo?.caption : nil
                     Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
-                            tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
+                            tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
                             night: FullView.night(form.page), visible: captionShown, quiet: water.modeSwitching,
                             maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + 24))
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
@@ -388,17 +389,22 @@ struct SheetContent: View {
         // a collection's map: its title, your places of it, of how many (an event collection: "of 23 stops")
         if let id = map.placesCollection, let c = CollectionStore.shared.collection(id) {
             _ = map.townsVersion
-            return (c.title, map.stampedTowns(on: .collection(id)), "of \(c.items.count)" + (c.event ? " stops" : ""))
+            return (c.title, map.stampedTowns(on: .collection(id)), "of \(c.items.count)" + (c.event ? " stops" : " places"))
         }
         // a continent's or world region's map: its name and your towns in it (no "of N" yet: its towns are not all read)
         if let a = map.placesArea {
             _ = map.townsVersion
-            return (a, map.stampedTowns(on: map.placesPick), "")
+            // (every number says what it counts, 8 Nov)
+            let n = map.stampedTowns(on: map.placesPick)
+            return (a, n, n == 1 ? "place" : "places")
         }
         guard let i = map.placeOpen, let w = map.world, let cc = map.placeOpenID else { return nil }
-        let all = map.townScenes[cc]?.towns.count
         _ = map.townsVersion
-        return (w.places[i].n, map.townStamped[cc]?.count ?? 0, all.map { "of \($0.formatted())" } ?? "")
+        _ = MarkStore.shared.changes
+        // your places in it (towns, things and your own, as its row on Everywhere counts them: Monaco's circuit made
+        // the row say 1 place and the caption 0 of 2 towns)
+        let n = PlacesMaps.counts()[cc] ?? 0
+        return (w.places[i].n, n, n == 1 ? "place" : "places")
     }
 
     /// is a region map up (the caption's own taps stand down for it)
