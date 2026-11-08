@@ -1490,6 +1490,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                     let stamp = t.timestamp, hit = c.pressed
                     DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
                         guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }
+                        // (a name's tap answers to the place tap's guards; refused, it opens nothing)
+                        guard c.namePageAllowed?() ?? true else { return }
                         // no page (a collection's stop): the tap goes on as a tap on what is under it
                         if !self.townNames.openPage(name, c), let hit { c.onPlaceTap?(hit, d0) }
                     }

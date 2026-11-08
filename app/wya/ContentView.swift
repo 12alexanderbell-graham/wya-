@@ -10,6 +10,7 @@ struct ContentView: View {
     @State private var tab = 0
     @State private var launch = Launch.shared
     @State private var side = Sideways.shared
+    @State private var pageStack = PlacePageState.shared
     /// THE SESSION (19.2), for when the system ends the app in the background (Apple's scene storage: discarded when
     /// the person quits the app, so a cold launch opens fresh): the tab, the mode, the continent, the camera, the sheet
     /// stop, the lock
@@ -205,6 +206,13 @@ struct ContentView: View {
                 else if VerifyState.shared.isOpen { VerifyState.shared.close(water: water) }
                 else { CardState.shared.close(map: map); RegionCardState.shared.close(map: map) }
             }
+            // a name on the map tapped (its page): the place tap's own guards (below), so a name never opens a page
+            // sideways, over the upload sheet, or with the tap that closed search or put the book away
+            map.namePageAllowed = { [head, water, map] in
+                !water.upload && !Sideways.shared.on && !map.locked
+                    && CACurrentMediaTime() - head.mapClosedSearchAt > 0.6
+                    && !BookState.shared.isOpen && CACurrentMediaTime() - BookState.shared.closedAt > 0.4
+            }
             // a tap on the sea at the review leaves it, the finds waiting (9.5)
             map.onSeaTap = { [water] in if water.upload { UploadState.shared.leaveReview() } }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
@@ -311,6 +319,8 @@ struct ContentView: View {
                 Feel.notch()
             }
             water.onMapAgain = { [head] in
+                // a page up goes first (the Map tab again is "back to the map", as leaving the tab is)
+                PlacePageState.shared.closeAll()
                 if head.mode == .regions { backToRegionsList() }
                 UploadState.shared.close()
                 head.searching = false
@@ -378,6 +388,14 @@ struct ContentView: View {
         // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
         .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
         // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)
+        // A PAGE OPENING (from a hold menu, the passport, a name on the map, the journey): it takes the screen, so the
+        // tools (and quick stamping and history with them), settings and What's here? go first, as for a card
+        .onChange(of: pageStack.isOpen) { _, open in
+            if open { head.toolsOpen = false; head.closeSettings(); WhatsHere.shared.close() }
+        }
+        // the Stamped list rising (its caption tapped): the passport book goes back into its tool, never left open
+        // squeezed to nothing under the list
+        .onChange(of: water.stampedList) { _, v in if v { BookState.shared.close() } }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
@@ -418,6 +436,8 @@ struct ContentView: View {
         // the Stamped list is the Countries map's: a mode change takes it at once (never two lists, one over the other)
         if old != new { water.closeList(back: false, instant: true) }
         WhatsHere.shared.close()
+        // a page up goes with the old mode (the capsule's hold can change the mode under a page)
+        PlacePageState.shared.closeAll()
         // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
         // still off, so its open country goes with it)
         if old == .regions { map.leaveRegionTowns() }

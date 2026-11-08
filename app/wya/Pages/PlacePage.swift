@@ -122,6 +122,12 @@ final class PlacePageState {
         pages = [first]
         close()
     }
+    /// every page closed, back once they have gone (a link opening a page over one already up: `open` refuses while
+    /// any is up, so the old page closed and the new one never came)
+    func closeAllAndWait() async {
+        closeAll()
+        for _ in 0 ..< 20 where isOpen { try? await Task.sleep(for: .milliseconds(50)) }
+    }
 }
 
 extension PlacePageState.OnePage {
@@ -374,6 +380,7 @@ struct PlacePageView: View {
             }
         }
         .onChange(of: stack.isOpen) { _, open in
+            water.pageUp = open
             if open { before = water.stop; water.go(.closed) }
             else {
                 water.pageSheet = false

@@ -74,7 +74,9 @@ final class Water {
     /// the menu's rows are still on screen, leaving through the list's bottom edge as the water goes down
     var menuLeaving = false
     @ObservationIgnored private var menuJob = 0
-    var menuShown: Bool { regions && !settings && !details && !upload }
+    /// a place's page is up (16.1): the Regions list steps aside for it as for settings, and is back when it closes
+    var pageUp = false
+    var menuShown: Bool { regions && !settings && !details && !upload && !pageUp }
     /// the head, for the menu's search (set once by the screen)
     @ObservationIgnored weak var head: HeadState?
     /// the menu is the whole screen, as the old native app's Regions list was (clear glass with the world under

@@ -33,14 +33,14 @@ enum DeepLink {
             switch key.kind {
             case .country:
                 guard let i = w.placeIndex[key.id.lowercased()] else { return false }
-                close(); PlacePageState.shared.closeAll()
+                close(); await PlacePageState.shared.closeAllAndWait()
                 PlacePageState.shared.open(key, name: w.places[i].n, country: w.places[i].id, from: from)
             case .town:
                 TownIndex.shared.load()
                 for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
                 guard let t = TownIndex.shared.hit(key.id) else { return false }
                 let country = w.placeIndex[t.file].map { w.places[$0].n } ?? ""
-                close(); PlacePageState.shared.closeAll()
+                close(); await PlacePageState.shared.closeAllAndWait()
                 PlacePageState.shared.open(key, name: t.name, what: t.region.isEmpty ? "Town in \(country)" : "Town in \(t.region), \(country)",
                                            country: t.file, from: from)
             case .thing:
@@ -48,7 +48,7 @@ enum DeepLink {
                 for _ in 0 ..< 150 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
                 guard let h = ThingIndex.shared.hit(key.id) else { return false }
                 ThingStore.shared.load(h.file)
-                close(); PlacePageState.shared.closeAll()
+                close(); await PlacePageState.shared.closeAllAndWait()
                 PlacePageState.shared.open(key, name: h.name, country: h.file, from: from)
             default:
                 NSLog("wya link not opened: %@", url.absoluteString)

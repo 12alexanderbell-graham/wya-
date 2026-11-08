@@ -109,6 +109,9 @@ final class MapController {
     @ObservationIgnored var onPlaceTap: ((Int, CGPoint) -> Void)?
     /// a confirmed tap with no place under it (the sea), after the same double-tap wait
     @ObservationIgnored var onSeaTap: (() -> Void)?
+    /// whether a confirmed tap on a town's or thing's name may open its page now (the same guards a place's tap has:
+    /// not sideways, not over the upload sheet, not the tap that closed search or the passport book)
+    @ObservationIgnored var namePageAllowed: (() -> Bool)?
     /// FINDS (Part 9.4, 9.5): places an upload found that are not stamped yet, drawn darkened as a pressed place is (the
     /// relief darker, never grey or lime); they change in one frame, as every colour does
     var found: Set<Int> = [] { didSet { if found != oldValue { needsFrame = true } } }

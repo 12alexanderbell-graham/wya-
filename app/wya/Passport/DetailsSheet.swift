@@ -94,6 +94,7 @@ struct DetailsSheet: View {
     let water: Water
     let form: Water.Form
     @State private var s = DetailsState.shared
+    @State private var marks = MarkStore.shared
     @FocusState private var typing: String?
     @State private var kb: CGFloat = 0
     @State private var kind: String?
@@ -221,6 +222,12 @@ struct DetailsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in kb = 0 }
         // the rows' identities follow the stored rows (a change from outside, an undo, makes them fresh)
         .onChange(of: livedTimes.count, initial: true) { _, n in livedIDs = Self.synced(livedIDs, n) }
+        // the place no longer stamped (or no longer wished) under it: undone by a shake or a three-finger swipe, or
+        // taken off another way. Details closes rather than stand open for a record that is gone (what was typed could
+        // no longer be kept)
+        .onChange(of: s.key.map { k in s.wish ? marks.state(k).wished : marks.state(k).stamped } ?? true) { _, still in
+            if !still { s.close(water: water, now: true) }
+        }
         .onAppear {
             // from the list: the words roll in once the list has gone (they start as blanks, see `sheetGone`)
             guard sheetGone else { return }
