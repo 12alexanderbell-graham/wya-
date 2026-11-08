@@ -78,6 +78,8 @@ struct VerifySheet: View {
                 }
                 removeRow
             }
+            // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+            .background(WaterHandoff())
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }

@@ -183,6 +183,8 @@ struct DetailsSheet: View {
                         }
                     }
                 }
+                // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+                .background(WaterHandoff())
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
                 .padding(.bottom, 24)

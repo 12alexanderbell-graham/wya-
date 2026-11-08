@@ -47,6 +47,8 @@ struct WaterView: View {
             if !Perf.shared.off.contains("tabs") { tabs(L) }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        // the lists in the water hand a pull down from their top to the water (Water/WaterHandoff)
+        .environment(\.handoffWater, water)
         .contentShape(shape)
         // at Regions' menu stop a drag scrolls the list and never moves the water (6.3): the water's own drag is off
         // there, the list's scroll and the tabs keep theirs

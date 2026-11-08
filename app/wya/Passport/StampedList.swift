@@ -212,6 +212,8 @@ struct StampedList: View {
                     }
             }
         }
+        // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+        .background(WaterHandoff(beside: true))
         .listStyle(.plain)
         // A4.21: the rows drop as one block down through the bottom edge (first tried row by row with a stagger:
         // List's own cell layout moved the rows over each other on the way)

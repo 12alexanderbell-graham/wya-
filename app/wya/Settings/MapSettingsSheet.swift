@@ -116,6 +116,8 @@ private struct SettingsList: View {
                         rowView(row, s).id(row.id)
                     }
                 }
+                // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+                .background(WaterHandoff())
                 .scrollTargetLayout()
             }
             // a search result: the row brought into view (its choices already open)
@@ -296,6 +298,8 @@ private struct SettingsPage: View {
                 default: advanced(s)
                 }
             }
+            // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+            .background(WaterHandoff())
             .scrollTargetLayout()
         }
         // a search result: its row brought into view (a dispute's sides open)

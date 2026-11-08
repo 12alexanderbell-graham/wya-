@@ -31,6 +31,8 @@ struct PageSheet: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if reporting { report(page, width: w - 32) } else { list(page) }
                 }
+                // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
+                .background(WaterHandoff())
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
                 .frame(width: w, alignment: .leading)
