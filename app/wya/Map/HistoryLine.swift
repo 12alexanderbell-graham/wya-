@@ -651,21 +651,49 @@ struct HistoryBar: View {
                     let a = max(info.first, info.dayNumber(LocalDay(y: y, m: 1, d: 1)))
                     let b = min(info.last, info.dayNumber(LocalDay(y: y, m: 12, d: 31)))
                     let inside = b >= info.lo && a <= info.hi
+                    // the year's whole stretch of the track is its button, under the thumbs' band (8 Nov: a 31 x 16
+                    // word beside a thumb's touch, so a tap on it moved the thumb instead)
                     Text(String(y)).font(.footnote.weight(.medium)).foregroundStyle(Palette.ink.opacity(inside ? 1 : 0.5))
-                        .fixedSize().position(x: (x(a) + x(b)) / 2, y: 40)
+                        .fixedSize()
+                        .frame(width: max(30, x(b) - x(a)), height: 18)
+                        .contentShape(Rectangle())
+                        .position(x: (x(a) + x(b)) / 2, y: 41)
                         .onTapGesture {
                             Feel.tap()
                             withAnimation(Motion.settle) { map.setHistoryRange(lo: a, hi: b) }
                         }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel("\(y)")
                 }
-                handle(lo, info: info, isLow: true, y: trackY)
-                handle(hi, info: info, isLow: false, y: trackY)
+                thumb(lo, y: trackY)
+                thumb(hi, y: trackY)
+                // ONE TOUCH BAND FOR BOTH THUMBS (8 Nov): the nearer thumb is taken; when they meet, the first move
+                // says which (left the start, right the end), so the range can always be widened again
+                // (round each thumb only, 60 x 32: a hold anywhere else on the bar is still its menu)
+                // (fixed identities: a thumb's band is the same view all through its drag)
+                ForEach(0 ..< 2, id: \.self) { k in
+                    let at = k == 0 ? lo : hi
+                    Color.clear
+                        .frame(width: 60, height: 32)
+                        .contentShape(Rectangle())
+                        .position(x: at, y: trackY)
+                        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("historybar"))
+                            .updating($thumbLive) { _, live, _ in live = true }
+                            .onChanged { v in drag(v, info: info, lo: lo, hi: hi) }
+                            .onEnded { _ in grabbed = nil; lastEnd = 0; map.setHistoryRange(lo: info.lo, hi: info.hi) })
+                        .accessibilityHidden(true)
+                }
+                .onChange(of: thumbLive) { _, live in
+                    if !live, grabbed != nil, let i = map.historyInfo { grabbed = nil; lastEnd = 0; map.setHistoryRange(lo: i.lo, hi: i.hi) }
+                }
+                // VOICEOVER: the start and the end, each adjustable by a month
+                end(info, isLow: true, at: lo, y: trackY)
+                end(info, isLow: false, at: hi, y: trackY)
             }
             .frame(width: width, height: 50)
             .coordinateSpace(.named("historybar"))
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .contain)
             .accessibilityLabel("Range")
-            .accessibilityValue("\(info.text(info.lo)) to \(info.text(info.hi))")
         }
     }
 
@@ -678,29 +706,58 @@ struct HistoryBar: View {
         return stride(from: first, through: last, by: 1).filter { ($0 - first) % step == 0 }
     }
 
-    private func handle(_ at: CGFloat, info: HistoryInfo, isLow: Bool, y: CGFloat) -> some View {
+    /// a thumb, drawn only (the band above takes the finger)
+    private func thumb(_ at: CGFloat, y: CGFloat) -> some View {
         Circle().fill(Palette.white)
             .shadow(color: Palette.ink.opacity(0.18), radius: 4, y: 1)
             .overlay(Circle().stroke(Palette.ink.opacity(0.06), lineWidth: 0.5))
             .frame(width: 28, height: 28)
-            .frame(width: 44, height: 44).contentShape(Rectangle())
             .position(x: at, y: y)
-            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("historybar"))
-                .updating($thumbLive) { _, live, _ in live = true }
-                .onChanged { v in
-                    let share = Double((v.location.x - inset) / (width - 2 * inset))
-                    var d = info.first + Int((share * Double(info.last - info.first)).rounded())
-                    let end = d <= info.first ? -1 : d >= info.last ? 1 : 0
-                    if end != 0, end != lastEnd { Feel.tick() }
-                    lastEnd = end
-                    d = min(info.last, max(info.first, d))
-                    if isLow { map.setHistoryRange(lo: min(d, info.hi), hi: info.hi, live: true) }
-                    else { map.setHistoryRange(lo: info.lo, hi: max(d, info.lo), live: true) }
-                }
-                .onEnded { _ in lastEnd = 0; map.setHistoryRange(lo: info.lo, hi: info.hi) })
-            // a drag cancelled with no end: the range is set where the thumb was let go, as on an end
-            .onChange(of: thumbLive) { _, live in
-                if !live, let i = map.historyInfo { lastEnd = 0; map.setHistoryRange(lo: i.lo, hi: i.hi) }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    /// which thumb the finger has: 0 the start, 1 the end, -1 both under it (decided by the first move)
+    @State private var grabbed: Int?
+    @State private var grabX: CGFloat = 0
+
+    private func drag(_ v: DragGesture.Value, info: HistoryInfo, lo: CGFloat, hi: CGFloat) {
+        if grabbed == nil {
+            let dl = abs(v.startLocation.x - lo), dh = abs(v.startLocation.x - hi)
+            // a touch well away from both thumbs moves neither
+            guard min(dl, dh) <= 30 else { return }
+            grabbed = abs(hi - lo) < 12 ? -1 : (dl <= dh ? 0 : 1)
+            grabX = v.startLocation.x
+        }
+        if grabbed == -1 {
+            let dx = v.location.x - grabX
+            guard abs(dx) >= 3 else { return }
+            grabbed = dx < 0 ? 0 : 1
+        }
+        guard let g = grabbed, g >= 0 else { return }
+        let share = Double((v.location.x - inset) / (width - 2 * inset))
+        var d = info.first + Int((share * Double(info.last - info.first)).rounded())
+        let end = d <= info.first ? -1 : d >= info.last ? 1 : 0
+        if end != 0, end != lastEnd { Feel.tick() }
+        lastEnd = end
+        d = min(info.last, max(info.first, d))
+        if g == 0 { map.setHistoryRange(lo: min(d, info.hi), hi: info.hi, live: true) }
+        else { map.setHistoryRange(lo: info.lo, hi: max(d, info.lo), live: true) }
+    }
+
+    /// VoiceOver's handle on one end: its date, a swipe up or down moves it by a month
+    private func end(_ info: HistoryInfo, isLow: Bool, at: CGFloat, y: CGFloat) -> some View {
+        Color.clear
+            .frame(width: 44, height: 44)
+            .position(x: at, y: y)
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel(isLow ? "Start" : "End")
+            .accessibilityValue(info.text(isLow ? info.lo : info.hi))
+            .accessibilityAdjustableAction { dir in
+                let step = dir == .increment ? 30 : dir == .decrement ? -30 : 0
+                if isLow { map.setHistoryRange(lo: min(info.hi, max(info.first, info.lo + step)), hi: info.hi) }
+                else { map.setHistoryRange(lo: info.lo, hi: min(info.last, max(info.lo, info.hi + step))) }
             }
     }
 }
