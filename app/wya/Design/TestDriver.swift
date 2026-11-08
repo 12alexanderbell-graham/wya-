@@ -633,6 +633,8 @@ final class TestDriver {
                 // pageturn 45: the passport's leaf held at that angle (> 0 forward, < 0 the previous page coming back)
                 case "pageturn": BookState.shared.turn = Double(a) ?? 0
                 case "book":
+                    // book off: put away if out (a reset's step)
+                    if a == "off" { BookState.shared.close(); break }
                     if let n = Int(a) { BookState.shared.page = max(0, n - 1) }
                     BookState.shared.toggle()
                 case "verify":

@@ -941,7 +941,10 @@ struct SourcesRow: View {
                 func v(_ k: String) -> String? { ((meta[k] as? [String: Any])?["value"] as? String).map(Self.text) }
                 let file = String(title.dropFirst(5))
                 let key = batch.first { $0.replacingOccurrences(of: "_", with: " ") == file } ?? file
-                out[key] = [v("Artist"), v("LicenseShortName")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+                // (an artist's wiki signature keeps its time stamp, "historicair 11:41, 15 October 2006 (UTC)": the name alone)
+                let artist = v("Artist")?.replacingOccurrences(of: #"\s*\d{1,2}:\d{2},\s*\d{1,2}\s+\p{L}+\s+\d{4}\s*\(UTC\)"#,
+                                                               with: "", options: .regularExpression)
+                out[key] = [artist, v("LicenseShortName")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
             }
         }
         return out

@@ -286,8 +286,10 @@ final class HistoryLineView: UIView {
         // the leg's capsule beside its middle, on the side its bow goes (the chord's middle is inside the bow)
         // (first: a leg's capsule names both its ends, so a start or end capsule it would overlap steps back while it is
         // up; 31 Oct 07:45, at world zoom the three crossed one another)
+        // (none while a stamping card is up over the journey: its name ran into "Poland · Oct 2026", 8 Nov)
+        let cardUp = CardState.shared.isOpen || RegionCardState.shared.isOpen
         var legRect: CGRect?
-        if let j = legShown, m.historyTrack != nil, shown > 0.999, j + 1 < track.stops.count, let r = Self.legRange(track, j) {
+        if let j = legShown, !cardUp, m.historyTrack != nil, shown > 0.999, j + 1 < track.stops.count, let r = Self.legRange(track, j) {
             let pm = m.screenPoint(track.points[(r.lowerBound + r.upperBound) / 2])
             var q = m.screenPoint((track.stops[j].at + track.stops[j + 1].at) / 2)
             if hypot(pm.x - q.x, pm.y - q.y) < 1 {
@@ -303,14 +305,14 @@ final class HistoryLineView: UIView {
         if let first = track.stops.first {
             let p0 = m.screenPoint(track.points.first ?? first.at)
             let dir = track.points.count > 1 ? m.screenPoint(track.points[1]) : CGPoint(x: p0.x + 1, y: p0.y)
-            startCap.set(Self.words(first), near: p0, awayFrom: dir, in: room, avoid: legRect, visible: shown > 0.001 && m.historyTrack != nil && seen.contains(p0))
+            startCap.set(Self.words(first), near: p0, awayFrom: dir, in: room, avoid: legRect, visible: !cardUp && shown > 0.001 && m.historyTrack != nil && seen.contains(p0))
         }
         if let last = track.stops.last, track.stops.count > 1 {
             let pn = m.screenPoint(track.points.last ?? last.at)
             let prev = track.points.count > 1 ? m.screenPoint(track.points[track.points.count - 2]) : CGPoint(x: pn.x - 1, y: pn.y)
-            endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: shown > 0.999 && m.historyTrack != nil && seen.contains(pn))
+            endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: !cardUp && shown > 0.999 && m.historyTrack != nil && seen.contains(pn))
         } else { endCap.hide() }
-        edges(track, m, room: room, on: shown > 0.999 && m.historyTrack != nil)
+        edges(track, m, room: room, on: !cardUp && shown > 0.999 && m.historyTrack != nil)
         if m.historyTrack == nil && shown <= 0.001 { self.track = nil; builtCount = -1; isHidden = true }
     }
 

@@ -1242,7 +1242,8 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(map.regionScene.flatMap { sc in map.world.map { $0.places[sc.place].id } })
-                ResultWords(name: h?.name ?? "", notes: [h?.word ?? ""])
+                // (its kind with a capital, as the countries' "Country" and "Territory")
+                ResultWords(name: h?.name ?? "", notes: [(h?.word ?? "").prefix(1).uppercased() + (h?.word ?? "").dropFirst()])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1532,7 +1533,9 @@ struct SearchResults: View {
         // its names in other languages ("Allemagne", "ドイツ") last, so they never push an English match down
         var language: [Int] = []
         let picked = Set(alias + own + other + contains)
-        if q.count >= 2, let more = w.otherLanguageNamesIfReady {
+        // (from four letters: at three, "ger" filled the list with Greenland, Greece, Grenada and Guernsey by names in
+        // languages nobody typing English meant, 8 Nov; a name in another script, "ドイツ", from its first letter)
+        if q.count >= 4 || q.unicodeScalars.contains(where: { $0.value > 0x24F }), let more = w.otherLanguageNamesIfReady {
             for (i, p) in w.places.enumerated() where !p.junk && !picked.contains(i) && more[i].contains(where: { $0.hasPrefix(q) }) {
                 language.append(i)
             }
@@ -1568,7 +1571,8 @@ private struct ResultWords: View {
     let notes: [String]
 
     var body: some View {
-        let n = notes.filter { !$0.isEmpty }
+        // (never the name again: "Berlin  Berlin", a pin "Ed Al Fursan  Ed Al Fursan", 8 Nov)
+        let n = notes.filter { !$0.isEmpty && $0.caseInsensitiveCompare(name) != .orderedSame }
         ViewThatFits(in: .horizontal) {
             if n.count > 0 { line(n[0]) }
             if n.count > 1 { line(n[1]) }
