@@ -233,7 +233,8 @@ struct SheetContent: View {
             // line 28 pt under the water's edge), not a small block in its middle
             if !Perf.shared.off.contains("caption"), let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) {
                 rl
-                    .padding(.top, form.top + 18)
+                    // (at full under the head, as every caption: never in the head's row)
+                    .padding(.top, max(L.headBottom + 10, form.top + 18))
                     .frame(width: L.W, height: L.H, alignment: .top)
                     .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
             }
