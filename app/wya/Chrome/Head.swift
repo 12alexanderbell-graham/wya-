@@ -215,15 +215,6 @@ struct HeadView: View {
             GlassEffectContainer(spacing: 14) {
                 ZStack(alignment: .topLeading) {
                     Animated(p: searchP) { p in
-                        searchCapsule(ink: ink, p: p, fieldW: fieldW)
-                            .frame(width: L.circle + (fieldW - L.circle) * p, height: L.circle, alignment: .leading)
-                            .clipShape(Capsule())
-                            .glassEffect(PageGlass.head, in: .capsule)
-                    }
-                    .frame(width: fieldW, height: L.circle, alignment: .leading)
-                    .position(x: L.side + fieldW / 2, y: L.headY)
-
-                    Animated(p: searchP) { p in
                         if p > 0.001 {
                             SearchResults(map: map, head: head, pick: pick, reveal: p,
                                           width: L.circle + (fieldW - L.circle) * p, fullWidth: fieldW, gap: gap)
@@ -233,6 +224,17 @@ struct HeadView: View {
                     .frame(width: fieldW, alignment: .topLeading)
                     .padding(.leading, L.side)
                     .padding(.top, L.headBottom + 10)
+
+                    // (the field over the results: closing, the results' glass flows back up into the circle under its
+                    // glyph, which stays; drawn under it, it covered the glyph for 0.4 s, 8 Nov)
+                    Animated(p: searchP) { p in
+                        searchCapsule(ink: ink, p: p, fieldW: fieldW)
+                            .frame(width: L.circle + (fieldW - L.circle) * p, height: L.circle, alignment: .leading)
+                            .clipShape(Capsule())
+                            .glassEffect(PageGlass.head, in: .capsule)
+                    }
+                    .frame(width: fieldW, height: L.circle, alignment: .leading)
+                    .position(x: L.side + fieldW / 2, y: L.headY)
                 }
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
             }
@@ -984,7 +986,7 @@ struct SearchResults: View {
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
         let pinHits = pinsSearch && typed ? Self.pinMatches(head.query) : []
-        let keys: [ResultKey] = pinsSearch && typed
+        let found: [ResultKey] = pinsSearch && typed
             ? { () -> [ResultKey] in
                 let k = pinHits.prefix(5).map { ResultKey.pin($0.id) } + hits.prefix(max(3, 8 - min(5, pinHits.count))).map { .place($0) }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
@@ -1009,6 +1011,10 @@ struct SearchResults: View {
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
             }() : baseKeys
+        // each result once: a region or a thing found by two of its names is one key, and a key twice in the rows drew
+        // one of them blank (8 Nov)
+        var seen = Set<ResultKey>()
+        let keys = found.filter { seen.insert($0).inserted }
         let w = width > 0 ? width : fullWidth
         // a stack that is always there (an empty Group is no view, so its onChange never ran and the first list never
         // came)
@@ -1017,7 +1023,20 @@ struct SearchResults: View {
             if !shown.isEmpty && reveal > 0.001 {
                 TimelineView(.animation(paused: Date().timeIntervalSinceReferenceDate > until)) { ctx in
                     let t = ctx.date.timeIntervalSinceReferenceDate
-                    let open = shown.map { CGFloat(min(1, max(0, slots[$0]?.at(t).x ?? 1))) }
+                    // a row whose result is no longer there (its index changed under it: the towns cut to four as
+                    // the things came in) has nothing to show: its slot is shut at once, never a blank row (8 Nov)
+                    let has = { (k: ResultKey) -> Bool in
+                        switch k {
+                        case .place, .miss: return true
+                        case .setting(let id): return settingHits.contains { $0.id == id }
+                        case .region(let r): return regionHits.contains { $0.key == r }
+                        case .thing(let r): return thingHits.contains { $0.key == r }
+                        case .town(let r): return townHits.contains { $0.key == r } || townGuess?.key == r
+                        case .anyRegion(let r): return anyRegionHits.contains { $0.key == r }
+                        case .pin(let id): return PinStore.shared.pin(id) != nil
+                        }
+                    }
+                    let open = shown.map { has($0) ? CGFloat(min(1, max(0, slots[$0]?.at(t).x ?? 1))) : 0 }
                     let full = 44 * open.reduce(0, +) + 8
                     // from the circle (44 by 44, in the circle's place) to the full box
                     let h = 44 + (max(44, full + gap) - 44) * reveal - gap * reveal

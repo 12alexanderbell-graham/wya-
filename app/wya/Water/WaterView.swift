@@ -368,11 +368,14 @@ struct SheetContent: View {
                     .accessibilityHidden(true)
             }
         }
+        .onChange(of: water.pageUp) { _, v in DispatchQueue.main.async { pageWasUp = v } }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
             // (a mode change swaps the caption with no roll)
             if captionShown != fits {
-                if water.modeSwitching { captionShown = fits }
+                // (a page coming or going is the screen changing at once: the caption with it, 8 Nov: it faded over
+                // the page's first frames)
+                if water.modeSwitching || water.pageUp != pageWasUp { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
         }
@@ -433,7 +436,7 @@ struct SheetContent: View {
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
     private var captionFits: Bool {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
-            && !water.upload && !water.regions && !water.menuLeaving
+            && !water.upload && !water.regions && !water.menuLeaving && !water.pageUp
     }
     /// the solar system is down out of the water while something else is the water's content
     private var cosmosOut: Bool {
@@ -443,8 +446,14 @@ struct SheetContent: View {
             || map.placesMode || map.pinsMode
             // and a region map's (the system is the Countries world's; it sat in France's sheet at 50%)
             || map.regionScene != nil
+            // and the water on its way down to 25% by itself (settings, a list or Details closed, the Map tab): the
+            // system is not shown for a moment only to sink away under the caption (8 Nov burst: it came back at 50%
+            // and rode down for a second); under a finger it rises and sinks with the water as before
+            || (!water.held && (water.stop == .quarter || water.stop == .closed))
     }
     @State private var captionShown = false
+    /// the page state the caption last saw (a page coming or going swaps the caption at once)
+    @State private var pageWasUp = false
 }
 
 /// THE FULL VIEW IS CLEAR GLASS WITH STARS: no field, no mist, nothing spreading from the sun; the water stays the

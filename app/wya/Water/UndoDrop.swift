@@ -57,8 +57,9 @@ struct UndoDrop: View {
         // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at
         // edge + 4 its top stuck 14 pt out as a bump on every sheet) to 30 pt above it
         .position(x: L.W / 2, y: up ? edge - 30 : edge + 22)
-        .opacity(atFull ? 0 : 1)
-        .allowsHitTesting(up && !atFull)
+        // (not over a place's page: the page is the screen, 8 Nov: "Canada stamped" sat on France's page)
+        .opacity(atFull || water.pageUp ? 0 : 1)
+        .allowsHitTesting(up && !atFull && !water.pageUp)
         .accessibilityLabel("Undo \(words)")
         .accessibilityHidden(!up)
         // with a stamping card up the drop waits and rises as the card closes (4.2.3: the card closes keeping every

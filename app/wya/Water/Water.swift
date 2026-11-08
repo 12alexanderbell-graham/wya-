@@ -493,7 +493,8 @@ final class Water {
         stop = s
         body.target = restTop(s)
         // Reduce Motion: the same settle, shorter (Part 19)
-        body.response = 0.35 * (Motion.reduce ? 0.65 : 1)
+        // (0.42 s in real time: about 0.45 s to settle, Apple's sheet; 0.35 stepped once a frame was 0.7 s at 120 Hz)
+        body.response = 0.42 * (Motion.reduce ? 0.65 : 1)
         // (never past its stop: a fast fling at 0.9 let the sheet overshoot a little, 8 Nov)
         body.damping = 1
         // (no landing haptic: a plain sheet lands silently)
@@ -522,7 +523,9 @@ final class Water {
     private func run() {
         guard !running else { return }
         running = true
-        Clock.shared.run(self, step: { [weak self] dt in self?.step(dt) ?? false },
+        // (in real time: the sheet takes the same time on any phone; stepped once a frame it took twice as long at 60 Hz
+        // as at 120, and longer still whenever frames dropped)
+        Clock.shared.run(self, realTime: true, step: { [weak self] dt in self?.step(dt) ?? false },
                          frame: { [weak self] in self?.publish() })
     }
 

@@ -312,22 +312,21 @@ struct StampedList: View {
     private func show(_ id: String, after d: Double) {
         DispatchQueue.main.asyncAfter(deadline: .now() + d) {
             withAnimation(.smooth(duration: Self.each)) { _ = flagOut.insert(id) }
-            // the words once the flag is past 60% (about a third of its time on this curve)
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.each * 0.3) {
-                withAnimation(Motion.quick) { _ = wordsOut.insert(id) }
-            }
+            // the words with the flag (the flag is just there now, so words waiting for it to grow left a column of
+            // flags with no names for 0.4 s, 8 Nov burst)
+            withAnimation(Motion.quick) { _ = wordsOut.insert(id) }
         }
     }
-    /// the reverse, bottom row first: the words roll out and the flags shrink into their own centres
+    /// closing: every row's words and flag go in the same frame (no roll, no stagger)
     private func leave() {
         let ids = rows.map(\.id)
         let shown = ids.filter { onScreen.contains($0) }
         for id in ids where !onScreen.contains(id) { flagOut.remove(id); wordsOut.remove(id) }
-        for (k, id) in shown.reversed().enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.gap * Double(k)) {
-                withAnimation(Motion.quick) { _ = wordsOut.remove(id) }
-                withAnimation(.smooth(duration: Self.each)) { _ = flagOut.remove(id) }
-            }
+        // all at once, with no roll: the water starts down as the list closes, and rows still rolling out one by one rode down
+        // with it into the tabs (8 Nov burst: "stria" over the tab capsule)
+        var t = Transaction(); t.disablesAnimations = true
+        withTransaction(t) {
+            for id in shown { wordsOut.remove(id); flagOut.remove(id) }
         }
         arrived = false
         // the solar system comes back as soon as the last row has gone (Water's own timer is the cap)

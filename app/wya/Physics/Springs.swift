@@ -105,11 +105,15 @@ final class Clock: NSObject {
     private var carry: CFTimeInterval = 0
     private var bodies: [ObjectIdentifier: (CGFloat) -> Bool] = [:]
     private var frames: [ObjectIdentifier: () -> Void] = [:]
+    private var timed: Set<ObjectIdentifier> = []
 
     /// `step` is called at 240 Hz and returns true while it still moves; `frame` once per screen frame after it.
-    func run(_ owner: AnyObject, step: @escaping (CGFloat) -> Bool, frame: @escaping () -> Void = {}) {
+    /// `realTime`: stepped for every 1/240 s that passed, so it takes the same time at any frame rate (the others step
+    /// once a frame, as they were tuned: twice as slow at 60 Hz as at 120, and slower still when frames drop)
+    func run(_ owner: AnyObject, realTime: Bool = false, step: @escaping (CGFloat) -> Bool, frame: @escaping () -> Void = {}) {
         bodies[ObjectIdentifier(owner)] = step
         frames[ObjectIdentifier(owner)] = frame
+        if realTime { timed.insert(ObjectIdentifier(owner)) } else { timed.remove(ObjectIdentifier(owner)) }
         if link == nil {
             let l = CADisplayLink(target: self, selector: #selector(tick(_:)))
             l.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
@@ -129,10 +133,12 @@ final class Clock: NSObject {
             carry -= h
             // as it was when the water's feel was approved: a body steps once per tick here (`||` skips the rest), and
             // every spring was tuned so
-            for (k, s) in bodies { moving[k] = (moving[k] ?? false) || s(CGFloat(h)) }
+            for (k, s) in bodies {
+                moving[k] = timed.contains(k) ? (s(CGFloat(h)) || (moving[k] ?? false)) : ((moving[k] ?? false) || s(CGFloat(h)))
+            }
         }
         for (k, f) in frames where bodies[k] != nil { f() }
-        for (k, m) in moving where !m { bodies[k] = nil; frames[k] = nil }
+        for (k, m) in moving where !m { bodies[k] = nil; frames[k] = nil; timed.remove(k) }
         if bodies.isEmpty {
             link?.invalidate(); link = nil; last = 0; carry = 0
         }
