@@ -1343,8 +1343,9 @@ struct UploadSheet: View {
                 .frame(width: run, alignment: .leading)
                 .position(x: L.W / 2, y: form.top + 3)
         }
+        // (there or not, no growing from a point, 8 Nov; its spinning is its own)
         WorkingMark(size: 20, running: u.markIn)
-            .scaleEffect(u.markIn ? 1 : 0)
+            .opacity(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
         // once the review is up, the go says what it does (7 Nov, the friend's review board 15: the bare stamp glyph
         // saved the visit without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
@@ -1467,7 +1468,7 @@ struct UploadSheet: View {
                 if let f = Flags.square(r.flag.isEmpty ? r.id : r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
-            .scaleEffect(shown ? 1 : 0)
+            .opacity(shown ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
             VStack(alignment: .leading, spacing: 1) {
                 Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
                     .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
@@ -1507,8 +1508,8 @@ struct UploadSheet: View {
             Spacer(minLength: 0)
             Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 13)
                 .opacity(off ? 0.5 : 1)
-                // grows about its centre with the words, as the flags do
-                .scaleEffect(shown ? 1 : 0)
+                // there with the words, as the flags are (nothing grows from a point, 8 Nov)
+                .opacity(shown ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .onTapGesture { u.tapTrip(r.id, k) }
@@ -1530,10 +1531,10 @@ struct UploadSheet: View {
                 ToolRing(width: 2)
                     .fill(Palette.ink, style: FillStyle(eoFill: true))
                     .frame(width: 22, height: 22)
-                    .scaleEffect(grown && !(u.locating && u.step == 2 && side == 1) ? 1 : 0)
-                // Here waiting: the small working mark grows from the icon's centre as the icon shrinks into it
+                    .opacity(grown && !(u.locating && u.step == 2 && side == 1) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
+                // Here waiting: the small working mark is there in the icon's place (nothing grows from a point, 8 Nov)
                 if u.step == 2 && side == 1 {
-                    WorkingMark(size: 20, running: u.locating).scaleEffect(u.locating ? 1 : 0)
+                    WorkingMark(size: 20, running: u.locating).opacity(u.locating ? 1 : 0)
                 }
             }
             .frame(width: 22, height: 22)

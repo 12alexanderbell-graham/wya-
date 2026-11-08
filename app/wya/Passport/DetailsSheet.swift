@@ -175,7 +175,7 @@ struct DetailsSheet: View {
                             }
                         }
                         VStack(alignment: .leading, spacing: 0) {
-                            row("Rating", blank: out) { stars.scaleEffect(out ? 0 : 1) }
+                            row("Rating", blank: out) { stars.opacity(out ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
                             row("With", blank: out) {
                                 if out { fieldWords("Names", s.d.with, gone: out, trailing: true) }
                                 else { field("Names", id: "with", max: 120, trailing: true, \.with) }
@@ -353,8 +353,8 @@ struct DetailsSheet: View {
                 }
                 if n > 1 {
                     xCircle { removeTrip(k) }
-                        .scaleEffect(gone ? 0 : 1)
-                        .transition(.scale)
+                        .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
+                        .transition(.identity)
                 }
             }
             .frame(minHeight: 52).edgeRow()
@@ -479,9 +479,9 @@ struct DetailsSheet: View {
                     }
                     if t.count > 1 {
                         xCircle { removeLived(i) }
-                            .scaleEffect(gone ? 0 : 1)
+                            .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                             // the first row's × comes and goes with the second row: about its own centre, never a fade
-                            .transition(.scale)
+                            .transition(.identity)
                     }
                 }
             }
@@ -520,7 +520,7 @@ struct DetailsSheet: View {
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body).foregroundStyle(Palette.ink)
                         .contentTransition(.numericText(value: gone ? 0 : 1))
                     xCircle { removePlace(Int(placeIDs.firstIndex(of: k) ?? 0)) }
-                    .scaleEffect(gone ? 0 : 1)
+                    .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 }
                 .frame(minHeight: 52).edgeRow()
             }
@@ -675,7 +675,7 @@ struct DetailsSheet: View {
             .padding(.horizontal, 16)
             // on: a plain black band edge to edge, square-ended, as Map settings' current choice (no oval); it shrinks
             // about its centre while the band's block goes (and grows as it comes)
-            .background { Rectangle().fill(on ? Palette.ink : .clear).scaleEffect(blank ? 0 : 1) }
+            .background { Rectangle().fill(on ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
             .padding(.horizontal, -16)
             .contentShape(Rectangle())
             .onTapGesture(perform: tap)
@@ -709,7 +709,7 @@ struct DetailsSheet: View {
                     .foregroundStyle(chosen == id ? .white : Palette.ink)
                     .padding(.horizontal, 12)
                     .frame(height: 36)
-                    .background { Capsule().fill(chosen == id ? Palette.ink : .clear).scaleEffect(blank ? 0 : 1) }
+                    .background { Capsule().fill(chosen == id ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
                     .padding(.vertical, 4)
                     .edgeRow()
                     .contentShape(Rectangle())
@@ -763,7 +763,7 @@ struct DetailsSheet: View {
             // the app's own icons only, never SF Symbols (0.8.7): "plus" and "minus" from Icons5
             Icon5Still(key: g, progress: 0, ink: Palette.white, size: 17)
                 .frame(width: 36, height: 36).background(Palette.ink, in: .circle)
-                .scaleEffect(blank ? 0 : 1)
+                .opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)

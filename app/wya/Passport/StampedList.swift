@@ -331,7 +331,7 @@ struct StampedList: View {
                 if let f = Flags.square(r.kind == .country ? r.id.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
-            .scaleEffect(flagOut.contains(r.id) ? 1 : 0)
+            .opacity(flagOut.contains(r.id) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }  // (just there, never grown from a point, 8 Nov)
             // the words by the text roll (never scaled, never faded): a blank of the same length until they come
             let w = wordsOut.contains(r.id)
             VStack(alignment: .leading, spacing: 1) {
