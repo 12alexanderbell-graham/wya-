@@ -57,6 +57,9 @@ struct PlacesMaps: View {
     /// the room under the rows (the tabs' place)
     let bottom: CGFloat
 
+    /// each row's map in its middle (by the row's name)
+    @State private var middle: [String: MapController.PlacesPick?] = [:]
+
     static let continents = ["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"]
 
     var body: some View {
@@ -97,6 +100,14 @@ struct PlacesMaps: View {
                 .contentMargins(.horizontal, 12, for: .scrollContent)
                 .scrollIndicators(.hidden)
                 .scrollTargetBehavior(.viewAligned)
+                // SWIPED: the map in the row's middle when a swipe comes to rest is shown behind the water, which stays
+                // where it is so the next one is a swipe away (a tap shows one and lowers the water)
+                .scrollPosition(id: Binding(get: { middle[name] ?? nil }, set: { middle[name] = $0 }), anchor: .center)
+                .onScrollPhaseChange { old, new in
+                    guard new == .idle, old != .idle, let m = middle[name] ?? nil, m != map.placesPick else { return }
+                    Feel.tick()
+                    map.showPlacesMap(m)
+                }
                 .onAppear { if picks.contains(current) { proxy.scrollTo(current, anchor: .center) } }
             }
         }
