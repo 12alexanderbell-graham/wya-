@@ -253,7 +253,9 @@ final class PinRoutes {
         Task {
             let answer = try? await MKDirections(request: req).calculate()
             // still the row's question: open, the same two ends, both still there
-            guard me == asking, open, from == fid, to == tid, end(fid) != nil, end(tid) != nil else { return }
+            // (and the ends still where they were asked from: an end pin dragged during the wait asks again, 8 Nov)
+            guard me == asking, open, from == fid, to == tid, let f2 = end(fid), let t2 = end(tid) else { return }
+            if Self.moved(f, f2) || Self.moved(t, t2) { ask(); return }
             guard let routes = answer?.routes, let best = routes.first else {
                 // across an ocean by car: the To chip says so for 2 s
                 Feel.refuse()
@@ -377,6 +379,9 @@ final class PinRoutes {
     func pinMoved(_ pin: UUID) {
         for r in routes where r.from == pin || r.to == pin { reask(r.id, quiet: true) }
     }
+
+    /// an end moved since its route was asked for (a pin dragged during the wait)
+    static func moved(_ a: Place, _ b: Place) -> Bool { abs(a.lat - b.lat) > 1e-6 || abs(a.lon - b.lon) > 1e-6 }
 
     static func request(_ f: Place, _ t: Place, walk: Bool) -> MKDirections.Request {
         let req = MKDirections.Request()

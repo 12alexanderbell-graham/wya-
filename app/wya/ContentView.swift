@@ -366,7 +366,8 @@ struct ContentView: View {
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
             // (the tools close first, and history and quick stamping with them: the book's "the tool closes, then the gear")
-            if open { closeCard(); WhatsHere.shared.close(); head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
+            // (a route's colour sheet goes too: hidden under settings, it came back in the 25% water after them, 8 Nov)
+            if open { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.colouring = nil; head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
         // (What's here? goes back into its point too: its name no longer stands under the search or settings)
