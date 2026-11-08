@@ -514,7 +514,8 @@ final class Water {
         body.target = restTop(s)
         // Reduce Motion: the same settle, shorter (Part 19)
         body.response = (s == .full ? 0.5 : 0.42) * (Motion.reduce ? 0.65 : 1)
-        body.damping = (released && s != .full && abs(speed) > 900) ? 0.9 : 1
+        // (never past its stop: a fast fling at 0.9 let the sheet overshoot a little, 8 Nov)
+        body.damping = 1
         landingSpeed = abs(speed)
         run()
     }

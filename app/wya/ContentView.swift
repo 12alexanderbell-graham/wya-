@@ -456,9 +456,9 @@ struct ContentView: View {
             head.history = false
         }
         // (a card, Details or the book over the map goes with the map it was on: Places' and Pins' maps are their own)
-        if new == .places || old == .places || new == .pins || old == .pins { closeCard() }
+        if new == .places || old == .places || new == .pins || old == .pins { closeCard(instant: true) }
         if new == .regions {
-            closeCard()
+            closeCard(instant: true)
             water.closeList(back: false)
             map.closeRegions(instant: true)
             map.regionsMenu = true
@@ -473,7 +473,7 @@ struct ContentView: View {
             water.openMenu(instant: true)
             map.goHome(animated: false)
         } else if old == .regions {
-            closeCard()
+            closeCard(instant: true)
             map.regionsMenu = false
             map.closeRegions(instant: true)
             water.closeMenu(to: .quarter, instant: true)
@@ -695,12 +695,14 @@ struct ContentView: View {
         Sideways.shared.enter(water: water, head: head, map: map) { closeCard() }
     }
 
-    private func closeCard() {
-        BookState.shared.close()
+    /// `instant` for a mode change: the card, its region twin and the book are simply gone (it swaps the content and
+    /// moves nothing; they folded away over the new mode's content, 8 Nov)
+    private func closeCard(instant: Bool = false) {
+        BookState.shared.close(instant: instant)
         DetailsState.shared.close(water: water)
         VerifyState.shared.close(water: water)
-        CardState.shared.close(map: map)
-        RegionCardState.shared.close(map: map)
+        CardState.shared.close(map: map, instant: instant)
+        RegionCardState.shared.close(map: map, instant: instant)
     }
 
     /// A COUNTRY'S HOLD MENU (11.5): Stamp or Unstamp, Wish or Unwish, Lived here | Details, Verify | Open its page,

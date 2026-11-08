@@ -33,9 +33,19 @@ final class RegionCardState {
         }
     }
     /// back into the water, every change kept
-    func close(map: MapController) {
+    /// `instant`: gone in this frame, no fold (a mode change moves nothing)
+    func close(map: MapController, instant: Bool = false) {
+        guard key != nil else { return }
+        if instant {
+            closing = false
+            closedAt = CACurrentMediaTime()
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { p = 0 }
+            key = nil; map.kept = nil
+            return
+        }
         // one close per card: a second touch while it folds no longer starts the 0.4 s over (that ate the next tap)
-        guard key != nil, !closing else { return }
+        guard !closing else { return }
         closing = true
         closedAt = CACurrentMediaTime()
         withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: { [weak self] in

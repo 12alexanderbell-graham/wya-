@@ -61,7 +61,9 @@ private struct RowWords: View {
         HStack(spacing: 8) {
             if let flag, let img = Flags.square(flag) {
                 // shown with the row's words (in one frame: a flag is not a word to roll)
-                img.resizable().frame(width: 28, height: 28).opacity(shown ? 1 : 0).padding(.trailing, 4)
+                img.resizable().frame(width: 28, height: 28).opacity(shown ? 1 : 0)
+                    .transaction { $0.disablesAnimations = true; $0.animation = nil }
+                    .padding(.trailing, 4)
             }
             // (one line in the 48 pt row: a long name gets a little smaller rather than wrap or be cut)
             Text(shown ? name : blank(name))
@@ -84,7 +86,8 @@ private struct RowWords: View {
         .frame(maxWidth: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // the current choice: the black band, the water's width; it just appears
-        .background(band && shown ? Palette.ink : .clear)
+        // (in its own transaction: it faded in with the words' roll)
+        .background { (band && shown ? Palette.ink : Color.clear).transaction { $0.disablesAnimations = true; $0.animation = nil } }
         .contentShape(Rectangle())
         // words only while the whole row is inside the list: they roll out before an edge could cut them
         .onScrollVisibilityChange(threshold: 0.99) { v in
@@ -191,6 +194,8 @@ private struct SettingsList: View {
                         ChoiceRow(name: c.name, picked: row.get(s) == c.id, delay: Double(j) * 0.05) {
                             pick(row, c.id)
                         }
+                        // (no fade in or out: the rows open the space and their words roll, 8 Nov)
+                        .transition(.identity)
                     }
                 }
             }
@@ -369,6 +374,7 @@ private struct SettingsPage: View {
                                 withAnimation(Motion.chrome) { if open == d.id { open = nil } }
                             }
                         }
+                        .transition(.identity)
                     }
                 }
             }
@@ -405,6 +411,7 @@ private struct SettingsPage: View {
                         set(c.0)
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { withAnimation(Motion.chrome) { if open == id { open = nil } } }
                     }
+                    .transition(.identity)
                 }
             }
         }

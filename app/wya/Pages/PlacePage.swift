@@ -794,7 +794,7 @@ private struct InsideList: View {
             .glassEffect(PageGlass.on, in: .capsule)
             ForEach(rows.prefix(shown), id: \.self) { r in row(r) }
             if rows.count > shown {
-                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
+                Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
                 }
                 .buttonStyle(.plain)
@@ -988,7 +988,7 @@ private struct ActivitiesList: View {
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
             }
             if rows.count > shown {
-                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
+                Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(height: 44)
                 }
                 .buttonStyle(.plain)

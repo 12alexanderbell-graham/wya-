@@ -1026,7 +1026,7 @@ struct PinsWater: View {
                 ZStack(alignment: .top) {
                     Caption(name: " ", count: 0, tail: " ", night: false).hidden()
                     VStack(spacing: 4) {
-                        Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
                         Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                     }
                 }
@@ -1038,7 +1038,7 @@ struct PinsWater: View {
                         night: FullView.night(form.page))
             }
         }
-        .animation(Motion.quick, value: store.selected)
+        // (no fade between "Pins" and a pin's name: the words are simply there, 8 Nov; it crossfaded on every pin tap)
         // (clear of the Share circle on each side while the sheet is up, so the name stays centred)
         .frame(width: L.W - 2 * L.sheetInset - 32 - (store.selected != nil && water.stop != .quarter && water.stop != .closed ? 96 : 0))
         .position(x: L.W / 2, y: captionY)

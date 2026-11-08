@@ -48,7 +48,7 @@ struct PageSheet: View {
             .onChange(of: stack.reportAsked) { _, r in
                 guard let r else { return }
                 stack.reportAsked = nil
-                withAnimation(Motion.quick) { reporting = true; reason = r }
+                reporting = true; reason = r  // (the form simply replaces the list, no crossfade, 8 Nov)
             }
             .task(id: page.key.description) {
                 reporting = false; reason = nil; note = ""; sent = false
@@ -93,7 +93,7 @@ struct PageSheet: View {
         // REPORT A MISTAKE, last
         Button {
             Feel.tap()
-            withAnimation(Motion.quick) { reporting = true }
+            reporting = true  // (the form simply replaces the list, no crossfade)
         } label: { actionWords("Report a mistake") }
         .buttonStyle(.plain)
         .padding(.top, 12)

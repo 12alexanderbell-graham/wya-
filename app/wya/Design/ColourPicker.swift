@@ -245,7 +245,8 @@ struct ColourPicker: View {
             ForEach(mine, id: \.self) { c in
                 swatch(c)
                     .contextMenu { Button("Remove", role: .destructive) { Feel.lift(); withAnimation(Motion.quick) { store.remove(c) } } }
-                    .transition(.scale)
+                    // (no circle growing from nothing: a swatch is simply there or gone, the others slide over, 8 Nov)
+                    .transition(.identity)
             }
             Spacer(minLength: 0)
         }
@@ -256,7 +257,8 @@ struct ColourPicker: View {
     private func swatch(_ c: ColourPick) -> some View {
         Button {
             Feel.tap()
-            withAnimation(Motion.quick) { colour = c }
+            // the colour just appears (no blend into it, 8 Nov)
+            colour = c
             done(c)
         } label: {
             Circle().fill(c.color).frame(width: Self.circle, height: Self.circle)

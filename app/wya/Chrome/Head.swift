@@ -751,9 +751,12 @@ struct ModeWheel: View {
                 if let v { dragging = true; reveal = 1; at = v } else { dragging = false; reveal = 0; at = CGFloat(head.mode.rawValue) }
             }
         }
+        // a mode changed from elsewhere (the tabs' hold, a hold menu, the upload): the dot is simply the new mode's,
+        // no turn through the ones between (a mode change moves nothing, 8 Nov)
         .onChange(of: head.mode) { _, m in
             if Int(at.rounded()) != m.rawValue && !dragging {
-                withAnimation(Motion.chrome) { at = CGFloat(m.rawValue) }
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { at = CGFloat(m.rawValue) }
             }
         }
         .accessibilityElement()

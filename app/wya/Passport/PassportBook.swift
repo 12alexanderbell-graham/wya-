@@ -45,13 +45,19 @@ final class BookState {
     /// back into the tool: the cover closes, and the book flies back once the cover is past 45 degrees
     /// when it last closed: the touch that closed it never opens a card (one press, one job)
     @ObservationIgnored private(set) var closedAt: CFTimeInterval = 0
-    func close() {
+    /// `instant`: shut and gone in this frame (a mode change moves nothing)
+    func close(instant: Bool = false) {
         guard isOpen else { return }
         isOpen = false
         closedAt = CACurrentMediaTime()
         job += 1
         let j = job
         UserDefaults.standard.set(page, forKey: "passportPage")
+        if instant {
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { cover = 0; turn = 0; p = 0 }
+            return
+        }
         withAnimation(.spring(response: 0.30, dampingFraction: 1)) { cover = 0; turn = 0 }
         Task {
             try? await Task.sleep(for: .milliseconds(120))

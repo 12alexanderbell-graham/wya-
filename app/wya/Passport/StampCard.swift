@@ -126,8 +126,18 @@ final class CardState {
     }
 
     /// back into the point it came from, every change kept (no Save: closing keeps, the undo drop takes it back)
-    func close(map: MapController) {
-        guard place != nil, !closing else { return }
+    /// `instant`: gone in this frame, no fold (a mode change swaps the content and moves nothing, 8 Nov)
+    func close(map: MapController, instant: Bool = false) {
+        guard place != nil else { return }
+        if instant {
+            closing = false
+            closedAt = CACurrentMediaTime()
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { p = 0 }
+            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil
+            return
+        }
+        guard !closing else { return }
         // (8 Nov) a card still waiting for the water to make room was never seen: it goes at once, and the touch that
         // sent it away may open the next one (a second tap on a place had been eaten by the 0.4 s rule)
         if p == 0 {
