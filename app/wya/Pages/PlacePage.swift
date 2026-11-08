@@ -50,6 +50,8 @@ final class PlacePageState {
         /// 0 at the origin to 1 full screen
         var p: CGFloat = 0
         var drag: CGFloat = 0
+        /// on its way back into its origin (the stack is not "up" for the water once every page is)
+        var closing = false
         init(key: PlaceKey, name: String, what: String, country: String, code: String?, origin: CGRect) {
             self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
             self.origin = origin
@@ -81,6 +83,8 @@ final class PlacePageState {
     /// a reason the page's sheet opens on, at Report a mistake (a hold menu's Report a wrong place)
     var reportAsked: String?
     var isOpen: Bool { !pages.isEmpty }
+    /// a page that stays: false from the moment the last one starts closing (its close animation still running)
+    var standing: Bool { pages.contains { !$0.closing } }
 
     /// the first page, grown from what opened it on the map, the card or the list (A16.1)
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
@@ -113,6 +117,7 @@ final class PlacePageState {
         // the top page still standing (a quick second back closes the page under the one already going; it used to
         // land on the closing one and do nothing)
         guard let page = pages.last(where: { $0.p > 0.5 || $0.drag > 0 }) else { return }
+        page.closing = true
         withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { page.p = 0; page.drag = 0 } completion: { [weak self] in
             guard let self, page.p < 0.01 else { return }
             self.pages.removeAll { $0 === page }
@@ -381,24 +386,30 @@ struct PlacePageView: View {
                 PageLayer(map: map, water: water, page: page, top: page === stack.top)
             }
         }
-        .onChange(of: stack.isOpen) { _, open in
+        // (from the moment the last page starts closing, not once it has gone: what closed it may move the water
+        // itself, a search pick or the Map tab, and the page's stop must not undo that)
+        .onChange(of: stack.standing) { _, open in
             water.pageUp = open
             if open { before = water.stop; water.go(.closed) }
             else {
+                let sheet = water.pageSheet
                 water.pageSheet = false
-                if let b = before { water.go(b); before = nil }
+                // back to where it was only if nothing else has moved the water since (the page put it at the capsule,
+                // or its own sheet had it at 50%)
+                if let b = before, water.stop == .closed || sheet { water.go(b) }
+                before = nil
             }
         }
         // THE PAGE'S OWN SHEET (16.6): the water pulled up from the tab capsule, or Sources tapped, comes to 50% holding
         // the page's sheet; back down to the capsule, the sheet goes
         .onChange(of: water.stop) { _, s in
-            guard stack.isOpen else { return }
+            guard stack.standing else { return }
             if s == .closed { water.pageSheet = false; return }
             if !water.pageSheet { water.pageSheet = true }
             if s == .quarter { water.go(.half) }
         }
         .onChange(of: stack.sheetAsked) { _, _ in
-            guard stack.isOpen else { return }
+            guard stack.standing else { return }
             water.pageSheet = true
             water.go(.half)
         }

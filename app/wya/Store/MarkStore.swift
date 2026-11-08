@@ -158,6 +158,7 @@ final class MarkStore {
         guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return false }
         if join, !r.changed.isEmpty, let last = undoStack.last, last.run == nil {
             undoStack[undoStack.count - 1] = (last.snaps + r.undo, words, nil, nil)
+            undoSerial &+= 1
             take(r)
             redoStack = []
             lastWords = words
@@ -226,10 +227,14 @@ final class MarkStore {
     }
 
     var canUndo: Bool { !undoStack.isEmpty }
+    /// changes each time the top of the undo stack does (a step pushed, joined, undone or redone): a step to be joined
+    /// later checks it is still the top
+    @ObservationIgnored private(set) var undoSerial = 0
 
     /// UNDO the last write (the drop, a shake, a three-finger swipe left; Part 3.10)
     func undo() async {
         guard let store, let last = undoStack.popLast() else { return }
+        undoSerial &+= 1
         if let run = last.run {
             run()
             // a change of Pins' made again by redo when it says how (8 Nov: pin and route steps had no redo)
@@ -254,6 +259,7 @@ final class MarkStore {
     /// REDO the last undone write (a three-finger swipe right; Part 3.10, proposal)
     func redo() async {
         guard let store, let last = redoStack.popLast() else { return }
+        undoSerial &+= 1
         if let run = last.run {
             run()
             undoStack.append(([], last.words, last.back, run))
@@ -289,6 +295,7 @@ final class MarkStore {
     /// a change made elsewhere (a pin dropped or deleted) that the undo drop takes back with `back`
     func did(_ words: String, back: @escaping @MainActor () -> Void, forth: (@MainActor () -> Void)? = nil) {
         undoStack.append(([], words, back, forth))
+        undoSerial &+= 1
         redoStack = []
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
         lastWords = words
@@ -299,6 +306,7 @@ final class MarkStore {
         guard !r.changed.isEmpty else { return }
         take(r)
         undoStack.append((r.undo, words, nil, nil))
+        undoSerial &+= 1
         redoStack = []
         markDates.append(Date())
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }

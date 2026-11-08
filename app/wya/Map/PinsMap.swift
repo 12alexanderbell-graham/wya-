@@ -1406,6 +1406,8 @@ struct PinSheet: View {
         store.colourAsked = false
         pick = p.pick ?? Self.nearBlack
         picking = true
+        // (said here too: another pin's Colour while the picker is out changes no `picking`)
+        store.colourStart(p.id)
     }
 }
 

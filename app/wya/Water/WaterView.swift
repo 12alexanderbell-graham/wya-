@@ -308,7 +308,7 @@ struct SheetContent: View {
                     .position(x: L.W / 2, y: captionY + 4)
                     .onTapGesture {
                         if water.stampedList { Feel.tap(); water.closeList() }
-                        else if (water.historyUp ? (map.historyInfo?.count ?? 0) : count) > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
+                        else if (water.historyUp ? (map.historyInfo?.count ?? 0) : listCount) > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() }
                         else { Feel.refuse() }
                     }
                     .accessibilityLabel("Stamped list")
@@ -324,7 +324,10 @@ struct SheetContent: View {
                     .contentShape(Rectangle())
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
                     .contextMenu {
-                        if let here {
+                        if map.placesMode {
+                            // Places: the map's own list (the continents are Countries' menu; Places picks its maps on the shelf)
+                            Button("Its stamped list") { if listCount > 0 { water.openList() } else { Feel.refuse() } }
+                        } else if let here {
                             // the planet's own menu (11.5), the continent you are on unavailable as the current row
                             Section(here) {
                                 Button("Open \(here)") {}.disabled(true)
@@ -338,7 +341,7 @@ struct SheetContent: View {
                     }
                     .position(x: L.W / 2, y: captionY - 44)
                     .onTapGesture {
-                        if count > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() } else { Feel.refuse() }
+                        if listCount > 0 { Feel.tap(); CardState.shared.close(map: map); water.openList() } else { Feel.refuse() }
                     }
                     .accessibilityHidden(true)
             }
@@ -364,12 +367,19 @@ struct SheetContent: View {
         return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
                                     failed: map.regionFailed, loading: map.regionLoading,
                                     width: width, visible: captionShown) { row in
+            // the card of a region of the old level goes (its region is no longer drawn)
+            RegionCardState.shared.close(map: map); DetailsState.shared.close(water: water); VerifyState.shared.close(water: water)
             if row == Self.townsRow { map.showRegionTowns() } else { map.leaveRegionTowns(); map.openRegions(sc.place, row: row) }
         })
     }
 
     /// the towns level's row in the level line (no region level uses it)
     static let townsRow = 99
+
+    /// what the Stamped list will hold: Places' own count on its maps, else your stamps
+    private var listCount: Int {
+        map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.count.0
+    }
 
     /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
     private var placesCaption: (name: String, count: Int, tail: String)? {

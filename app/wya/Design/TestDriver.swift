@@ -153,6 +153,13 @@ final class TestDriver {
                         NSLog("wya suggestions %@", s.map { w.places[$0].id }.joined(separator: " "))
                     }
                     else { NSLog("wya t search open"); head?.searching = true; head?.query = p.dropFirst().joined(separator: " ") }
+                // submit: the keyboard's Search key
+                case "submit": head?.submitAsked += 1
+                // where: what is up, logged (mode, search, card, Places' open country, the water's stop, a page)
+                case "where":
+                    NSLog("wya where: mode %d search %d card %@ placeOpen %@ stop %@ page %d continent %@", head?.mode.rawValue ?? -1, head?.searching == true ? 1 : 0,
+                          CardState.shared.isOpen ? "up" : "none", map?.placeOpen.map { "\($0)" } ?? "nil", water.map { "\($0.stop)" } ?? "?",
+                          PlacePageState.shared.isOpen ? 1 : 0, map?.continent ?? "nil")
                 case "zoom":
                     if a == "in" { map?.zoomIn() } else if a == "out" { map?.zoomOut() } else { map?.goHome() }
                 case "show":

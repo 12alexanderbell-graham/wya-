@@ -40,6 +40,9 @@ final class UploadState {
     private(set) var note: [Int: String] = [:]
     /// Here waiting for its fix: the icon gives way to the working mark
     private(set) var locating = false
+    /// Pick's or All's choice (its note key, 2 or 3) while the photos are read: its working mark in the icon's place,
+    /// and no other choice taken meanwhile (a second All read the library twice; Pick opened under All's read)
+    private(set) var photosBusy: Int?
     var picking = false
     var importing = false
     var picked: [PhotosPickerItem] = []
@@ -109,6 +112,9 @@ final class UploadState {
     /// the countries the import just stamped, when the round on screen is that import's (its go joins their undo step);
     /// 0 for a round opened again from waiting
     @ObservationIgnored private var roundJoins = 0
+    /// the undo stack's top when the round came up (the countries' step): the round joins that step only if it is
+    /// still the top (an undo meanwhile took the countries back; joining then merged the regions into an older step)
+    @ObservationIgnored private var roundSerial = -1
     /// the second round worked out while the review is up (every found country's regions), so the go never waits on it;
     /// after Add more it holds every read's regions (each read's own worked out, joined to the reads before it)
     @ObservationIgnored private var roundAhead: Task<[RegionFind], Never>?
@@ -136,7 +142,7 @@ final class UploadState {
         if let wr = waitingRound() { openRound(water: w, map: m, wr); return }
         water = w; map = m
         phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
-        step = 0; note = [:]; locating = false
+        step = 0; note = [:]; locating = false; photosBusy = nil
         shapes = [false, false]; words = false
         let at25 = w.stop == .quarter
         w.openUpload()
@@ -175,6 +181,7 @@ final class UploadState {
     /// A9.3: a tap on step 1's choices goes to its step 2
     func choose(_ side: Int) {
         guard phase == .choosing, !moving, words else { return }
+        if photosBusy != nil || locating { Feel.refuse(); return }
         Feel.tap()
         switch step {
         case 0: go(to: side == 0 ? 1 : 2, lead: side)
@@ -187,6 +194,7 @@ final class UploadState {
         guard phase == .choosing, step != 0, !moving else { return }
         Feel.tick()
         readToken += 1
+        photosBusy = nil
         go(to: 0, lead: nil)
     }
 
@@ -208,7 +216,7 @@ final class UploadState {
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
-            phase = .choosing; step = 0; note = [:]; locating = false
+            phase = .choosing; step = 0; note = [:]; locating = false; photosBusy = nil
             shapes = [false, false]; words = false
             grow(after: 0, job: me)
         }
@@ -235,7 +243,7 @@ final class UploadState {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
             step = s
-            locating = false
+            locating = false; photosBusy = nil
             grow(after: 0, job: me)
         }
     }
@@ -264,7 +272,7 @@ final class UploadState {
             closing = false
             guard me == job else { return }
             w.closeUpload()
-            step = 0; note = [:]; locating = false
+            step = 0; note = [:]; locating = false; photosBusy = nil
         }
     }
 
@@ -275,7 +283,9 @@ final class UploadState {
     func picked(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         let t = readToken
+        withAnimation(Motion.quick) { photosBusy = 2 }
         Task {
+            defer { if t == readToken { withAnimation(Motion.quick) { photosBusy = nil } } }
             var out: [HistoryReader.Sample] = []
             for it in items {
                 // a video: a copy of its file read for its place and time, then the copy goes
@@ -294,10 +304,12 @@ final class UploadState {
     }
     /// All: Photos access asked at this press only; refused, the word says so and leads to Settings
     private func all() {
-        if note[2] != nil { openSettings(); return }
+        if note[3] != nil { openSettings(); return }
         let t = readToken
+        withAnimation(Motion.quick) { photosBusy = 3 }
         Task {
-            guard await PhotosReader.ask() else { if t == readToken { refuse(2, "Allow Photos in Settings") }; return }
+            defer { if t == readToken { withAnimation(Motion.quick) { photosBusy = nil } } }
+            guard await PhotosReader.ask() else { if t == readToken { refuse(3, "Allow Photos in Settings") }; return }
             let (s, skipped) = await PhotosReader.samples()
             found(s, from: .photos, read: s.count + skipped, token: t)
         }
@@ -592,7 +604,9 @@ final class UploadState {
                     line: f.visits.isEmpty ? f.country : "\(f.country) · \(f.visits.count == 1 ? Self.range(f.visits[0]) : "\(f.visits.count) trips")",
                     dropped: roundDropped.contains(f.id), trips: [], tripsDropped: [], open: false, datesIn: false, flag: f.cc)
             }
-            return all.filter { !$0.dropped } + all.filter(\.dropped)
+            _ = orderSettle
+            let held = heldOrder?.round ?? roundDropped
+            return all.filter { !held.contains($0.id) } + all.filter { held.contains($0.id) }
         }
         guard let w = map?.world else { return [] }
         let byPlace = Dictionary(finds.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
@@ -608,7 +622,9 @@ final class UploadState {
                        datesIn: datesIn.contains(p.id))
         }
         func last(_ r: Row) -> LocalDay { byPlace[r.id]?.visits.last?.to ?? LocalDay(y: 0, m: 1, d: 1) }
-        return all.filter { !$0.dropped }.sorted { last($0) > last($1) } + all.filter(\.dropped).sorted { last($0) > last($1) }
+        _ = orderSettle
+        let held = heldOrder?.dropped ?? dropped
+        return all.filter { !held.contains($0.place) }.sorted { last($0) > last($1) } + all.filter { held.contains($0.place) }.sorted { last($0) > last($1) }
     }
     /// a find's second line: its trip's dates ("12–18 Aug 2024"), "3 trips", "+2 trips" for a place already stamped,
     /// "Home" for your home base
@@ -775,6 +791,11 @@ final class UploadState {
         /// the regions found inside these places, for the second round (older files have none)
         var regions: [WaitingRound.Region]?
     }
+    /// the app put away with a review or a round up: kept as if left (the finds or regions wait), the sheet as it is
+    func backgrounded() {
+        if round != nil { saveRound(); return }
+        if phase == .review, !order.isEmpty { save() }
+    }
     private func save() {
         guard let url = Self.waitingURL, let w = map?.world else { return }
         let ids = Set(order.map { w.places[$0].id })
@@ -832,11 +853,28 @@ final class UploadState {
         NSLog("wya upload: %d finds waiting", order.count)
     }
 
+    /// THE ROWS STAY WHERE THEY ARE while you are tapping them (a dropped row went to the end at once, so a second
+    /// tap meant to keep it again landed on the row that slid into its place and dropped that one): they keep the
+    /// order they had at the first tap, and move once no row has been tapped for 1.2 s (as Reminders' done rows)
+    @ObservationIgnored private var heldOrder: (dropped: Set<Int>, round: Set<String>)?
+    private var orderSettle = 0
+    private func holdOrder() {
+        if heldOrder == nil { heldOrder = (dropped, roundDropped) }
+        orderSettle += 1
+        let me = orderSettle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [self] in
+            guard me == orderSettle else { return }
+            heldOrder = nil
+            withAnimation(Motion.chrome) { orderSettle += 1 }
+        }
+    }
+
     /// a review row tapped, swiped or chosen in its menu: a country of the first round, a region of the second
     func tapRow(_ r: Row) {
         guard round != nil else { _ = tap(r.place); return }
         guard phase == .review, !busy else { return }
         Feel.tap()
+        holdOrder()
         if roundDropped.contains(r.id) { roundDropped.remove(r.id) } else { roundDropped.insert(r.id) }
         withAnimation(Motion.quick) { count = (round?.count ?? 0) - roundDropped.count }
     }
@@ -846,6 +884,7 @@ final class UploadState {
     func tap(_ i: Int) -> Bool {
         guard phase == .review, !busy, let m = map, order.contains(i) else { return false }
         Feel.tap()
+        holdOrder()
         if dropped.contains(i) {
             dropped.remove(i); m.found.insert(i)
             // kept again with every trip dropped alone: its trips come back with it (a find is never kept with none)
@@ -980,7 +1019,7 @@ final class UploadState {
                     _ = await Self.importRegions(more, source: src, places: n)
                 } else {
                     // the caption has rolled out with the go: it rolls back in as the round's (A9.14)
-                    round = more; roundDropped = []; roundJoins = n
+                    round = more; roundDropped = []; roundJoins = n; roundSerial = MarkStore.shared.undoSerial
                     count = more.count
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
                         busy = false
@@ -1024,7 +1063,7 @@ final class UploadState {
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
         if w.stop != .quarter { w.go(.quarter) }
         Task {
-            guard await Self.importRegions(keep, source: src, places: roundJoins) else {
+            guard await Self.importRegions(keep, source: src, places: MarkStore.shared.undoSerial == roundSerial ? roundJoins : 0) else {
                 Feel.refuse()
                 busy = false
                 withAnimation(Motion.quick) { captionIn = true; goIn = true }
@@ -1042,7 +1081,8 @@ final class UploadState {
         busy = true
         job += 1
         withAnimation(Motion.quick) { goIn = false; captionIn = false }
-        saveRound()
+        // every region dropped: the round is let go (as a review with every find dropped), else it waits
+        if let r = round, Set(r.map(\.id)).isSubset(of: roundDropped) { forgetRound() } else { saveRound() }
         let me = job
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
             busy = false
@@ -1233,8 +1273,9 @@ final class UploadState {
         UIAccessibility.post(notification: .announcement, argument: words)
         let me = job
         phase = .words
-        // the number and its lines roll out (and the mark goes) before the words come into their place
-        withAnimation(.smooth(duration: 0.15)) { markIn = false; captionIn = false }
+        // the number and its lines roll out (and the mark and its × go: a × with nothing to stop took no tap) before
+        // the words come into their place
+        withAnimation(.smooth(duration: 0.15)) { markIn = false; captionIn = false; xIn = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
             guard me == job else { return }
             message = words
@@ -1526,15 +1567,17 @@ struct UploadSheet: View {
     private func choice(_ side: Int, width w: CGFloat) -> some View {
         let name = u.note[u.step * 2 + side] ?? UploadState.names[u.step][side]
         let grown = u.shapes[side]
+        let busy = (u.locating && u.step == 2 && side == 1) || (u.photosBusy != nil && u.photosBusy == u.step * 2 + side)
         return VStack(spacing: 12) {
             ZStack {
                 ToolRing(width: 2)
                     .fill(Palette.ink, style: FillStyle(eoFill: true))
                     .frame(width: 22, height: 22)
-                    .opacity(grown && !(u.locating && u.step == 2 && side == 1) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
-                // Here waiting: the small working mark is there in the icon's place (nothing grows from a point, 8 Nov)
-                if u.step == 2 && side == 1 {
-                    WorkingMark(size: 20, running: u.locating).opacity(u.locating ? 1 : 0)
+                    .opacity(grown && !busy ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
+                // Here waiting, or Pick's or All's photos being read: the small working mark is there in the icon's
+                // place (nothing grows from a point, 8 Nov)
+                if (u.step == 2 && side == 1) || u.step == 1 {
+                    WorkingMark(size: 20, running: busy).opacity(busy ? 1 : 0)
                 }
             }
             .frame(width: 22, height: 22)

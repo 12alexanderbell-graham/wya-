@@ -10,8 +10,16 @@ final class HeadState {
         var key: String { ["map-countries", "map-regions", "map-places", "map-pins"][rawValue] }
     }
     var mode: Mode = .countries
-    var searching = false
+    var searching = false {
+        // any other close (a result, the ×, a mode's change) forgets the map close's text: it is that close's only
+        didSet { if oldValue, !searching, !closingFromMap { mapClosedSearchAt = 0 } }
+    }
+    @ObservationIgnored private var closingFromMap = false
+    /// the mode search was closed from the map in (the text comes back only in that mode)
+    @ObservationIgnored var mapClosedMode: Mode?
     var query = ""
+    /// the keyboard's Search key pressed: the results run their first row
+    var submitAsked = 0
     /// search closed by a touch on the map (1.10): the typed text comes back if search opens again within 10 s, and that
     /// touch opens nothing else
     @ObservationIgnored var mapClosedSearchAt: CFTimeInterval = 0
@@ -20,7 +28,10 @@ final class HeadState {
         guard searching else { return }
         Feel.tap()
         mapClosedSearchAt = CACurrentMediaTime()
+        mapClosedMode = mode
+        closingFromMap = true
         searching = false
+        closingFromMap = false
     }
     var toolsOpen = false
     /// Regions' selection menu is up: search filters its rows (no results box), and quick stamping can't be used (6.3)
@@ -363,18 +374,9 @@ struct HeadView: View {
                     .onSubmit {
                         // over Regions' menu the search key opens the first country the list still shows
                         if head.filtersMenu { RegionsMenuModel.shared.pickFirst(query: head.query, map: map); return }
-                        // on a region map: the first region found
-                        if let sc = map.regionScene {
-                            if let h = RegionSearch.hits(head.query, place: sc.id).first {
-                                Feel.tap(); closeSearch(); map.openRegions(sc.place, row: h.row, focus: h.id)
-                            } else { Feel.refuse() }
-                            return
-                        }
-                        // Places: the first town found, else the first country
-                        if map.placesMode, let t = TownIndex.shared.hits(head.query, open: map.placeOpenID).first {
-                            Feel.tap(); closeSearch(); map.showTown(file: t.file, id: t.id); return
-                        }
-                        if let first = SearchResults.matches(map: map, query: head.query).first { pick(first) }
+                        // otherwise the first row the results show, as its tap (an empty field: nothing to search)
+                        if head.query.trimmingCharacters(in: .whitespaces).isEmpty { Feel.refuse(); return }
+                        head.submitAsked += 1
                     }
                     .padding(.leading, 44)
                     .padding(.trailing, 14)
@@ -411,12 +413,14 @@ struct HeadView: View {
         }
     }
 
+    @MainActor private static var pickJob = 0
+
     /// the sheet stays where it is: the results sit under the field, over the map or the glass
     private func openSearch() {
         Feel.tap(); Sound.tap()
         head.toolsOpen = false
         // closed by a touch on the map less than 10 s ago: what was typed comes back (1.10)
-        if CACurrentMediaTime() - head.mapClosedSearchAt > 10 { head.query = "" }
+        if CACurrentMediaTime() - head.mapClosedSearchAt > 10 || head.mapClosedMode != head.mode { head.query = "" }
         head.searching = true
         // the keyboard comes the moment search opens; the field exists from the first frame of the opening
         DispatchQueue.main.async { typing = true }
@@ -431,6 +435,10 @@ struct HeadView: View {
         Feel.tap(); Sound.tap()
         // a result picked over a page: the pages go first, so what it does on the map is seen (16.8)
         PlacePageState.shared.closeAll()
+        // a card up (the recent searches' menu picks with search never opened): it goes, the new place's comes
+        CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
+        Self.pickJob += 1
+        let me = Self.pickJob
         if let id = map.world?.places[i].id { SearchResults.remember(id) }
         // Places: a country picked is opened with its towns (7.4)
         if map.placesMode { map.openPlace(i); closeSearch(); return }
@@ -443,7 +451,9 @@ struct HeadView: View {
         map.show(place: i, sheetTop: water.layout.top(.quarter))
         closeSearch()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + 0.1) {
-            guard let w = map.world, !map.placesMode, map.regionScene == nil else { return }
+            // nothing came over the map meanwhile (another pick, search again, the tools, Upload, a page)
+            guard me == Self.pickJob, let w = map.world, !map.placesMode, !map.pinsMode, map.regionScene == nil, !head.searching,
+                  !head.toolsOpen, !water.upload, !water.settings, !PlacePageState.shared.isOpen else { return }
             let p = w.places[i]
             CardState.shared.open(i, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map, water: water)
         }
@@ -1041,6 +1051,20 @@ struct SearchResults: View {
             }
         }
         .onChange(of: keys, initial: true) { old, new in update(to: new, first: old == new) }
+        // THE KEYBOARD'S SEARCH KEY: what the first row shown would do (its own rules had it open a town over the country
+        // leading the list, a country with settings open, and nothing for a region or a "Did you mean?")
+        .onChange(of: head.submitAsked) { _, _ in
+            switch keys.first {
+            case .place(let i): pick(i)
+            case .setting(let id): settingAct(settingHits.first { $0.id == id })
+            case .region(let k): regionAct(regionHits.first { $0.key == k })
+            case .thing(let k): thingAct(thingHits.first { $0.key == k })
+            case .town(let k): townAct(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil))
+            case .anyRegion(let k): anyRegionAct(anyRegionHits.first { $0.key == k })
+            case .pin(let id): pinAct(PinStore.shared.pin(id))
+            case .miss, nil: Feel.refuse()
+            }
+        }
         .task(id: head.query) { await askModel() }
     }
 
@@ -1114,12 +1138,13 @@ struct SearchResults: View {
     }
 
     /// a setting found (settings open): its name and where it is or what matched; a tap opens it in the sheet
+    private func settingAct(_ h: SettingsSearch.Hit?) {
+        Feel.tap()
+        if let h { SettingsSearch.go(h.id) }
+        head.searching = false
+    }
     private func settingRow(_ h: SettingsSearch.Hit?) -> some View {
-        Button {
-            Feel.tap()
-            if let h { SettingsSearch.go(h.id) }
-            head.searching = false
-        } label: {
+        Button { settingAct(h) } label: {
             HStack(spacing: 12) {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
@@ -1187,12 +1212,15 @@ struct SearchResults: View {
     }
 
     /// a region found on a region map: its name and what it is ("department"); a tap closes search and shows it there
+    private func regionAct(_ h: RegionSearch.Hit?) {
+        Feel.tap()
+        head.searching = false
+        // a page up goes first (the region is shown on the map under it)
+        PlacePageState.shared.closeAll()
+        if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
+    }
     private func regionRow(_ h: RegionSearch.Hit?) -> some View {
-        Button {
-            Feel.tap()
-            head.searching = false
-            if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
-        } label: {
+        Button { regionAct(h) } label: {
             HStack(spacing: 12) {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
@@ -1224,17 +1252,20 @@ struct SearchResults: View {
 
     /// a pin found in Pins: the pin in its colour, its name, its place; a tap closes search, chooses the pin and Apple's
     /// map goes to it (as a row of the pins' list)
+    private func pinAct(_ p: Pin?) {
+        guard let p else { return }
+        head.searching = false
+        // a page up goes first (the pin is shown on the map under it)
+        PlacePageState.shared.closeAll()
+        // the Route row waiting for an end: the pin found fills it (8.6)
+        if PinRoutes.shared.pinTapped(p.id) { return }
+        Feel.tap()
+        PinStore.shared.selected = p.id
+        PinsMapState.shared.go(to: p)
+        if let w = head.water, w.stop != .quarter { w.go(.quarter) }
+    }
     private func pinRow(_ p: Pin?) -> some View {
-        Button {
-            guard let p else { return }
-            head.searching = false
-            // the Route row waiting for an end: the pin found fills it (8.6)
-            if PinRoutes.shared.pinTapped(p.id) { return }
-            Feel.tap()
-            PinStore.shared.selected = p.id
-            PinsMapState.shared.go(to: p)
-            if let w = head.water, w.stop != .quarter { w.go(.quarter) }
-        } label: {
+        Button { pinAct(p) } label: {
             HStack(spacing: 12) {
                 Group {
                     if let p {
@@ -1257,15 +1288,17 @@ struct SearchResults: View {
         .accessibilityLabel(p.map { "\($0.title), pin" } ?? "")
     }
 
+    private func anyRegionAct(_ h: RegionIndex.Hit?) {
+        let place = h.flatMap { h in map.world?.placeIndex[h.place] }
+        Feel.tap()
+        head.searching = false
+        PlacePageState.shared.closeAll()
+        if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
+    }
     private func anyRegionRow(_ h: RegionIndex.Hit?) -> some View {
         let place = h.flatMap { h in map.world?.placeIndex[h.place] }
         let country = place.flatMap { map.world?.places[$0].n } ?? ""
-        return Button {
-            Feel.tap()
-            head.searching = false
-            PlacePageState.shared.closeAll()
-            if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
-        } label: {
+        return Button { anyRegionAct(h) } label: {
             HStack(spacing: 12) {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
@@ -1281,17 +1314,18 @@ struct SearchResults: View {
 
     /// a town found in Places: its name and where it is (its region inside the open country, else its country); a tap
     /// closes search and shows it (its country opened)
+    private func townAct(_ h: TownIndex.Hit?) {
+        Feel.tap()
+        head.searching = false
+        PlacePageState.shared.closeAll()
+        if let h { map.showTown(file: h.file, id: h.id) }
+    }
     private func townRow(_ h: TownIndex.Hit?, note: String? = nil) -> some View {
         let country = note ?? h.flatMap { h in
             h.file == map.placeOpenID && !h.region.isEmpty ? h.region
                 : map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } }
         } ?? ""
-        return Button {
-            Feel.tap()
-            head.searching = false
-            PlacePageState.shared.closeAll()
-            if let h { map.showTown(file: h.file, id: h.id) }
-        } label: {
+        return Button { townAct(h) } label: {
             HStack(spacing: 12) {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
@@ -1306,15 +1340,16 @@ struct SearchResults: View {
     }
 
     /// a thing found in Places: its name and its kind and country; a tap closes search and shows it (its country opened)
+    private func thingAct(_ h: ThingIndex.Hit?) {
+        Feel.tap()
+        head.searching = false
+        PlacePageState.shared.closeAll()
+        if let h { map.showThing(file: h.file, id: h.id) }
+    }
     private func thingRow(_ h: ThingIndex.Hit?) -> some View {
         let country = h.flatMap { h in map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } } } ?? ""
         let kind = h.map { ThingStore.kinds[min(max($0.kind, 0), 11)].capitalized } ?? ""
-        return Button {
-            Feel.tap()
-            head.searching = false
-            PlacePageState.shared.closeAll()
-            if let h { map.showThing(file: h.file, id: h.id) }
-        } label: {
+        return Button { thingAct(h) } label: {
             HStack(spacing: 12) {
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)

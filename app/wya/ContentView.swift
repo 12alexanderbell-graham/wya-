@@ -122,7 +122,11 @@ struct ContentView: View {
                     .onChange(of: UploadState.shared.phase) { _, ph in
                         // (from Pins too: its finds were drawn on the Countries map hidden under Apple's, and the review's
                         // taps chose pins, 8 Nov)
-                        if ph == .finding, head.mode == .regions || head.mode == .pins { head.quickStamp = false; head.mode = .countries; Feel.notch() }
+                        // (and from Places: its map draws no finds)
+                        if ph == .finding, head.mode != .countries { head.quickStamp = false; head.mode = .countries; Feel.notch() }
+                        // the review is the world's: its caption counts the world, and a continent's map flattens the
+                        // finds outside it (a tap on one there was a sea tap that left the review)
+                        if ph == .finding, map.continent != nil { map.goHome() }
                     }
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
@@ -324,7 +328,11 @@ struct ContentView: View {
             water.onMapAgain = { [head] in
                 // a page up goes first (the Map tab again is "back to the map", as leaving the tab is)
                 PlacePageState.shared.closeAll()
+                // a card goes back into the water with the rest (the camera is leaving it)
+                closeCard()
                 if head.mode == .regions { backToRegionsList() }
+                // Places: back to Everywhere (no country, collection or continent left open under the world)
+                if head.mode == .places { map.showPlacesMap(.everywhere) }
                 UploadState.shared.close()
                 head.searching = false
                 head.toolsOpen = false
@@ -437,6 +445,9 @@ struct ContentView: View {
         water.modeSwitchedAt = CACurrentMediaTime()
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview(); UploadState.shared.close() }
+        // mid-finding the wheel stops the read (leaving the review and closing do nothing then; the review would have
+        // opened on Places' or Pins' map, where finds are not drawn)
+        if new != .countries, UploadState.shared.phase == .finding { UploadState.shared.cancel() }
         // the Stamped list is the Countries map's: a mode change takes it at once (never two lists, one over the other)
         if old != new { water.closeList(back: false, instant: true) }
         WhatsHere.shared.close()
@@ -493,6 +504,8 @@ struct ContentView: View {
     private func openRegion(_ i: Int, row: Int? = nil, focus: String? = nil) {
         head.searching = false
         head.toolsOpen = false
+        // straight in from another mode with the water up (search at 50% or full): the region map's room is 25%'s
+        if !water.regions, water.stop != .quarter { water.jump(.quarter) }
         water.closeMenu(to: .quarter)
         map.openRegions(i, row: row, focus: focus)
     }

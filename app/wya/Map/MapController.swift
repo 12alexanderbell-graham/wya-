@@ -227,6 +227,8 @@ final class MapController {
             regionPressed = regionUnit(at: p)
             return regionPressed == nil ? nil : sc.place
         }
+        // no town, own place or thing under the finger: none kept from an earlier press answers this one
+        if placesMode { townPressed = nil; ownPressed = nil; thingPressed = nil }
         let m = mapPoint(p)
         let mp = SIMD2(Float(m.x), Float(m.y)), reach = Float(10 / k), tiny = Float(14 / k)
         let small: (Int) -> Bool = { w.places[$0].tiny }
@@ -559,6 +561,8 @@ final class MapController {
     /// already, from the row's touch) and drawn when ready, the country's own fill staying until then
     func openRegions(_ i: Int, row: Int? = nil, focus: String? = nil) {
         guard let w = world, i >= 0, i < w.places.count else { return }
+        // a region asked for (search) is shown on its level, not under the towns level
+        if focus != nil { leaveRegionTowns() }
         // the level already drawn: only the region asked for is shown
         if let focus, let sc = regionScene, sc.place == i, row == nil || row == sc.row {
             // (a level still loading is dropped: this one is the one asked for now)

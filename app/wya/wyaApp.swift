@@ -14,10 +14,14 @@ struct wyaApp: App {
         Task { @MainActor in Hitches.start(); HangWatch.start() }
     }
 
+    @Environment(\.scenePhase) private var phase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.light)
+                // the app put away: a review or round up is kept on disk (iOS may end the app before it is back)
+                .onChange(of: phase) { _, p in if p == .background { UploadState.shared.backgrounded() } }
         }
     }
 }

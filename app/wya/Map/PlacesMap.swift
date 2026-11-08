@@ -75,29 +75,47 @@ extension MapController {
     /// darkened (as a region found on a region map is)
     func showTown(file cc: String, id: String) {
         guard let w = world, let i = w.placeIndex[cc] else { return }
-        if placeOpen != i { openPlace(i) }
+        ShowJob.n += 1
+        let me = ShowJob.n
+        // the country open already but its towns never came (offline then): they are asked again
+        if placeOpen != i { openPlace(i) } else { loadTowns(cc) }
         Task { @MainActor [weak self] in
             for _ in 0 ..< 150 {
-                if self?.townScenes[cc] != nil { break }
+                if self?.townScenes[cc] != nil || me != ShowJob.n { break }
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            guard let self, self.placeOpen == i, let sc = self.townScenes[cc], let t = sc.index[id] else { return }
+            // a newer pick wins; a town that can't be shown says so
+            guard me == ShowJob.n else { return }
+            guard let self, self.placeOpen == i, let sc = self.townScenes[cc], let t = sc.index[id] else { Feel.refuse(); return }
             self.townPressed = (cc, t)
             self.showBox(sc.box(t), place: i)
         }
+    }
+
+    /// YOUR OWN PLACE from the Stamped list: its country opened (if it isn't), the camera close to it, its mark pressed
+    func showOwn(_ id: String) {
+        guard let w = world, let o = OwnPlaces.shared.place(id), let i = w.placeIndex[o.cc] else { return }
+        ShowJob.n += 1
+        if placeOpen != i { openPlace(i) }
+        let d: Float = 2, at = o.point
+        ownPressed = id
+        showBox(SIMD4(at.x - d, at.y - d, at.x + d, at.y + d), place: i)
     }
 
     /// A THING FOUND BY SEARCH: its country opened (if it isn't), then, once its things have come, the thing framed and
     /// darkened for two seconds
     func showThing(file cc: String, id: String) {
         guard let w = world, let i = w.placeIndex[cc] else { return }
+        ShowJob.n += 1
+        let me = ShowJob.n
         if placeOpen != i { openPlace(i) }
         Task { @MainActor [weak self] in
             for _ in 0 ..< 150 {
-                if ThingStore.shared.things(cc) != nil { break }
+                if ThingStore.shared.things(cc) != nil || me != ShowJob.n { break }
                 try? await Task.sleep(for: .milliseconds(100))
             }
-            guard let self, self.placeOpen == i, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }) else { return }
+            guard me == ShowJob.n else { return }
+            guard let self, self.placeOpen == i, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }) else { Feel.refuse(); return }
             self.thingPressed = id
             // close enough that its band shows it (the rest of its fame's band: 16x the framing zoom covers every thing)
             let r: Float = 0.004
@@ -260,6 +278,7 @@ extension MapController {
 
     /// back to the world: the towns go, the world comes back (the camera stays where it is)
     func closePlace() {
+        ownPressed = nil
         guard placeOpen != nil else { return }
         placeOpen = nil
         townPressed = nil
@@ -423,3 +442,7 @@ enum TownStamps {
         set { UserDefaults.standard.set(Array(newValue), forKey: throughKey) }
     }
 }
+
+/// the latest town, thing or own place asked to be shown (a quicker second pick wins over the first one still waiting
+/// for its country's towns)
+@MainActor enum ShowJob { static var n = 0 }

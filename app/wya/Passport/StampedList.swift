@@ -54,11 +54,11 @@ struct StampedList: View {
         var flag = ""
         /// an event stop's day, for the stops' order
         var day = ""
-        enum Kind { case country, town, thing, stop }
+        enum Kind { case country, town, thing, stop, yours }
         /// a journey's row: its stop's own key (the row's id carries its place in the journey) and the stop
         var journey: HistoryTrack.Stop?
         var town: Bool { kind == .town }
-        var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : .thing, id)) }
+        var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : kind == .yours ? .yours : .thing, id)) }
     }
 
     /// a row's words for how often: "Twice", "3 times" ("" for once)
@@ -153,6 +153,11 @@ struct StampedList: View {
                 guard let f = found, ids?.contains(f.cc) ?? true, let i = index[f.cc] ?? index[f.cc.uppercased()] else { return nil }
                 return Row(id: k.id, name: f.name, place: i, line: (f.cc == open ? f.what : "\(f.what) · \(w.places[i].n)") + Self.often(s),
                            kind: .thing, flag: f.cc)
+            case .yours:
+                // your own places (7.8): the caption counts them, so the list holds them
+                guard let o = OwnPlaces.shared.place(k.id), ids?.contains(o.cc) ?? true, let i = index[o.cc] ?? index[o.cc.uppercased()] else { return nil }
+                return Row(id: k.id, name: o.name, place: i, line: (o.cc == open ? "Your place" : "Your place · \(w.places[i].n)") + Self.often(s),
+                           kind: .yours, flag: o.cc)
             default: return nil
             }
         }
@@ -377,6 +382,8 @@ struct StampedList: View {
         if r.town { map.showTown(file: String(r.id.prefix { $0 != "/" }), id: r.id); return }
         // a thing: its country opens and the camera comes close to it (as a thing found by search)
         if r.kind == .thing { map.showThing(file: r.flag.lowercased(), id: String(r.id.dropFirst(3))); return }
+        // your own place: its country opens and the camera comes close to it, its mark pressed
+        if r.kind == .yours { map.showOwn(r.id); return }
         // a collection's stop: the camera comes to it on the collection's map, its mark pressed for a moment
         if r.kind == .stop, let it = CollectionStore.shared.collection(map.placesCollection ?? "")?.items.first(where: { $0.key.id == r.id }) {
             let d: Float = 2
