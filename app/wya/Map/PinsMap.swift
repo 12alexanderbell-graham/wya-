@@ -72,7 +72,7 @@ final class PinStore {
         pins.append(p)
         selected = p.id
         save()
-        MarkStore.shared.did("Pin dropped") { [weak self] in self?.remove(p.id, undoable: false) }
+        undoableDrop(p.id)
         Task { await name(p.id, country: country?.name) }
     }
     /// DROP A PIN HERE (11.5's town or thing menu): a pin at a place's point, named after it; not chosen, and nothing
@@ -83,21 +83,36 @@ final class PinStore {
         p.place = [named, country?.name ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
         pins.append(p)
         save()
-        MarkStore.shared.did("Pin dropped") { [weak self] in self?.remove(p.id, undoable: false) }
+        undoableDrop(p.id)
     }
-    func remove(_ id: UUID, undoable: Bool = true) {
-        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+    /// a dropped pin's undo takes it away; its redo puts it back as it was then (named, coloured, routes with it)
+    private func undoableDrop(_ id: UUID) {
+        let box = UndoBox<(Pin, Int, [PinRoute])>()
+        MarkStore.shared.did("Pin dropped", back: { [weak self] in
+            guard let self, let k = self.pins.firstIndex(where: { $0.id == id }) else { return }
+            let p = self.pins[k]
+            box.value = (p, k, self.remove(id, undoable: false))
+        }, forth: { [weak self] in
+            guard let self, let (p, k, routes) = box.value, self.pin(id) == nil else { return }
+            self.pins.insert(p, at: min(k, self.pins.count)); self.save()
+            PinRoutes.shared.restore(routes)
+        })
+    }
+    /// gives back the routes that went with it
+    @discardableResult func remove(_ id: UUID, undoable: Bool = true) -> [PinRoute] {
+        guard let k = pins.firstIndex(where: { $0.id == id }) else { return [] }
         let gone = pins.remove(at: k)
         if selected == id { selected = nil }
         let routes = PinRoutes.shared.pinGone(id)
         save()
         if undoable {
-            MarkStore.shared.did("\(gone.title) deleted") { [weak self] in
-                guard let self else { return }
+            MarkStore.shared.did("\(gone.title) deleted", back: { [weak self] in
+                guard let self, self.pin(id) == nil else { return }
                 self.pins.insert(gone, at: min(k, self.pins.count)); self.save()
                 PinRoutes.shared.restore(routes)
-            }
+            }, forth: { [weak self] in self?.remove(id, undoable: false) })
         }
+        return routes
     }
     /// MOVE A PIN (8.4): set down somewhere else by a drag; its place is read again there (a name you gave it stays);
     /// the undo puts it back where it was, with its old place
@@ -108,12 +123,19 @@ final class PinStore {
         pins[k].lon = c.longitude
         pins[k].cc = country?.id
         save()
-        MarkStore.shared.did("\(was.title) moved") { [weak self] in
+        let box = UndoBox<Pin>()
+        MarkStore.shared.did("\(was.title) moved", back: { [weak self] in
             guard let self, let j = self.pins.firstIndex(where: { $0.id == id }) else { return }
+            box.value = self.pins[j]
             self.pins[j].lat = was.lat; self.pins[j].lon = was.lon; self.pins[j].cc = was.cc; self.pins[j].place = was.place
             self.save()
             PinRoutes.shared.pinMoved(id)
-        }
+        }, forth: { [weak self] in
+            guard let self, let now = box.value, let j = self.pins.firstIndex(where: { $0.id == id }) else { return }
+            self.pins[j].lat = now.lat; self.pins[j].lon = now.lon; self.pins[j].cc = now.cc; self.pins[j].place = now.place
+            self.save()
+            PinRoutes.shared.pinMoved(id)
+        })
         PinRoutes.shared.pinMoved(id)
         Task { await name(id, country: country?.name) }
     }
@@ -127,6 +149,21 @@ final class PinStore {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         pins[k].pick = c
         save()
+    }
+    /// the picker out for a pin: the colour it had then, so the picker going away makes one undo of all its moves
+    @ObservationIgnored private var colourWas: (id: UUID, pick: ColourPick?)?
+    func colourStart(_ id: UUID) {
+        if colourWas?.id == id { return }
+        colourEnd()
+        colourWas = (id, pin(id)?.pick)
+    }
+    func colourEnd() {
+        guard let was = colourWas else { return }
+        colourWas = nil
+        guard let p = pin(was.id), p.pick != was.pick else { return }
+        let now = p.pick, id = was.id
+        MarkStore.shared.did("\(p.title) colour changed", back: { [weak self] in self?.colour(id, was.pick) },
+                             forth: { [weak self] in self?.colour(id, now) })
     }
     func note(_ id: UUID, _ n: String) {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
@@ -1321,6 +1358,9 @@ struct PinSheet: View {
             // pulled down below full, the picker goes back into its row
             .onChange(of: water.stop) { _, s in if s != .full { picking = false } }
             .onAppear { colourIfAsked() }
+            // the picker going away (closed, Reset, another pin, the water down): its moves are one undo
+            .onChange(of: picking) { _, on in if on, let id = store.selected { store.colourStart(id) } else if !on { store.colourEnd() } }
+            .onDisappear { store.colourEnd() }
         }
     }
 

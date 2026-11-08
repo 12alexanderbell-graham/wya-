@@ -32,9 +32,10 @@ final class MarkStore {
 
     @ObservationIgnored private var store: TravelStore?
     /// (`run`: a change that is not a mark's, Pins' pins: its own way back, Part 3.10's one undo for everything)
-    @ObservationIgnored private var undoStack: [(snaps: [TravelStore.Snapshot], words: String, run: (@MainActor () -> Void)?)] = []
+    /// (`forth`: that change made again, for redo; a step with `run` and no `forth` cannot be redone)
+    @ObservationIgnored private var undoStack: [(snaps: [TravelStore.Snapshot], words: String, run: (@MainActor () -> Void)?, forth: (@MainActor () -> Void)?)] = []
     /// what undo took back, for a three-finger swipe right (Part 3.10, proposal); any new change empties it
-    @ObservationIgnored private var redoStack: [(snaps: [TravelStore.Snapshot], words: String)] = []
+    @ObservationIgnored private var redoStack: [(snaps: [TravelStore.Snapshot], words: String, run: (@MainActor () -> Void)?, back: (@MainActor () -> Void)?)] = []
     @ObservationIgnored private var listeners: [UUID: (MarksChanged) -> Void] = [:]
     @ObservationIgnored let container: ModelContainer?
 
@@ -156,7 +157,7 @@ final class MarkStore {
         let acc = account
         guard let r = try? await store.importFinds(finds, account: acc, source: source) else { return false }
         if join, !r.changed.isEmpty, let last = undoStack.last, last.run == nil {
-            undoStack[undoStack.count - 1] = (last.snaps + r.undo, words, nil)
+            undoStack[undoStack.count - 1] = (last.snaps + r.undo, words, nil, nil)
             take(r)
             redoStack = []
             lastWords = words
@@ -231,13 +232,18 @@ final class MarkStore {
         guard let store, let last = undoStack.popLast() else { return }
         if let run = last.run {
             run()
+            // a change of Pins' made again by redo when it says how (8 Nov: pin and route steps had no redo)
+            if let forth = last.forth {
+                redoStack.append(([], last.words, forth, run))
+                if redoStack.count > 20 { redoStack.removeFirst(redoStack.count - 20) }
+            }
             lastWords = undoStack.last?.words
             return
         }
         let acc = account
         guard let r = try? await store.restore(last.snaps, account: acc) else { return }
         take(r)
-        redoStack.append((r.undo, last.words))
+        redoStack.append((r.undo, last.words, nil, nil))
         if redoStack.count > 20 { redoStack.removeFirst(redoStack.count - 20) }
         lastWords = undoStack.last?.words
         emit(MarksChanged(changed: r.changed, origin: nil, who: .undo))
@@ -248,10 +254,16 @@ final class MarkStore {
     /// REDO the last undone write (a three-finger swipe right; Part 3.10, proposal)
     func redo() async {
         guard let store, let last = redoStack.popLast() else { return }
+        if let run = last.run {
+            run()
+            undoStack.append(([], last.words, last.back, run))
+            lastWords = last.words
+            return
+        }
         let acc = account
         guard let r = try? await store.restore(last.snaps, account: acc) else { return }
         take(r)
-        undoStack.append((r.undo, last.words, nil))
+        undoStack.append((r.undo, last.words, nil, nil))
         lastWords = last.words
         emit(MarksChanged(changed: r.changed, origin: nil, who: .undo))
     }
@@ -275,8 +287,8 @@ final class MarkStore {
     // MARK: inside
 
     /// a change made elsewhere (a pin dropped or deleted) that the undo drop takes back with `back`
-    func did(_ words: String, back: @escaping @MainActor () -> Void) {
-        undoStack.append(([], words, back))
+    func did(_ words: String, back: @escaping @MainActor () -> Void, forth: (@MainActor () -> Void)? = nil) {
+        undoStack.append(([], words, back, forth))
         redoStack = []
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
         lastWords = words
@@ -286,7 +298,7 @@ final class MarkStore {
     private func apply(_ r: TravelStore.Result, words: String, origin: CGPoint?, who: Who) {
         guard !r.changed.isEmpty else { return }
         take(r)
-        undoStack.append((r.undo, words, nil))
+        undoStack.append((r.undo, words, nil, nil))
         redoStack = []
         markDates.append(Date())
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
@@ -332,3 +344,6 @@ final class MarkStore {
     }
     #endif
 }
+
+/// what an undo took away, kept for its redo (a pin or route as it was when taken back, names and colours with it)
+@MainActor final class UndoBox<T> { var value: T? }

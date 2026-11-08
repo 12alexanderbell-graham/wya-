@@ -999,7 +999,8 @@ struct ContentView: View {
                 let k = OwnPlaces.shared.all.firstIndex { $0.id == o.id } ?? 0
                 OwnPlaces.shared.remove(o.id)
                 map.needsFrame = true
-                MarkStore.shared.did("\(o.name) deleted") { OwnPlaces.shared.restore(o, at: k); map.needsFrame = true }
+                MarkStore.shared.did("\(o.name) deleted", back: { OwnPlaces.shared.restore(o, at: k); map.needsFrame = true },
+                                    forth: { OwnPlaces.shared.remove(o.id); map.needsFrame = true })
             }
         }
         return UIMenu(title: o.name, children: [

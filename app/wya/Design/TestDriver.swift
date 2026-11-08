@@ -256,6 +256,15 @@ final class TestDriver {
                         // pins move <n> <x> <y>: pin n set down at that screen point, as a drag lets it go there
                         let c = v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v)
                         PinStore.shared.move(PinStore.shared.pins[n].id, to: c, country: map.flatMap { PinsMapView.Coordinator.country($0, c) })
+                    } else if a == "colour", p.count > 2, let n = Int(p[2]), n < PinStore.shared.pins.count {
+                        // pins colour <n>: a pick made in its picker and the picker closed (one undo step)
+                        let s = PinStore.shared, id = s.pins[n].id
+                        s.colourStart(id); s.colour(id, ColourPick(hue: 0.6, light: 0.5, strength: 0.9)); s.colourEnd()
+                    } else if a == "state" {
+                        // pins state: how many pins and routes, each pin's colour and where it is
+                        let s = PinStore.shared
+                        NSLog("wya pins state: %d pins, %d routes, redo %d; %@", s.pins.count, PinRoutes.shared.routes.count, MarkStore.shared.canRedo ? 1 : 0,
+                              s.pins.map { String(format: "%@ %.3f,%.3f %@", $0.title, $0.lat, $0.lon, $0.pick == nil ? "black" : "coloured") }.joined(separator: " | "))
                     } else if a == "dropat", p.count > 3, let la = Double(p[2]), let lo = Double(p[3]) {
                         // pins dropat <lat> <lon>: a pin there, named as a hold names it (its country logged)
                         let c = CLLocationCoordinate2D(latitude: la, longitude: lo)

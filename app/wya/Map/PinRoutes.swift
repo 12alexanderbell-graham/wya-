@@ -145,7 +145,19 @@ final class PinRoutes {
     /// the row's spots on land not yet in a kept route
     private var temp: [UUID: RouteSpot] = [:]
     /// the route whose colour is being picked in the water (its hold menu's Colour)
-    var colouring: UUID?
+    var colouring: UUID? {
+        // the colour sheet going away (or to another route): its moves are one undo
+        didSet { if oldValue != colouring { colourEnd(oldValue); colourWas = colouring.map { c in (c, routes.first { $0.id == c }?.pick) } } }
+    }
+    @ObservationIgnored private var colourWas: (id: UUID, pick: ColourPick?)?
+    private func colourEnd(_ id: UUID?) {
+        guard let was = colourWas, was.id == id else { return }
+        colourWas = nil
+        guard let r = routes.first(where: { $0.id == was.id }), r.pick != was.pick else { return }
+        let now = r.pick, id = was.id
+        MarkStore.shared.did("Route colour changed", back: { [weak self] in self?.colour(id, was.pick) },
+                             forth: { [weak self] in self?.colour(id, now) })
+    }
     /// words a route shows for 2 s in place of its distance ("No walking route"), on the map and in the list
     private(set) var notes: [UUID: String] = [:]
     /// the newest re-ask of each route, and the way it was asked for (a second one starts from the first's ends)
@@ -284,17 +296,23 @@ final class PinRoutes {
             if was.from == f, was.to == t, was.distance == r.distance, was.time == r.expectedTravelTime { return }
             routes[k].from = f; routes[k].to = t; routes[k].spots = kept; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
             save()
-            MarkStore.shared.did("Route changed") { [weak self] in
-                guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
-                self.routes[j].way = was; self.save(); self.undone(id)
-            }
+            changed(id, was: was)
         } else {
             var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
             new.spots = kept
             current = new.id
             routes.append(new)
             save()
-            MarkStore.shared.did("Route added") { [weak self] in self?.remove(new.id, undoable: false) }
+            let id = new.id
+            let box = UndoBox<(PinRoute, Int)>()
+            MarkStore.shared.did("Route added", back: { [weak self] in
+                guard let self, let k = self.routes.firstIndex(where: { $0.id == id }) else { return }
+                box.value = (self.routes[k], k)
+                self.remove(id, undoable: false)
+            }, forth: { [weak self] in
+                guard let self, let (r, k) = box.value, !self.routes.contains(where: { $0.id == id }) else { return }
+                self.routes.insert(r, at: min(k, self.routes.count)); self.save(); self.undone(id)
+            })
         }
     }
     /// another way tapped: it becomes the route (the old one is let go: Apple's ways are asked for again next time)
@@ -306,11 +324,19 @@ final class PinRoutes {
         let picked = others.remove(at: i)
         routes[k].points = Self.points(picked.polyline); routes[k].distance = picked.distance; routes[k].time = picked.expectedTravelTime
         save()
-        MarkStore.shared.did("Route changed") { [weak self] in
+        changed(id, was: was)
+        PinsMapState.shared.redrawRoutes()
+    }
+    /// a route's way changed: one undo takes it back to `was`, its redo makes it as it is now again
+    private func changed(_ id: UUID, was: PinRoute.Way) {
+        guard let now = routes.first(where: { $0.id == id })?.way else { return }
+        MarkStore.shared.did("Route changed", back: { [weak self] in
             guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
             self.routes[j].way = was; self.save(); self.undone(id)
-        }
-        PinsMapState.shared.redrawRoutes()
+        }, forth: { [weak self] in
+            guard let self, let j = self.routes.firstIndex(where: { $0.id == id }) else { return }
+            self.routes[j].way = now; self.save(); self.undone(id)
+        })
     }
     /// an undo touched the route the row is making: Apple's other ways no longer belong to it; the row shows what is
     /// kept now (or, for a route taken back, its ends with nothing made)
@@ -347,10 +373,10 @@ final class PinRoutes {
         save()
         PinsMapState.shared.redrawRoutes()
         if undoable {
-            MarkStore.shared.did("Route deleted") { [weak self] in
-                guard let self else { return }
+            MarkStore.shared.did("Route deleted", back: { [weak self] in
+                guard let self, !self.routes.contains(where: { $0.id == id }) else { return }
                 self.routes.insert(gone, at: min(k, self.routes.count)); self.save(); PinsMapState.shared.redrawRoutes()
-            }
+            }, forth: { [weak self] in self?.remove(id, undoable: false) })
         }
     }
     /// a pin deleted: its routes go with it (given back to the pin's undo, which brings them back with it)
@@ -426,10 +452,7 @@ final class PinRoutes {
             PinsMapState.shared.redrawRoutes()
             // a pin's move carries its own undo (which asks again); a menu row's change is one undo of its own
             guard !quiet else { return }
-            MarkStore.shared.did("Route changed") { [weak self] in
-                guard let self, let i = self.routes.firstIndex(where: { $0.id == id }) else { return }
-                self.routes[i].way = was; self.save(); self.undone(id)
-            }
+            changed(id, was: was)
         }
     }
 
