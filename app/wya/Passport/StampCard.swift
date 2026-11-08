@@ -196,6 +196,13 @@ struct StampCard: View {
                 .allowsHitTesting(r < 0.01 && !detailsUp)
             }
             .frame(width: g.bookW)
+            // the page as the passport is now: a stamp taken back by the undo drop (or put back) while the card is
+            // open leaves or comes back on the page too, never a stamp drawn for a place no longer stamped
+            // (keyed on this place's stamp as well: `changes` counts writes, not undos and redos)
+            .task(id: "\(marks.changes)|\(state.stamped)") {
+                let now = await MarkStore.shared.passportOrder()
+                if !card.flying, now != card.order { card.order = now }
+            }
             // Details closed and the water back where it was: the card follows the water again
             .onChange(of: !water.details && abs(waterTop - (card.heldTop ?? waterTop)) < 0.5) { _, back in
                 if back { card.heldTop = nil }
