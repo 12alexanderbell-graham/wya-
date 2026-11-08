@@ -294,6 +294,14 @@ final class PinRoutes {
             let was = routes[k].way
             // the same way again (the route asked once more): nothing changed, so no undo and no word about it
             if was.from == f, was.to == t, was.distance == r.distance, was.time == r.expectedTravelTime { return }
+            // the same ends asked again and Apple's way only a little different (its time moves with traffic): the
+            // line is kept up to date quietly, with no undo step and no "Route changed" (it said so with nothing done)
+            if was.from == f, was.to == t, abs(was.distance - r.distance) <= max(50, was.distance * 0.01) {
+                routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
+                save()
+                PinsMapState.shared.redrawRoutes()
+                return
+            }
             routes[k].from = f; routes[k].to = t; routes[k].spots = kept; routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
             save()
             changed(id, was: was)

@@ -1055,7 +1055,9 @@ final class MapController {
         let top = Double(room.lowerBound) + 56, bottom = Double(room.upperBound) - 56
         let roomH = Swift.max(80, bottom - top)
         let bw = Swift.max(1e-6, x1 - x0), bh = Swift.max(1e-6, y1 - y0)
-        var target = Swift.min((W - 80) / bw, roomH / bh)
+        // (the room left of the zoom column: the journey's last stop sat behind its buttons)
+        let colW = Double(layout.side) + 44 + 8
+        var target = Swift.min((W - 32 - colW) / bw, roomH / bh)
         target = Swift.min(target, townsK, kMax)
         let fits = target >= kMin
         target = Swift.max(kMin, target)
@@ -1066,7 +1068,8 @@ final class MapController {
             let sx = t.stops.map(\.at.x).sorted()
             mid.x = sx[sx.count / 2]
         }
-        let centre = mid + SIMD2(0, (Double(view.height) / 2 - (top + bottom) / 2) / target)
+        // its middle in the middle of that room (half the column's width left of the screen's middle)
+        let centre = mid + SIMD2(colW / 2 / target, (Double(view.height) / 2 - (top + bottom) / 2) / target)
         fly(to: clamped(centre, target), k: target, dur: Self.flight)
     }
 
