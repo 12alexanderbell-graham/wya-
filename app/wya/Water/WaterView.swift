@@ -213,7 +213,8 @@ struct SheetContent: View {
                 RegionsMenu(water: water, map: map, head: head, form: form).transition(.identity)
             }
             // THE UPLOAD SHEET (Part 9.3) at 25%, the caption's words out while it is up
-            if water.upload { UploadSheet(water: water, form: form).transition(.identity) }
+            // (settings take the water over it, as everywhere; the upload is there again when they close)
+            if water.upload, !water.settings { UploadSheet(water: water, form: form).transition(.identity) }
             // DETAILS (Part 4.4): the same place in the water as settings, the Cosmos out of the way the same way
             // (its contents are there in one frame once the water has risen; no fade, no words rolling yet)
             if water.details && water.detailsWords {
