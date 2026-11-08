@@ -54,7 +54,8 @@ final class Water {
             return
         }
         guard !settings else { return }
-        settingsFrom = stop
+        // (Details or Verify up at 50% go as settings come: the water goes back to the card's 25%, not their 50%)
+        settingsFrom = details && stop == .half ? .quarter : stop
         // over the menu (6.3): from the menu stop down to 50% while the rows leave; closing brings the menu back
         if regions { leaveMenuRows() }
         settings = true

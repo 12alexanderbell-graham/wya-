@@ -215,7 +215,8 @@ private struct SettingsList: View {
     }
 
     private func tap(_ row: SettingRow, _ choices: [SettingRow.Choice], _ s: MapSettings) {
-        if choices.count == 2 {
+        // (a two-choice row opened by a settings search shows its choices: a tap on the row closes them, as any row's)
+        if choices.count == 2, open != row.id {
             // two choices: one tap switches; the value rolls; the map changes behind (notch + click: a two-state switch)
             let next = choices.first { $0.id != row.get(s) }?.id ?? choices[0].id
             // haptics only: no sound is added here
