@@ -353,10 +353,11 @@ struct ContentView: View {
         // that leaves the water below 50% closes them (A5.2)
         .onChange(of: head.settingsOpen) { _, open in
             // (the tools close first, and history and quick stamping with them: the book's "the tool closes, then the gear")
-            if open { closeCard(); head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
+            if open { closeCard(); WhatsHere.shared.close(); head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
-        .onChange(of: head.searching) { _, v in if v { closeCard() } }
+        // (What's here? goes back into its point too: its name no longer stands under the search or settings)
+        .onChange(of: head.searching) { _, v in if v { closeCard(); WhatsHere.shared.close() } }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
         // a continent follows the sheet (A1.16)
@@ -377,7 +378,7 @@ struct ContentView: View {
         // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
         .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
         // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)
-        .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); PinRoutes.shared.close() } else { BookState.shared.close() } }
+        .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
             // the water raised over a card (no Details or Verify from it): the card goes, its changes kept, rather than
