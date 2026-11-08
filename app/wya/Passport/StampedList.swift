@@ -333,15 +333,19 @@ struct StampedList: View {
             // the words by the text roll (never scaled, never faded): a blank of the same length until they come
             let w = wordsOut.contains(r.id)
             VStack(alignment: .leading, spacing: 1) {
+                // (one line each, so every row is the list's 56 pt step and none is cut at rest; a long name or line
+                // gets a little smaller first)
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.7)
                     .contentTransition(.numericText(value: w ? 1 : 0))
                 Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
-                    .lineLimit(1)
+                    .lineLimit(1).minimumScaleFactor(0.75)
                     .contentTransition(.numericText(value: w ? 1 : 0))
             }
             Spacer(minLength: 0)
         }
         .frame(minHeight: 56)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .onAppear { onScreen.insert(r.id) }
         .onDisappear { onScreen.remove(r.id) }
         .contentShape(Rectangle())

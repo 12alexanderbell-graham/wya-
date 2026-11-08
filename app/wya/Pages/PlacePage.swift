@@ -540,7 +540,7 @@ private struct PageLayer: View {
                     else { Feel.stamp(); await MarkStore.shared.stamp(key, name: page.name) }
                 }
             } label: {
-                Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity).frame(height: 44)
                     .glassEffect(s.stamped ? PageGlass.control.tint(Palette.lime) : PageGlass.control, in: .capsule)
             }
@@ -552,7 +552,7 @@ private struct PageLayer: View {
                     else { await MarkStore.shared.wish(key, name: page.name) }
                 }
             } label: {
-                Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(s.stamped ? 0.5 : 1))
+                Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(s.stamped ? 0.5 : 1)).lineLimit(1).minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity).frame(height: 44)
                     .glassEffect(s.wished ? PageGlass.control.tint(Palette.blue) : PageGlass.control, in: .capsule)
             }
@@ -799,8 +799,9 @@ private struct InsideList: View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                if !r.line.isEmpty { Text(r.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
+                // (a long commune, "Saint-Remy-en-Bouzemont-...", gets a little smaller before it is ever cut)
+                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                if !r.line.isEmpty { Text(r.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8) }
             }
             Spacer(minLength: 8)
             Button {
@@ -831,6 +832,8 @@ private struct InsideList: View {
             .buttonStyle(.plain)
         }
         .frame(height: 52)
+        // the 52 pt rows hold their two lines up to the largest standard size
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .contentShape(Rectangle())
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { [frames] f in frames.at[r.key] = f }
         .onTapGesture {

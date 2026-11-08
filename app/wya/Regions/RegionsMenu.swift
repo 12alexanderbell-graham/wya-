@@ -82,8 +82,10 @@ struct RegionsMenu: View {
             .scaleEffect(lifted == r.id ? 1.1 : 1)
             .offset(y: lifted == r.id ? -4 : 0)
             VStack(alignment: .leading, spacing: 1) {
-                Text(r.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(2)
-                Text(r.sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                // (one line, so every row is the list's 56 pt step and none is cut at rest: a long name gets a
+                // little smaller instead of a second line)
+                Text(r.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                Text(r.sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
                     .contentTransition(.numericText(value: Double(r.count)))
                     .animation(Motion.quick, value: r.count)
             }

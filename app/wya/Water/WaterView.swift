@@ -272,7 +272,8 @@ struct SheetContent: View {
                     Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
                             tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? "") : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                            night: FullView.night(form.page), visible: captionShown, quiet: water.modeSwitching)
+                            night: FullView.night(form.page), visible: captionShown, quiet: water.modeSwitching,
+                            maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + 24))
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -573,7 +574,11 @@ struct Caption: View {
     var visible = true
     /// a mode change: the new name, number and tail are simply there (no roll)
     var quiet = false
+    /// the widest the name may be (inside the sheet's margins): a long one gets a little smaller to fit, never
+    /// runs off the sheet (8 Nov)
+    var maxNameWidth: CGFloat = 360
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let ink: Color = night ? Palette.white : Palette.ink
@@ -583,9 +588,13 @@ struct Caption: View {
             Text(visible ? name : Self.blank(name, "\u{2002}"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .contentTransition(.numericText(value: way))
                 .animation(quiet ? nil : Motion.quick, value: name)
-            Text(visible ? "\(count)" : Self.blank("\(count)", "\u{2007}"))
+                .frame(width: min(Self.nameWidth(name, typeSize), maxNameWidth))
+            // with its thousands mark, as its tail is written ("15,229" over "of 15,229", never "15229")
+            Text(visible ? count.formatted() : Self.blank(count.formatted(), "\u{2007}"))
                 .font(.system(size: big, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(ink)
@@ -610,6 +619,12 @@ struct Caption: View {
     }
 
     /// a line's placeholder: one space per character (en spaces for words, figure spaces for digits)
+    /// the name's own width at title2 semibold for the type size in use (the caption is as wide as its words)
+    static func nameWidth(_ s: String, _ size: DynamicTypeSize) -> CGFloat {
+        let base = UIFont.preferredFont(forTextStyle: .title2, compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(size)))
+        let font = UIFont.systemFont(ofSize: base.pointSize, weight: .semibold)
+        return ceil((s as NSString).size(withAttributes: [.font: font]).width) + 2
+    }
     static func blank(_ s: String, _ space: String) -> String { String(repeating: space, count: max(1, s.count)) }
 }
 

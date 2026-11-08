@@ -121,6 +121,8 @@ struct RegionCard: View {
         Button(action: act) {
             Text(words ? word : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)
@@ -170,6 +172,8 @@ struct RegionCard: View {
         } label: {
             Text(words ? (s.stamped ? "Stamped" : "Stamp") : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)
@@ -198,6 +202,8 @@ struct RegionCard: View {
         } label: {
             Text(words ? "Wishlist" : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)

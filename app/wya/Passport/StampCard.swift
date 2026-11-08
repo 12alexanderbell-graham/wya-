@@ -272,6 +272,10 @@ struct StampCard: View {
             .font(.title2.weight(.semibold))
             .foregroundStyle(Palette.ink)
             .multilineTextAlignment(.center)
+            // one line, a little smaller for a long name: the card's rows are laid out for a 44 pt name, and a second
+            // line put the stamp's slot and its landing 12 pt off
+            .lineLimit(1)
+            .minimumScaleFactor(0.55)
             // just the name: no glass box round it
             .frame(minHeight: 44)
             .frame(maxWidth: width + 32)
@@ -283,6 +287,8 @@ struct StampCard: View {
         } label: {
             Text(s.stamped ? "Stamped" : "Stamp")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.numericText())
                 .frame(width: w, height: 44)
@@ -341,6 +347,8 @@ struct StampCard: View {
         } label: {
             Text("Wishlist")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .frame(width: w, height: 44)
                 .glassEffect(s.wished ? .clear.tint(Palette.blue) : .clear, in: .capsule)
@@ -353,6 +361,8 @@ struct StampCard: View {
         Button { Feel.refuse() } label: {
             Text(words ? word : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(dim || !live ? 0.5 : 1))
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)
@@ -371,6 +381,8 @@ struct StampCard: View {
         } label: {
             Text(words ? proofWord : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)
@@ -395,6 +407,8 @@ struct StampCard: View {
         } label: {
             Text(words ? "Details" : " ")
                 .font(.body.weight(.semibold))
+                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
+                .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(s.stamped || s.wished ? 1 : 0.5))
                 .contentTransition(.numericText())
                 .animation(Motion.quick, value: words)

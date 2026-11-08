@@ -23,7 +23,11 @@ struct RegionLevels: View {
         VStack(spacing: 12) {
             // the name at the Countries caption's name size, the levels at the size of its tail (17 pt), set to use the
             // water: lines 10 pt apart, words 18 pt apart
+            // (one line inside the levels' 24 pt margins: a long name gets a little smaller, never runs past them)
             roll(name).font(.title2.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: width - 48)
                 .accessibilityAddTraits(.isHeader)
             if levels.count > 1 {
                 CentredFlow(spacing: 18, lineSpacing: 10) {

@@ -30,12 +30,19 @@ struct UndoDrop: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
+                    // (8 Nov: nothing held it to the capsule, so a long town's words ran off both edges) a little
+                    // smaller first, then cut in the middle, the place's start and "stamped" kept
+                    .minimumScaleFactor(0.75)
+                    .truncationMode(.middle)
                     .contentTransition(.numericText())
+                    .frame(width: min(Self.width(words), L.capsule.width - 28 - (Self.hasIcon ? 23 : 0)))
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
             // as wide as its words + 28 pt (the icon's 23 pt too, once it is drawn), never wider than the tab capsule
             .fixedSize()
+            // its words at the standard sizes only: the pill is 36 pt high
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             // the water's own kind of glass (frosted over a page, clear on the map), so inside the water it merges away
             .glassEffect(PageGlass.surface, in: .capsule)
         }
@@ -56,6 +63,12 @@ struct UndoDrop: View {
     private static let icon = "undo-stroke"
     private static let hasIcon = IC5.all[icon] != nil || IC5.drawn[icon] != nil
     @State private var pending = false
+    /// the words' own width at the drop's text style (the pill is as wide as its words, up to the capsule)
+    private static func width(_ s: String) -> CGFloat {
+        let base = UIFont.preferredFont(forTextStyle: .subheadline)
+        let font = UIFont.systemFont(ofSize: base.pointSize, weight: .semibold)
+        return ceil((s as NSString).size(withAttributes: [.font: font]).width) + 2
+    }
 
     private func rise() {
         words = marks.lastWords ?? ""

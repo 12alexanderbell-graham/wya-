@@ -1114,9 +1114,9 @@ struct SearchResults: View {
             head.searching = false
         } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
-                Text(h?.note ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(h?.note ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1139,15 +1139,19 @@ struct SearchResults: View {
                     if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
                 .frame(width: 22, height: 22)
+                // a long name ("Saint Vincent and the Grenadines") shrinks a little before it is ever cut; the kind word
+                // beside it is short and always whole
                 Text(pl?.n ?? "")
                     .font(.body)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? "")
                     .font(.subheadline)
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1)
+                    .fixedSize()
                     .contentTransition(.numericText())
                     .animation(Motion.quick, value: note)
             }
@@ -1183,9 +1187,9 @@ struct SearchResults: View {
             if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
         } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
-                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1232,10 +1236,10 @@ struct SearchResults: View {
                     }
                 }
                 .frame(width: 22, height: 22)
-                Text(p?.title ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(p?.title ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? "")
-                    .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                    .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1256,9 +1260,9 @@ struct SearchResults: View {
             if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
         } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
-                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1282,9 +1286,9 @@ struct SearchResults: View {
             if let h { map.showTown(file: h.file, id: h.id) }
         } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
-                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1305,7 +1309,7 @@ struct SearchResults: View {
             if let h { map.showThing(file: h.file, id: h.id) }
         } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(h?.file == map.placeOpenID ? kind : "\(kind) · \(country)").font(.subheadline)
                     .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
