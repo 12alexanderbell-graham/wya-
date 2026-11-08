@@ -1342,7 +1342,9 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
 
     private func active(_ event: UIEvent?) -> [UITouch] {
-        (event?.allTouches ?? []).filter { $0.phase != .ended && $0.phase != .cancelled }
+        // the map's own fingers only: a thumb on the water, a tab or a card is not a second finger on the map (it made
+        // a lifted press stay dark and a tap read as a pinch, 8 Nov)
+        (event?.allTouches ?? []).filter { $0.view === self && $0.phase != .ended && $0.phase != .cancelled }
             .sorted { $0.timestamp < $1.timestamp }
     }
 

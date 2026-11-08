@@ -178,11 +178,17 @@ struct HoldButton<Label: View>: View {
                     .onEnded { g in
                         timer?.cancel(); timer = nil
                         defer { down = false }
+                        // a hold that ran into the limit ends here too (the button went off under the finger and the
+                        // hold was never let go, so the next tap on it ended that hold instead of zooming, 8 Nov)
+                        if holding { holding = false; onHold(false); return }
                         guard enabled else { return }
-                        if holding { holding = false; onHold(false) }
-                        else if hypot(g.translation.width, g.translation.height) < 22 { onTap() }
+                        if hypot(g.translation.width, g.translation.height) < 22 { onTap() }
                     }
             )
+            // turned off under the finger (the limit reached): whatever the gesture does next, nothing is left held
+            .onChange(of: enabled) { _, on in
+                if !on { timer?.cancel(); timer = nil; if holding { holding = false; onHold(false) }; down = false }
+            }
     }
 }
 

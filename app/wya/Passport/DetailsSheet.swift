@@ -190,6 +190,8 @@ struct DetailsSheet: View {
                 .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
             }
             .scrollIndicators(.hidden)
+            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+            .scrollDisabled(water.stop != .full)
             .scrollDismissesKeyboard(.interactively)
             // the water's top blurs only once content scrolls under it (4.4.2); neither edge cuts a word sharply
             .scrollEdgeEffectStyle(.soft, for: .top)

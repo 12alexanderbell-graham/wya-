@@ -412,6 +412,7 @@ private struct PageLayer: View {
     let page: PlacePageState.OnePage
     let top: Bool
     @State private var ground: [Color] = []
+    @GestureState private var headerLive = false
 
     var body: some View { pageBody }
 
@@ -522,12 +523,18 @@ private struct PageLayer: View {
         .frame(maxWidth: .infinity)
         .padding(.top, L.headBottom + 24)
         .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 8)
+        // (in the screen's space: the header moves and shrinks with the drag, so measured in its own space the page
+        // followed at two thirds of the finger and shook, 8 Nov; a cancelled drag springs the page back)
+        .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global)
+            .updating($headerLive) { _, live, _ in live = true }
             .onChanged { v in page.drag = max(0, v.translation.height) }
             .onEnded { v in
                 if v.translation.height > 120 || v.predictedEndTranslation.height > 260 { PlacePageState.shared.close() }
                 else { withAnimation(.spring(response: 0.42, dampingFraction: 1)) { page.drag = 0 } }
             })
+        .onChange(of: headerLive) { _, live in
+            if !live, page.drag > 0, page.p > 0.5 { withAnimation(.spring(response: 0.42, dampingFraction: 1)) { page.drag = 0 } }
+        }
     }
 
     /// THE MARKING BLOCK (16.4.2): the stamping card's own buttons

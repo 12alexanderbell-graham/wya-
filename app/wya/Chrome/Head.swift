@@ -804,11 +804,13 @@ struct ModeWheel: View {
 
     private func choose(_ i: Int) {
         // landing on another mode starts it fresh, quick stamping off (BUILD-BOOK 3.1a, 4.7)
-        if i != head.mode.rawValue { head.quickStamp = false }
+        let changed = i != head.mode.rawValue
+        if changed { head.quickStamp = false }
         head.mode = HeadState.Mode(rawValue: i)!
         lastTick = i
         withAnimation(Motion.chrome) { at = CGFloat(i) }
-        Feel.notch(); Sound.click()
+        // (a turn that settles back on the same mode, e.g. a pull straight down on the dot, clicks nothing)
+        if changed { Feel.notch(); Sound.click() }
     }
 }
 

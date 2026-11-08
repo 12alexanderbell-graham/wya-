@@ -36,6 +36,8 @@ struct PageSheet: View {
                 .frame(width: w, alignment: .leading)
             }
             .scrollIndicators(.hidden)
+            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+            .scrollDisabled(water.stop != .full)
             .frame(width: w, height: max(0, bottom - top))
             .position(x: L.W / 2, y: top + max(0, bottom - top) / 2)
             .onChange(of: stack.reportTest) { _, r in reporting = true; reason = Self.reasons.contains(r) ? r : nil }

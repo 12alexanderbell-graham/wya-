@@ -152,6 +152,8 @@ struct TopPullView: View {
     @Bindable var head: HeadState
     let water: Water
     @State private var dragging = false
+    @GestureState private var pullLive = false
+    @State private var pages = PlacePageState.shared
 
     var body: some View {
         let L = water.layout
@@ -164,8 +166,14 @@ struct TopPullView: View {
                 .frame(width: L.W, height: L.H)
                 .contentShape(PullArea(layout: L, ai: head.pullStop > 0))
                 .gesture(pullGesture)
-                // sideways (1.11) the strip would be one of the map's side edges: the map's own
-                .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on)
+                // a pull cancelled with no end (Notification or Control Center took the touch at the top): the pull
+                // settles from where it is, never left half out with the wheel switched off (8 Nov)
+                .onChange(of: pullLive) { _, live in
+                    if !live, dragging { dragging = false; head.pullEnded(velocity: 0) }
+                }
+                // sideways (1.11) the strip would be one of the map's side edges: the map's own; over a page the top is
+                // the page's (its own pull closes it; the AI came out over it instead, 8 Nov)
+                .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on && !pages.isOpen)
                 // (the AI only: settings pulled up to full are still the water's, Part 3.9; closing them here took
                 // the rows away as the sheet reached the top, 8 Nov)
                 .onChange(of: sheetHigh) { _, high in if high { head.putAwayAI() } }
@@ -176,6 +184,7 @@ struct TopPullView: View {
     /// the finger only: what it does is the head's (HeadState.pullBegan/Moved/Ended), so a test runs the same code
     private var pullGesture: some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .global)
+            .updating($pullLive) { _, live, _ in live = true }
             .onChanged { g in
                 if !dragging { dragging = true; head.pullBegan() }
                 head.pullMoved(g.translation.height)
