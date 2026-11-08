@@ -110,7 +110,9 @@ final class PlacePageState {
     }
     /// the page on top goes back into what it grew from; the one under it is there as it was
     func close() {
-        guard let page = top, page.p > 0.5 || page.drag > 0 else { return }
+        // the top page still standing (a quick second back closes the page under the one already going; it used to
+        // land on the closing one and do nothing)
+        guard let page = pages.last(where: { $0.p > 0.5 || $0.drag > 0 }) else { return }
         withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { page.p = 0; page.drag = 0 } completion: { [weak self] in
             guard let self, page.p < 0.01 else { return }
             self.pages.removeAll { $0 === page }

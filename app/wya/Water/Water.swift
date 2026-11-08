@@ -37,27 +37,48 @@ final class Water {
 
     /// MAP SETTINGS OPEN (A5.1): the water rises to 50% if it is lower (at 50% or full it stays), the caption's words
     /// roll out and the Cosmos moves down out of the water; then the rows' words roll in
+    // (8 Nov: each open and close is its own job: a close within the open's first 0.35 s used to let the open's
+    // words come in after the close had looked, so the close never finished and the sheet stayed with the gear gone)
+    @ObservationIgnored private var settingsJob = 0
+    @ObservationIgnored private var settingsClosing = false
     func openSettings() {
+        // opened again while closing: the close is called off and the words come back
+        if settings, settingsClosing {
+            settingsJob += 1; settingsClosing = false
+            settingsFrom = stop
+            let me = settingsJob
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+                guard let self, self.settings, me == self.settingsJob else { return }
+                withAnimation(Motion.quick) { self.settingsWords = true }
+            }
+            return
+        }
         guard !settings else { return }
         settingsFrom = stop
         // over the menu (6.3): from the menu stop down to 50% while the rows leave; closing brings the menu back
         if regions { leaveMenuRows() }
         settings = true
         if stop == .closed || stop == .quarter || regions { go(.half) }
+        settingsJob += 1
+        let me = settingsJob
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.settings else { return }
+            guard let self, self.settings, me == self.settingsJob else { return }
             withAnimation(Motion.quick) { self.settingsWords = true }
         }
     }
     /// MAP SETTINGS CLOSE (A5.2): the rows' words roll out first; then the water goes back to the stop it was at (or
     /// stays where a pull's release took it) and the Cosmos and the caption come back by their own rules
     func closeSettings() {
-        guard settings else { return }
+        guard settings, !settingsClosing else { return }
+        settingsClosing = true
+        settingsJob += 1
+        let me = settingsJob
         withAnimation(.smooth(duration: 0.15)) { settingsWords = false }
         let back = settingsFrom
         settingsFrom = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-            guard let self, !self.settingsWords else { return }
+            guard let self, me == self.settingsJob else { return }
+            self.settingsClosing = false
             self.settings = false
             if self.regions { self.go(.half); return }
             if let back, self.stop == .half, back != .half, self.grab == nil { self.go(back) }
@@ -130,24 +151,43 @@ final class Water {
     var details = false
     var detailsWords = false
     @ObservationIgnored var detailsFrom: Stop?
+    // (the same jobs as settings': a close in the open's first 0.35 s left Details, or Verify, up with no place)
+    @ObservationIgnored private var detailsJob = 0
+    @ObservationIgnored private var detailsClosing = false
     func openDetails() {
+        if details, detailsClosing {
+            detailsJob += 1; detailsClosing = false
+            detailsFrom = stop
+            let me = detailsJob
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+                guard let self, self.details, me == self.detailsJob else { return }
+                withAnimation(Motion.quick) { self.detailsWords = true }
+            }
+            return
+        }
         guard !details else { return }
         detailsFrom = stop
         details = true
         if stop == .closed || stop == .quarter { go(.half) }
+        detailsJob += 1
+        let me = detailsJob
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.details else { return }
+            guard let self, self.details, me == self.detailsJob else { return }
             withAnimation(Motion.quick) { self.detailsWords = true }
         }
     }
     /// `rolled`: the sheet's words have already rolled out (back to the Stamped list, A4.21), so no wait for them
     func closeDetails(rolled: Bool = false) {
-        guard details else { return }
+        guard details, !detailsClosing else { return }
+        detailsClosing = true
+        detailsJob += 1
+        let me = detailsJob
         withAnimation(.smooth(duration: 0.15)) { detailsWords = false }
         let back = detailsFrom
         detailsFrom = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + (rolled ? 0 : 0.18)) { [weak self] in
-            guard let self, !self.detailsWords else { return }
+            guard let self, me == self.detailsJob else { return }
+            self.detailsClosing = false
             self.details = false
             // back to where it was, unless a pull's release already took it somewhere below 50%
             if let back, self.stop != back, self.stop.rawValue >= Stop.half.rawValue, self.grab == nil, !self.settings { self.go(back) }

@@ -72,6 +72,9 @@ final class UploadState {
     /// what A9.8 says when a file gave nothing (not a history, unreadable); nil: "No places found"
     @ObservationIgnored private var failed: String?
     @ObservationIgnored private var job = 0
+    /// on its way out (the 0.42 s before the water lets it go): taps on the map are the map's again, and a second touch
+    /// no longer starts the wait over
+    @ObservationIgnored private(set) var closing = false
     /// which read a result belongs to: a read started on one sheet, step or session that has since gone (back, closed,
     /// reopened) is dropped when it lands
     @ObservationIgnored private var readToken = 0
@@ -125,6 +128,7 @@ final class UploadState {
     /// A9.1 and A9.2: the water to 25% (it stays if it is there), the caption's words out, then the pair in
     func open(water w: Water, map m: MapController) {
         guard !w.upload else { return }
+        closing = false
         readToken += 1
         moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0
         // finds waiting: the Upload tool opens straight on their review (9.2); then a round of regions left waiting
@@ -242,13 +246,14 @@ final class UploadState {
         guard !busy else { return }
         // leaving the review (a pull down): the finds wait (9.6)
         if phase == .review { leave(); return }
-        guard let w = water, w.upload, phase == .choosing || phase == .words else { return }
+        guard let w = water, w.upload, phase == .choosing || phase == .words, !closing else { return }
         readToken += 1
         // nothing half-done carries into the next session
         moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0; kept = nil
         if phase == .words { endWords(close: true); return }
         job += 1
         let me = job
+        closing = true
         shrink()
         picking = false; importing = false
         // finds kept by Add more wait, darkened, as when the review is left (9.6)
@@ -256,6 +261,7 @@ final class UploadState {
             if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+            closing = false
             guard me == job else { return }
             w.closeUpload()
             step = 0; note = [:]; locating = false

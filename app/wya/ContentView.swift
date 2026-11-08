@@ -195,7 +195,7 @@ struct ContentView: View {
                 head.putAway(); water.hideCredit()
                 // the upload sheet while choosing closes (and that touch does nothing else, 9.3); while finding or at the
                 // review the touch is the map's (a pan, or a tap that drops or keeps a find)
-                if water.upload {
+                if water.upload, !UploadState.shared.closing {
                     let ph = UploadState.shared.phase
                     if ph == .choosing || ph == .words { UploadState.shared.close() }
                     return
@@ -209,7 +209,7 @@ struct ContentView: View {
             // a name on the map tapped (its page): the place tap's own guards (below), so a name never opens a page
             // sideways, over the upload sheet, or with the tap that closed search or put the book away
             map.namePageAllowed = { [head, water, map] in
-                !water.upload && !Sideways.shared.on && !map.locked
+                (!water.upload || UploadState.shared.closing) && !Sideways.shared.on && !map.locked
                     && CACurrentMediaTime() - head.mapClosedSearchAt > 0.6
                     && !BookState.shared.isOpen && CACurrentMediaTime() - BookState.shared.closedAt > 0.4
             }
@@ -228,7 +228,7 @@ struct ContentView: View {
                 // the upload sheet up: finding owns the map's presses, a tap while choosing has closed it (9.3, 9.4), and
                 // at the review a found country's tap drops or keeps it (9.5)
                 // (the second round's rows are regions: a tap on the map leaves it, its regions waiting, 9.5)
-                if water.upload {
+                if water.upload, !UploadState.shared.closing {
                     if UploadState.shared.inRound { UploadState.shared.leaveReview() } else { _ = UploadState.shared.tap(i) }
                     return
                 }

@@ -17,6 +17,7 @@ final class RegionCardState {
     /// stamped on this card (a tap on Stamped lifts it again); stamped before, Stamped refuses (Part 4.2.3)
     var stampedHere = false
     @ObservationIgnored var closedAt: CFTimeInterval = 0
+    @ObservationIgnored private var closing = false
     var isOpen: Bool { key != nil }
 
     /// out of the water (A6.11): the map never moves; the region stays darkened while the card is up
@@ -33,10 +34,14 @@ final class RegionCardState {
     }
     /// back into the water, every change kept
     func close(map: MapController) {
-        guard key != nil else { return }
+        // one close per card: a second touch while it folds no longer starts the 0.4 s over (that ate the next tap)
+        guard key != nil, !closing else { return }
+        closing = true
         closedAt = CACurrentMediaTime()
         withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: { [weak self] in
-            guard let self, self.closedAt > 0, self.p < 0.01 else { return }
+            guard let self else { return }
+            self.closing = false
+            guard self.closedAt > 0, self.p < 0.01 else { return }
             self.key = nil
             map.kept = nil
         }
@@ -53,6 +58,7 @@ struct RegionCard: View {
     @State private var card = RegionCardState.shared
     @State private var marks = MarkStore.shared
     @State private var details = DetailsState.shared
+    @State private var tapAt: CFTimeInterval = 0
 
     var body: some View {
         if let key = card.key {
@@ -126,6 +132,9 @@ struct RegionCard: View {
 
     private func stampButton(_ s: MarkState, key: PlaceKey, w: CGFloat, words: Bool) -> some View {
         Button {
+            // a quick second tap is the same press (it used to stamp and take the stamp off again)
+            guard CACurrentMediaTime() - tapAt > 0.35 else { return }
+            tapAt = CACurrentMediaTime()
             if !s.stamped {
                 Feel.stamp()
                 Task {
@@ -175,6 +184,8 @@ struct RegionCard: View {
         let blocked = s.stamped
         return Button {
             if blocked { Feel.refuse(); return }
+            guard CACurrentMediaTime() - tapAt > 0.35 else { return }
+            tapAt = CACurrentMediaTime()
             Task {
                 if s.wished {
                     await MarkStore.shared.unwish(key, name: card.name); Feel.lift()

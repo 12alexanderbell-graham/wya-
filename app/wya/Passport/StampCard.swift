@@ -79,6 +79,7 @@ final class CardState {
     var goingTop: CGFloat?
 
     var isOpen: Bool { place != nil }
+    @ObservationIgnored private var closing = false
 
     func open(_ i: Int, at point: CGPoint, map: MapController, water: Water? = nil) {
         // one press, one job: the touch that closed a card never opens another (Appendix A.4)
@@ -126,10 +127,20 @@ final class CardState {
 
     /// back into the point it came from, every change kept (no Save: closing keeps, the undo drop takes it back)
     func close(map: MapController) {
-        guard place != nil else { return }
+        guard place != nil, !closing else { return }
+        // (8 Nov) a card still waiting for the water to make room was never seen: it goes at once, and the touch that
+        // sent it away may open the next one (a second tap on a place had been eaten by the 0.4 s rule)
+        if p == 0 {
+            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil
+            return
+        }
+        // one close per card: a second touch while it folds no longer starts the 0.4 s over (that ate the tap after it)
+        closing = true
         closedAt = CACurrentMediaTime()
         withAnimation(.spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: { [weak self] in
-            guard let self, self.closedAt > 0, self.p < 0.01 else { return }
+            guard let self else { return }
+            self.closing = false
+            guard self.closedAt > 0, self.p < 0.01 else { return }
             self.place = nil
             self.heldTop = nil
             self.goingTop = nil
@@ -149,6 +160,7 @@ struct StampCard: View {
     @State private var marks = MarkStore.shared
     @State private var details = DetailsState.shared
     @State private var verify = VerifyState.shared
+    @State private var wishTapAt: CFTimeInterval = 0
     /// what the Verify? button reads for this card's place (Verify? / In process / Verified)
     @State private var proofWord = "Verify?"
 
@@ -296,7 +308,8 @@ struct StampCard: View {
             // ONE MEANING EVERYWHERE (7 Nov, the friend's review boards 03 and 12: "Stamped" took the stamp off right
             // after stamping, but did nothing on a card opened later): a tap on Stamped always takes the stamp off,
             // its visits with it, and the undo drop puts all of it back
-            guard !card.flying else { return }
+            // the stamp still on its way down: felt as refused, not silently ignored
+            guard !card.flying else { Feel.refuse(); return }
             card.lift {
                 Task {
                     await MarkStore.shared.unstamp(key, name: name)
@@ -313,6 +326,9 @@ struct StampCard: View {
         let blocked = s.stamped
         return Button {
             if blocked { Feel.refuse(); return }
+            // a quick second tap is the same press (it used to wish and unwish again)
+            guard CACurrentMediaTime() - wishTapAt > 0.35 else { return }
+            wishTapAt = CACurrentMediaTime()
             Task {
                 if s.wished {
                     card.showGhost()
