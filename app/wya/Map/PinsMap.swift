@@ -402,6 +402,14 @@ struct PinsMapView: UIViewRepresentable {
         hold.allowableMovement = 8
         hold.delegate = context.coordinator
         v.addGestureRecognizer(hold)
+        // the finger's first contact: the app's map touch (search, settings, the book put away)
+        let down = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.down(_:)))
+        down.minimumPressDuration = 0
+        down.cancelsTouchesInView = false
+        down.delaysTouchesBegan = false
+        down.delaysTouchesEnded = false
+        down.delegate = context.coordinator
+        v.addGestureRecognizer(down)
         // any tap on Apple's map takes What's here? away (the tap goes on)
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
         tap.cancelsTouchesInView = false
@@ -498,10 +506,29 @@ struct PinsMapView: UIViewRepresentable {
 
         /// the camera is moving (a fling still gliding, a flight): a tap then only stops it
         private var moving = false
+        /// THE MAP TOUCHED (as our own map's touch-down does, 8 Nov: Apple's map took every touch, so search, settings
+        /// and the book stayed open under a pan or a tap, and the tap still acted): the app's map.onTouch runs at the
+        /// finger's first contact; if it closed something, this touch does nothing else
+        private(set) var closedThisTouch = false
+        @objc func down(_ g: UILongPressGestureRecognizer) {
+            guard g.state == .began else { return }
+            let before = map.touchClosedAt
+            map.onTouch?()
+            closedThisTouch = map.touchClosedAt != before
+        }
         @objc func tapped(_ g: UITapGestureRecognizer) {
             // a tap that takes What's here? away, or stops the map, does only that
             if WhatsHere.shared.isOpen { WhatsHere.shared.close(); return }
+            if closedThisTouch { return }
             if moving { return }
+            // a tap on the map off every pin lets the chosen pin go, however it was chosen (dropped, from the list, from
+            // search: MapKit had not selected it, so its own deselect never came and the pin stayed chosen, 8 Nov)
+            if !PinRoutes.shared.open, PinStore.shared.selected != nil, let v = g.view as? MKMapView {
+                var hit = v.hitTest(g.location(in: v), with: nil)
+                var onPin = false
+                while let h = hit, !(h is MKMapView) { if h is PinAnnotationView || h is RouteLabelView { onPin = true; break }; hit = h.superview }
+                if !onPin { PinStore.shared.selected = nil; return }
+            }
             // a tap on one of Apple's other ways makes it the route (8.6): only off the pins, and only when that way is
             // nearer the finger (within 12 pt) than the route itself, so a tap on a shared road or an end changes nothing
             guard PinRoutes.shared.open, let v = g.view as? MKMapView else { return }
@@ -696,6 +723,7 @@ struct PinsMapView: UIViewRepresentable {
         @objc func held(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began, let v = g.view as? MKMapView else { return }
             WhatsHere.shared.close()
+            if closedThisTouch { return }
             let p = g.location(in: v)
             // on a pin: its own menu, not a new pin; on a route: the route's menu (the lock keeps menus: it only refuses
             // a new pin)
@@ -704,6 +732,8 @@ struct PinsMapView: UIViewRepresentable {
             if map.locked { Feel.refuse(); return }
             Feel.tick()
             let c = v.convert(p, toCoordinateFrom: v)
+            // (a new pin is chosen: the Route row goes first, its sheet hidden behind it otherwise)
+            if PinRoutes.shared.open { PinRoutes.shared.close() }
             PinStore.shared.drop(at: c, country: Self.country(map, c))
             if water.stop != .quarter { water.go(.quarter) }
         }
@@ -801,8 +831,12 @@ struct PinsMapView: UIViewRepresentable {
         func mapView(_ v: MKMapView, didSelect a: MKAnnotation) {
             if a is RouteLabel { v.deselectAnnotation(a, animated: false); return }
             guard let a = a as? PinAnnotation else { return }
+            // the touch that closed search, settings or the book does only that (one press, one job)
+            if closedThisTouch { v.deselectAnnotation(a, animated: false); return }
             // the Route row waiting for an end: the pin fills it, nothing else happens
             if PinRoutes.shared.pinTapped(a.id) { v.deselectAnnotation(a, animated: false); return }
+            // no end waiting: the row goes and the pin is chosen (its sheet had stood hidden behind the row)
+            if PinRoutes.shared.open { PinRoutes.shared.close() }
             Feel.tap()
             PinStore.shared.selected = a.id
             if water.stop != .quarter { water.go(.quarter) }
@@ -972,11 +1006,12 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         // each runs once the menu has gone (as every hold menu's rows)
         let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let state = PinsMapState.shared
+        // (the Route row goes first: the pin's sheet stood hidden behind it, and came up unasked later, 8 Nov)
         let edit = UIAction(title: "Edit") { _ in
-            after { PinStore.shared.selected = id; state.water?.go(.half) }
+            after { PinRoutes.shared.close(); PinStore.shared.selected = id; state.water?.go(.half) }
         }
         let colour = UIAction(title: "Colour") { _ in
-            after { PinStore.shared.selected = id; PinStore.shared.colourAsked = true; state.water?.go(.full) }
+            after { PinRoutes.shared.close(); PinStore.shared.selected = id; PinStore.shared.colourAsked = true; state.water?.go(.full) }
         }
         let directions = UIAction(title: "Directions") { _ in PinStore.directions(p) }
         // Route from here / Route to here (11.5): the Route row opens with that end set (8.6)

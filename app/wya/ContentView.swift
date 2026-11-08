@@ -120,7 +120,9 @@ struct ContentView: View {
                     // the upload from Regions: once finding starts the wheel turns to Countries by itself, because the
                     // review always opens on the Countries map (6.3's connections, A6.4)
                     .onChange(of: UploadState.shared.phase) { _, ph in
-                        if ph == .finding, head.mode == .regions { head.quickStamp = false; head.mode = .countries; Feel.notch() }
+                        // (from Pins too: its finds were drawn on the Countries map hidden under Apple's, and the review's
+                        // taps chose pins, 8 Nov)
+                        if ph == .finding, head.mode == .regions || head.mode == .pins { head.quickStamp = false; head.mode = .countries; Feel.notch() }
                     }
 
                 if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
@@ -186,7 +188,7 @@ struct ContentView: View {
                 // What's here? goes back into its point; the touch goes on
                 WhatsHere.shared.close()
                 // search open: the touch closes it only (a drag still pans), keeping the typed text 10 s (1.10)
-                if head.searching { head.closeSearchFromMap(); return }
+                if head.searching { head.closeSearchFromMap(); map.touchClosedAt = CACurrentMediaTime(); return }
                 // anything this touch closes: that press opens no hold menu
                 if head.settingsOpen || BookState.shared.isOpen || DetailsState.shared.isOpen || VerifyState.shared.isOpen
                     || CardState.shared.isOpen || RegionCardState.shared.isOpen || (water.upload && [.choosing, .words].contains(UploadState.shared.phase)) {
@@ -307,6 +309,7 @@ struct ContentView: View {
                 water.closeList(back: false, instant: true)
                 PinRoutes.shared.close()
                 PinStore.shared.selected = nil
+                PinStore.shared.colourAsked = false
                 WhatsHere.shared.close()
                 if Sideways.shared.on { Sideways.shared.leave() }
             }
@@ -443,7 +446,7 @@ struct ContentView: View {
         if old == .regions { map.leaveRegionTowns() }
         map.placesMode = new == .places
         map.pinsMode = new == .pins
-        if new != .pins { PinStore.shared.selected = nil; PinRoutes.shared.close() }
+        if new != .pins { PinStore.shared.selected = nil; PinStore.shared.colourAsked = false; PinRoutes.shared.close() }
         // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
         // drawn on
         head.toolsOpen = false
