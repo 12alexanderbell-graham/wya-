@@ -1483,7 +1483,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 // stamps or opens its card)
                 let name = journey == nil ? townNames.nameHit(d0) : nil
                 if c.locked { Feel.refuse(); c.lockedPress() }
-                else if let journey {
+                // (one press, one job: this touch closed a card, the book or Details; the journey's tap is not also made)
+                else if let journey, CACurrentMediaTime() - c.touchClosedAt > 0.6 {
                     let stamp = t.timestamp
                     DispatchQueue.main.asyncAfter(deadline: .now() + Map.doubleTapWindow) { [weak self, weak c] in
                         guard let self, let c, self.lastTapTime == stamp, self.downAt == nil else { return }

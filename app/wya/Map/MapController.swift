@@ -479,7 +479,8 @@ final class MapController {
     }
     /// off (A13.3): undrawn into its start in 0.6 s, twice as fast when something else is taking over
     func historyOff(fast: Bool = false, instant: Bool = false) {
-        guard historyTrack != nil else { return }
+        // (none, or already going: a second off never starts its draw-back again)
+        guard historyTrack != nil, instant || historyAnim?.to != 0 else { return }
         // (under settings the map draws no frames, so an undraw would stall half way: the line simply goes)
         if instant { historyAnim = nil; historyShown = 0; historyTrack = nil; historyInfo = nil; needsFrame = true; return }
         historyAnim = (historyShown, 0, CACurrentMediaTime(), (Motion.reduce ? 0.2 : 0.6) / (fast ? 2 : 1))

@@ -9,6 +9,11 @@ enum RegionStamps {
     /// the region `unit` of `scene`, and every parent above it, stamped
     @MainActor
     static func stamp(_ unit: Int, in scene: RegionScene, source: MarkSource) async {
+        // one undo step for the region and its parents, named by the region tapped
+        await MarkStore.shared.grouped { await stampChain(unit, in: scene, source: source) }
+    }
+    @MainActor
+    private static func stampChain(_ unit: Int, in scene: RegionScene, source: MarkSource) async {
         let id = scene.unitIDs[unit]
         await MarkStore.shared.stamp(PlaceKey(.region, id), name: scene.unitNames[unit], cc: scene.id, level: scene.row,
                                      source: source)
@@ -27,6 +32,10 @@ enum RegionStamps {
     /// through it, nearest first, stopping at the first that stays
     @MainActor
     static func unstamp(_ unit: Int, in scene: RegionScene) async {
+        await MarkStore.shared.grouped { await unstampChain(unit, in: scene) }
+    }
+    @MainActor
+    private static func unstampChain(_ unit: Int, in scene: RegionScene) async {
         let id = scene.unitIDs[unit]
         await MarkStore.shared.unstamp(PlaceKey(.region, id), name: scene.unitNames[unit])
         forget(id)

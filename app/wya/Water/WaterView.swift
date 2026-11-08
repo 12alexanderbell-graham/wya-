@@ -198,7 +198,7 @@ struct SheetContent: View {
             // (not under the journey's rows at full: it rode up over the head, 31 Oct 11:32)
             // (84 pt under the caption's middle, so at full it stays under the caption, never in the head's row; and not
             // under settings, Details or the upload, which take the water)
-            if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving, !water.settings, !water.details, !water.upload {
+            if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving, !water.settings, !water.details, !water.upload, !water.regions {
                 HistoryBar(map: map, width: L.W - 2 * L.sheetInset - 32)
                     .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72) + 84)
             }
@@ -288,7 +288,8 @@ struct SheetContent: View {
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
             // (not in Pins: its caption is its own, and its number is not your stamps)
-            if captionShown, !map.pinsMode, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
+            // (the journey's caption over a picked sun: its count opens the journey's list)
+            if captionShown, !map.pinsMode, !map.sunPicked || water.historyUp, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())

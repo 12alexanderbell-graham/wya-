@@ -302,11 +302,36 @@ final class MarkStore {
         changes += 1
     }
 
+    /// ONE UNDO FOR ONE TAP: the writes made inside `body` (a region and the parents it stamps, a town and its region
+    /// chain and country) are one undo step, named by the first (the place tapped)
+    func grouped(_ body: () async -> Void) async {
+        // (a group inside a group is part of it: a town's stamp stamps its region, which stamps its parents)
+        if groupDepth == 0 { groupSerial = nil }
+        groupDepth += 1
+        await body()
+        groupDepth -= 1
+        if groupDepth == 0 { groupSerial = nil }
+    }
+    @ObservationIgnored private var groupDepth = 0
+    private var grouping: Bool { groupDepth > 0 }
+    @ObservationIgnored private var groupSerial: Int?
+
     private func apply(_ r: TravelStore.Result, words: String, origin: CGPoint?, who: Who) {
         guard !r.changed.isEmpty else { return }
         take(r)
+        // a later write of the same tap joins its first step (only while that step is still the top)
+        if grouping, let g = groupSerial, g == undoSerial, let last = undoStack.last, last.run == nil {
+            undoStack[undoStack.count - 1] = (last.snaps + r.undo, last.words, nil, nil)
+            undoSerial &+= 1
+            groupSerial = undoSerial
+            redoStack = []
+            changes += 1
+            emit(MarksChanged(changed: r.changed, origin: origin, who: who))
+            return
+        }
         undoStack.append((r.undo, words, nil, nil))
         undoSerial &+= 1
+        if grouping { groupSerial = undoSerial }
         redoStack = []
         markDates.append(Date())
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }

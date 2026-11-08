@@ -389,6 +389,12 @@ enum TownStamps {
     @MainActor
     static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource, place: Int? = nil,
                       at point: SIMD2<Float>? = nil, day: String? = nil) async {
+        // one undo step for the town, its country and its regions, named by the town
+        await MarkStore.shared.grouped { await stampChain(key, name: name, cc: cc, source: source, place: place, at: point, day: day) }
+    }
+    @MainActor
+    private static func stampChain(_ key: PlaceKey, name: String, cc: String, source: MarkSource, place: Int?,
+                                   at point: SIMD2<Float>?, day: String?) async {
         await MarkStore.shared.stamp(key, name: name, cc: cc, source: source, day: day)
         let country = PlaceKey.country(cc)
         if !MarkStore.shared.state(country).stamped {
@@ -417,6 +423,10 @@ enum TownStamps {
 
     @MainActor
     static func unstamp(_ key: PlaceKey, name: String, cc: String) async {
+        await MarkStore.shared.grouped { await unstampChain(key, name: name, cc: cc) }
+    }
+    @MainActor
+    private static func unstampChain(_ key: PlaceKey, name: String, cc: String) async {
         await MarkStore.shared.unstamp(key, name: name)
         guard through.contains(cc) else { return }
         // still held by another stamped town or thing of it

@@ -246,7 +246,11 @@ final class HistoryLineView: UIView {
         let t = m.historyTrack
         if t == nil && track == nil { if !isHidden { isHidden = true }; return }
         isHidden = false
-        if let t, t.points.count != builtCount || track == nil || t.stops.count != track!.stops.count || t.points.first != track!.points.first {
+        // (a new range with as many points and stops, starting at the same place, is still a new line: its ends and
+        // days are looked at too; a leg's capsule shown belongs to the old range and goes)
+        if let t, t.points.count != builtCount || track == nil || t.stops.count != track!.stops.count || t.points.first != track!.points.first
+            || t.points.last != track!.points.last || t.stops.first?.from != track!.stops.first?.from || t.stops.last?.from != track!.stops.last?.from {
+            if track != nil { legShown = nil }
             track = t; builtCount = t.points.count; build(t)
         }
         let shown = m.historyShown
@@ -454,10 +458,11 @@ final class HistoryLineView: UIView {
     /// drawn
     func hit(_ p: CGPoint, _ m: MapController) -> Hit? {
         guard let track, m.historyTrack != nil, m.historyShown > 0.999 else { return nil }
-        if startCap.isShown, startCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .start }
-        if endCap.isShown, endCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return .end }
-        if legCap.isShown, legCap.frame.insetBy(dx: -2, dy: -2).contains(p) { return legShown.map { .leg($0) } }
-        for (n, c) in edgeCaps.enumerated() where n < edgeStop.count && c.isShown && c.frame.insetBy(dx: -2, dy: -2).contains(p) {
+        // (each capsule takes a touch over 44 pt: drawn 28 high, 8 pt more above and below)
+        if startCap.isShown, startCap.frame.insetBy(dx: -4, dy: -8).contains(p) { return .start }
+        if endCap.isShown, endCap.frame.insetBy(dx: -4, dy: -8).contains(p) { return .end }
+        if legCap.isShown, legCap.frame.insetBy(dx: -4, dy: -8).contains(p) { return legShown.map { .leg($0) } }
+        for (n, c) in edgeCaps.enumerated() where n < edgeStop.count && c.isShown && c.frame.insetBy(dx: -4, dy: -8).contains(p) {
             return .edge(edgeStop[n])
         }
         var best: (j: Int, d: CGFloat)?

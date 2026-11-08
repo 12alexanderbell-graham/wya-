@@ -76,7 +76,8 @@ struct RegionCard: View {
             let w = StampCard.Geometry(L: L, sheetTop: L.top(.quarter)).bookW
             let half = (w - 12) / 2
             let s = marks.state(key)
-            let base = L.top(.quarter) - 12
+            // (over the water at history height when the journey is up, never on it)
+            let base = (water.historyUp ? water.restTop(.quarter) : L.top(.quarter)) - 12
             let p = card.p
             // each piece's own share of the opening, lowest first (0.4 of the way apart)
             let a = Self.part(p, 0), b = Self.part(p, 1), c = Self.part(p, 2)
@@ -102,19 +103,24 @@ struct RegionCard: View {
                 }
                 .scaleEffect(max(0.001, b), anchor: .bottom)
                 .position(x: L.W / 2, y: base - 44 - 12 - 22)
+                // (two lines each at most, held by their bottom over Stamp | Wishlist: a big type size grows them up,
+                // never down over the buttons)
                 VStack(spacing: 2) {
-                    Text(card.name).font(.headline).foregroundStyle(Palette.ink)
+                    Text(card.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(2).minimumScaleFactor(0.8)
                     if !card.parents.isEmpty {
-                        Text(card.parents).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
+                        Text(card.parents).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
                 .multilineTextAlignment(.center)
                 .frame(width: w + 32)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(width: w + 32, height: 160, alignment: .bottom)
                 .scaleEffect(max(0.001, c), anchor: .bottom)
-                .position(x: L.W / 2, y: base - 2 * (44 + 12) - 28)
+                .position(x: L.W / 2, y: base - 2 * (44 + 12) - 8 - 80)
             }
             .frame(width: L.W, height: L.H, alignment: .topLeading)
+            // the card's words up to the size its 44 pt buttons still hold on one line
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .allowsHitTesting(p > 0.98)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("\(card.name), \(card.parents)")

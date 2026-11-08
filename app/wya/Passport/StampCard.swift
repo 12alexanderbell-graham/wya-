@@ -53,8 +53,9 @@ final class CardState {
             guard let self else { return }
             withAnimation(.spring(response: 0.12 * k, dampingFraction: 1)) { self.press = 1.25 } completion: { [weak self] in
                 guard let self else { return }
-                withAnimation(.spring(response: 0.26 * k, dampingFraction: 1)) { self.travel = 0 } completion: { [weak self] in
-                    self?.flying = false
+                withAnimation(.spring(response: 0.26 * k, dampingFraction: 1)) { self.travel = 0 } completion: {
+                    // (still flying until `done` has taken the stamp off and the page's order is the new one: it said
+                    // false first, and the stamp stood in its slot again for the write's few frames)
                     done()
                 }
             }
@@ -171,6 +172,7 @@ struct StampCard: View {
     @State private var details = DetailsState.shared
     @State private var verify = VerifyState.shared
     @State private var wishTapAt: CFTimeInterval = 0
+    @State private var stampTapAt: CFTimeInterval = 0
     /// what the Verify? button reads for this card's place (Verify? / In process / Verified)
     @State private var proofWord = "Verify?"
 
@@ -312,8 +314,14 @@ struct StampCard: View {
     }
 
     private func stampTap(_ s: MarkState, key: PlaceKey, name: String) {
+        // a double tap is one tap (the second came during the write and stamped and lifted in one go)
+        let now = CACurrentMediaTime()
+        guard now - stampTapAt > 0.35 else { return }
+        stampTapAt = now
         if !s.stamped {
             Feel.tap()
+            // flying from the tap (the write first, then the landing): a tap meanwhile is refused, never a lift
+            card.flying = true
             Task {
                 await MarkStore.shared.stamp(key, name: name)
                 card.stampedHere = true
@@ -331,6 +339,7 @@ struct StampCard: View {
                     await MarkStore.shared.unstamp(key, name: name)
                     card.stampedHere = false
                     card.order = await MarkStore.shared.passportOrder()
+                    card.flying = false
                 }
             }
         }
@@ -565,7 +574,7 @@ struct PassportPage: View {
     var body: some View {
         // this place's page: where its stamp is, or the first free slot's
         let page = pageIndex ?? Self.page(of: id, order: order)
-        let onPage = Array(order.dropFirst(page * 6).prefix(6))
+        let onPage = Array(order.dropFirst(max(0, page) * 6).prefix(6))
         let corner = size.width * 0.036
         ZStack(alignment: .topLeading) {
             ForEach(onPage, id: \.self) { pid in

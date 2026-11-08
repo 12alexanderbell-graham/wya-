@@ -225,14 +225,15 @@ struct PassportBook: View {
             guard b.page < b.pages - 1 else { return }
             if from <= 0 { b.turn = 0.1 }
             withAnimation(.spring(response: 0.32, dampingFraction: 1)) { b.turn = 90 } completion: {
-                b.page += 1
+                // (clamped: a second flick inside the turn passed the guard with the old page)
+                b.page = min(b.pages - 1, b.page + 1)
                 b.turn = 0
             }
         } else {
             guard b.page > 0 else { return }
             if from >= 0 { b.turn = -89.9 }
             withAnimation(.spring(response: 0.32, dampingFraction: 1)) { b.turn = -0.01 } completion: {
-                b.page -= 1
+                b.page = max(0, b.page - 1)
                 b.turn = 0
             }
         }

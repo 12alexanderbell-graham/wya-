@@ -58,6 +58,9 @@ struct StampedList: View {
         /// a journey's row: its stop's own key (the row's id carries its place in the journey) and the stop
         var journey: HistoryTrack.Stop?
         var town: Bool { kind == .town }
+        /// the place's own id (a journey's row id carries its stop; a country's flag, Details, Unstamp, the book and
+        /// Share want the country's)
+        var placeID: String { journey?.key.id ?? id }
         var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : kind == .yours ? .yours : .thing, id)) }
     }
 
@@ -98,12 +101,17 @@ struct StampedList: View {
     private func journeyRows(_ w: World) -> [Row] {
         guard let t = map.historyTrack else { return [] }
         let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "d MMM yyyy"
-        return t.stops.enumerated().map { n, s in
+        var seen: [String: Int] = [:]
+        return t.stops.map { s in
             var c = DateComponents(); c.year = s.from.y; c.month = s.from.m; c.day = s.from.d
             let day = Calendar(identifier: .gregorian).date(from: c).map { f.string(from: $0) } ?? ""
             let kind: Row.Kind = s.key.kind == .country ? .country : s.key.kind == .town ? .town : .thing
             let flag = s.place < w.places.count ? w.places[s.place].id : ""
-            return Row(id: "j\(n)|\(s.key.description)", name: s.name, place: s.place, line: day, kind: kind, flag: flag,
+            // (keyed by the stop itself, its place and the day it starts: a stop taken away moves the rows under it up,
+            // never makes them new rows rolling in again)
+            let base = "j|\(s.key.description)|\(s.from.y)-\(s.from.m)-\(s.from.d)"
+            let k = seen[base, default: 0]; seen[base] = k + 1
+            return Row(id: k == 0 ? base : "\(base)|\(k)", name: s.name, place: s.place, line: day, kind: kind, flag: flag,
                        day: "", journey: s)
         }
     }
@@ -197,7 +205,7 @@ struct StampedList: View {
                             if r.kind == .country {
                                 Button("Show in passport") {
                                     water.closeList(to: .quarter)
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.id) }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { BookState.shared.open(showing: r.placeID) }
                                 }
                             }
                             Button("Open its page") { page(r) }
@@ -209,7 +217,7 @@ struct StampedList: View {
                             }
                         }
                         // offline for now: the app's own link and the name (11.7)
-                        ShareLink(item: URL(string: r.kind == .country ? "wya://country/\(r.id)" : "wya://page/\(r.key.description)")!,
+                        ShareLink(item: URL(string: r.kind == .country ? "wya://country/\(r.placeID)" : "wya://page/\(r.key.description)")!,
                                   subject: Text(r.name), message: Text(r.name)) {
                             Text("Share")
                         }
@@ -333,7 +341,7 @@ struct StampedList: View {
     private func row(_ r: Row) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.kind == .country ? r.id.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.square(r.kind == .country ? r.placeID.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
             .frame(width: 28, height: 28)
             .opacity(flagOut.contains(r.id) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }  // (just there, never grown from a point, 8 Nov)
@@ -395,8 +403,12 @@ struct StampedList: View {
         map.show(place: r.place, sheetTop: water.y(.quarter))
         // the card from the place once the camera has landed (show's flight is 0.8 s) and the water is at 25%, so
         // nothing moves into the card's way while it grows
+        Self.openJob += 1
+        let me = Self.openJob
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + 0.1) {
-            guard let w = map.world else { return }
+            // nothing else came meanwhile (another row, settings, Upload, a page, another mode's map, the list again)
+            guard me == Self.openJob, let w = map.world, !water.settings, !water.upload, !water.stampedList, !water.details,
+                  !PlacePageState.shared.isOpen, !map.placesMode, !map.pinsMode, map.regionScene == nil else { return }
             let p = w.places[r.place]
             CardState.shared.open(r.place, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map, water: water)
         }
@@ -415,7 +427,7 @@ struct StampedList: View {
         Self.backFromDetails = true
         withAnimation(Motion.quick) { listDrop = listHeight + 8 }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.each) {
-            DetailsState.shared.open(.country(r.id), name: r.name, water: water)
+            DetailsState.shared.open(.country(r.placeID), name: r.name, water: water)
         }
     }
     /// back from Details: every row in, the ones on screen (the list starts at its top again) coming up through the
@@ -429,6 +441,7 @@ struct StampedList: View {
         }
     }
     private var listHeight: CGFloat { max(60, water.layout.capsule.minY - 24 - (top + 12)) }
+    @MainActor private static var openJob = 0
     /// Details were opened from a row: the list coming back rises instead of arriving (A4.21)
     @MainActor static var backFromDetails = false
     /// the test driver's way to swipe a row right (simulator checks: a synthesized drag does not trigger List swipes)
@@ -443,7 +456,7 @@ struct StampedList: View {
             Task { await TownStamps.unstamp(r.key, name: r.name, cc: r.flag.lowercased()) }
             return
         }
-        Task { await MarkStore.shared.unstamp(.country(r.id), name: r.name) }
+        Task { await MarkStore.shared.unstamp(.country(r.placeID), name: r.name) }
     }
 }
 

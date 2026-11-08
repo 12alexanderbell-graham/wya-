@@ -57,6 +57,8 @@ struct ContentView: View {
                 WhatsHereView(layout: water.layout)
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
+                    // (its words up to the size its 44 pt buttons still hold on one line)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 // the region card (6.7): over the map, standing on the 25% water
                 RegionCard(map: map, water: water)
                 // the passport book from the plus's passport tool (Part 4.3)
@@ -97,6 +99,8 @@ struct ContentView: View {
                             return
                         }
                         if on {
+                            // over Regions' list there is no map to draw the journey on: refused, as with no stops
+                            if water.regions { Feel.refuse(); head.history = false; return }
                             if !map.historyOn() { Feel.refuse(); head.history = false; return }
                             // the water to history height from wherever it is (13.4)
                             water.historyUp = true
@@ -328,8 +332,9 @@ struct ContentView: View {
             water.onMapAgain = { [head] in
                 // a page up goes first (the Map tab again is "back to the map", as leaving the tab is)
                 PlacePageState.shared.closeAll()
-                // a card goes back into the water with the rest (the camera is leaving it)
+                // a card goes back into the water with the rest (the camera is leaving it); the sun let go (back to Earth)
                 closeCard()
+                map.sunPicked = false
                 if head.mode == .regions { backToRegionsList() }
                 // Places: back to Everywhere (no country, collection or continent left open under the world)
                 if head.mode == .places { map.showPlacesMap(.everywhere) }
@@ -443,6 +448,8 @@ struct ContentView: View {
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
         water.modeSwitchedAt = CACurrentMediaTime()
+        // the sun picked (Streak) is the Countries world's: another map starts on its own caption
+        map.sunPicked = false
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview(); UploadState.shared.close() }
         // mid-finding the wheel stops the read (leaving the review and closing do nothing then; the review would have
@@ -465,7 +472,8 @@ struct ContentView: View {
         head.quickStamp = false
         if Sideways.shared.on { Sideways.shared.leave() }
         if head.history, old != new {
-            if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(fast: true) }
+            // (the line goes at once: a mode change moves nothing, and the old map's line never draws back over the new)
+            if old == .pins { PinsMapState.shared.history(false) } else { map.historyOff(instant: true) }
             // the water back from history height at once (a mode change moves nothing)
             if water.historyUp { water.historyUp = false; if water.stop == .quarter { water.jump(.quarter) } }
             head.history = false

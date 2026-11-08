@@ -16,7 +16,7 @@ final class DetailsState {
     var want = 1
     @ObservationIgnored private var start: (StampDetails, Int, Bool)?
     @ObservationIgnored private var wishStart: (WishDetails, Int)?
-    @ObservationIgnored private var opening = false
+    @ObservationIgnored private(set) var opening = false
 
     var isOpen: Bool { key != nil }
     /// closing back to the Stamped list (A4.21 reversed): the sheet's words roll out for 0.26 s before it closes
@@ -25,7 +25,7 @@ final class DetailsState {
     /// `lived`: opened with Lived here on (a hold menu's Lived here, 11.5)
     func open(_ key: PlaceKey, name: String, water: Water, lived livedOn: Bool = false) {
         // one thing in the water at a time: not over Verify
-        guard self.key == nil, !opening, !VerifyState.shared.isOpen else { return }
+        guard self.key == nil, !opening, !VerifyState.shared.isOpen, !VerifyState.shared.opening else { return }
         opening = true
         Task {
             defer { opening = false }
@@ -47,8 +47,13 @@ final class DetailsState {
     }
 
     /// closed (pulled down, a tap off): kept, written once; nothing changed, nothing written (no undo drop)
+    /// rows whose × was tapped and that are still rolling out: taken out of the details now if Details closes first
+    /// (the copy written on close kept them, and the row came back)
+    @ObservationIgnored var pendingDrops: [String: () -> Void] = [:]
     func close(water: Water, now: Bool = false) {
         guard let key else { return }
+        let drops = pendingDrops; pendingDrops = [:]
+        drops.values.forEach { $0() }
         let rolled = rollingOut
         if !now {
             guard !rollingOut else { return }
@@ -212,7 +217,8 @@ struct DetailsSheet: View {
                 if let id {
                     if water.stop != .full { water.go(.full) }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .center) } }
-                } else if water.details, water.stop == .full {
+                } else if water.details, water.stop == .full, !water.stampedList {
+                    // (opened from the Stamped list it stays at full, the list's height: lower was the list's pull down)
                     water.go(.half)
                 }
             }
@@ -268,7 +274,7 @@ struct DetailsSheet: View {
             ForEach(1 ... 5, id: \.self) { n in
                 Star().fill(n <= s.want ? Palette.ink : Palette.ink.opacity(0.15))
                     .frame(width: 24, height: 24)
-                    .frame(width: 40, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         if n == s.want && n == 1 { Feel.refuse(); return }
@@ -621,10 +627,12 @@ struct DetailsSheet: View {
     private func removeRow(_ k: String, index: @escaping () -> Int?, drop: @escaping (Int) -> Void) {
         Feel.lift()
         rolling.insert(k)
+        s.pendingDrops[k] = { if let j = index() { drop(j) } }
         DispatchQueue.main.async {
             withAnimation(.smooth(duration: 0.26)) { _ = leaving.insert(k) }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) {
-                if let j = index() { withAnimation(Motion.quick) { drop(j) } }
+                // (not if Details closed meanwhile and took it out already)
+                if s.pendingDrops.removeValue(forKey: k) != nil, let j = index() { withAnimation(Motion.quick) { drop(j) } }
                 leaving.remove(k); rolling.remove(k)
             }
         }
@@ -790,7 +798,7 @@ struct DetailsSheet: View {
             ForEach(1 ... 5, id: \.self) { n in
                 Star().fill(n <= (s.d.stars ?? 0) ? Palette.ink : Palette.ink.opacity(0.15))
                     .frame(width: 24, height: 24)
-                    .frame(width: 40, height: 44)
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
                     .onTapGesture { Feel.tap(); s.d.stars = s.d.stars == n ? nil : n }
             }

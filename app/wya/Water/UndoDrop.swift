@@ -59,10 +59,12 @@ struct UndoDrop: View {
         .accessibilityHidden(!up)
         // with a stamping card up the drop waits and rises as the card closes (4.2.3: the card closes keeping every
         // change, then the drop rises), so it never sits on the card's Details | Verify?
-        .onChange(of: marks.changes) { _, _ in if card.isOpen { pending = true } else { rise() } }
-        .onChange(of: card.isOpen) { _, open in if !open, pending { pending = false; rise() } }
+        // (a region's, town's or thing's card the same: its Details | Verify? row is where the drop rises)
+        .onChange(of: marks.changes) { _, _ in if card.isOpen || regionCard.isOpen { pending = true } else { rise() } }
+        .onChange(of: card.isOpen || regionCard.isOpen) { _, open in if !open, pending { pending = false; rise() } }
     }
     @State private var card = CardState.shared
+    @State private var regionCard = RegionCardState.shared
     private static let icon = "undo-stroke"
     private static let hasIcon = IC5.all[icon] != nil || IC5.drawn[icon] != nil
     @State private var pending = false

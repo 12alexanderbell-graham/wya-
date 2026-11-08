@@ -18,10 +18,15 @@ final class VerifyState {
     var consent: String?
 
     var isOpen: Bool { key != nil }
+    /// reading the place's proof (Details is refused meanwhile, as Verify is while Details reads)
+    @ObservationIgnored private(set) var opening = false
 
     func open(_ key: PlaceKey, name: String, place: Int, water: Water) {
-        guard self.key == nil, !DetailsState.shared.isOpen else { return }
+        // one thing in the water at a time: not over Details, nor while Details is still reading its place
+        guard self.key == nil, !opening, !DetailsState.shared.isOpen, !DetailsState.shared.opening else { return }
+        opening = true
         Task {
+            defer { opening = false }
             proof = await MarkStore.shared.verification(key)
             hereWord = nil; consent = nil; finding = false
             self.name = name
