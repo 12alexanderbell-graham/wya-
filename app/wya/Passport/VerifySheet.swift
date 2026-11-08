@@ -142,12 +142,20 @@ struct VerifySheet: View {
             .onTapGesture {
                 guard let key = s.key else { return }
                 Feel.tap()
-                let n = s.name
+                let n = s.name, pl = s.place
                 s.close(water: water)
                 Task {
                     // after the water is back down (nothing moves into the card while it changes)
                     try? await Task.sleep(for: .milliseconds(450))
-                    await MarkStore.shared.unstamp(key, name: n)
+                    // the same unstamp as the card's Stamped: a region takes back the parents stamped only through it,
+                    // a town or thing its country stamped only through it (8 Nov answer 13)
+                    if key.kind == .region, let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
+                        await RegionStamps.unstamp(u, in: sc)
+                    } else if key.kind == .town || key.kind == .thing, let i = pl, let w = map.world, i < w.places.count {
+                        await TownStamps.unstamp(key, name: n, cc: w.places[i].id.lowercased())
+                    } else {
+                        await MarkStore.shared.unstamp(key, name: n)
+                    }
                     Feel.lift()
                     CardState.shared.order = await MarkStore.shared.passportOrder()
                 }

@@ -237,7 +237,10 @@ struct SheetContent: View {
             // the name and number: at full they stay under the head
             // THE REGION MAP'S LINE fills the 25% water from the top where the Countries caption's name sits (its first
             // line 28 pt under the water's edge), not a small block in its middle
-            if !Perf.shared.off.contains("caption"), let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) {
+            // (history up on a region map: the journey's caption takes the level line's place, its dates and count as
+            // everywhere else, 8 Nov answer 15)
+            if !Perf.shared.off.contains("caption"), !(water.historyUp && map.historyInfo != nil),
+               let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) {
                 rl
                     // (at full under the head, as every caption: never in the head's row)
                     .padding(.top, max(L.headBottom + 10, form.top + 18))
@@ -268,7 +271,7 @@ struct SheetContent: View {
                     }
                 }
             }
-            if !Perf.shared.off.contains("caption"), map.regionScene == nil, !water.pageSheet, !map.pinsMode {
+            if !Perf.shared.off.contains("caption"), map.regionScene == nil || (water.historyUp && map.historyInfo != nil), !water.pageSheet, !map.pinsMode {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
@@ -328,7 +331,23 @@ struct SheetContent: View {
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
                     .contextMenu {
                         if map.placesMode {
-                            // Places: the map's own list (the continents are Countries' menu; Places picks its maps on the shelf)
+                            // Places: your maps (8 Nov answer 8), Everywhere, the countries you have places in, the
+                            // collections; then this map's stamped list
+                            let counts = PlacesMaps.counts()
+                            Section("Maps") {
+                                Button("Everywhere") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.everywhere) } }
+                                    .disabled(map.placesPick == .everywhere)
+                                if let w = map.world {
+                                    ForEach(w.places.indices.filter { (counts[w.places[$0].id.lowercased()] ?? 0) > 0 }, id: \.self) { i in
+                                        Button(w.places[i].n) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.country(i)) } }
+                                            .disabled(map.placesPick == .country(i))
+                                    }
+                                }
+                                ForEach(CollectionStore.shared.all, id: \.id) { c in
+                                    Button(c.title) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.collection(c.id)) } }
+                                        .disabled(map.placesPick == .collection(c.id))
+                                }
+                            }
                             Button("Its stamped list") { if listCount > 0 { water.openList() } else { Feel.refuse() } }
                         } else if let here {
                             // the planet's own menu (11.5), the continent you are on unavailable as the current row
