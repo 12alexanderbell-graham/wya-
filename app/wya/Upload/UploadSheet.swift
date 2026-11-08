@@ -129,6 +129,7 @@ final class UploadState {
     @ObservationIgnored private weak var water: Water?
 
     static let names = [["Photos", "Location"], ["Pick", "All"], ["File", "Here"]]
+    static let icons = [["photo", "locate"], ["photo", "photos"], ["file", "locate"]]
     static let spoken = [["Photos", "Location"], ["Pick photos", "All photos"], ["Location history file", "Where I am now"]]
 
     /// A9.1 and A9.2: the water to 25% (it stays if it is there), the caption's words out, then the pair in
@@ -1570,9 +1571,11 @@ struct UploadSheet: View {
         let busy = (u.locating && u.step == 2 && side == 1) || (u.photosBusy != nil && u.photosBusy == u.step * 2 + side)
         return VStack(spacing: 12) {
             ZStack {
-                ToolRing(width: 2)
-                    .fill(Palette.ink, style: FillStyle(eoFill: true))
-                    .frame(width: 22, height: 22)
+                // EACH CHOICE ITS OWN ICON (they were empty rings, read as unticked boxes; 8 Nov: drawn or reused,
+                // never SF Symbols): Photos and Pick a photo, All a stack of them, Location and Here the locate mark,
+                // File the file
+                UploadChoiceIcon(key: UploadState.icons[u.step][side])
+                    .frame(width: 24, height: 24)
                     .opacity(grown && !busy ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 // Here waiting, or Pick's or All's photos being read: the small working mark is there in the icon's
                 // place (nothing grows from a point, 8 Nov)
@@ -1672,5 +1675,51 @@ struct RowSnap: ScrollTargetBehavior {
         let y = (target.rect.minY / row).rounded() * row
         // the end rounded up to a whole row (the list's own end clamps the rest)
         target.rect.origin.y = min(max(0, y), (top / row).rounded(.up) * row)
+    }
+}
+
+/// an upload choice's icon: the set's own where it has one (locate, file), drawn here where it has none (a photo, a
+/// stack of photos), in the set's line weight (1.6 pt at 24 pt), ink only
+struct UploadChoiceIcon: View {
+    let key: String
+    var body: some View {
+        switch key {
+        case "photo": PhotoGlyph(stacked: false).stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+        case "photos": PhotoGlyph(stacked: true).stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
+        default: Icon5(key: key, ink: Palette.ink, size: 22)
+        }
+    }
+}
+
+/// a photo: a rounded frame with a hill and a sun in it; stacked, a second frame showing behind it, up and to the right
+struct PhotoGlyph: Shape {
+    let stacked: Bool
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let w = r.width, h = r.height
+        let f = stacked ? CGRect(x: r.minX + 1, y: r.minY + h * 0.28, width: w * 0.78, height: h * 0.62)
+                        : CGRect(x: r.minX + 1, y: r.minY + h * 0.18, width: w - 2, height: h * 0.66)
+        p.addRoundedRect(in: f, cornerSize: CGSize(width: 3, height: 3), style: .continuous)
+        // the hill: from the frame's lower left up to a peak and down to its right
+        p.move(to: CGPoint(x: f.minX + 1, y: f.maxY - f.height * 0.18))
+        p.addLine(to: CGPoint(x: f.minX + f.width * 0.42, y: f.minY + f.height * 0.48))
+        p.addLine(to: CGPoint(x: f.minX + f.width * 0.62, y: f.minY + f.height * 0.68))
+        p.addLine(to: CGPoint(x: f.minX + f.width * 0.74, y: f.minY + f.height * 0.56))
+        p.addLine(to: CGPoint(x: f.maxX - 1, y: f.maxY - f.height * 0.2))
+        // the sun
+        let sr = f.width * 0.09
+        p.addEllipse(in: CGRect(x: f.maxX - f.width * 0.3 - sr, y: f.minY + f.height * 0.22 - sr, width: 2 * sr, height: 2 * sr))
+        if stacked {
+            // the frame behind: its top and right edges only, offset up and right
+            let o: CGFloat = w * 0.16
+            p.move(to: CGPoint(x: f.minX + o, y: f.minY))
+            p.addLine(to: CGPoint(x: f.minX + o, y: f.minY - o + 3))
+            p.addQuadCurve(to: CGPoint(x: f.minX + o + 3, y: f.minY - o), control: CGPoint(x: f.minX + o, y: f.minY - o))
+            p.addLine(to: CGPoint(x: f.maxX + o - 3, y: f.minY - o))
+            p.addQuadCurve(to: CGPoint(x: f.maxX + o, y: f.minY - o + 3), control: CGPoint(x: f.maxX + o, y: f.minY - o))
+            p.addLine(to: CGPoint(x: f.maxX + o, y: f.maxY - o))
+            p.addLine(to: CGPoint(x: f.maxX, y: f.maxY - o))
+        }
+        return p
     }
 }

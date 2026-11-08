@@ -360,38 +360,19 @@ final class Water {
         let lo = L.top(.full), hi = L.top(.closed)
         // past full it does not go at all: no give and no spring back at the top
         if t < lo { t = lo }
-        // the upload sheet has no 50% while choosing: pulled up, the water gives 12 pt and no more (9.3)
-        if upload, UploadState.shared.phase != .review, t < L.top(.quarter) { t = L.top(.quarter) - Flow.rubber(L.top(.quarter) - t, 12) }
-        // HISTORY HEIGHT (13.4): the line needs the map, so pulled up the water gives 12 pt and no more
-        // (not with Details or Verify up over it, both `details`: a sheet of their own, at 50% or full)
-        if historyUp, !stampedList, !details, t < restTop(.quarter) { t = restTop(.quarter) - Flow.rubber(restTop(.quarter) - t, 12) }
-        // under the capsule it does not go either
-        if t > hi { t = hi + Flow.rubber(t - hi, 10) }
-        // from 50% up to full it is harder: above half the water follows at 0.75 for the first 60 points, then 1:1,
-        // with a tick at the point past which a release goes to full (BUILD-BOOK 2.3)
-        let Hf = L.top(.half)
-        if g.from != .full && t < Hf {
-            let over = Hf - t
-            t = Hf - (over <= 60 ? over * 0.75 : 45 + (over - 60))
-            let past = t <= Hf * 0.55
-            if past != pastCommit { pastCommit = past; Feel.tick() }
-        }
+        // a plain sheet under the finger, one to one, with hard ends: no give past a stop, no harder band above 50%,
+        // no ticks, no droplet, no lag behind the finger
+        // the upload sheet has no 50% while choosing (9.3), and at history height the line needs the map (13.4):
+        // pulled up, it stays at its own height
+        if upload, UploadState.shared.phase != .review { t = max(t, L.top(.quarter)) }
+        if historyUp, !stampedList, !details { t = max(t, restTop(.quarter)) }
+        // over the plain Countries map the water goes no higher than 50% (no full-screen solar system); full is for
+        // what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
+        if !fullAllowed { t = max(t, L.top(.half)) }
+        if t > hi { t = hi }
         fingerTop = t
-        // pulled out of the capsule, the first 40 points are only the droplet; then the body fills in behind it
-        var target = t
-        if g.from == .closed {
-            let s = hi - t
-            if s > 0 { target = hi - Water.behind(s) }
-        }
-        body.target = target
-        body.response = 0.16
-        body.damping = 1
-        // a soft tick at each height it passes (once)
-        if let near = Stop.allCases.min(by: { abs(L.top($0) - t) < abs(L.top($1) - t) }),
-           abs(L.top(near) - t) < 4, near != lastPassed {
-            lastPassed = near
-            Feel.tick()
-        }
+        body.target = t
+        body.snap()
         run()
     }
 
@@ -436,28 +417,12 @@ final class Water {
             }
             return
         }
-        // a flick goes on to the next height its way, otherwise the nearest; never more than one height from where
-        // it was picked up
+        // where a release goes (a plain sheet's rule): the stop nearest to where the sheet would coast to at this
+        // speed (0.1 s of it), never more than one stop from where it was picked up
         let order = Stop.allCases
-        let here = fingerTop
-        var best = order.min(by: { abs(layout.top($0) - here) < abs(layout.top($1) - here) }) ?? .quarter
-        if abs(v) > 300 {
-            let up = v < 0
-            let cur = order.min(by: { abs(layout.top($0) - here) < abs(layout.top($1) - here) }) ?? g.from
-            let beyond = order.filter { up ? layout.top($0) < here - 6 : layout.top($0) > here + 6 }
-            if let next = up ? beyond.max(by: { layout.top($0) < layout.top($1) }) : beyond.min(by: { layout.top($0) < layout.top($1) }) {
-                best = next
-            } else { best = cur }
-        }
-        // between half and full the commit points decide (BUILD-BOOK 2.3): up from half it goes on to full only past
-        // 45% of the way or flicked faster than 1,100 pt/s; down from full it goes to half only past 35% of the way or
-        // flicked faster than 900 pt/s
-        let Hf = layout.top(.half)
-        if g.from != .full && here < Hf - 1 && v <= 300 {
-            best = (here <= Hf * 0.55 || v < -1100) ? .full : .half
-        } else if g.from == .full && here < Hf && v >= -300 {
-            best = (here >= Hf * 0.35 || v > 900) ? .half : .full
-        }
+        let projected = fingerTop + v * 0.1
+        var best = order.min(by: { abs(layout.top($0) - projected) < abs(layout.top($1) - projected) }) ?? .quarter
+        if best == .full, !fullAllowed { best = .half }
         if abs(best.rawValue - g.from.rawValue) > 1 {
             best = order[g.from.rawValue + (best.rawValue > g.from.rawValue ? 1 : -1)]
         }
@@ -468,19 +433,13 @@ final class Water {
     /// the page never bounces against the screen's edges.
     /// THE WATER'S FIRST-TIME HINT (A3.15): its top rises 24 pt and settles back, 0.8 s, the one time it moves by
     /// itself; a finger takes it from wherever it is
+    /// whether the water may be pulled to full: not over the plain Countries map
+    var fullAllowed: Bool {
+        stampedList || settings || details || upload || pageSheet || regions || (head?.mode ?? .countries) != .countries
+    }
+
     func hint() {
-        guard grab == nil else { return }
-        body.target = restTop(stop) - 24
-        // the water's own spring (one step per frame of the Clock, as its feel was tuned): about half way up at 0.2 s
-        body.response = 0.38
-        body.damping = 1
-        run()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            guard let self, self.grab == nil else { return }
-            self.body.target = self.restTop(self.stop)
-            self.body.response = 0.42
-            self.run()
-        }
+        // (no more: the water never moves by itself)
     }
 
     /// the water at a stop at once, no movement (a mode's own content swapped in, not moved)
@@ -512,13 +471,16 @@ final class Water {
             return
         }
         pendingGo = nil
+        // (full only where something fills it: over the plain Countries map 50% is the top)
+        let s = s == .full && !fullAllowed ? .half : s
         stop = s
         body.target = restTop(s)
         // Reduce Motion: the same settle, shorter (Part 19)
-        body.response = (s == .full ? 0.5 : 0.42) * (Motion.reduce ? 0.65 : 1)
+        body.response = 0.35 * (Motion.reduce ? 0.65 : 1)
         // (never past its stop: a fast fling at 0.9 let the sheet overshoot a little, 8 Nov)
         body.damping = 1
-        landingSpeed = abs(speed)
+        // (no landing haptic: a plain sheet lands silently)
+        landingSpeed = 0
         run()
     }
 
@@ -553,7 +515,8 @@ final class Water {
     private func step(_ dt: CGFloat) -> Bool {
         body.step(dt)
         // the droplet is what the body lags behind the finger, upward only, and at most 90 points
-        let lead = grab != nil ? min(90, max(0, body.value - fingerTop)) : 0
+        // (no droplet any more: the sheet is under the finger)
+        let lead: CGFloat = 0
         dropSpring.target = lead
         dropSpring.response = grab != nil ? 0.06 : 0.28
         dropSpring.step(dt)

@@ -479,6 +479,16 @@ struct PinsMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ v: MKMapView, context: Context) {
+        // Apple's look from Settings in Pins (Standard, Satellite, Hybrid; 8 Nov: Pins' settings are its own rows)
+        let look = MapSettingsStore.shared.value.pinsMap
+        if context.coordinator.look != look {
+            context.coordinator.look = look
+            switch look {
+            case "apple-satellite": v.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .flat)
+            case "apple-hybrid": v.preferredConfiguration = MKHybridMapConfiguration(elevationStyle: .flat)
+            default: v.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .flat)
+            }
+        }
         context.coordinator.sync(v, store.pins)
         context.coordinator.select(v, store.selected)
         let L = water.layout
@@ -494,6 +504,8 @@ struct PinsMapView: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate, UIDropInteractionDelegate, UIContextMenuInteractionDelegate {
+        /// Apple's look shown now (Settings in Pins)
+        var look = ""
         let water: Water
         let map: MapController
         init(water: Water, map: MapController) { self.water = water; self.map = map }
@@ -1016,12 +1028,10 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         }
     }
 
+    /// a pin dropped is simply there (no fall any more, 8 Nov answer), with the notch of setting it down
     func fall() {
-        transform = CGAffineTransform(translationX: 0, y: -57)
-        // (Reduce Motion: the same fall on the tight spring, 0.2 s, 0.4)
-        UIView.animate(withDuration: Motion.reduce ? 0.2 : 0.42, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: []) {
-            self.transform = .identity
-        } completion: { _ in Feel.notch() }
+        transform = .identity
+        Feel.notch()
     }
 
     // THE PIN'S HOLD MENU (11.5), its name over the rows built so far, in the book's groups:
@@ -1279,6 +1289,30 @@ struct PinSheet: View {
         if let p = store.pin(store.selected) {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {
+                  if picking {
+                    // CHOOSING ITS COLOUR: the sheet is the picker alone, at the height it is at (50% holds it): the colour's
+                    // name, Reset to black and Done on one line, the picker under it; nothing else is up meanwhile (the
+                    // pin's other rows, a full screen for one colour, a Share circle in the head's corner all went, 8 Nov)
+                    HStack(spacing: 16) {
+                        Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
+                        Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.headline).foregroundStyle(Palette.ink)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Spacer(minLength: 8)
+                        if p.pick != nil {
+                            Button { Feel.tap(); store.colour(p.id, nil); pick = Self.nearBlack } label: {
+                                Text("Reset").font(.body).foregroundStyle(Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Button { Feel.tap(); picking = false } label: {
+                            Text("Done").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; store.colour(p.id, c) }),
+                                 suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c) }
+                  } else {
                     section("Name") {
                         TextField("", text: Binding(get: { p.name }, set: { v in
                             if v.count > 60 { Feel.refuse() }
@@ -1293,9 +1327,9 @@ struct PinSheet: View {
                         Button {
                             Feel.tap()
                             pick = p.pick ?? Self.nearBlack
-                            picking.toggle()
-                            // the picker is taller than the room at 50%: it opens with the water at full
-                            if picking, water.stop != .full { water.go(.full) }
+                            picking = true
+                            // (the picker alone fits 50%: from 25% the water comes to 50%, from full it stays)
+                            if water.stop == .quarter || water.stop == .closed { water.go(.half) }
                         } label: {
                             HStack {
                                 // the colour's own name ("deep red"), as the picker names it
@@ -1307,18 +1341,6 @@ struct PinSheet: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        if picking {
-                            ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; store.colour(p.id, c) }),
-                                         suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c) }
-                            if p.pick != nil {
-                                Button {
-                                    Feel.tap(); store.colour(p.id, nil); picking = false
-                                } label: {
-                                    Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
                     }
                     // NOTHING CUT AT REST: below full the sheet holds what fits whole (Name, Colour, Note);
                     // Coordinates and Delete pin are at full, where it scrolls (as the picker, which needs full)
@@ -1333,6 +1355,7 @@ struct PinSheet: View {
                         .frame(minHeight: 44)
                     }
                     if whole { fullRows(p) }
+                  }
                     Color.clear.frame(height: L.H - fade + 24)
                 }
                 .padding(.horizontal, 16)
@@ -1356,7 +1379,7 @@ struct PinSheet: View {
             .onChange(of: store.selected) { _, _ in picking = false; colourIfAsked() }
             .onChange(of: store.colourAsked) { _, _ in colourIfAsked() }
             // pulled down below full, the picker goes back into its row
-            .onChange(of: water.stop) { _, s in if s != .full { picking = false } }
+            .onChange(of: water.stop) { _, s in if s == .quarter || s == .closed { picking = false } }
             .onAppear { colourIfAsked() }
             // the picker going away (closed, Reset, another pin, the water down): its moves are one undo
             .onChange(of: picking) { _, on in if on, let id = store.selected { store.colourStart(id) } else if !on { store.colourEnd() } }
@@ -1379,6 +1402,13 @@ struct PinSheet: View {
             .buttonStyle(.plain)
             .accessibilityHint("Copies the coordinates")
         }
+        // Share, a row of its own (it was a circle under the head's plus, whose arrow read as undo)
+        Button { Feel.tap(); PinStore.share(p) } label: {
+            Text("Share").font(.body).foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         Button { Feel.lift(); store.remove(p.id); water.go(.quarter) } label: {
             Text("Delete pin").font(.body).foregroundStyle(Palette.red)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)

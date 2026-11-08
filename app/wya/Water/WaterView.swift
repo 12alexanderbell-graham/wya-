@@ -163,7 +163,9 @@ struct SheetContent: View {
                 // no stars under Regions' list (the whole screen is the list there)
                 // nor in Places or Pins (the stars are the countries you have left: they mean nothing there, 7 Nov)
                 // nor over a place's page and its sheet (the page is the screen there)
-                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode || water.pageSheet {
+                if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode || water.pageSheet
+                    // nor on a country's region map (the solar system is the Countries world's; it stood in France's sheet)
+                    || map.regionScene != nil {
                     Color.clear
                 } else {
                     PlasmaStars(page: form.page, top: form.top, stars: map.placesLeft, sun: CGPoint(x: L.W / 2, y: L.H / 2), map: map,
@@ -258,9 +260,8 @@ struct SheetContent: View {
                     // the pin's sheet under its name, once the water is above 25% (8.8)
                     else if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
                         // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
-                        // under it: the Share circle beside the name, the sheet's rows 10 pt under the place line)
+                        // under it; the sheet's rows 10 pt under the place line; Share is a row of the sheet at full, and in the pin's menu)
                         PinSheet(water: water, top: cy + 6)
-                        PinShare(water: water, captionY: cy - 42)
                     } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
                         PinsList(water: water, captionY: cy)
                     }
@@ -415,6 +416,8 @@ struct SheetContent: View {
             || water.pageSheet
             // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places), and Pins' its pins
             || map.placesMode || map.pinsMode
+            // and a region map's (the system is the Countries world's; it sat in France's sheet at 50%)
+            || map.regionScene != nil
     }
     @State private var captionShown = false
 }

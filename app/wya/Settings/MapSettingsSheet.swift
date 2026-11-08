@@ -109,9 +109,40 @@ private struct SettingsList: View {
     }
 
     var body: some View {
+        if map.pinsMode { pinsRows(settings.value) } else { mainList }
+    }
+
+    /// SETTINGS IN PINS (8 Nov): Pins is Apple's map, so its settings are Apple's look only (our map's rows did nothing
+    /// there): Map, Standard, Satellite or Hybrid
+    @ViewBuilder private func pinsRows(_ s: MapSettings) -> some View {
+        let looks: [(String, String)] = [("apple-standard", "Standard"), ("apple-satellite", "Satellite"), ("apple-hybrid", "Hybrid")]
+        let now = looks.first { $0.0 == s.pinsMap }?.1 ?? "Standard"
+        // (in a scroll view as the main list: a row's words show once it is wholly in the list)
+        ScrollView(.vertical) {
+        VStack(spacing: 0) {
+            RowWords(name: "Map", value: now)
+                .onTapGesture { Feel.tap(); withAnimation(Motion.chrome) { open = open == "pinsLook" ? nil : "pinsLook" } }
+            if open == "pinsLook" {
+                ForEach(Array(looks.enumerated()), id: \.element.0) { j, l in
+                    ChoiceRow(name: l.1, picked: now == l.1, delay: Double(j) * 0.05) {
+                        Feel.tap()
+                        MapSettingsStore.shared.change { $0.pinsMap = l.0 }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { withAnimation(Motion.chrome) { if open == "pinsLook" { open = nil } } }
+                    }
+                    .transition(.identity)
+                }
+            }
+        }
+        }
+        .scrollIndicators(.hidden)
+        .toolbar(.hidden, for: .navigationBar)
+        .containerBackground(.clear, for: .navigation)
+    }
+
+    private var mainList: some View {
         let s = settings.value
         let rows = MapSettingsRows.all.filter { $0.shows(s) }
-        ScrollViewReader { proxy in
+        return ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in

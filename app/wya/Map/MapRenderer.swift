@@ -465,7 +465,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
                     let dur = 0.4 * RegionLines.slow
                     let tIn = (now - l.start - l.delay * RegionLines.slow) / dur, tOut = (now - l.start) / dur
-                    if tIn < 1 || tOut < 1 { controller.needsFrame = true }
+                    // (no drawing along any more, 8 Nov answer: the new borders are there at once when they come
+                    // and the old ones go with them)
+                    _ = tOut
+                    if tIn < 0 { controller.needsFrame = true }
                     func set(_ b: MTLBuffer?, _ count: Int, _ q: Float) {
                         guard let b, count > 0, q > 0.001 else { return }
                         var q = q
@@ -474,8 +477,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                         ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: count * 2)
                     }
                     set(linesShared, l.shared.count / 10, 1)
-                    set(linesNew, l.new.count / 10, Float(Motion.camera(max(0, tIn))))
-                    set(linesOld, l.old.count / 10, 1 - Float(Motion.camera(max(0, tOut))))
+                    set(linesNew, l.new.count / 10, tIn >= 0 ? 1 : 0)
+                    set(linesOld, l.old.count / 10, tIn >= 0 ? 0 : 1)
                 }
                 ce.endEncoding()
             }
@@ -556,7 +559,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let ck = controller.drawnContinent ?? controller.focusPlace.map { "place:\($0)" }
         if let ck { awayKey = ck }
         let goal: Float = ck == nil ? 0 : 1
-        if goal != flatTo { flatFrom = flatNow(now); flatTo = goal; flatAt = now }
+        // (at once, no fade any more: 8 Nov answer cut the continent fade)
+        if goal != flatTo { flatFrom = goal; flatTo = goal; flatAt = now }
         let flat = flatNow(now)
         if now - flatAt < 0.55 { controller.needsFrame = true }
         let menuGoal: Float = controller.regionsMenu ? 1 : 0

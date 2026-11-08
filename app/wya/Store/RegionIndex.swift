@@ -46,12 +46,20 @@ final class RegionIndex {
         let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         guard ready, q.count >= 2 else { return [] }
         if let l = last, l.q == q { return l.hits }
-        var starts: [Hit] = [], inside: [Hit] = []
+        // every name starting with it, ranked (the file's order put "Texiguat" before Texas): the whole name typed
+        // first, then the shorter name (a state's "Texas" before a town's "Texcaltitlán"); then names holding it
+        var starts: [(f: String, h: Hit)] = [], inside: [Hit] = []
         for r in rows {
-            if r.folded.hasPrefix(q) { starts.append(r.hit); if starts.count >= limit { break } }
+            if r.folded.hasPrefix(q) { starts.append((r.folded, r.hit)) }
             else if q.count >= 3, inside.count < limit, r.folded.contains(q) { inside.append(r.hit) }
         }
-        let h = Array((starts + inside).prefix(limit))
+        starts.sort { a, b in
+            let ea = a.f == q, eb = b.f == q
+            if ea != eb { return ea }
+            if a.f.count != b.f.count { return a.f.count < b.f.count }
+            return a.f < b.f
+        }
+        let h = Array((starts.map(\.h) + inside).prefix(limit))
         last = (q, h)
         return h
     }

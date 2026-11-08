@@ -472,13 +472,18 @@ struct HeadView: View {
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
+            // THE TOOLS BUTTON IS THREE DOTS (8 Nov answer A: not a plus, which also stood for zooming in and for
+            // the first tool); open, or with search open, it is the cross; on a page, Share
             Group {
-                if share > 0.001 {
-                    IconRoll(from: "plus", to: "share", p: share, ink: ink)
+                if share > 0.5 {
+                    Icon5(key: "share", ink: ink, size: 22)
+                } else if head.toolsOpen || head.searching {
+                    Icon5(key: "cross", ink: ink, size: 22)
                 } else {
-                    Icon5(key: "plus", on: head.toolsOpen || head.searching, ink: ink, size: 22)
+                    ToolDots(ink: ink)
                 }
             }
+            .transaction { $0.animation = nil }
             .frame(width: 44, height: 44)
             .contentShape(Circle())
         }
@@ -1219,12 +1224,23 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
     }
+    /// a row's leading flag (22 pt, square, as the country rows'), or its empty place
+    private func rowFlag(_ id: String?) -> some View {
+        Group {
+            if let f = id.flatMap({ Flags.square($0.lowercased()) }) { f.resizable().interpolation(.high) } else { Color.clear }
+        }
+        .frame(width: 22, height: 22)
+    }
     private func regionRow(_ h: RegionSearch.Hit?) -> some View {
         Button { regionAct(h) } label: {
             HStack(spacing: 12) {
+                // its country's flag in the flag's place: every row's name starts on one line (a town under a country
+                // started 34 pt further left)
+                rowFlag(map.regionScene.flatMap { sc in map.world.map { $0.places[sc.place].id } })
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
-                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                // (the kind word is short and always whole; it read "reg" beside a long name)
+                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).fixedSize()
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1300,6 +1316,9 @@ struct SearchResults: View {
         let country = place.flatMap { map.world?.places[$0].n } ?? ""
         return Button { anyRegionAct(h) } label: {
             HStack(spacing: 12) {
+                // its country's flag in the flag's place: every row's name starts on one line (a town under a country
+                // started 34 pt further left)
+                rowFlag(h?.place)
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
@@ -1327,6 +1346,9 @@ struct SearchResults: View {
         } ?? ""
         return Button { townAct(h) } label: {
             HStack(spacing: 12) {
+                // its country's flag in the flag's place: every row's name starts on one line (a town under a country
+                // started 34 pt further left)
+                rowFlag(h?.file)
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
@@ -1351,6 +1373,9 @@ struct SearchResults: View {
         let kind = h.map { ThingStore.kinds[min(max($0.kind, 0), 11)].capitalized } ?? ""
         return Button { thingAct(h) } label: {
             HStack(spacing: 12) {
+                // its country's flag in the flag's place: every row's name starts on one line (a town under a country
+                // started 34 pt further left)
+                rowFlag(h?.file)
                 Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 8)
                 Text(h?.file == map.placeOpenID ? kind : "\(kind) · \(country)").font(.subheadline)
@@ -1525,3 +1550,15 @@ struct SearchResults: View {
 /// the test driver's way into the head's own actions
 @MainActor enum HeadTest { static var pick: ((Int) -> Void)? }
 #endif
+
+/// the tools button's three dots (drawn: three 4.5 pt discs, 4.5 pt apart, on the icon's middle line)
+struct ToolDots: View {
+    let ink: Color
+    var body: some View {
+        HStack(spacing: 4.5) {
+            ForEach(0 ..< 3, id: \.self) { _ in Circle().fill(ink).frame(width: 4.5, height: 4.5) }
+        }
+        .frame(width: 22, height: 22)
+        .accessibilityHidden(true)
+    }
+}

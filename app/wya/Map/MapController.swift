@@ -1057,8 +1057,15 @@ final class MapController {
         let bw = Swift.max(1e-6, x1 - x0), bh = Swift.max(1e-6, y1 - y0)
         var target = Swift.min((W - 80) / bw, roomH / bh)
         target = Swift.min(target, townsK, kMax)
+        let fits = target >= kMin
         target = Swift.max(kMin, target)
-        let mid = SIMD2((x0 + x1) / 2, (y0 + y1) / 2)
+        var mid = SIMD2((x0 + x1) / 2, (y0 + y1) / 2)
+        // too wide for the screen even at the widest view (the United States to Turkey on a phone held upright): the
+        // camera goes where most of the stops are (their middle one across), never the empty middle of the span
+        if !fits, !t.stops.isEmpty {
+            let sx = t.stops.map(\.at.x).sorted()
+            mid.x = sx[sx.count / 2]
+        }
         let centre = mid + SIMD2(0, (Double(view.height) / 2 - (top + bottom) / 2) / target)
         fly(to: clamped(centre, target), k: target, dur: Self.flight)
     }

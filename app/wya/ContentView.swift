@@ -47,6 +47,11 @@ struct ContentView: View {
                         // mode change; with the water's own move otherwise)
                         .offset(x: water.regions ? 90 : 0)
                         .animation(water.modeSwitching ? nil : Motion.chrome, value: water.regions)
+                        // a card or the passport book up: the column is not drawn over its page (it sat on the card's right
+                        // edge); it is simply not there, and back when they go
+                        .opacity(cardsUp ? 0 : 1)
+                        .allowsHitTesting(!cardsUp)
+                        .transaction { $0.animation = nil }
                 }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)
@@ -271,6 +276,9 @@ struct ContentView: View {
                 if head.quickStamp { if !UploadState.shared.stampWaiting(i) { Self.quickStamp(i, map: map) }; return }
                 // the tap that put the book away opens no card (one press, one job)
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
+                // history on: a tap on a country opens nothing (the journey's line and its capsules are what is up;
+                // 8 Nov answer)
+                if head.history { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
             // APPLE'S HOLD MENU ON A COUNTRY (Part 11.5)
@@ -722,6 +730,9 @@ struct ContentView: View {
 
     /// `instant` for a mode change: the card, its region twin and the book are simply gone (it swaps the content and
     /// moves nothing; they folded away over the new mode's content, 8 Nov)
+    /// a stamping card, a region's card or the book over the map
+    private var cardsUp: Bool { CardState.shared.isOpen || RegionCardState.shared.isOpen || BookState.shared.isOpen }
+
     private func closeCard(instant: Bool = false) {
         BookState.shared.close(instant: instant)
         DetailsState.shared.close(water: water)
