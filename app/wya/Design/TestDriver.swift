@@ -12,6 +12,8 @@ final class TestDriver {
     weak var head: HeadState?
     private var lastID = ""
     private var lostOwner = false
+    /// the command file is being read (off the main thread), since when, and whether a stuck read was said
+    private var reading = false, readSince = 0.0, saidStuck = false
     /// where the whole content is on screen (to see whether the keyboard moves it)
     var contentFrame: CGRect = .zero
     /// the session put back as after the system ended the app (19.2): `session restore`
@@ -40,29 +42,59 @@ final class TestDriver {
         let path = Snap.dir + "/cmd.txt"
         // a command left over from the last run is not run again
         lastID = (try? String(contentsOfFile: path, encoding: .utf8))?.split(separator: "\n").first.map(String.init) ?? ""
+        // (8 Nov 01:20: the read itself sometimes never came back, the file in the synced folder held by something
+        // outside the app, and the whole app stood still with it; now it is read off the main thread, one read at a
+        // time, and a read that hangs only stops the commands, said once in the log)
+        let queue = DispatchQueue(label: "testdriver.read", qos: .userInitiated)
+        let ownerPath = Snap.dir + "/owner.txt"
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
             MainActor.assumeIsolated {
-                if !Snap.isOwner {
-                    // another copy of the app (another simulator) took the test files over: say so once
-                    if !self.lostOwner {
-                        self.lostOwner = true
-                        let o = (try? String(contentsOfFile: Snap.dir + "/owner.txt", encoding: .utf8)) ?? "unreadable"
-                        NSLog("wya test driver: owner is now %@, I am %@", o, Snap.me)
+                if self.reading {
+                    if !self.saidStuck, CACurrentMediaTime() - self.readSince > 3 {
+                        self.saidStuck = true
+                        NSLog("wya test driver: reading cmd.txt has not come back for 3 s")
                     }
                     return
                 }
-                guard let s = try? String(contentsOfFile: path, encoding: .utf8) else { return }
-                var lines = s.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }
-                guard let id = lines.first, id != self.lastID else { return }
-                self.lastID = id
-                lines.removeFirst()
-                NSLog("wya test driver runs %@", lines.joined(separator: " | "))
-                // "quiet" anywhere in the commands: no screen grabs (measuring lag, the grabs would be the lag)
-                Snap.activeUntil = lines.contains("quiet") ? 0 : CACurrentMediaTime() + 20
-                self.run(lines)
+                self.reading = true; self.readSince = CACurrentMediaTime()
+                queue.async {
+                    let s = try? String(contentsOfFile: path, encoding: .utf8)
+                    let owner = try? String(contentsOfFile: ownerPath, encoding: .utf8)
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            self.reading = false
+                            if self.saidStuck { self.saidStuck = false; NSLog("wya test driver: cmd.txt read again") }
+                            self.took(s, owner: owner)
+                        }
+                    }
+                }
             }
         }
         #endif
+    }
+
+    /// the command file as read: run it when its id is new and it is whole (its last line "end", so a file read
+    /// while it was being written is left for the next read)
+    private func took(_ s: String?, owner: String?) {
+        if let owner { Snap.ownerSeen = owner }
+        if let owner, owner != Snap.me {
+            // another copy of the app (another simulator) took the test files over: say so once
+            if !lostOwner {
+                lostOwner = true
+                NSLog("wya test driver: owner is now %@, I am %@", owner, Snap.me)
+            }
+            return
+        }
+        guard let s else { return }
+        var lines = s.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard let id = lines.first, id != lastID, lines.last == "end" else { return }
+        lastID = id
+        lines.removeFirst()
+        lines.removeLast()
+        NSLog("wya test driver runs %@", lines.joined(separator: " | "))
+        // "quiet" anywhere in the commands: no screen grabs (measuring lag, the grabs would be the lag)
+        Snap.activeUntil = lines.contains("quiet") ? 0 : CACurrentMediaTime() + 20
+        run(lines)
     }
 
     private func run(_ lines: [String]) {
@@ -208,6 +240,8 @@ final class TestDriver {
                     }
                 case "burst": Snap.burst(ms: Int(a) ?? 1000)
                 case "quiet": break
+                // block ms: the main thread held that long (to see the hang watch say where it is)
+                case "block": Thread.sleep(forTimeInterval: (Double(a) ?? 4000) / 1000)
                 // searchpick <id>: that place's search result picked (Head's pick)
                 // pins drop x y (a hold there) | pins select <n> | pins none: Pins' map without a finger
                 case "pins":

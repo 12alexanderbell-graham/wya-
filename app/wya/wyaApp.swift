@@ -11,7 +11,7 @@ struct wyaApp: App {
             }
         }
         Snap.start()
-        Task { @MainActor in Hitches.start() }
+        Task { @MainActor in Hitches.start(); HangWatch.start() }
     }
 
     var body: some Scene {

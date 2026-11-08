@@ -23,10 +23,10 @@ enum Snap {
     nonisolated(unsafe) static var writing = false
     /// another copy of the app has taken the test files over; a moment when the file can't be read (iCloud busy with
     /// it) is not that: grabs stopped for good on such a moment, which looked like the app freezing
-    static var isOwner: Bool {
-        guard let o = try? String(contentsOfFile: dir + "/owner.txt", encoding: .utf8) else { return true }
-        return o == me
-    }
+    /// (no longer read here on the main thread, where a read the synced folder held stopped the whole app; the test
+    /// driver reads it with the commands, off the main thread, and leaves what it found here)
+    nonisolated(unsafe) static var ownerSeen: String?
+    static var isOwner: Bool { ownerSeen.map { $0 == me } ?? true }
 
     static func start() {
         #if targetEnvironment(simulator) && DEBUG
