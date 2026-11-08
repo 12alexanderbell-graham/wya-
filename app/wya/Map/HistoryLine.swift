@@ -620,6 +620,7 @@ struct HistoryBar: View {
     let map: MapController
     let width: CGFloat
     @State private var lastEnd = 0
+    @GestureState private var thumbLive = false
     /// the track's ends (the thumbs' centres can reach them)
     private var inset: CGFloat { 14 }
 
@@ -630,6 +631,18 @@ struct HistoryBar: View {
             let lo = x(info.lo), hi = x(info.hi)
             let trackY: CGFloat = 16
             ZStack(alignment: .topLeading) {
+                // THE BAR'S MENU on the bar behind the thumbs only (8 Nov: on the whole bar, a press and pause on a thumb
+                // opened it and dropped the thumb)
+                Color.clear
+                    .frame(width: width, height: 50)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        // LATEST TRIP (13.4): the latest run of days away from home; with no home yet (Profile), the
+                        // last 12 months, as the book's fallback
+                        Button("Latest trip") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
+                        Button("This year") { map.setHistoryRange(lo: max(info.first, info.dayNumber(LocalDay(y: info.lastYear, m: 1, d: 1))), hi: info.last) }
+                        Button("All time") { map.setHistoryRange(lo: info.first, hi: info.last) }
+                    }
                 Capsule().fill(Palette.ink.opacity(0.12))
                     .frame(width: width - 2 * inset + 6, height: 6).position(x: width / 2, y: trackY)
                 Capsule().fill(Palette.ink)
@@ -650,13 +663,6 @@ struct HistoryBar: View {
             }
             .frame(width: width, height: 50)
             .coordinateSpace(.named("historybar"))
-            .contextMenu {
-                // LATEST TRIP (13.4): the latest run of days away from home; with no home yet (Profile), the last 12
-                // months, as the book's fallback
-                Button("Latest trip") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
-                Button("This year") { map.setHistoryRange(lo: max(info.first, info.dayNumber(LocalDay(y: info.lastYear, m: 1, d: 1))), hi: info.last) }
-                Button("All time") { map.setHistoryRange(lo: info.first, hi: info.last) }
-            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Range")
             .accessibilityValue("\(info.text(info.lo)) to \(info.text(info.hi))")
@@ -680,6 +686,7 @@ struct HistoryBar: View {
             .frame(width: 44, height: 44).contentShape(Rectangle())
             .position(x: at, y: y)
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("historybar"))
+                .updating($thumbLive) { _, live, _ in live = true }
                 .onChanged { v in
                     let share = Double((v.location.x - inset) / (width - 2 * inset))
                     var d = info.first + Int((share * Double(info.last - info.first)).rounded())
@@ -691,6 +698,10 @@ struct HistoryBar: View {
                     else { map.setHistoryRange(lo: info.lo, hi: max(d, info.lo), live: true) }
                 }
                 .onEnded { _ in lastEnd = 0; map.setHistoryRange(lo: info.lo, hi: info.hi) })
+            // a drag cancelled with no end: the range is set where the thumb was let go, as on an end
+            .onChange(of: thumbLive) { _, live in
+                if !live, let i = map.historyInfo { lastEnd = 0; map.setHistoryRange(lo: i.lo, hi: i.hi) }
+            }
     }
 }
 

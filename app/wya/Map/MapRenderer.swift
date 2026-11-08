@@ -1278,6 +1278,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         #endif
         // locked: no menu; the lift refuses the hold (finish) (11.7)
         if c.locked { return nil }
+        // a tap then a hold is a one-finger zoom, never a hold (its menu opened over the zoom, 8 Nov)
+        if zoomAnchor != nil { return nil }
         // THE JOURNEY (13.4): held on its line, a leg or a capsule, the journey's own menu
         if c.historyTrack != nil, historyLine.hit(location, c) != nil, let menu = historyLine.menu(c) {
             menuTarget?.removeFromSuperview()
