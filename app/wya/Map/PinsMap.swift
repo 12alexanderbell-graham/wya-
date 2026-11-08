@@ -1028,7 +1028,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         }
     }
 
-    /// a pin dropped is simply there (no fall any more, 8 Nov answer), with the notch of setting it down
+    /// a pin dropped is simply there (no fall any more, 8 Nov), with the notch of setting it down
     func fall() {
         transform = .identity
         Feel.notch()

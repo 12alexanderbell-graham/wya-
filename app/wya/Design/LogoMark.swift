@@ -18,7 +18,7 @@ struct LogoMark: View, Animatable {
         set { phase = newValue }
     }
 
-    // THE CONSTRUCTION, on a 1024 square, the centre at 512 (build_wya_logo.py)
+    // THE LOGO'S CONSTRUCTION, on a 1024 square, the centre at 512 (build_wya_logo.py)
     static let phi = (1 + 5.0.squareRoot()) / 2
     static let R: CGFloat = 350
     static let k: CGFloat = 1 / CGFloat(phi * phi)
@@ -30,7 +30,7 @@ struct LogoMark: View, Animatable {
     /// the drawing: sin(rest) = k
     static let rest = asin(Double(1 / (phi * phi)))
 
-    // THE GLASS COLOURS (build_glass_svg.py COL, GLOW): body, light, deep
+    // THE LOGO GLASS COLOURS (build_glass_svg.py COL, GLOW): body, light, deep
     static let lime = (body: hex(0xd6eb38), light: hex(0xf0ff8c), deep: hex(0xb3cc14), glow: hex(0xebfb7b))
     static let blue = (body: hex(0x66a6ff), light: hex(0x9ee6ff), deep: hex(0x407af2), glow: hex(0x93d9ff))
     static let ink = (body: hex(0x0d0d0f), light: hex(0x525257))

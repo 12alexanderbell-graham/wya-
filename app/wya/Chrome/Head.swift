@@ -472,7 +472,7 @@ struct HeadView: View {
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
-            // THE TOOLS BUTTON IS THREE DOTS (8 Nov answer A: not a plus, which also stood for zooming in and for
+            // THE TOOLS BUTTON IS THREE DOTS (8 Nov: not a plus, which also stood for zooming in and for
             // the first tool); open, or with search open, it is the cross; on a page, Share
             Group {
                 if share > 0.5 {

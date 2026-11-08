@@ -1678,7 +1678,7 @@ struct RowSnap: ScrollTargetBehavior {
     }
 }
 
-/// an upload choice's icon: the set's own where it has one (locate, file), drawn here where it has none (a photo, a
+/// an upload choice's icon: the app set's own where it has one (locate, file), drawn here where it has none (a photo, a
 /// stack of photos), in the set's line weight (1.6 pt at 24 pt), ink only
 struct UploadChoiceIcon: View {
     let key: String

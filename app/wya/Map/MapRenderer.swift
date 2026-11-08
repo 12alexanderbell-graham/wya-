@@ -465,7 +465,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
                     let dur = 0.4 * RegionLines.slow
                     let tIn = (now - l.start - l.delay * RegionLines.slow) / dur, tOut = (now - l.start) / dur
-                    // (no drawing along any more, 8 Nov answer: the new borders are there at once when they come
+                    // (no drawing along any more: the new borders are there at once when they come,
                     // and the old ones go with them)
                     _ = tOut
                     if tIn < 0 { controller.needsFrame = true }
@@ -559,7 +559,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let ck = controller.drawnContinent ?? controller.focusPlace.map { "place:\($0)" }
         if let ck { awayKey = ck }
         let goal: Float = ck == nil ? 0 : 1
-        // (at once, no fade any more: 8 Nov answer cut the continent fade)
+        // (at once, no fade any more, 8 Nov)
         if goal != flatTo { flatFrom = goal; flatTo = goal; flatAt = now }
         let flat = flatNow(now)
         if now - flatAt < 0.55 { controller.needsFrame = true }

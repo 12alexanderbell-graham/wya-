@@ -276,8 +276,7 @@ struct ContentView: View {
                 if head.quickStamp { if !UploadState.shared.stampWaiting(i) { Self.quickStamp(i, map: map) }; return }
                 // the tap that put the book away opens no card (one press, one job)
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
-                // history on: a tap on a country opens nothing (the journey's line and its capsules are what is up;
-                // 8 Nov answer)
+                // history on: a tap on a country opens nothing (the journey's line and its capsules are what is up)
                 if head.history { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
