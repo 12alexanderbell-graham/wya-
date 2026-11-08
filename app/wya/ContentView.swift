@@ -386,6 +386,10 @@ struct ContentView: View {
             if CardState.shared.isOpen, s == .half || s == .full, !DetailsState.shared.isOpen, !VerifyState.shared.isOpen {
                 CardState.shared.close(map: map)
             }
+            // (a region's card the same: it stood on the 25% water and was left under the risen water, seen through it)
+            if RegionCardState.shared.isOpen, s == .half || s == .full, !DetailsState.shared.isOpen, !VerifyState.shared.isOpen {
+                RegionCardState.shared.close(map: map)
+            }
             if DetailsState.shared.isOpen || VerifyState.shared.isOpen, water.stampedList {
                 // Details or Verify opened from the list: a pull down closes them, back to the list at full (A4.21
                 // reversed)
