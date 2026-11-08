@@ -25,7 +25,11 @@ struct UndoDrop: View {
             HStack(spacing: 8) {
                 // the icon is there only while the drop is out (it just appears; nothing of it inside the water); with
                 // no undo icon drawn yet in the set, the words alone, centred (no empty slot beside them)
-                if Self.hasIcon { Icon5(key: Self.icon, ink: Palette.ink, size: 15).opacity(up ? 1 : 0) }
+                // the undo mark, drawn (8 Nov: never an SF Symbol): an arrow turning back on itself
+                UndoGlyph().stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                    .frame(width: 15, height: 15)
+                    .opacity(up ? 1 : 0)
+                    .transaction { $0.animation = nil }
                 Text(up ? words : String(repeating: "\u{2002}", count: max(1, words.count)))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
@@ -35,7 +39,7 @@ struct UndoDrop: View {
                     .minimumScaleFactor(0.75)
                     .truncationMode(.middle)
                     .contentTransition(.numericText())
-                    .frame(width: min(Self.width(words), L.capsule.width - 28 - (Self.hasIcon ? 23 : 0)))
+                    .frame(width: min(Self.width(words), L.capsule.width - 28 - 23))
             }
             .padding(.horizontal, 14)
             .frame(height: 36)
@@ -90,5 +94,23 @@ struct UndoDrop: View {
     private func sink() {
         hide?.cancel()
         withAnimation(Motion.chrome) { up = false }
+    }
+}
+
+/// the undo drop's mark: a bow over the top from right to left, its arrowhead at the left end pointing down and back
+struct UndoGlyph: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let w = r.width, h = r.height
+        // the bow: from the lower right up over the top to the left
+        p.move(to: CGPoint(x: r.minX + w * 0.86, y: r.minY + h * 0.86))
+        p.addCurve(to: CGPoint(x: r.minX + w * 0.16, y: r.minY + h * 0.42),
+                   control1: CGPoint(x: r.minX + w * 1.02, y: r.minY + h * 0.30),
+                   control2: CGPoint(x: r.minX + w * 0.42, y: r.minY + h * 0.08))
+        // the arrowhead at its end
+        p.move(to: CGPoint(x: r.minX + w * 0.10, y: r.minY + h * 0.12))
+        p.addLine(to: CGPoint(x: r.minX + w * 0.16, y: r.minY + h * 0.44))
+        p.addLine(to: CGPoint(x: r.minX + w * 0.46, y: r.minY + h * 0.36))
+        return p
     }
 }
