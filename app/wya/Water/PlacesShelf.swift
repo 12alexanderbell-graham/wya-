@@ -63,6 +63,9 @@ struct PlacesMaps: View {
         let _ = MarkStore.shared.changes
         let counts = Self.counts()
         let pick = map.placesPick
+        // below full the rows do not scroll: only whole rows show, none cut by the soft edge above the tabs (a heading
+        // only with a row under it)
+        let cut: CGFloat? = water.stop == .full ? nil : L.capsule.minY - 44 - 14
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if pick == .everywhere {
@@ -71,18 +74,19 @@ struct PlacesMaps: View {
                     let all = picks(counts)
                     let countries = all.filter { if case .country = $0 { return true } else { return false } }
                     let collections = all.filter { if case .collection = $0 { return true } else { return false } }
-                    if !countries.isEmpty { heading("Countries"); ForEach(countries, id: \.self) { p in row(p, counts) } }
-                    if !collections.isEmpty { heading("Collections"); ForEach(collections, id: \.self) { p in row(p, counts) } }
+                    if !countries.isEmpty { heading("Countries").whole(cut, need: 56); ForEach(countries, id: \.self) { p in row(p, counts).whole(cut) } }
+                    if !collections.isEmpty { heading("Collections").whole(cut, need: 56); ForEach(collections, id: \.self) { p in row(p, counts).whole(cut) } }
                 } else {
                     // INSIDE A COUNTRY, A COLLECTION OR A CONTINENT: the way back up first, then your places on this map
-                    backRow
+                    backRow.whole(cut)
                     let rows = placeRows(pick)
-                    heading("Your places")
+                    heading("Your places").whole(cut, need: 44)
                     if rows.isEmpty {
                         Text("None stamped yet").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
                             .frame(minHeight: 44, alignment: .leading)
+                            .whole(cut)
                     }
-                    ForEach(rows, id: \.key) { r in placeRow(r) }
+                    ForEach(rows, id: \.key) { r in placeRow(r).whole(cut) }
                 }
                 Color.clear.frame(height: bottom)
             }
@@ -263,6 +267,17 @@ struct PlacesMaps: View {
             return (c?.title ?? "", "\(map.stampedTowns(on: p).formatted()) of \((c?.items.count ?? 0).formatted())")
         default:
             return (p.title, places(map.stampedTowns(on: .everywhere)))
+        }
+    }
+}
+
+
+extension View {
+    /// WHOLE ROWS ONLY (a sheet below full, where its rows do not scroll): hidden when its bottom (plus `need`, the room
+    /// for what must come with it) is past `cut`, in the screen's points (nil: always shown)
+    func whole(_ cut: CGFloat?, need: CGFloat = 0) -> some View {
+        visualEffect { content, proxy in
+            content.opacity(cut.map { proxy.frame(in: .global).maxY + need > $0 ? 0 : 1 } ?? 1)
         }
     }
 }

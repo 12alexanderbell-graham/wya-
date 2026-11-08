@@ -52,8 +52,17 @@ final class PlacePageState {
         var drag: CGFloat = 0
         /// on its way back into its origin (the stack is not "up" for the water once every page is)
         var closing = false
+        /// a line that names the place itself again ("Town in Tokyo, Japan" under Tokyo) skips it: "Town in Japan"
+        static func trim(_ what: String, _ name: String) -> String {
+            for lead in ["Town in ", "City in "] where what.hasPrefix(lead) {
+                var parts = what.dropFirst(lead.count).components(separatedBy: ", ")
+                if parts.count > 1, parts[0].caseInsensitiveCompare(name) == .orderedSame { parts.removeFirst() }
+                return lead + parts.joined(separator: ", ")
+            }
+            return what
+        }
         init(key: PlaceKey, name: String, what: String, country: String, code: String?, origin: CGRect) {
-            self.key = key; self.name = name; self.what = what; self.country = country.lowercased(); self.code = code
+            self.key = key; self.name = name; self.what = Self.trim(what, name); self.country = country.lowercased(); self.code = code
             self.origin = origin
         }
         func load() {

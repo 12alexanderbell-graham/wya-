@@ -118,19 +118,18 @@ private struct SettingsList: View {
         let looks: [(String, String)] = [("apple-standard", "Standard"), ("apple-satellite", "Satellite"), ("apple-hybrid", "Hybrid")]
         let now = looks.first { $0.0 == s.pinsMap }?.1 ?? "Standard"
         // (in a scroll view as the main list: a row's words show once it is wholly in the list)
+        // its one setting's three choices are out at once (behind a row of its own they left the 50% water all but
+        // empty, 8 Nov), the current one on the black band as every choice
         ScrollView(.vertical) {
         VStack(spacing: 0) {
-            RowWords(name: "Map", value: now)
-                .onTapGesture { Feel.tap(); withAnimation(Motion.chrome) { open = open == "pinsLook" ? nil : "pinsLook" } }
-            if open == "pinsLook" {
-                ForEach(Array(looks.enumerated()), id: \.element.0) { j, l in
-                    ChoiceRow(name: l.1, picked: now == l.1, delay: Double(j) * 0.05) {
-                        Feel.tap()
-                        MapSettingsStore.shared.change { $0.pinsMap = l.0 }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { withAnimation(Motion.chrome) { if open == "pinsLook" { open = nil } } }
-                    }
-                    .transition(.identity)
+            RowWords(name: "Map", value: "")
+            ForEach(looks, id: \.0) { l in
+                ChoiceRow(name: l.1, picked: now == l.1, delay: 0) {
+                    guard now != l.1 else { return }
+                    Feel.tap()
+                    MapSettingsStore.shared.change { $0.pinsMap = l.0 }
                 }
+                .transition(.identity)
             }
         }
         }

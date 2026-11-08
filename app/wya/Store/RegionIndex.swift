@@ -47,15 +47,21 @@ final class RegionIndex {
         guard ready, q.count >= 2 else { return [] }
         if let l = last, l.q == q { return l.hits }
         // every name starting with it, ranked (the file's order put "Texiguat" before Texas): the whole name typed
-        // first, then the shorter name (a state's "Texas" before a town's "Texcaltitlán"); then names holding it
+        // first, then the first level before the second, then the shorter name (a state's "Texas" before a town's
+        // "Texcaltitlán"); then names with a later word starting with it
         var starts: [(f: String, h: Hit)] = [], inside: [Hit] = []
         for r in rows {
             if r.folded.hasPrefix(q) { starts.append((r.folded, r.hit)) }
-            else if q.count >= 3, inside.count < limit, r.folded.contains(q) { inside.append(r.hit) }
+            // (a later word starting with it: "Saint-Denis" for "denis"; never the middle of a word)
+            else if q.count >= 3, inside.count < limit, r.folded.contains(q),
+                    r.folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) }) { inside.append(r.hit) }
         }
         starts.sort { a, b in
             let ea = a.f == q, eb = b.f == q
             if ea != eb { return ea }
+            // a country's first level (states, regions) before its second (the communes that filled "fra" with Fram,
+            // Frata and Frasin, 8 Nov)
+            if a.h.row != b.h.row { return a.h.row < b.h.row }
             if a.f.count != b.f.count { return a.f.count < b.f.count }
             return a.f < b.f
         }

@@ -479,6 +479,8 @@ final class PinRoutes {
         let colour = UIAction(title: "Colour") { [weak self] _ in
             after {
                 PinStore.shared.selected = nil
+                // (the Route row keeps the water at 25%: it goes first)
+                self?.close()
                 self?.colouring = id
                 PinsMapState.shared.water?.go(.full)
             }
@@ -524,7 +526,10 @@ struct RouteRow: View {
 
     var body: some View {
         let L = water.layout
-        let chipW = min(138, (L.W - 2 * L.sheetInset - 32 - 44 - 24) / 2)
+        // the two ends share the water's width: halves, unless one name needs more and the other less (a fixed 138 pt
+        // cut "Cause-de-Cléra..." beside a near-empty "Mut", 8 Nov); a name too long for what is left is cut at its end
+        let room = L.W - 2 * L.sheetInset - 32 - 44 - 24
+        let (fromW, toW) = Self.split(room, need(.from, r.from), need(.to, r.to))
         HStack(spacing: 12) {
             Button {
                 Feel.tap()
@@ -536,11 +541,29 @@ struct RouteRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close route")
-            chip(.from, r.from, word: "From", width: chipW)
-            chip(.to, r.to, word: r.noRoute ? "No route" : "To", width: chipW)
+            chip(.from, r.from, word: "From", width: fromW)
+            chip(.to, r.to, word: r.noRoute ? "No route" : "To", width: toW)
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .position(x: L.W / 2, y: captionY)
+    }
+
+    /// the width an end's chip needs to show its words whole (its dot, 6 pt, the words, 12 pt each side)
+    private func need(_ end: PinRoutes.End, _ pin: UUID?) -> CGFloat {
+        let sub = UIFont.preferredFont(forTextStyle: .subheadline), body = UIFont.preferredFont(forTextStyle: .body)
+        if let p = r.end(pin), !(end == .to && r.noRoute) {
+            let w = (p.title as NSString).size(withAttributes: [.font: sub]).width
+            return ceil(w) + (p.pin != nil ? 18 : 0) + 24 + 2
+        }
+        let word = end == .from ? "From" : r.noRoute ? "No route" : "To"
+        return ceil((word as NSString).size(withAttributes: [.font: body]).width) + 24 + 2
+    }
+    /// halves when both fit (or neither does); else the one that needs more takes it from the other's spare room
+    static func split(_ room: CGFloat, _ a: CGFloat, _ b: CGFloat) -> (CGFloat, CGFloat) {
+        let half = room / 2
+        if a <= half && b <= half || a > half && b > half { return (half, half) }
+        if a > half { let w = min(a, room - max(b, 72)); return (w, room - w) }
+        let w = min(b, room - max(a, 72)); return (room - w, w)
     }
 
     private func chip(_ end: PinRoutes.End, _ pin: UUID?, word: String, width: CGFloat) -> some View {
@@ -551,8 +574,8 @@ struct RouteRow: View {
                 if let p, !(end == .to && r.noRoute) {
                     // a pin's colour dot; a spot on land is its name alone
                     if let pin = p.pin { Circle().fill(PinRows.colour(pin)).frame(width: 12, height: 12) }
-                    // (a little smaller before it is ever cut; cut at its end, never its middle: "Caus...lérans")
-                    Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.75).truncationMode(.tail)
+                    // (one size always; cut at its end, never its middle: "Caus...lérans")
+                    Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.tail)
                 } else {
                     Text(word).font(.body).foregroundStyle(waiting ? Palette.ink : Palette.ink.opacity(0.5))
                 }

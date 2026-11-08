@@ -1151,9 +1151,7 @@ struct SearchResults: View {
     private func settingRow(_ h: SettingsSearch.Hit?) -> some View {
         Button { settingAct(h) } label: {
             HStack(spacing: 12) {
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(h?.note ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                ResultWords(name: h?.name ?? "", notes: [h?.note ?? ""])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1176,19 +1174,7 @@ struct SearchResults: View {
                     if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
                 .frame(width: 22, height: 22)
-                // a long name ("Saint Vincent and the Grenadines") shrinks a little before it is ever cut; the kind word
-                // beside it is short and always whole
-                Text(pl?.n ?? "")
-                    .font(.body)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(Palette.ink.opacity(0.5))
-                    .lineLimit(1)
-                    .fixedSize()
+                ResultWords(name: pl?.n ?? "", notes: [note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? ""])
                     .contentTransition(.numericText())
                     .animation(Motion.quick, value: note)
             }
@@ -1237,10 +1223,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(map.regionScene.flatMap { sc in map.world.map { $0.places[sc.place].id } })
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                // (the kind word is short and always whole; it read "reg" beside a long name)
-                Text(h?.word ?? "").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).fixedSize()
+                ResultWords(name: h?.name ?? "", notes: [h?.word ?? ""])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1290,10 +1273,7 @@ struct SearchResults: View {
                     }
                 }
                 .frame(width: 22, height: 22)
-                Text(p?.title ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? "")
-                    .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                ResultWords(name: p?.title ?? "", notes: [p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? ""])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1319,9 +1299,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.place)
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                ResultWords(name: h?.name ?? "", notes: [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1349,9 +1327,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.file)
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                ResultWords(name: h?.name ?? "", notes: [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1376,10 +1352,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.file)
-                Text(h?.name ?? "").font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Spacer(minLength: 8)
-                Text(h?.file == map.placeOpenID ? kind : "\(kind) · \(country)").font(.subheadline)
-                    .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                ResultWords(name: h?.name ?? "", notes: h?.file == map.placeOpenID ? [kind] : ["\(kind) · \(country)", kind])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1517,6 +1490,8 @@ struct SearchResults: View {
         }
     }
 
+    /// a name's words (split at spaces, hyphens, apostrophes and the like)
+    static func words(_ s: String) -> [Substring] { s.split { !$0.isLetter && !$0.isNumber } }
     static func matches(map: MapController, query: String) -> [Int] {
         guard let w = map.world else { return [] }
         let typedLower = query.lowercased().trimmingCharacters(in: .whitespaces)
@@ -1524,7 +1499,7 @@ struct SearchResults: View {
         guard !q.isEmpty else { return [] }
         // in order: a name people type for it (UK, Britain), its own name starting with what was typed, another of
         // its names starting with it ("Estados Unidos Mexicanos" is Mexico, after the United States for "united"),
-        // then anything containing it
+        // then a later word of any of its names starting with it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
         if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
         let names = w.searchNames
@@ -1532,7 +1507,8 @@ struct SearchResults: View {
             let n = names[i]
             if n[0].hasPrefix(q) { own.append(i) }
             else if n.dropFirst().contains(where: { $0.hasPrefix(q) }) { other.append(i) }
-            else if n.contains(where: { $0.contains(q) }) { contains.append(i) }
+            // (a word of a name starting with it: "ed" is not in the middle of "United" or "Federation")
+            else if n.contains(where: { name in Self.words(name).contains { $0.hasPrefix(q) } }) { contains.append(i) }
         }
         // its names in other languages ("Allemagne", "ドイツ") last, so they never push an English match down
         var language: [Int] = []
@@ -1560,5 +1536,34 @@ struct ToolDots: View {
         }
         .frame(width: 22, height: 22)
         .accessibilityHidden(true)
+    }
+}
+
+
+/// A RESULT'S WORDS: its name in body, one line, at one size in every row; then the grey words, as many as fit whole
+/// (the longest of `notes` that fits, else a shorter one, else none), never cut to an ellipsis beside the name. A name
+/// too long for the row on its own is the only thing ever cut.
+private struct ResultWords: View {
+    let name: String
+    /// the grey words, longest first ("Station · Germany", "Station")
+    let notes: [String]
+
+    var body: some View {
+        let n = notes.filter { !$0.isEmpty }
+        ViewThatFits(in: .horizontal) {
+            if n.count > 0 { line(n[0]) }
+            if n.count > 1 { line(n[1]) }
+            line(nil)
+        }
+    }
+
+    private func line(_ note: String?) -> some View {
+        HStack(spacing: 8) {
+            Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+            Spacer(minLength: 8)
+            if let note {
+                Text(note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+        }
     }
 }

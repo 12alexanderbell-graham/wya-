@@ -231,6 +231,7 @@ struct ContentView: View {
             // a tap on the sea at the review leaves it, the finds waiting (9.5)
             map.onSeaTap = { [water] in if water.upload { UploadState.shared.leaveReview() } }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
+            water.regionMapUp = { [map] in map.regionScene != nil }
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
                 WhatsHere.shared.close()

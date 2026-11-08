@@ -371,6 +371,8 @@ final class Water {
         // over the plain Countries map the water goes no higher than 50% (no full-screen solar system); full is for
         // what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
         if !fullAllowed { t = max(t, L.top(.half)) }
+        // a country's region map with nothing open: its levels line at 25% is all there is (50% was empty glass)
+        if !halfAllowed { t = max(t, L.top(.quarter)) }
         if t > hi { t = hi }
         fingerTop = t
         body.target = t
@@ -425,6 +427,7 @@ final class Water {
         let projected = fingerTop + v * 0.1
         var best = order.min(by: { abs(layout.top($0) - projected) < abs(layout.top($1) - projected) }) ?? .quarter
         if best == .full, !fullAllowed { best = .half }
+        if !halfAllowed, best == .half || best == .full { best = .quarter }
         if PinRoutes.shared.open, best == .half || best == .full { best = .quarter }
         if abs(best.rawValue - g.from.rawValue) > 1 {
             best = order[g.from.rawValue + (best.rawValue > g.from.rawValue ? 1 : -1)]
@@ -440,6 +443,14 @@ final class Water {
     var fullAllowed: Bool {
         stampedList || settings || details || upload || pageSheet || regions || (head?.mode ?? .countries) != .countries
     }
+
+    /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
+    var halfAllowed: Bool {
+        !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet
+          && !regions && !historyUp)
+    }
+    /// a country's region map is on screen (set once by the screen)
+    @ObservationIgnored var regionMapUp: () -> Bool = { false }
 
     func hint() {
         // (no more: the water never moves by itself)
@@ -475,7 +486,10 @@ final class Water {
         }
         pendingGo = nil
         // (full only where something fills it: over the plain Countries map 50% is the top)
-        let s = s == .full && !fullAllowed ? .half : s
+        var s = s == .full && !fullAllowed ? .half : s
+        if !halfAllowed, s == .half || s == .full { s = .quarter }
+        // the Route row is the caption's line at 25%: nothing above it (as a drag, so anything asking for more)
+        if PinRoutes.shared.open, s == .half || s == .full { s = .quarter }
         stop = s
         body.target = restTop(s)
         // Reduce Motion: the same settle, shorter (Part 19)

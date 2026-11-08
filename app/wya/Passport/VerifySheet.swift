@@ -66,6 +66,8 @@ struct VerifySheet: View {
         let top = max(form.top + 20, L.headBottom + 8)
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - top)
+        // below full only whole rows show (the last one was cut in half at 50%, 8 Nov)
+        let cut: CGFloat? = water.stop == .full ? nil : top + h + 1
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 if form.page > 0.5 || !CardState.shared.isOpen {
@@ -78,10 +80,11 @@ struct VerifySheet: View {
                     Text(p.state == "verified" ? "Verified · \(Self.wayName(p.how))" : "Waiting to send · \(Self.wayName(p.how))")
                         .font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                         .frame(minHeight: 52, alignment: .leading)
+                        .whole(cut)
                 } else {
-                    ForEach(Self.ways, id: \.id) { w in wayRow(w.id, w.name) }
+                    ForEach(Self.ways, id: \.id) { w in wayRow(w.id, w.name).whole(cut) }
                 }
-                removeRow
+                removeRow.whole(cut)
             }
             // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
             .background(WaterHandoff())
