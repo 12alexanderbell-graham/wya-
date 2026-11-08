@@ -255,19 +255,25 @@ struct SheetContent: View {
                 // a route's colour being picked takes the water (its name where the pins' caption sits)
                 if PinRoutes.shared.colouring != nil {
                     RouteColourSheet(water: water, captionY: cy)
+                } else if PinStore.shared.selected == nil {
+                    // THE DOCK (8.5): the pins' count and the tools at the water's top (the Route row and Layers' looks
+                    // in the tools' place); your saved pins and routes under it from 50%
+                    let dockTop = max(form.top, L.headBottom + 8)
+                    PinsDock(water: water, top: dockTop)
+                    if !PinRoutes.shared.open, PinsDockState.shared.tool == nil, !PinStore.shared.pins.isEmpty {
+                        PinsList(water: water, captionY: cy, top: PinsDock.bottom(dockTop))
+                    }
                 } else {
                     PinsWater(water: water, form: form, captionY: cy)
-                    // the Route row (8.6) where the dock's row will be: near the water's top
+                    // the Route row (8.6) near the water's top
                     if PinRoutes.shared.open {
                         RouteRow(water: water, captionY: cy - 30)
                     }
                     // the pin's sheet under its name, once the water is above 25% (8.8)
-                    else if PinStore.shared.selected != nil, water.stop != .quarter, water.stop != .closed {
+                    else if water.stop != .quarter, water.stop != .closed {
                         // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
                         // under it; the sheet's rows 10 pt under the place line; Share is a row of the sheet at full, and in the pin's menu)
                         PinSheet(water: water, top: cy + 6)
-                    } else if PinStore.shared.selected == nil, !PinStore.shared.pins.isEmpty {
-                        PinsList(water: water, captionY: cy)
                     }
                 }
             }

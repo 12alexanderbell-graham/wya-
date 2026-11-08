@@ -458,6 +458,8 @@ struct ContentView: View {
         water.modeSwitchedAt = CACurrentMediaTime()
         // the sun picked (Streak) is the Countries world's: another map starts on its own caption
         map.sunPicked = false
+        // Pins' dock: a tool's controls go with the mode
+        PinsDockState.shared.tool = nil
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview(); UploadState.shared.close() }
         // mid-finding the wheel stops the read (leaving the review and closing do nothing then; the review would have

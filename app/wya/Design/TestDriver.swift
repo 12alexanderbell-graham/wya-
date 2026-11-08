@@ -293,7 +293,10 @@ final class TestDriver {
                     } else if a == "routecolour", p.count > 3, let n = Int(p[2]), n < PinRoutes.shared.routes.count, let h = Double(p[3]) {
                         // pins routecolour <n> <hue>: route n in that colour, as the picker sets it
                         PinRoutes.shared.colour(PinRoutes.shared.routes[n].id, ColourPick(hue: h, light: 0.55, strength: 0.9))
-                    } else if a == "routeclose" { PinRoutes.shared.close()
+                    } else if a == "routeclose" { PinRoutes.shared.close(); PinsDockState.shared.tool = nil
+                    // pins routeempty | layers: the dock's Route and Layers tools
+                    } else if a == "routeempty" { PinRoutes.shared.openEmpty()
+                    } else if a == "layers" { PinsDockState.shared.tool = .layers
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
                         for (i, r) in PinRoutes.shared.routes.enumerated() {

@@ -1142,23 +1142,27 @@ struct PinsList: View {
     let water: Water
     /// the caption's centre
     let captionY: CGFloat
+    /// where the rows start (under the dock), else under the caption's foot
+    var top: CGFloat? = nil
     var store = PinStore.shared
 
     var body: some View {
         let L = water.layout
-        // (under the caption's foot, as Places' rows)
-        let foot = captionY + 65
+        // (under the dock, or under the caption's foot as Places' rows)
+        let foot = self.top.map { $0 - 8 } ?? captionY + 65
         let fade = L.capsule.minY - 44
-        let top = foot + 8
+        let rowsTop = foot + 8
         ScrollView(.vertical) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%;
                 // the pins need no name of their own: the caption over them already says Pins
                 let routes = PinRoutes.shared.routes
-                ForEach(store.pins.reversed()) { p in row(p) }
+                // (below full only whole rows, none cut by the soft edge over the tabs)
+                let cut: CGFloat? = water.stop == .full ? nil : L.capsule.minY - 44 - 14
+                ForEach(store.pins.reversed()) { p in row(p).whole(cut) }
                 if !routes.isEmpty {
-                    header("Routes").padding(.top, 12)
-                    ForEach(routes.reversed()) { r in routeRow(r) }
+                    header("Routes").padding(.top, 12).whole(cut, need: 56)
+                    ForEach(routes.reversed()) { r in routeRow(r).whole(cut) }
                 }
                 Color.clear.frame(height: L.H - fade + 24)
             }
@@ -1167,8 +1171,8 @@ struct PinsList: View {
         .contentMargins(.horizontal, 16, for: .scrollContent)
         .scrollIndicators(.hidden)
         .scrollDisabled(water.stop != .full)
-        .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - top))
-        .padding(.top, top)
+        .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - rowsTop))
+        .padding(.top, rowsTop)
         .frame(width: L.W, height: L.H, alignment: .top)
         .mask { PlacesShelf.band(top: foot - 8, bottom: fade, H: L.H) }
         .allowsHitTesting(water.stop != .quarter && water.stop != .closed)

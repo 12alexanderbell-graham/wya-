@@ -1264,7 +1264,9 @@ struct SearchResults: View {
         for p in PinStore.shared.pins.reversed() {
             let words = [p.title, p.place, p.note ?? ""].map(fold)
             if words.contains(where: { $0.hasPrefix(q) || $0.contains(" " + q) }) { starts.append(p) }
-            else if words.contains(where: { $0.contains(q) }) { holds.append(p) }
+            // (a later word of its name or place starting with it, after a hyphen or the like; never the middle of a
+            // word: "ed" found "Verkhnedonskoy District", 8 Nov)
+            else if words.contains(where: { w in SearchResults.words(w).contains { $0.hasPrefix(q) } }) { holds.append(p) }
         }
         return starts + holds
     }

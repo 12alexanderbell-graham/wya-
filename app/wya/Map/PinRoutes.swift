@@ -197,6 +197,11 @@ final class PinRoutes {
         if let d = try? JSONEncoder().encode(routes) { try? d.write(to: u, options: .atomic) }
     }
 
+    /// the dock's Route tool: the row opens with both ends empty, From waiting for a pin or a tap on the map
+    func openEmpty() {
+        if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1 }
+        waiting = .from
+    }
     /// Route from here / Route to here (the pin's menu): the row opens with that end set, the other waiting
     func start(_ end: End, at pin: UUID) {
         if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1 }
