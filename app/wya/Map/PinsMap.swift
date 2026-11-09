@@ -250,9 +250,16 @@ final class PinsMapState {
     private var journeyKey = ""
     /// each stop's colour and place along the line, for the renderer
     private(set) var journeyColours: ([UIColor], [CGFloat]) = ([], [])
+    /// where the map was before history framed the journey (put back when history goes off; 9 Nov audit: the map
+    /// stayed on the journey's frame, the open Atlantic, after history closed)
+    private var beforeHistory: MKMapCamera?
     @discardableResult func history(_ on: Bool) -> Bool {
+        let was = historyOn
         historyOn = on && PinStore.shared.pins.count > 1
         redrawHistory()
+        if was, !historyOn, let v = view, let back = beforeHistory { v.setCamera(back, animated: true) }
+        if !historyOn { beforeHistory = nil }
+        if !was, historyOn, let v = view { beforeHistory = v.camera.copy() as? MKMapCamera }
         // turned on: the whole journey framed between the head and the water at its stop (as on our own map, 13.4);
         // the top clears a pin's own height under the head
         if historyOn, let v = view, let j = journey, let w = water {

@@ -53,16 +53,21 @@ final class PlacePageState {
         /// on its way back into its origin (the stack is not "up" for the water once every page is)
         var closing = false
         /// a line that names the place itself again ("Town in Tokyo, Japan" under Tokyo) skips it: "Town in Japan"
-        static func trim(_ what: String, _ name: String) -> String {
+        static func trim(_ what: String, _ name: String, country: String = "") -> String {
             for lead in ["Town in ", "City in "] where what.hasPrefix(lead) {
                 var parts = what.dropFirst(lead.count).components(separatedBy: ", ")
-                if parts.count > 1, parts[0].caseInsensitiveCompare(name) == .orderedSame { parts.removeFirst() }
+                if parts[0].caseInsensitiveCompare(name) == .orderedSame {
+                    // ("Town in Tokyo" under Tokyo: its region has its name; its country instead)
+                    if parts.count > 1 { parts.removeFirst() }
+                    else if let land = Locale(identifier: "en_GB").localizedString(forRegionCode: country.uppercased()) { parts = [land] }
+                }
                 return lead + parts.joined(separator: ", ")
             }
-            return what
+            // (a thing's own line from its data starts lower case: "ancient Roman amphitheatre, ...")
+            return what.prefix(1).uppercased() + what.dropFirst()
         }
         init(key: PlaceKey, name: String, what: String, country: String, code: String?, origin: CGRect) {
-            self.key = key; self.name = name; self.what = Self.trim(what, name); self.country = country.lowercased(); self.code = code
+            self.key = key; self.name = name; self.what = Self.trim(what, name, country: country); self.country = country.lowercased(); self.code = code
             self.origin = origin
         }
         func load() {
@@ -166,8 +171,21 @@ extension PlacePageState.OnePage {
         // (its own line is already under its name; no prose repeating it)
         out.rows.append(("Kind", t.kindName.capitalized))
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
-        out.rows.append(("Where", String(format: "%.4f, %.4f", ll.lat, ll.lon)))
-        _ = cc
+        // where it is in words (the nearest town and its country), the numbers only when no town is near; the towns'
+        // index read first if it is not yet (it is read once, in the background)
+        if !TownIndex.shared.ready {
+            TownIndex.shared.load()
+            Task { @MainActor in
+                for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                if TownIndex.shared.ready, self.key.kind == .thing { self.loadThing() }
+            }
+        }
+        let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
+        if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
+            out.rows.append(("Where", [town.name, land].filter { !$0.isEmpty && $0 != town.name }.joined(separator: ", ")))
+        } else {
+            out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
+        }
         facts = out
     }
     private func seedOnly() {
@@ -200,7 +218,12 @@ extension PlacePageState.OnePage {
                 let sec = tz.secondsFromGMT(), h = abs(sec) / 3600, m = abs(sec) % 3600 / 60
                 return String(format: "UTC%@%02d:%02d", sec < 0 ? "-" : "+", h, m)
             }
-            out.rows.append(("Time zones", zones.joined(separator: ", ")))
+            // (a zone's own name next to its offset said it twice: "Japan Standard Time, UTC+09:00, UTC+09:00"; the
+            // offsets alone, each once, when there are any)
+            var seen = Set<String>()
+            let utc = zones.filter { $0.hasPrefix("UTC") }
+            let shown = (utc.isEmpty ? zones : utc).filter { seen.insert($0).inserted }
+            out.rows.append((shown.count == 1 ? "Time zone" : "Time zones", shown.joined(separator: ", ")))
         }
         if let c = f["currency"] as? [[String: Any]], let first = c.first {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
@@ -328,14 +351,24 @@ extension PlacePageState {
         var out: [Activity] = []
         var seen = Set<String>()
         let cities = town.map { [$0] } ?? (first.filter { all[$0] != nil } + all.keys.sorted().filter { !first.contains($0) })
+        var each: [[Activity]] = []
         for c in cities {
+            var mine: [Activity] = []
             for l in all[c] ?? [] {
                 let k = l["k"] as? String ?? ""
                 guard k == "do" || (town != nil && k == "see"), let n = l["n"] as? String, seen.insert(n).inserted else { continue }
                 let desc = (l["d"] as? String).map { plain($0) } ?? ""
                 let line = town == nil ? (desc.isEmpty ? c : "\(c) · \(desc)") : desc
-                out.append(Activity(name: n, line: line))
+                mine.append(Activity(name: plain(n), line: line))
             }
+            if !mine.isEmpty { each.append(mine) }
+        }
+        // a country's: one from each city in turn (the first rows were all one city's: Japan's all Hiroshima)
+        guard town == nil else { return each.flatMap { $0 } }
+        var i = 0
+        while each.contains(where: { i < $0.count }) {
+            for list in each where i < list.count { out.append(list[i]) }
+            i += 1
         }
         return out
     }
@@ -360,8 +393,19 @@ extension PlacePageState {
     /// the source's HTML entities as the characters they stand for
     static func plain(_ s: String) -> String {
         var t = s
-        for (e, c) in [("&quot;", "\""), ("&amp;", "&"), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " ")] {
+        for (e, c) in [("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
+                       ("&mdash;", "\u{2014}"), ("&ndash;", "\u{2013}"), ("&hellip;", "\u{2026}"), ("&rsquo;", "\u{2019}"),
+                       ("&lsquo;", "\u{2018}"), ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"), ("&eacute;", "é"),
+                       ("&amp;", "&")] {
             t = t.replacingOccurrences(of: e, with: c)
+        }
+        // numbered ones ("&#8212;", "&#x2014;")
+        if t.contains("&#"), let re = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);") {
+            for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
+                guard let r = Range(m.range, in: t), let hx = Range(m.range(at: 1), in: t), let num = Range(m.range(at: 2), in: t),
+                      let v = UInt32(t[num], radix: t[hx].isEmpty ? 10 : 16), let u = Unicode.Scalar(v) else { continue }
+                t.replaceSubrange(r, with: String(Character(u)))
+            }
         }
         return t
     }

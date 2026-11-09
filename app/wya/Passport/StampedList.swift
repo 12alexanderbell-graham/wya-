@@ -54,14 +54,14 @@ struct StampedList: View {
         var flag = ""
         /// an event stop's day, for the stops' order
         var day = ""
-        enum Kind { case country, town, thing, stop, yours }
+        enum Kind { case country, region, town, thing, stop, yours }
         /// a journey's row: its stop's own key (the row's id carries its place in the journey) and the stop
         var journey: HistoryTrack.Stop?
         var town: Bool { kind == .town }
         /// the place's own id (a journey's row id carries its stop; a country's flag, Details, Unstamp, the book and
         /// Share want the country's)
         var placeID: String { journey?.key.id ?? id }
-        var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .town ? .town : kind == .yours ? .yours : .thing, id)) }
+        var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .region ? .region : kind == .town ? .town : kind == .yours ? .yours : .thing, id)) }
     }
 
     /// a row's words for how often: "Twice", "3 times" ("" for once)
@@ -77,6 +77,9 @@ struct StampedList: View {
         if journeyOn { return journeyRows(w) }
         // PLACES (7.6): the Stamped list scoped to the current map, as the caption's number counts it
         if map.placesMode { return placesRows(w, index) }
+        // A COUNTRY'S REGION MAP (Regions, 4.6: "Regions' to the level"): its regions you stamped at the level on screen
+        // (9 Nov audit: the list showed your countries under France's level words)
+        if let sc = map.regionScene { return regionRows(sc, w) }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
             // a continent picked: its stamps only (20.3.2), fixed as the list opened, so a row's flight (which leaves the
@@ -92,6 +95,17 @@ struct StampedList: View {
             return Row(id: k.id, name: w.places[i].n, place: i, line: line)
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private func regionRows(_ sc: RegionScene, _ w: World) -> [Row] {
+        var index: [String: Int] = [:]
+        for (u, id) in sc.unitIDs.enumerated() { index[id] = u }
+        let flag = sc.place < w.places.count ? w.places[sc.place].id : ""
+        return marks.marks.compactMap { k, s -> Row? in
+            guard k.kind == .region, s.stamped, let u = index[k.id], u < sc.unitNames.count else { return nil }
+            let line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
+            return Row(id: k.id, name: sc.unitNames[u], place: sc.place, line: line, kind: .region, flag: flag)
+        }
     }
 
     /// history is on: the list is the journey's
@@ -385,6 +399,8 @@ struct StampedList: View {
         water.closeList(to: .quarter)
         // a journey's row: the camera frames that stop; history stays on, the water back at history height
         if let s = r.journey { map.frameHistoryStop(s); return }
+        // a region: shown on its country's region map, as a region found by search
+        if r.kind == .region, let sc = map.regionScene { map.openRegions(sc.place, row: nil, focus: r.id); return }
         // a town: the camera frames it and it darkens (as a town found by search)
         if r.town { map.showTown(file: String(r.id.prefix { $0 != "/" }), id: r.id); return }
         // a thing: its country opens and the camera comes close to it (as a thing found by search)
@@ -450,6 +466,10 @@ struct StampedList: View {
     /// rows below move up into its place
     private func unstamp(_ r: Row) {
         Feel.lift()
+        if r.kind == .region {
+            Task { await MarkStore.shared.unstamp(r.key, name: r.name) }
+            return
+        }
         if r.kind != .country {
             // with the country stamped only through it (7.4's unstamp rule)
             Task { await TownStamps.unstamp(r.key, name: r.name, cc: r.flag.lowercased()) }

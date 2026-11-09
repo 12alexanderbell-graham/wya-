@@ -633,6 +633,8 @@ final class TestDriver {
                     }
                 // row labels on: a Map settings row set as a tap on it would (id, value id)
                 case "row": if let m = map, p.count > 2 { _ = await MapSettingsRows.set(p[1], p[2], map: m) }
+                // pinslook apple-satellite: Pins' map look, as its settings row sets it (not one of the shared rows)
+                case "pinslook": MapSettingsStore.shared.change { $0.pinsMap = a }
                 // pageturn 45: the passport's leaf held at that angle (> 0 forward, < 0 the previous page coming back)
                 case "pageturn": BookState.shared.turn = Double(a) ?? 0
                 case "book":

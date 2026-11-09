@@ -1108,7 +1108,7 @@ final class MapController {
         if k == "World" { goHome(); return }
         guard let w = world else { return }
         continent = k
-        guard let f = w.contViews[k] else {
+        guard var f = w.contViews[k] else {
             // Antarctica: its own polar map is not built yet; the rest goes and the world stays where it is
             offContinent(); drawnContinent = k
             return
@@ -1119,7 +1119,18 @@ final class MapController {
         let top = Double(room.lowerBound) + 14, bottom = Double(room.upperBound) - 2
         let roomH = max(80, bottom - top)
         let s = max(W / (f.z - f.x), roomH / (f.w - f.y))
-        let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
+        var mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
+        // Oceania's frame runs east over the Pacific's islands, so its middle sat east of Australia and half of
+        // Australia went off the left edge (9 Nov audit): across, its middle is its biggest land's, Australia's
+        if k == "Oceania" {
+            var best: SIMD4<Float>?, ba: Float = 0
+            for r in w.rings where r.unit >= 0 && r.unit < w.unitConts.count && w.unitConts[r.unit].contains(k) {
+                let a = (r.box.z - r.box.x) * (r.box.w - r.box.y)
+                if a > ba { ba = a; best = r.box }
+            }
+            // (its frame's west edge ran through Western Australia: widened to hold Australia whole, 4 units over)
+            if let b = best { f.x = min(f.x, Double(b.x) - 4); mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2) }
+        }
         // in the middle of the room, always: zoomed in as far as it takes for the continent's middle to sit in the
         // room's middle with the screen still inside the world, so nothing past the world's edge is ever shown
         let H = Double(view.height), roomMid = (top + bottom) / 2

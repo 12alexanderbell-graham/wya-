@@ -1193,7 +1193,10 @@ struct SearchResults: View {
                     if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
                 .frame(width: 22, height: 22)
-                ResultWords(name: pl?.n ?? "", notes: [note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? ""])
+                // found by another of its names ("united": Mexico as United Mexican States): that name says why it is
+                // here; its kind when that does not fit
+                ResultWords(name: pl?.n ?? "", notes: [note ?? map.world.flatMap { Self.otherName($0, i, head.query) } ?? "",
+                                                       note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? ""])
                     .contentTransition(.numericText())
                     .animation(Motion.quick, value: note)
             }
@@ -1501,6 +1504,20 @@ struct SearchResults: View {
             add(w.places.indices.filter { !stamped.contains($0) && $0 != h }.sorted(by: near(h)))
         }
         return out
+    }
+
+    /// the name of place `i` that what was typed matched, when it is not its own name (nil when its own name did)
+    static func otherName(_ w: World, _ i: Int, _ query: String) -> String? {
+        let q = fold(query.trimmingCharacters(in: .whitespaces))
+        guard !q.isEmpty, i < w.places.count else { return nil }
+        let n = w.searchNames[i]
+        if n[0].hasPrefix(q) || Self.words(n[0]).contains(where: { $0.hasPrefix(q) }) { return nil }
+        let p = w.places[i]
+        let originals = ([p.official ?? ""] + p.alt).filter { !$0.isEmpty }
+        for (k, f) in n.dropFirst().enumerated() where k < originals.count {
+            if f.hasPrefix(q) || Self.words(f).contains(where: { $0.hasPrefix(q) }) { return originals[k] }
+        }
+        return nil
     }
 
     static func kind(_ k: String?) -> String {
