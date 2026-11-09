@@ -549,6 +549,14 @@ private struct PageLayer: View {
         .scrollEdgeEffectStyle(.soft, for: .top)
         // and at the bottom, under the tabs' capsule, so a row there fades instead of being cut by it
         .scrollEdgeEffectStyle(.soft, for: .bottom)
+        // (the system's edge never reached it here: the page is laid out over the whole screen) the page's own white
+        // coming up under the capsule, so rows fade into it and are never cut by its edge
+        .overlay(alignment: .bottom) {
+            LinearGradient(stops: [.init(color: Palette.white.opacity(0), location: 0), .init(color: Palette.white.opacity(0.85), location: 0.45),
+                                   .init(color: Palette.white, location: 1)], startPoint: .top, endPoint: .bottom)
+                .frame(height: L.H - L.capsule.minY + 28)
+                .allowsHitTesting(false)
+        }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
         }
         .background(Palette.white)

@@ -112,20 +112,24 @@ struct PlacesMaps: View {
             }
         }
         .padding(.top, 6)
-        // (two kinds fit at 50%: the continents under your maps, 9 Nov; at 112 pt the second was left under the edge)
-        .frame(height: 100, alignment: .top)
+        // (two kinds fit at 50%: the continents under your maps, 9 Nov; at 112 pt the second was left under the edge;
+        // 108 with names on two lines, 9 Nov audit)
+        .frame(height: 108, alignment: .top)
     }
 
     /// a map: its shape 44 pt high in a 76 pt column, its name under it
     private func item(_ p: MapController.PlacesPick, current: Bool) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 4) {
             shape(p)
                 .foregroundStyle(Palette.ink.opacity(current ? 1 : 0.45))
-                .frame(width: 64, height: 44)
+                .frame(width: 64, height: 40)
+            // (never cut: "United Kin…", "North Ame…" at rest, 9 Nov audit) up to two lines, every name in the same
+            // two-line room so the shapes stay on one line
             Text(title(p)).font(current ? .footnote.weight(.semibold) : .footnote)
                 .foregroundStyle(Palette.ink.opacity(current ? 1 : 0.7))
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(width: 76)
         .contentShape(Rectangle())
