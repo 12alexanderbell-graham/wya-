@@ -48,7 +48,10 @@ final class ThingIndex {
         }
     }
 
-    /// at most `limit` things for what was typed: a code typed whole first, then names (the open country's first)
+    /// at most `limit` things for what was typed: a code typed whole first, then names (the open country's first),
+    /// the best known first among them (the index is in the data's order: "yellowst" found a lake, a waterfall and two
+    /// airports and never the park). A name with a word that starts with what was typed counts as one that starts
+    /// with it ("baikal" finds Lake Baikal before the airport named after it).
     func hits(_ query: String, open: String?, limit: Int = 4) -> [Hit] {
         let raw = query.trimmingCharacters(in: .whitespaces)
         let q = raw.townFolded
@@ -56,16 +59,29 @@ final class ThingIndex {
         if let l = last, l.q == q, l.open == open { return l.hits }
         let code = raw.lowercased()
         var coded: [Hit] = [], home: [Hit] = [], away: [Hit] = [], homeIn: [Hit] = [], awayIn: [Hit] = []
+        var starts = Set<String>()
+        let word = " " + q
         for r in rows {
             if code.count >= 3, code.count <= 4, r.codes.contains(code) { coded.append(r.hit); continue }
             let mine = r.hit.file == open
             if r.folded.hasPrefix(q) {
-                if mine { if home.count < limit { home.append(r.hit) } } else if away.count < limit { away.append(r.hit) }
+                starts.insert(r.hit.id)
+                if mine { home.append(r.hit) } else { away.append(r.hit) }
+            } else if r.folded.contains(word) {
+                if mine { home.append(r.hit) } else { away.append(r.hit) }
             } else if q.count >= 3, r.folded.contains(q) {
                 if mine { if homeIn.count < limit { homeIn.append(r.hit) } } else if awayIn.count < limit { awayIn.append(r.hit) }
             }
         }
-        let h = Array((coded + home + homeIn + away + awayIn).prefix(limit))
+        // (by fame; at equal fame a name that starts with it first; then the data's order)
+        let best = { (a: [Hit]) -> [Hit] in
+            a.enumerated().sorted { x, y in
+                if x.element.fame != y.element.fame { return x.element.fame > y.element.fame }
+                let sx = starts.contains(x.element.id), sy = starts.contains(y.element.id)
+                return sx != sy ? sx : x.offset < y.offset
+            }.map(\.element)
+        }
+        let h = Array((coded + best(home) + homeIn + best(away) + awayIn).prefix(limit))
         last = (q, open, h)
         return h
     }

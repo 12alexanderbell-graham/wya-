@@ -625,6 +625,14 @@ final class TestDriver {
                         head?.searching = false
                         m.showTown(file: t.file, id: t.id)
                     }
+                // itemfind yellowst: Places' search's first set place shown (as a tap on its row would)
+                case "itemfind":
+                    if let m = map, let f = CollectionStore.shared.find(p.dropFirst().joined(separator: " "), first: m.placesCollection).first {
+                        head?.searching = false
+                        CardState.shared.close(map: m); RegionCardState.shared.close(map: m)
+                        water?.go(.quarter)
+                        m.showSetPlace(f.list, id: f.item.id)
+                    }
                 case "regiondirect":
                     if let h = head, let i = map?.world?.placeIndex[a] { ContentView.openRegionMap(i, head: h) }
                 // regionslow 8: the region borders' change at 1/8 speed (frame checks)

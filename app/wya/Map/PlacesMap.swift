@@ -131,6 +131,46 @@ extension MapController {
         }
     }
 
+    /// A SET'S PLACE FOUND BY SEARCH: its set on the map, all of it (a kind picked could be another's); its country
+    /// opened when it is one country's (the set narrowed to it, as a tap on the country does), the map over the place
+    /// itself otherwise (a sea, a range, a peak two countries share); then its card, as a tap on its mark gives
+    func showSetPlace(_ set: String, id: String) {
+        guard placesMode, let w = world, let it = CollectionStore.shared.collection(set)?.items.first(where: { $0.id == id }) else { return }
+        ShowJob.n += 1
+        let me = ShowJob.n
+        if placesCollection != set || placesType != nil || !placesPicked { showPlacesSet(set) }
+        let home = it.ccs.count == 1 ? (w.placeIndex[it.cc] ?? w.placeIndex[it.cc.uppercased()]) : nil
+        if let home { if placeOpen != home { closePlace(); openPlace(home) } } else { closePlace() }
+        let shaped = CollectionStore.shared.collection(set)?.shapes != nil
+        Task { @MainActor [weak self] in
+            // (a set of shapes just picked: its shapes are still coming, and without its own box a sea was framed as a
+            // point, the screen all water)
+            for _ in 0 ..< 40 {
+                guard let self, me == ShowJob.n else { return }
+                if !shaped || self.setScenes[set] != nil { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let self, me == ShowJob.n, self.placesCollection == set else { return }
+            // (the map goes to the place itself, with room round it: its shape and a third of it again on every side,
+            // or a degree round its point; the whole of the United States with 70 marks said nothing of where
+            // Yellowstone is)
+            var b = self.setScenes[set]?.box(it.id) ?? SIMD4(it.at.x - 1, it.at.y - 1, it.at.x + 1, it.at.y + 1)
+            let pad = SIMD2(max(0.3, (b.z - b.x) * 0.35), max(0.3, (b.w - b.y) * 0.35))
+            b = SIMD4(b.x - pad.x, b.y - pad.y, b.z + pad.x, b.w + pad.y)
+            // (its card will stand on the 25% water, 240 pt of the map's room: the box runs on under it by that share,
+            // so the place itself is framed in the room above the card)
+            let room = self.layout.room(sheetTop: self.layout.top(.quarter))
+            let free = max(120, room.upperBound - room.lowerBound - 240)
+            b.w += (b.w - b.y) * Float((room.upperBound - room.lowerBound) / free - 1)
+            if let home { self.showBox(b, place: home) } else { self.showFree(b) }
+            try? await Task.sleep(for: .milliseconds(1100))
+            guard me == ShowJob.n, self.placesCollection == set else { return }
+            self.thingPressed = id
+            self.needsFrame = true
+            self.onSeaTap?()
+        }
+    }
+
     /// your own place whose mark is under a screen point (within 22 pt of its point)
     func ownHit(at p: CGPoint) -> String? {
         var best: (String, CGFloat)?

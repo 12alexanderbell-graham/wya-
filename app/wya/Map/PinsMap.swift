@@ -179,6 +179,19 @@ final class PinStore {
         pins[k].note = n.isEmpty ? nil : String(n.prefix(600))
         save()
     }
+    /// PINS NAMED BEFORE THE COUNTRY WAS KEPT (the first days' pins: a town's name alone, where a new pin there is
+    /// the town and its country): a pin on land whose place is one name gets the country our map has under it, so
+    /// every row of the list says where it is. A pin at sea, or one named as its country, stays as it is.
+    func nameCountries(_ country: (CLLocationCoordinate2D) -> (id: String, name: String)?) {
+        var changed = false
+        for k in pins.indices where !pins[k].place.isEmpty && !pins[k].place.contains(", ") {
+            guard let c = country(pins[k].coordinate), c.name != pins[k].place else { continue }
+            pins[k].place += ", " + c.name
+            if pins[k].cc == nil { pins[k].cc = c.id }
+            changed = true
+        }
+        if changed { save() }
+    }
     /// its category (3 Oct: a pin is filed under one of the twelve kinds, as a place of your own is); nil: none
     func kind(_ id: UUID, _ kind: String?) {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
@@ -488,6 +501,7 @@ struct PinsMapView: UIViewRepresentable {
         v.isPitchEnabled = false
         v.register(PinAnnotationView.self, forAnnotationViewWithReuseIdentifier: PinAnnotationView.id)
         v.setRegion(PinsMapState.region(from: map), animated: false)
+        PinStore.shared.nameCountries { [map] c in Coordinator.country(map, c) }
         // HOLD THE MAP ANYWHERE (8.4), the system's half second, and let go: a pin drops there. A finger that moves
         // (before the half second or after it) is a pan, not a drop: a hold that turned into a drag of the map left
         // a pin behind at every start, pins nobody meant

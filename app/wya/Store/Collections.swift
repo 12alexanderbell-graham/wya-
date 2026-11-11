@@ -142,6 +142,45 @@ final class CollectionStore {
     }
     @ObservationIgnored private var knownCut: (key: String, list: Collection)?
 
+    /// THE SETS' OWN PLACES BY NAME (Places' search): the places of the menu's sets whose name, or a word of it, starts
+    /// with what was typed ("yellowst" Yellowstone National Park, "baikal" Lake Baikal, "kili" Mount Kilimanjaro: the
+    /// things' index holds none of the three). A name that starts with it before one that has it further in, the best
+    /// known first, the set looked at first among equals ("taj" is the Taj Mahal with Mountain peaks up too); a place
+    /// in two sets once.
+    struct Found: Hashable { let list: String; let item: Item; var key: String { list + "|" + item.id } }
+    func find(_ query: String, first: String?, limit: Int = 4) -> [Found] {
+        let q = query.trimmingCharacters(in: .whitespaces).townFolded
+        guard ready, q.count >= 2 else { return [] }
+        if let l = lastFind, l.q == q, l.first == first { return l.hits }
+        let word = " " + q
+        var hits: [(Found, Int, Bool, Int)] = []   // found, fame (and the set looked at, and a set of shapes), starts with it, its place in its list
+        for id in menu {
+            guard let c = collection(id) else { continue }
+            let names = foldedNames[id] ?? {
+                let n = c.items.map(\.name.townFolded)
+                foldedNames[id] = n
+                return n
+            }()
+            for (n, it) in c.items.enumerated() {
+                let starts = names[n].hasPrefix(q)
+                guard starts || names[n].contains(word) else { continue }
+                // (a place in two sets is found in the one that has its shape: Lake Baikal as the lake, not as a
+                // World Heritage point in the middle of its water)
+                hits.append((Found(list: id, item: it), min(3, it.fame) * 4 + (id == first ? 2 : 0) + (c.shapes != nil ? 1 : 0), starts, n))
+            }
+        }
+        hits.sort { a, b in a.2 != b.2 ? a.2 : a.1 != b.1 ? a.1 > b.1 : a.3 < b.3 }
+        var seen = Set<String>(), out: [Found] = []
+        for h in hits where seen.insert(h.0.item.id).inserted {
+            out.append(h.0)
+            if out.count == limit { break }
+        }
+        lastFind = (q, first, out)
+        return out
+    }
+    @ObservationIgnored private var foldedNames: [String: [String]] = [:]
+    @ObservationIgnored private var lastFind: (q: String, first: String?, hits: [Found])?
+
     /// A LIST ON A CONTINENT (the rest of the world is one flat blue there, and a mark out on the blue is nobody's): its
     /// places in that continent's countries, the list's scope the continent's name. A list of places that are no
     /// country's (seas, ranges) is not cut: nil. Kept per list and continent

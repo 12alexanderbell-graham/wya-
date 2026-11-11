@@ -740,6 +740,21 @@ final class MapController {
         }
     }
 
+    /// A BOX IN SIGHT, THE MAP FREE AFTER (a sea, a range, a peak two countries share, found by search: no country to
+    /// open, and nothing holds the map to its frame afterwards): its box in the room above the 25% water, clear of the
+    /// zoom column
+    func showFree(_ b: SIMD4<Float>) {
+        continent = nil
+        offContinent()
+        let W = Double(view.width), H = Double(view.height)
+        let room = layout.room(sheetTop: layout.top(.quarter))
+        let top = Double(room.lowerBound), bottom = Double(room.upperBound)
+        let fw = max(0.02, Double(b.z - b.x)), fh = max(0.02, Double(b.w - b.y))
+        let nk = min(kMax, max(worldKMin, min((W - 128) / fw, max(80, bottom - top) / fh)))
+        let mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
+        fly(to: clamped(mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk), nk), k: nk, dur: Self.flight)
+    }
+
     /// the region under a screen point, if the region map is up
     func regionUnit(at p: CGPoint) -> Int? {
         guard let s = regionScene else { return nil }

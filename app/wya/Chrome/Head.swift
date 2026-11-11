@@ -916,7 +916,7 @@ extension Comparable {
     func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
 }
 
-enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String), thing(String), pin(UUID), set(MapController.PlacesPick) }
+enum ResultKey: Hashable { case place(Int), miss, setting(String), region(String), town(String), anyRegion(String), thing(String), pin(UUID), set(MapController.PlacesPick), item(String) }
 
 /// a search result's slot: how open it is (0 shut, 1 the row's full 44 pt) on the quick curve, moved by our own clock
 /// so the rows are always laid out from where every slot is at that moment: a row's top is the sum of the slots above
@@ -975,7 +975,9 @@ struct SearchResults: View {
         let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
         let _ = placesSearch ? ThingIndex.shared.load() : ()
         let thingHits = placesSearch && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
-        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
+        // (the sets' own places: the parks, peaks, lakes and the rest of Places' menu, the set looked at first)
+        let itemHits = placesSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
+        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty && itemHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
@@ -1005,12 +1007,34 @@ struct SearchResults: View {
                 let rest = hits.filter { !lead.contains($0) }
                 // a thing found by its code ("JFK") leads too; then the towns, the things, the other countries
                 let coded = thingHits.first.map { ThingIndex.shared.byCode($0, head.query) } ?? false
-                let things = thingHits.map { ResultKey.thing($0.key) }
-                let towns = Array(townHits.prefix(max(3, 8 - lead.count - things.count))).map { ResultKey.town($0.key) }
+                // (a thing that is a set's place found too is that place, once)
+                let items = itemHits.prefix(3).map { ResultKey.item($0.key) }
+                let inSets = Set(itemHits.prefix(3).map(\.item.id))
+                let things = thingHits.filter { !inSets.contains($0.id) }.map { ResultKey.thing($0.key) }
+                // (a town found only by another name of its own, Kirkop for "krka", comes after the things: it stood
+                // above Krka National Park. And the best known things, in 40 and more Wikipedias, lead the towns:
+                // Yellowstone before West Yellowstone)
+                let folded = head.query.trimmingCharacters(in: .whitespaces).townFolded
+                let cut = Array(townHits.prefix(max(3, 8 - lead.count - things.count)))
+                let towns = cut.filter { $0.name.townFolded.contains(folded) }.map { ResultKey.town($0.key) }
+                let others = cut.filter { !$0.name.townFolded.contains(folded) }.map { ResultKey.town($0.key) }
+                let known = thingHits.filter { $0.fame >= 3 && !inSets.contains($0.id) }.prefix(2).map { ResultKey.thing($0.key) }
                 // the types of place it names first ("lakes", "castle", "f1"), then the places themselves
                 let sets = Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
-                let k = Array(sets) + lead.map { ResultKey.place($0) } + (coded ? [things[0]] : []) + towns + (coded ? Array(things.dropFirst()) : things)
-                    + rest.prefix(max(2, 8 - towns.count - things.count - lead.count)).map { ResultKey.place($0) }
+                // (what was typed as a whole name leads, a town then a set's place: "bali" is Bali before Balikpapan,
+                // "london" London before the Tower of London; then the big towns that start with it, 300,000 people and
+                // more: "par" is Paris before Parinacota (at 100,000 "taj" was Tajimi before the Taj Mahal); then the
+                // sets' places, the best known things, the rest)
+                // (a big town of that name, then the set's place of that name, then a small town of it: "bali" is the
+                // island before the town in Cameroon)
+                let named = cut.filter { $0.name.townFolded == folded }
+                let whole = named.filter { $0.people >= 500_000 }.map { ResultKey.town($0.key) }
+                    + itemHits.prefix(3).filter { $0.item.name.townFolded == folded }.map { ResultKey.item($0.key) }
+                    + named.map { ResultKey.town($0.key) }
+                let big = cut.filter { $0.people >= 300_000 && $0.name.townFolded.hasPrefix(folded) }.prefix(2).map { ResultKey.town($0.key) }
+                let k = Array(sets) + lead.map { ResultKey.place($0) } + (coded && !things.isEmpty ? [things[0]] : []) + whole + Array(big)
+                    + Array(items) + Array(known) + towns + things + others
+                    + rest.prefix(max(2, 8 - cut.count - things.count - lead.count)).map { ResultKey.place($0) }
                 // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
@@ -1035,6 +1059,7 @@ struct SearchResults: View {
                         case .setting(let id): return settingHits.contains { $0.id == id }
                         case .region(let r): return regionHits.contains { $0.key == r }
                         case .thing(let r): return thingHits.contains { $0.key == r }
+                        case .item(let r): return itemHits.contains { $0.key == r }
                         case .town(let r): return townHits.contains { $0.key == r } || townGuess?.key == r
                         case .anyRegion(let r): return anyRegionHits.contains { $0.key == r }
                         case .pin(let id): return PinStore.shared.pin(id) != nil
@@ -1056,6 +1081,7 @@ struct SearchResults: View {
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
                                 case .thing(let k): thingRow(thingHits.first { $0.key == k })
+                                case .item(let k): itemRow(itemHits.first { $0.key == k })
                                 case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil),
                                                            note: townGuess?.key == k ? "Did you mean?" : nil)
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
@@ -1089,6 +1115,7 @@ struct SearchResults: View {
             case .setting(let id): settingAct(settingHits.first { $0.id == id })
             case .region(let k): regionAct(regionHits.first { $0.key == k })
             case .thing(let k): thingAct(thingHits.first { $0.key == k })
+            case .item(let k): itemAct(itemHits.first { $0.key == k })
             case .town(let k): townAct(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil))
             case .anyRegion(let k): anyRegionAct(anyRegionHits.first { $0.key == k })
             case .pin(let id): pinAct(PinStore.shared.pin(id))
@@ -1458,6 +1485,34 @@ struct SearchResults: View {
                 // started 34 pt further left)
                 rowFlag(h?.file)
                 ResultWords(name: h?.name ?? "", notes: h?.file == map.placeOpenID ? [] : [country])
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// a set's place found in Places (a park, a peak, a lake): its name and its country; a tap closes search and
+    /// shows it on its set's map with its card
+    private func itemAct(_ h: CollectionStore.Found?) {
+        Feel.tap()
+        head.searching = false
+        PlacePageState.shared.closeAll()
+        CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
+        guard let h else { return }
+        head.water?.go(.quarter)
+        map.showSetPlace(h.list, id: h.item.id)
+    }
+    private func itemRow(_ h: CollectionStore.Found?) -> some View {
+        // (one country's place says its country, as a thing does; a sea or a range has none to say)
+        let cc = h.flatMap { $0.item.ccs.count == 1 ? $0.item.cc : nil }
+        let country = cc.flatMap { cc in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } } ?? ""
+        return Button { itemAct(h) } label: {
+            HStack(spacing: 12) {
+                rowFlag(cc)
+                ResultWords(name: h?.item.name ?? "", notes: cc == map.placeOpenID || country.isEmpty ? [] : [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
