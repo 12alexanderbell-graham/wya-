@@ -154,8 +154,13 @@ extension MapController {
             // (the map goes to the place itself, with room round it: its shape and a third of it again on every side,
             // or a degree round its point; the whole of the United States with 70 marks said nothing of where
             // Yellowstone is)
-            var b = self.setScenes[set]?.box(it.id) ?? SIMD4(it.at.x - 1, it.at.y - 1, it.at.x + 1, it.at.y + 1)
-            let pad = SIMD2(max(0.3, (b.z - b.x) * 0.35), max(0.3, (b.w - b.y) * 0.35))
+            // (a landmark is a point in a town: a tenth of a degree round it, where its neighbours stand apart; at a
+            // degree the Eiffel Tower was one of a blot of marks over Paris)
+            let near = set == "landmarks"
+            let half: Float = near ? 0.1 : 1
+            var b = self.setScenes[set]?.box(it.id) ?? SIMD4(it.at.x - half, it.at.y - half, it.at.x + half, it.at.y + half)
+            let least: Float = near ? 0.05 : 0.3
+            let pad = SIMD2(max(least, (b.z - b.x) * 0.35), max(least, (b.w - b.y) * 0.35))
             b = SIMD4(b.x - pad.x, b.y - pad.y, b.z + pad.x, b.w + pad.y)
             // (its card will stand on the 25% water, 240 pt of the map's room: the box runs on under it by that share,
             // so the place itself is framed in the room above the card)

@@ -1440,6 +1440,7 @@ struct SearchResults: View {
     static let setWords: [String: [String]] = [
         "towns": ["town", "city", "cities", "village"],
         "capitals": ["capital"],
+        "landmarks": ["landmark", "monument", "sight", "building", "tower", "castle", "palace", "temple", "church", "cathedral", "mosque", "museum", "bridge", "ruin"],
         "parks": ["national park", "park"],
         "peaks": ["mountain", "peak", "summit", "volcano", "highest", "tallest"],
         "ranges": ["mountain range", "range", "mountains"],
