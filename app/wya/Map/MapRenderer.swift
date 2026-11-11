@@ -1076,7 +1076,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         if placesOn, let c = controller.markCollection, !(c.shapes != nil && controller.setScene == nil), let dp = diamondPipe {
             struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
             let scene = controller.setScene
-            var plain: [D] = [], wished: [D] = [], stamped: [D] = []
+            var plain: [D] = [], wished: [D] = [], stamped: [D] = [], pressed: [D] = []
             let W = Float(controller.view.width), H = Float(controller.view.height)
             // (one size for all of them at any zoom, smaller far out where they are many: 4.6 pt across at the world's
             // size, 9.5 pt from eight times that, by the zoom)
@@ -1090,11 +1090,17 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 if st.stamped || st.wished, let a = scene?.across(it.id), Double(a) * controller.k >= 8 { continue }
                 // (ink until it is yours: cream on the land's white was a speck nobody could see)
                 var col = st.stamped && controller.showsStamped ? Palette.limeV : st.wished && controller.showsWished ? Palette.blueV : Palette.inkV
-                if controller.thingPressed == it.id { col = st.stamped || st.wished ? col * SIMD4<Float>(0.80, 0.79, 0.77, 1) : SIMD4<Float>(0.45, 0.45, 0.45, 1) }
+                // (the one pressed, or found in search and shown with its card: half as big again and drawn over the
+                // others, in its own colour. A grey one was the faintest mark on the map, where it should be the one seen)
+                if controller.thingPressed == it.id {
+                    if st.stamped || st.wished { col = col * SIMD4<Float>(0.80, 0.79, 0.77, 1) }
+                    pressed.append(D(p: it.at, pad: SIMD2(size * 1.5, 0), colour: col))
+                    continue
+                }
                 let d = D(p: it.at, pad: SIMD2(size, 0), colour: col)
                 if st.stamped { stamped.append(d) } else if st.wished { wished.append(d) } else { plain.append(d) }
             }
-            let ds = plain + wished + stamped
+            let ds = plain + wished + stamped + pressed
             if !ds.isEmpty {
                 let need = ds.count * MemoryLayout<D>.stride
                 if setMarkBuffer == nil || setMarkBuffer!.length < need { setMarkBuffer = device.makeBuffer(length: max(need, 4096) * 2) }

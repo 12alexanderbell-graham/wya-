@@ -411,7 +411,9 @@ final class TownNamesView: UIView {
         for (id, z) in plan.ordered {
             if z > m.k * 1.0001 { break }
             guard let it = setItems[id], let b = setBoxes[id] else { continue }
-            if setGated.contains(id), !setOn { continue }
+            // (a card up: none of the marks' names. Only the ones above the card had room, and some named with others
+            // not is what the marks' names never are; the card says the name of the one it is on)
+            if setGated.contains(id), !setOn || card { continue }
             let q = m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
             guard live.contains(q) else { continue }
             var r = b.offsetBy(dx: q.x, dy: q.y)

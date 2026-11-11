@@ -1016,8 +1016,12 @@ struct SearchResults: View {
                 // Yellowstone before West Yellowstone)
                 let folded = head.query.trimmingCharacters(in: .whitespaces).townFolded
                 let cut = Array(townHits.prefix(max(3, 8 - lead.count - things.count)))
-                let towns = cut.filter { $0.name.townFolded.contains(folded) }.map { ResultKey.town($0.key) }
-                let others = cut.filter { !$0.name.townFolded.contains(folded) }.map { ResultKey.town($0.key) }
+                // (and one that has it only in the middle of a word, Reiffton for "eiff", comes after them too)
+                let starts = { (s: String) -> Bool in
+                    s.hasPrefix(folded) || s.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains { $0.hasPrefix(folded) }
+                }
+                let towns = cut.filter { starts($0.name.townFolded) }.map { ResultKey.town($0.key) }
+                let others = cut.filter { !starts($0.name.townFolded) }.map { ResultKey.town($0.key) }
                 let known = thingHits.filter { $0.fame >= 3 && !inSets.contains($0.id) }.prefix(2).map { ResultKey.thing($0.key) }
                 // the types of place it names first ("lakes", "castle", "f1"), then the places themselves
                 let sets = map.pinsMode ? [] : Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
@@ -1032,8 +1036,11 @@ struct SearchResults: View {
                     + itemHits.prefix(3).filter { $0.item.name.townFolded == folded }.map { ResultKey.item($0.key) }
                     + named.map { ResultKey.town($0.key) }
                 let big = cut.filter { $0.people >= 300_000 && $0.name.townFolded.hasPrefix(folded) }.prefix(2).map { ResultKey.town($0.key) }
+                // (the countries whose name starts with it, two, after the big towns: "par" had no Paraguay in its
+                // eight rows, "rom" no Romania, "taj" no Tajikistan)
+                let lands = rest.filter { i in map.world.map { $0.places[i].n.townFolded.hasPrefix(folded) } ?? false }.prefix(2)
                 let k = Array(sets) + lead.map { ResultKey.place($0) } + (coded && !things.isEmpty ? [things[0]] : []) + whole + Array(big)
-                    + Array(items) + Array(known) + towns + things + others
+                    + lands.map { ResultKey.place($0) } + Array(items) + Array(known) + towns + things + others
                     + rest.prefix(max(2, 8 - cut.count - things.count - lead.count)).map { ResultKey.place($0) }
                 // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
@@ -1394,6 +1401,8 @@ struct SearchResults: View {
     private func pinsGo(lat: Double, lon: Double, metres: Double, name: String) {
         let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
         if PinRoutes.shared.landTapped(c, country: name) { return }
+        // (Add pin there names its pin after what was found, at the place's own point)
+        PinsMapState.shared.found = (name, lat, lon)
         if PinStore.shared.selected != nil { PinStore.shared.selected = nil }
         if let w = head.water, w.stop != .quarter { w.go(.quarter) }
         PinsMapState.shared.show(lat: lat, lon: lon, metres: metres)
@@ -1538,13 +1547,18 @@ struct SearchResults: View {
         map.showSetPlace(h.list, id: h.item.id)
     }
     private func itemRow(_ h: CollectionStore.Found?) -> some View {
-        // (one country's place says its country, as a thing does; a sea or a range has none to say)
-        let cc = h.flatMap { $0.item.ccs.count == 1 ? $0.item.cc : nil }
-        let country = cc.flatMap { cc in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } } ?? ""
+        // (one country's place says its country, as a thing does; one on the border of two says both, with no flag;
+        // a sea or a range has none to say. Its name as the map says it: a list's long official name is cut short)
+        // (by the countries the map has: Rome's centre, Italy's and the Holy See's, says Italy)
+        let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
+        let ccs = (h?.item.ccs ?? []).filter { named($0) != nil }
+        let cc = ccs.count == 1 ? ccs[0] : nil
+        let two = ccs.count == 2 ? ccs.compactMap(named).sorted() : []
+        let country = two.count == 2 ? two.joined(separator: ", ") : cc.flatMap(named) ?? ""
         return Button { itemAct(h) } label: {
             HStack(spacing: 12) {
                 rowFlag(cc)
-                ResultWords(name: h?.item.name ?? "", notes: cc == map.placeOpenID || country.isEmpty ? [] : [country])
+                ResultWords(name: h?.item.short ?? "", notes: (cc != nil && cc == map.placeOpenID) || country.isEmpty ? [] : [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)

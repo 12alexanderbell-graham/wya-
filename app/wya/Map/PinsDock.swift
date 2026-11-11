@@ -23,9 +23,18 @@ final class PinsDockState {
         guard let v = PinsMapState.shared.view, let map = PinsMapState.shared.map, !map.locked else { Feel.refuse(); return }
         let L = water.layout
         let p = CGPoint(x: L.W / 2, y: (L.headBottom + water.level) / 2)
-        let c = v.convert(v.convert(p, from: nil), toCoordinateFrom: v)
+        var c = v.convert(v.convert(p, from: nil), toCoordinateFrom: v)
         guard CLLocationCoordinate2DIsValid(c) else { Feel.refuse(); return }
-        PinStore.shared.drop(at: c, country: PinsMapView.Coordinator.country(map, c))
+        // (the place found in search still under the point, within a finger's width: the pin is that place's, at its
+        // own point and with its name; anywhere else the map was moved since, and the pin is named as any other)
+        var known: String?
+        if let f = PinsMapState.shared.found {
+            let at = CLLocationCoordinate2D(latitude: f.lat, longitude: f.lon)
+            let q = v.convert(at, toPointTo: v), o = v.convert(p, from: nil)
+            if hypot(q.x - o.x, q.y - o.y) < 24 { c = at; known = f.name }
+            PinsMapState.shared.found = nil
+        }
+        PinStore.shared.drop(at: c, country: PinsMapView.Coordinator.country(map, c), known: known)
         if water.stop != .quarter { water.go(.quarter) }
     }
 }

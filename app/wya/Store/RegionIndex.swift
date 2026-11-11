@@ -49,8 +49,12 @@ final class RegionIndex {
         let towns = TownIndex.shared.regionPeople()
         guard !towns.isEmpty else { return [:] }
         var out: [String: Int] = [:]
-        for r in rows where r.hit.row == 1 {
-            if let n = towns[r.hit.place.lowercased() + "|" + r.folded] { out[r.hit.place + "|" + r.hit.id] = max(out[r.hit.place + "|" + r.hit.id] ?? 0, n) }
+        // (a second level by the town of its name there: York in the United Kingdom, 150,000, before York in Western
+        // Australia; with no number at all they stood by the alphabet)
+        let named = TownIndex.shared.townPeople()
+        for r in rows {
+            let k = r.hit.place + "|\(r.hit.row)|" + r.hit.id
+            if let n = (r.hit.row == 1 ? towns : named)[r.hit.place.lowercased() + "|" + r.folded] { out[k] = max(out[k] ?? 0, n) }
         }
         peopleByID = out
         return out
@@ -75,14 +79,16 @@ final class RegionIndex {
                     r.folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) }) { inside.append(r.hit) }
         }
         starts.sort { a, b in
+            // (a district named Çal led California for "cal": what was typed as a whole name leads within its level,
+            // not over the level above)
+            let pa = lives[a.h.place + "|\(a.h.row)|" + a.h.id] ?? 0, pb = lives[b.h.place + "|\(b.h.row)|" + b.h.id] ?? 0
             let ea = a.f == q, eb = b.f == q
-            if ea != eb { return ea }
             // a country's first level (states, regions) before its second (the communes that filled "fra" with Fram,
             // Frata and Frasin, 8 Nov)
             if a.h.row != b.h.row { return a.h.row < b.h.row }
+            if ea != eb { return ea }
             // the region more people live in first ("cal" is California, 39 million, before Çal and Caldas: by the
             // shorter name alone California never made the list)
-            let pa = lives[a.h.place + "|" + a.h.id] ?? 0, pb = lives[b.h.place + "|" + b.h.id] ?? 0
             if pa != pb { return pa > pb }
             if a.f.count != b.f.count { return a.f.count < b.f.count }
             return a.f < b.f

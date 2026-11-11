@@ -74,7 +74,9 @@ final class PinStore {
 
     /// a pin dropped at `c`: kept at once, named once the phone knows the place; the undo drop takes it back.
     /// `country`: the country our own map has there, for when Apple's naming gives none (open desert, small islands)
-    func drop(at c: CLLocationCoordinate2D, country: (id: String, name: String)? = nil) {
+    /// `known`: the place's own name when the pin is dropped on a place found in search (Apple's nearest name for
+    /// a town's middle can be a hamlet's)
+    func drop(at c: CLLocationCoordinate2D, country: (id: String, name: String)? = nil, known: String? = nil) {
         var p = Pin(lat: c.latitude, lon: c.longitude)
         p.cc = country?.id
         dropping = p.id
@@ -82,7 +84,7 @@ final class PinStore {
         selected = p.id
         save()
         undoableDrop(p.id)
-        Task { await name(p.id, country: country?.name) }
+        Task { await name(p.id, country: country?.name, known: known) }
     }
     /// DROP A PIN HERE (11.5's town or thing menu): a pin at a place's point, named after it; not chosen, and nothing
     /// else changes until Pins is opened; the undo drop takes it back
@@ -262,16 +264,16 @@ final class PinStore {
 
     /// the finest place a pin is in, from Apple's reverse geocoding: "Kreuzberg, Berlin"; a town alone; a region and
     /// its country; the sea's name at sea
-    private func name(_ id: UUID, country ours: String?) async {
+    private func name(_ id: UUID, country ours: String?, known: String? = nil) async {
         guard let p = pin(id), let req = MKReverseGeocodingRequest(location: CLLocation(latitude: p.lat, longitude: p.lon)) else { return }
         let item = try? await req.mapItems.first
         let a = item?.addressRepresentations
         let city = a?.cityName ?? ""
-        let near = item?.name ?? ""
+        let near = known ?? item?.name ?? ""
         let country = a?.regionName.flatMap { $0.isEmpty ? nil : $0 } ?? ours ?? ""
         // the finest place, its town, its country, each once: "Kreuzberg, Berlin, Germany"; "Mayo-Belwa, Nigeria"
         var parts: [String] = []
-        for x in [near.contains(where: \.isNumber) ? "" : near, city, country] where !x.isEmpty && !parts.contains(x) { parts.append(x) }
+        for x in [known == nil && near.contains(where: \.isNumber) ? "" : near, city, country] where !x.isEmpty && !parts.contains(x) { parts.append(x) }
         let place = parts.joined(separator: ", ")
         // the pin still where it was read (a move, or its undo, while Apple was answering, reads it again)
         guard let k = pins.firstIndex(where: { $0.id == id }), pins[k].lat == p.lat, pins[k].lon == p.lon else { return }
@@ -287,6 +289,9 @@ final class PinsMapState {
     weak var view: MKMapView?
     weak var water: Water?
     weak var map: MapController?
+    /// the place last found in search and shown (its name and point): Add pin on it drops the pin at that point, named
+    /// after it
+    var found: (name: String, lat: Double, lon: Double)?
     /// a pin being moved (8.4): the pin's spot from the finger, and the pin's drawn middle from its spot, as it was
     /// picked up (so it is set down tip first where the finger lets go, and lands where it is drawn)
     /// (one per pin: two fingers can move two pins at once). `middle` is the view's own centre, without its transform,

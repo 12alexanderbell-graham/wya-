@@ -107,7 +107,17 @@ struct PlacesMenu: View {
         let lines = stride(from: 0, to: list.count, by: cols).map { Array(list[$0 ..< min($0 + cols, list.count)]) }
         VStack(spacing: Self.gap) {
             ForEach(lines.indices, id: \.self) { i in
-                HStack(spacing: Self.gap) { ForEach(lines[i]) { row($0) } }
+                if lines[i].count < cols, let last = lines[i].first {
+                    // (an odd one out, the ninth of nine: a button as wide as the others, in the middle, not one
+                    // stretched across the whole water)
+                    Color.clear.frame(height: PlacesSheet.rowH).overlay {
+                        GeometryReader { g in
+                            row(last).frame(width: (g.size.width - Self.gap) / 2).frame(maxWidth: .infinity)
+                        }
+                    }
+                } else {
+                    HStack(spacing: Self.gap) { ForEach(lines[i]) { row($0) } }
+                }
             }
         }
         .dynamicTypeSize(...DynamicTypeSize.xLarge)

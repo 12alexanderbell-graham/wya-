@@ -42,6 +42,21 @@ final class TownIndex {
     }
     @ObservationIgnored private var peopleByRegion: [String: Int]?
 
+    /// EACH TOWN'S PEOPLE by country and folded name ("gb|york": 150,000; the biggest of that name there): what the
+    /// regions' search goes by for a second-level division, which is most often its town's name. Made once.
+    func townPeople() -> [String: Int] {
+        if let p = peopleByTown { return p }
+        guard ready else { return [:] }
+        var out: [String: Int] = [:]
+        for r in rows {
+            let k = r.hit.file.lowercased() + "|" + r.hit.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            if r.hit.people > out[k] ?? 0 { out[k] = r.hit.people }
+        }
+        peopleByTown = out
+        return out
+    }
+    @ObservationIgnored private var peopleByTown: [String: Int]?
+
     /// read the index once (in the background)
     func load() {
         guard !ready, !loading else { return }

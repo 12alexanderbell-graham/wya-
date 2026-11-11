@@ -640,6 +640,7 @@ final class TestDriver {
                         head?.searching = false
                         let c = CLLocationCoordinate2D(latitude: t.lat, longitude: t.lon)
                         if !PinRoutes.shared.landTapped(c, country: t.name) {
+                            PinsMapState.shared.found = (t.name, t.lat, t.lon)
                             PinStore.shared.selected = nil
                             water?.go(.quarter)
                             PinsMapState.shared.show(lat: t.lat, lon: t.lon, metres: t.people >= 1_000_000 ? 60_000 : 25_000)
