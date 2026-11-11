@@ -69,6 +69,12 @@ struct StampedList: View {
         s.visits <= 1 ? "" : s.visits == 2 ? " · Twice" : " · \(s.visits) times"
     }
 
+    /// a row's line from its parts and how often ("Hessen · Twice"; "Twice" alone when it has no parts)
+    private static func line(_ parts: [String], _ s: MarkState) -> String {
+        let o = often(s)
+        return (parts.filter { !$0.isEmpty } + (o.isEmpty ? [] : [String(o.dropFirst(3))])).joined(separator: " · ")
+    }
+
     private var rows: [Row] {
         guard let w = map.world else { return [] }
         var index: [String: Int] = [:]
@@ -133,11 +139,12 @@ struct StampedList: View {
     /// PLACES' ROWS (7.6): a collection's stops you stamped, by their day; with a country open its towns and things you
     /// stamped; otherwise (Everywhere, a continent, a world region) every town and thing you stamped on that map
     private func placesRows(_ w: World, _ index: [String: Int]) -> [Row] {
-        if let cid = map.placesCollection, let c = CollectionStore.shared.collection(cid) {
+        if let c = map.setCollection {
             return c.items.compactMap { it -> Row? in
                 let s = marks.state(it.key)
-                guard s.stamped, let i = index[it.cc] ?? index[it.cc.uppercased()] else { return nil }
-                return Row(id: it.key.id, name: it.name, place: i, line: CollectionStore.line(it) + Self.often(s), kind: .stop,
+                // (a sea or a range is no country's: its row has no flag and no country, place -1)
+                guard s.stamped, let i = it.cc.isEmpty ? -1 : index[it.cc] ?? index[it.cc.uppercased()] else { return nil }
+                return Row(id: it.key.id, name: it.name, place: i, line: Self.line([CollectionStore.line(it)], s), kind: .stop,
                            flag: it.cc, day: it.date)
             }
             .sorted { ($0.day, $0.name) < ($1.day, $1.name) }
@@ -162,18 +169,19 @@ struct StampedList: View {
                 // a region named in two languages ("Région de Bruxelles-Capitale/Brussels Hoofdstedelijk Gewest"): the first
                 region = String(region.prefix { $0 != "/" })
                 let wherePart = cc == open ? region : [region, w.places[i].n].filter { !$0.isEmpty }.joined(separator: ", ")
-                return Row(id: k.id, name: name, place: i, line: (wherePart.isEmpty ? "Town" : "Town · \(wherePart)") + Self.often(s),
+                return Row(id: k.id, name: name, place: i, line: Self.line([wherePart], s),
                            kind: .town, flag: cc)
             case .thing:
-                func word(_ kind: Int) -> String { let w = ThingStore.kinds[min(max(kind, 0), 11)]; return w.prefix(1).uppercased() + w.dropFirst() }
+                // (never our kind's word, 9 Nov 20:49: the kinds file things, they are not shown; a thing's line is where it is)
                 let found: (cc: String, name: String, what: String)?
-                if let (cc, t) = ThingStore.shared.thing(k.id) { found = (cc, t.name, word(t.kind)) }
-                else if let h = ThingIndex.shared.hit(k.id) { found = (h.file, h.name, word(h.kind)) }
+                if let (cc, t) = ThingStore.shared.thing(k.id) { found = (cc, t.name, "") }
+                else if let h = ThingIndex.shared.hit(k.id) { found = (h.file, h.name, "") }
                 // a collection's stop that isn't among the things (a circuit): its collection's line
                 else if let it = CollectionStore.shared.item(k) { found = (it.cc, it.name, CollectionStore.line(it)) }
                 else { found = nil }
                 guard let f = found, ids?.contains(f.cc) ?? true, let i = index[f.cc] ?? index[f.cc.uppercased()] else { return nil }
-                return Row(id: k.id, name: f.name, place: i, line: (f.cc == open ? f.what : "\(f.what) · \(w.places[i].n)") + Self.often(s),
+                let wherePart = f.cc == open ? "" : w.places[i].n
+                return Row(id: k.id, name: f.name, place: i, line: Self.line([f.what, wherePart], s),
                            kind: .thing, flag: f.cc)
             case .yours:
                 // your own places (7.8): the caption counts them, so the list holds them
@@ -226,8 +234,10 @@ struct StampedList: View {
                         }
                         Section {
                             Button("Details") { details(r) }
-                            Button("Verify") {
-                                VerifyState.shared.open(r.key, name: r.name, place: r.place, water: water)
+                            if r.place >= 0 {
+                                Button("Verify") {
+                                    VerifyState.shared.open(r.key, name: r.name, place: r.place, water: water)
+                                }
                             }
                         }
                         // offline for now: the app's own link and the name (11.7)
@@ -411,7 +421,13 @@ struct StampedList: View {
         if r.kind == .stop, let it = CollectionStore.shared.collection(map.placesCollection ?? "")?.items.first(where: { $0.key.id == r.id }) {
             let d: Float = 2
             map.thingPressed = it.id
-            map.showBox(SIMD4(it.at.x - d, it.at.y - d, it.at.x + d, it.at.y + d), place: r.place)
+            // (an area set's place: its own shape framed; no country is pressed with it)
+            if r.place < 0 {
+                let b = map.setScene?.box(it.id) ?? SIMD4(it.at.x - d, it.at.y - d, it.at.x + d, it.at.y + d)
+                map.frameArea(SIMD4(Double(b.x), Double(b.y), Double(b.z), Double(b.w)))
+            } else {
+                map.showBox(SIMD4(it.at.x - d, it.at.y - d, it.at.x + d, it.at.y + d), place: r.place)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { if map.thingPressed == it.id { map.thingPressed = nil; map.needsFrame = true } }
             return
         }

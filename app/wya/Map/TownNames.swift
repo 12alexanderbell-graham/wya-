@@ -81,7 +81,7 @@ final class TownNamesView: UIView {
         let own = ownMarks(m) + (HistoryLineView.current?.capsuleFrames ?? [])
         ensurePlan(m)
         let named = names(m, moving: moving, taken: own)
-        thingMarks(m, taken: named)
+        thingMarks(m, taken: named, moving: moving)
     }
 
     /// the plan for what is on the map now: the towns of the countries in play (the same candidates as before: a shape,
@@ -91,11 +91,11 @@ final class TownNamesView: UIView {
         let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
         let near = m.placesMode && m.placeOpen == nil
         let k0 = near ? m.townsK / 3 : m.continentK
-        let collection = m.placesMode ? m.placesCollection.flatMap { CollectionStore.shared.collection($0) } : nil
-        let kThing: Double? = collection != nil ? (m.continentK ?? m.worldKMin) : !m.placesMode ? nil : m.placeOpen == nil ? m.townsK : m.continentK
+        let collection = m.markCollection
+        let kThing: Double? = collection != nil ? (m.continentK ?? m.worldKMin) : nil
         let dotsOn = MapSettingsStore.shared.value.townDots
         let thingsCount = ccs.reduce(0) { $0 + (ThingStore.shared.things($1)?.count ?? 0) }
-        let pk = "\(ccs.joined(separator: ","))|\(dotsOn)|\(k0 ?? -1)|\(kThing ?? -1)|\(collection?.id ?? "")|\(thingsCount)"
+        let pk = "\(ccs.joined(separator: ","))|\(dotsOn)|\(k0 ?? -1)|\(kThing ?? -1)|\(collection?.id ?? "")|\(collection?.items.count ?? 0)|\(thingsCount)|\(m.placeOpen ?? -1)|\(m.setScene == nil ? 0 : 1)"
         guard pk != planKey else { return }
         planKey = pk
         var items: [LabelPlan.Item] = []
@@ -126,24 +126,10 @@ final class TownNamesView: UIView {
                 }
             }
         }
-        if let kThing {
-            let all: [ThingStore.Thing] = collection.map { c in
-                c.items.map { ThingStore.Thing(id: $0.id, name: $0.name, kind: 11, at: $0.at, fame: 9, line: "", photo: "") }
-            } ?? ccs.flatMap { ThingStore.shared.things($0) ?? [] }
-            for t in all {
-                let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
-                let w = thingWidths[t.id] ?? {
-                    // (the whole name: nothing cut off at rest; 31 Oct 11:05 "Maulbronn Monaste…")
-                    let w = ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
-                    thingWidths[t.id] = w
-                    return w
-                }()
-                // the mark (10 pt at most) and its name to its right
-                items.append(LabelPlan.Item(id: "h:" + t.id, at: SIMD2(Double(t.at.x), Double(t.at.y)),
-                                            box: CGRect(x: -5, y: -9, width: 10 + 3 + w, height: 18),
-                                            threshold: kThing * start, rank: Double(t.fame)))
-            }
-        }
+        // (a set's places are not planned: every one of them is on the map as its shape or its mark at every zoom,
+        // and their names are all up or none, setNames; 11 Nov)
+        _ = kThing
+        thingStart = [:]
         plan = items.isEmpty ? nil : LabelPlan(items)
         thingKey = []
     }
@@ -185,24 +171,37 @@ final class TownNamesView: UIView {
     // grey, lime when stamped, blue when wished; no outline, no shadow; its name (12 pt semibold, the cream halo) beside it on the right; a thing whose name has no room (a town's name, another thing) is not shown,
     // except one you stamped or wished, whose mark always shows; famous first, at most 40 on screen. The kind's icon
     // inside waits for the twelve kinds' icons (their review, Step 3b).
+    /// A THING'S ZOOM BAND (times the framing zoom from which it may show): a collection's stop at once; a picked
+    /// country's best known at once; otherwise by fame from 2.5x out to 16x
+    static func start(fame: Int, picked: Bool) -> Double {
+        if fame >= 9 { return 0 }
+        return fame >= 3 ? (picked ? 1 : 2.5) : fame == 2 ? (picked ? 2.5 : 5) : fame == 1 ? 9 : 16
+    }
+    /// each planned thing's zoom from which it may show (its band), for its mark's growth
+    private var thingStart: [String: Double] = [:]
     private var thingViews: [String: (dot: UIView, name: UILabel)] = [:]
     private static let thingFont = UIFont.systemFont(ofSize: 12, weight: .medium)
     /// each thing's name's width (measured once)
     private var thingWidths: [String: CGFloat] = [:]
     /// what the marks were last laid out for (the camera, the room, the marks, the town names): unchanged, nothing is done
     private var thingKey: [Double] = []
-    private func thingMarks(_ m: MapController, taken: [CGRect]) {
+    private func thingMarks(_ m: MapController, taken: [CGRect], moving: Bool) {
         // the things of the open country, or a collection's places (its map up: every one of them is its map's place, so
         // all are shown from the start, names where they have room)
-        let collection = m.placesCollection.flatMap { CollectionStore.shared.collection($0) }
+        let collection = m.markCollection
+        if let c = collection { setNames(m, c, taken: taken, moving: moving); return }
+        clearSet()
         let all: [ThingStore.Thing]
-        if let c = collection {
-            all = c.items.map { ThingStore.Thing(id: $0.id, name: $0.name, kind: 11, at: $0.at, fame: 9, line: "", photo: "") }
+        if let c = collection, c.shapes != nil, m.setScene == nil {
+            all = []
+        } else if let c = collection {
+            all = c.items.map { ThingStore.Thing(id: $0.id, name: $0.short, kind: 11, at: $0.at, fame: $0.fame, line: "", photo: "") }
         } else if m.placesMode {
-            // the open country's, or (close in with none open) the countries' in view, the best known first
-            let lists = m.townCountries.compactMap { ThingStore.shared.things($0) }
-            all = lists.count == 1 ? lists[0]
-                : lists.flatMap { $0 }.enumerated().sorted { ($0.element.fame, -$0.offset) > ($1.element.fame, -$1.offset) }.map(\.element)
+            // the towns' map: the things of the countries shown that are yours (stamped or wished), or found by search
+            all = m.townCountries.compactMap { ThingStore.shared.things($0) }.flatMap { $0 }.filter {
+                let st = MarkStore.shared.state($0.key)
+                return st.stamped || st.wished || m.thingPressed == $0.id
+            }
         } else { all = [] }
         // (close in with none open the things count from about 1,000 km across, the framing of a mid-size country, so they
         // come in no sooner than in an open Germany and never crowd the towns of the countries round)
@@ -215,7 +214,7 @@ final class TownNamesView: UIView {
                              Double(m.thingPressed?.hashValue ?? 0), Double(taken.count)]
         guard key != thingKey else { return }
         thingKey = key
-        let z = m.k / k0
+        _ = k0
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
         // FROM THE PLAN (31 Oct 11:10): a thing is up once the zoom is past its own (its fame's band, kept clear of every
@@ -224,24 +223,11 @@ final class TownNamesView: UIView {
         var frames: [String: CGRect] = [:]
         var named = Set<String>()
         var nameRects: [String: CGRect] = [:]
-        for t in all {
-            let st = MarkStore.shared.state(t.key)
-            // (one found by search and shown is marked too while it is darkened)
-            let marked = st.stamped || st.wished || m.thingPressed == t.id
-            let up = (plan?.zoom["h:" + t.id] ?? .infinity) <= m.k * 1.0001
-            guard up || marked else { continue }
-            let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
-            guard box.contains(q) else { continue }
-            let start: Double = t.fame >= 9 ? 0 : t.fame >= 3 ? 2.5 : t.fame == 2 ? 5 : t.fame == 1 ? 9 : 16
-            let u = start == 0 ? 1 : CGFloat(min(1, max(0, (z - start) / start)))
-            let size = 6 + 4 * u * u * (3 - 2 * u)
-            let r = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
-            let w = thingWidths[t.id] ?? ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
-            let nr = CGRect(x: q.x + 8, y: q.y - 9, width: w, height: 18)
-            // (only what is not planned can still be in the way: your own places' marks, the journey's capsules)
-            let nameFree = up && box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -1, dy: -1)) }
-            // (a mark without its name says nothing: only one you stamped or wished shows without it)
-            guard nameFree || marked else { continue }
+        // ONE MARK, ONE SIZE (dots of several sizes read as a mess): 6 pt at every zoom, ink until it is yours
+        let size: CGFloat = 6
+        var centres: [CGPoint] = []
+        let scene = m.setScene
+        func put(_ t: ThingStore.Thing, _ st: MarkState, _ r: CGRect, _ nr: CGRect, name: Bool, dot: Bool = true) {
             let v = thingViews[t.id] ?? {
                 let d = UIView(), l = UILabel()
                 d.isUserInteractionEnabled = false; l.isUserInteractionEnabled = false
@@ -253,14 +239,67 @@ final class TownNamesView: UIView {
                 return (d, l)
             }()
             v.dot.backgroundColor = m.thingPressed == t.id ? Self.pressed
-                : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.beigeDark)
+                : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.ink)
             v.dot.frame = r
             v.dot.layer.cornerRadius = size / 2
-            frames[t.id] = r
+            v.dot.isHidden = !dot
+            frames[t.id] = dot ? r : nr
+            if dot { centres.append(CGPoint(x: r.midX, y: r.midY)) }
             v.name.frame = nr
-            v.name.textAlignment = .left
-            v.name.isHidden = !nameFree
-            if nameFree { named.insert(t.id); nameRects[t.id] = nr }
+            v.name.textAlignment = dot ? .left : .center
+            v.name.isHidden = !name
+            if name { named.insert(t.id); nameRects[t.id] = nr }
+        }
+        // first the named ones and yours; then (a set's map) the marks still without a name, each only where it stands
+        // clear of the names and of the marks already up (16 pt), the list's best known first: a set far out reads as
+        // its places, never as a blot (450 marks over Europe, 9 Nov), and zooming in only ever adds marks
+        var waiting: [(ThingStore.Thing, MarkState, CGRect, CGRect)] = []
+        // AN AREA SET'S BIG PLACES FIRST: one whose shape is as long as its name has its name alone in the shape's
+        // middle, no mark, as a sea's on any map (its shape is what is filled and pressed); the marks' names after them
+        // keep clear of these (9 Nov: "Alboran Sea" ran into "Mediterranean Sea")
+        var centred: [CGRect] = []
+        var big = Set<String>()
+        if let scene {
+            for t in all {
+                guard let across = scene.across(t.id) else { continue }
+                let w = thingWidths[t.id] ?? ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+                guard CGFloat(across) * CGFloat(m.k) >= max(44, w) else { continue }
+                big.insert(t.id)
+                let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
+                let nr = CGRect(x: q.x - w / 2, y: q.y - 9, width: w, height: 18)
+                guard box.contains(nr), !taken.contains(where: { $0.intersects(nr.insetBy(dx: -1, dy: -1)) }),
+                      !centred.contains(where: { $0.intersects(nr.insetBy(dx: -4, dy: -2)) }) else { continue }
+                put(t, MarkStore.shared.state(t.key), CGRect(x: q.x, y: q.y, width: 0, height: 0), nr, name: true, dot: false)
+                centred.append(nr)
+            }
+        }
+        for t in all where !big.contains(t.id) {
+            let st = MarkStore.shared.state(t.key)
+            // (one found by search and shown is marked too while it is darkened)
+            let marked = st.stamped || st.wished || m.thingPressed == t.id
+            let up = (plan?.zoom["h:" + t.id] ?? .infinity) <= m.k * 1.0001
+            // (a set's place: its mark from its own band on, whether or not its name has room yet)
+            let inBand = collection != nil && (thingStart[t.id] ?? .infinity) <= m.k * 1.0001
+            guard up || marked || inBand else { continue }
+            let q = m.screenPoint(SIMD2(Double(t.at.x), Double(t.at.y)))
+            guard box.contains(q) else { continue }
+            let r = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
+            let w = thingWidths[t.id] ?? ceil((t.name as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+            let nr = CGRect(x: q.x + 7, y: q.y - 9, width: w, height: 18)
+            // (only what is not planned can still be in the way: your own places' marks, the journey's capsules)
+            let nameFree = up && box.contains(nr) && !taken.contains { $0.intersects(nr.insetBy(dx: -1, dy: -1)) }
+                && !centred.contains { $0.intersects(nr.insetBy(dx: -3, dy: -1)) }
+            // (a mark never stands on a big place's name)
+            if centred.contains(where: { $0.insetBy(dx: -3, dy: -1).intersects(r) }), !marked { continue }
+            if nameFree || marked { put(t, st, r, nr, name: nameFree) }
+            else if inBand { waiting.append((t, st, r, nr)) }
+        }
+        let rects = Array(nameRects.values)
+        for (t, st, r, nr) in waiting {
+            let c = CGPoint(x: r.midX, y: r.midY)
+            guard !rects.contains(where: { $0.insetBy(dx: -3, dy: -1).intersects(r) }),
+                  !centres.contains(where: { abs($0.x - c.x) < 16 && abs($0.y - c.y) < 16 }) else { continue }
+            put(t, st, r, nr, name: false)
         }
         thingNameFrames = nameRects
         for (id, v) in thingViews where frames[id] == nil { v.dot.removeFromSuperview(); v.name.removeFromSuperview(); thingViews[id] = nil }
@@ -270,6 +309,136 @@ final class TownNamesView: UIView {
         m.thingFrames = hits
     }
     private static let pressed = UIColor(red: 0xa1 / 255, green: 0x9e / 255, blue: 0x95 / 255, alpha: 1)
+
+    // MARK: A SET'S NAMES (11 Nov). The places themselves are the map's (their shapes and marks, MapRenderer: all of them
+    // at every zoom). Here only their names, every one of them planned once per list (LabelPlan), so a name is up
+    // exactly when the zoom is past its own and panning never changes which are up (names must not come and go
+    // as the map is zoomed):
+    // - a sea or a range has its name in its middle once it is big enough on screen to hold it, a bigger one first, as on
+    //   any map;
+    // - a mark's name stands to its right (a park's on its shape), the list's best known first. These names are all
+    //   up or all away (some marks named and some not reads as broken: either all are
+    //   named or none are): up when at most 30 of the list's marks are in sight and at least half of
+    //   them have room for their names (the few left out stand closer together than a name is wide, and get theirs a
+    //   little further in), away otherwise. Decided when the map comes to rest, never while it moves.
+    // Names just appear.
+    private var setLabels: [String: UILabel] = [:]
+    private var setKey: [Double] = []
+    private func clearSet() {
+        guard !setLabels.isEmpty || !setKey.isEmpty else { return }
+        for l in setLabels.values { l.removeFromSuperview() }
+        setLabels = [:]; setKey = []; setPlan = nil; setPlanKey = ""; setOn = false
+    }
+    private var setPlan: LabelPlan?
+    private var setPlanKey = ""
+    /// the list's places by id, and those whose names are a mark's (up together or not at all)
+    private var setItems: [String: CollectionStore.Item] = [:]
+    private var setGated = Set<String>()
+    /// each name's box about its place's point
+    private var setBoxes: [String: CGRect] = [:]
+    /// the marks' names are up
+    private var setOn = false
+    private func setNames(_ m: MapController, _ c: CollectionStore.Collection, taken: [CGRect], moving: Bool) {
+        clearThings()
+        let scene = m.setScene
+        guard m.placesMode, !(c.shapes != nil && scene == nil) else { clearSet(); m.thingFrames = [:]; thingNameFrames = [:]; return }
+        var fresh = false
+        if setPlanKey != c.tag + (scene == nil ? "" : "+") {
+            setPlanKey = c.tag + (scene == nil ? "" : "+")
+            fresh = true
+            setItems = Dictionary(c.items.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            setGated = []; setBoxes = [:]
+            var items: [LabelPlan.Item] = []
+            var markNames: [String: [CGRect]] = [:]
+            for (n, it) in c.items.enumerated() where setBoxes[it.id] == nil {
+                let w = thingWidths[it.id] ?? {
+                    let w = ceil((it.short as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+                    thingWidths[it.id] = w
+                    return w
+                }()
+                let at = SIMD2(Double(it.at.x), Double(it.at.y))
+                if let scene, let across = scene.across(it.id), across > 0, !scene.outlined {
+                    let box = CGRect(x: -w / 2, y: -9, width: w, height: 18)
+                    setBoxes[it.id] = box
+                    items.append(LabelPlan.Item(id: it.id, at: at, box: box, threshold: Double(w + 8) / Double(across), rank: Double(across)))
+                } else if scene?.across(it.id) != nil {
+                    // a park: its name on its shape
+                    let box = CGRect(x: -w / 2, y: -9, width: w, height: 18)
+                    setBoxes[it.id] = box; setGated.insert(it.id)
+                    items.append(LabelPlan.Item(id: it.id, at: at, box: box, threshold: 0, rank: Double(c.items.count - n)))
+                } else {
+                    // a mark and its name beside it, kept clear together: to its right, or its left, under it, over it,
+                    // whichever lets the name show soonest (the name's own box is set once the plan has chosen)
+                    setBoxes[it.id] = CGRect(x: 8, y: -9, width: w, height: 18); setGated.insert(it.id)
+                    markNames[it.id] = [CGRect(x: 8, y: -9, width: w, height: 18), CGRect(x: -8 - w, y: -9, width: w, height: 18),
+                                        CGRect(x: -w / 2, y: 6, width: w, height: 18), CGRect(x: -w / 2, y: -24, width: w, height: 18),
+                                        CGRect(x: 6, y: 3, width: w, height: 18), CGRect(x: 6, y: -21, width: w, height: 18),
+                                        CGRect(x: -6 - w, y: 3, width: w, height: 18), CGRect(x: -6 - w, y: -21, width: w, height: 18)]
+                    items.append(LabelPlan.Item(id: it.id, at: at, box: CGRect(x: -5, y: -9, width: 13 + w, height: 18),
+                                                threshold: 0, rank: Double(c.items.count - n),
+                                                alts: [CGRect(x: -8 - w, y: -9, width: 13 + w, height: 18), CGRect(x: -w / 2, y: -5, width: w, height: 29),
+                                                       CGRect(x: -w / 2, y: -24, width: w, height: 29),
+                                                       CGRect(x: -5, y: -5, width: 11 + w, height: 26), CGRect(x: -5, y: -21, width: 11 + w, height: 26),
+                                                       CGRect(x: -6 - w, y: -5, width: 11 + w, height: 26), CGRect(x: -6 - w, y: -21, width: 11 + w, height: 26)]))
+                }
+            }
+            setPlan = items.isEmpty ? nil : LabelPlan(items, gap: 5)
+            for (id, n) in setPlan?.choice ?? [:] { if let r = markNames[id], n < r.count { setBoxes[id] = r[n] } }
+        }
+        // (the map's room: under the head, above the water where it rests, clear of the zoom column)
+        let top = m.sheetTop > 0 ? min(max(m.sheetTop, m.layout.top(.half)), m.layout.top(.quarter)) : m.layout.top(.quarter)
+        let room = m.layout.room(sheetTop: top)
+        let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
+        let card = RegionCardState.shared.isOpen
+        let key: [Double] = [m.c.x, m.c.y, m.k, Double(bounds.width), Double(box.minY), Double(box.maxY), Double(c.tag.hashValue),
+                             Double(c.items.count), scene == nil ? 0 : 1, card ? 1 : 0, moving ? 1 : 0]
+        guard key != setKey else { return }
+        setKey = key
+        guard let plan = setPlan else { clearSet(); m.thingFrames = [:]; thingNameFrames = [:]; return }
+        // ALL OF THE MARKS' NAMES OR NONE, decided at rest (and at once for a list just picked)
+        if !moving || fresh {
+            var seen = 0, named = 0
+            for it in c.items where setGated.contains(it.id) {
+                let q = m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+                guard box.contains(q) else { continue }
+                seen += 1
+                if (plan.zoom[it.id] ?? .infinity) <= m.k * 1.0001 { named += 1 }
+                if seen > 30 { break }
+            }
+            setOn = seen > 0 && seen <= 30 && named * 2 >= seen
+        }
+        // (a card up: it stands on the 25% water, its name about 220 pt above it; no name of the map's under it)
+        let cardTop: CGFloat = card ? m.layout.top(.quarter) - 240 : .greatestFiniteMagnitude
+        let live = bounds.insetBy(dx: -80, dy: -20)
+        var rects: [String: CGRect] = [:]
+        for (id, z) in plan.ordered {
+            if z > m.k * 1.0001 { break }
+            guard let it = setItems[id], let b = setBoxes[id] else { continue }
+            if setGated.contains(id), !setOn { continue }
+            let q = m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+            guard live.contains(q) else { continue }
+            let r = b.offsetBy(dx: q.x, dy: q.y)
+            guard r.maxY < cardTop else { continue }
+            rects[id] = r
+        }
+        for (id, r) in rects {
+            guard let it = setItems[id] else { continue }
+            let l = setLabels[id] ?? {
+                let l = UILabel()
+                l.isUserInteractionEnabled = false
+                l.attributedText = Self.words(it.short, Self.thingFont)
+                l.textAlignment = .center
+                Self.glow(l)
+                addSubview(l)
+                setLabels[id] = l
+                return l
+            }()
+            l.frame = r
+        }
+        for (id, l) in setLabels where rects[id] == nil { l.removeFromSuperview(); setLabels[id] = nil }
+        thingNameFrames = rects
+        m.thingFrames = rects
+    }
     private func clearThings() {
         for v in thingViews.values { v.dot.removeFromSuperview(); v.name.removeFromSuperview() }
         thingViews = [:]

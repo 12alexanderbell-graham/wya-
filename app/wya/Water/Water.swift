@@ -432,6 +432,9 @@ final class Water {
         if abs(best.rawValue - g.from.rawValue) > 1 {
             best = order[g.from.rawValue + (best.rawValue > g.from.rawValue ? 1 : -1)]
         }
+        // (Places' menu has nothing to show at 25%: pulled down from 50% the water goes into the capsule, pulled up
+        // out of it to 50%)
+        if best == .quarter, placesMenuUp() { best = g.from == .closed ? .half : .closed }
         go(best, speed: v, released: true)
     }
 
@@ -441,7 +444,16 @@ final class Water {
     /// itself; a finger takes it from wherever it is
     /// whether the water may be pulled to full: not over the plain Countries map
     var fullAllowed: Bool {
-        stampedList || settings || details || upload || pageSheet || regions || (head?.mode ?? .countries) != .countries
+        // (nor over Places' map: its set's rows hold at 50%: nothing of Places is a full
+        // screen)
+        // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
+        // or note, and a route's colour, go to full, for the keyboard and the picker)
+        if stampedList || settings || details || upload || pageSheet || regions { return true }
+        switch head?.mode ?? .countries {
+        case .countries, .places: return false
+        case .pins: return PinStore.shared.typing || PinRoutes.shared.colouring != nil
+        case .regions: return true
+        }
     }
 
     /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
@@ -451,6 +463,8 @@ final class Water {
     }
     /// a country's region map is on screen (set once by the screen)
     @ObservationIgnored var regionMapUp: () -> Bool = { false }
+    /// Places with no set picked: its menu is up, which stands at 50% and has nothing for 25% (set once by the screen)
+    @ObservationIgnored var placesMenuUp: () -> Bool = { false }
 
     func hint() {
         // (no more: the water never moves by itself)
@@ -485,8 +499,10 @@ final class Water {
             return
         }
         pendingGo = nil
+        // (Places' menu stands at 50%: sent to 25%, it is 50%)
+        var s = s == .quarter && placesMenuUp() ? .half : s
         // (full only where something fills it: over the plain Countries map 50% is the top)
-        var s = s == .full && !fullAllowed ? .half : s
+        if s == .full, !fullAllowed { s = .half }
         if !halfAllowed, s == .half || s == .full { s = .quarter }
         // the Route row is the caption's line at 25%: nothing above it (as a drag, so anything asking for more)
         if PinRoutes.shared.open, s == .half || s == .full { s = .quarter }

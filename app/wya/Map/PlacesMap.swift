@@ -19,7 +19,7 @@ extension MapController {
     func openPlace(_ i: Int) {
         guard placesMode, let w = world, i >= 0, i < w.places.count, placeOpen != i else { return }
         townPressed = nil
-        placesCollection = nil
+        // (the set looked at stays: the country narrows it: national parks in one country)
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
@@ -77,6 +77,8 @@ extension MapController {
         guard let w = world, let i = w.placeIndex[cc] else { return }
         ShowJob.n += 1
         let me = ShowJob.n
+        // (a town is the towns' set's)
+        placesCollection = nil; placesType = nil; placesPicked = true
         // the country open already but its towns never came (offline then): they are asked again
         if placeOpen != i { openPlace(i) } else { loadTowns(cc) }
         Task { @MainActor [weak self] in
@@ -96,6 +98,7 @@ extension MapController {
     func showOwn(_ id: String) {
         guard let w = world, let o = OwnPlaces.shared.place(id), let i = w.placeIndex[o.cc] else { return }
         ShowJob.n += 1
+        placesCollection = nil; placesType = nil; placesPicked = true
         if placeOpen != i { openPlace(i) }
         let d: Float = 2, at = o.point
         ownPressed = id
@@ -108,6 +111,9 @@ extension MapController {
         guard let w = world, let i = w.placeIndex[cc] else { return }
         ShowJob.n += 1
         let me = ShowJob.n
+        // (one of the set looked at stays on its set's map; any other thing shows on the towns')
+        if let c = placesCollection, CollectionStore.shared.collection(c)?.items.contains(where: { $0.id == id }) != true { placesCollection = nil; placesType = nil }
+        placesPicked = true
         if placeOpen != i { openPlace(i) }
         Task { @MainActor [weak self] in
             for _ in 0 ..< 150 {
@@ -175,7 +181,7 @@ extension MapController {
         case everywhere, country(Int), continent(String), region(String), collection(String)
         @MainActor var title: String {
             switch self {
-            case .everywhere: "Everywhere"
+            case .everywhere: ""
             case .continent(let k), .region(let k): k
             case .country: ""
             case .collection(let id): CollectionStore.shared.collection(id)?.title ?? ""
@@ -183,8 +189,8 @@ extension MapController {
         }
     }
     var placesPick: PlacesPick {
-        if let c = placesCollection { return .collection(c) }
         if let i = placeOpen { return .country(i) }
+        if let c = placesCollection { return .collection(c) }
         if let a = placesArea { return Self.continents.contains(a) ? .continent(a) : .region(a) }
         return .everywhere
     }
@@ -193,7 +199,6 @@ extension MapController {
         guard placesMode, world != nil else { return }
         // a card left up from the last map goes back into the water (a town's card stood over the world after Everywhere)
         CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
-        if case .collection = pick {} else { placesCollection = nil }
         switch pick {
         case .everywhere:
             placesArea = nil
@@ -263,17 +268,17 @@ extension MapController {
             return ccs.compactMap { w.placeIndex[$0] }
         }
     }
-    /// your stamped towns (and own places, and things) on a pick; a collection's: its places you stamped
+    /// YOUR PLACES OF THE SET LOOKED AT, on the map up: a collection's places you stamped (in the open country, when
+    /// one narrows it); the towns' set: your towns (of the open country, a continent, or everywhere)
     func stampedTowns(on pick: PlacesPick) -> Int {
+        if let c = setCollection { return c.items.filter { MarkStore.shared.state($0.key).stamped }.count }
         if case .collection(let id) = pick {
             return CollectionStore.shared.collection(id)?.items.filter { MarkStore.shared.state($0.key).stamped }.count ?? 0
         }
         let ids: Set<String>? = members(of: pick).map { Set($0.compactMap { world?.places[$0].id.lowercased() }) }
-        guard let ids else {
-            return MarkStore.shared.marks.filter { $0.value.stamped && [.town, .yours, .thing].contains($0.key.kind) }.count
-        }
-        // (one count for the caption and Places' rows: PlacesMaps.counts, which also finds a collection stop's country)
-        return PlacesMaps.counts().reduce(0) { ids.contains($1.key) ? $0 + $1.value : $0 }
+        return MarkStore.shared.marks.filter { m in
+            m.value.stamped && m.key.kind == .town && (ids?.contains(String(m.key.id.prefix { $0 != "/" })) ?? true)
+        }.count
     }
 
     /// back to the world: the towns go, the world comes back (the camera stays where it is)
@@ -285,14 +290,124 @@ extension MapController {
         closeRegions()
     }
 
+    /// the collection whose places are the map's marks now: the set looked at; or, for Cities far out (the whole
+    /// world or a continent on screen, where a town's own shape is nothing yet), the cities people know. Nearer, and
+    /// in an open country, Cities is the towns' own shapes and this is nil
+    var markCollection: CollectionStore.Collection? {
+        if let c = setCollection { return c }
+        guard placesMode, placesPicked, placesCollection == nil, placeOpen == nil, placesArea == nil, regionScene == nil,
+              k < townsK else { return nil }
+        return CollectionStore.shared.collection(CollectionStore.famousCities)
+    }
+    /// the set looked at (picked from the menu), narrowed to its kind and to the open country; nil for Cities
+    var setCollection: CollectionStore.Collection? {
+        guard placesMode, let id = placesCollection else { return nil }
+        if let cc = placeOpenID, let i = placeOpen, let w = world {
+            return CollectionStore.shared.narrowed(id, type: placesType, cc: cc) { w.place(at: $0) == i }
+        }
+        return CollectionStore.shared.typed(id, placesType)
+    }
+    /// the area set's shapes that are up (the set looked at, once its shapes have come)
+    var setScene: SetScene? { placesMode ? placesCollection.flatMap { setScenes[$0] } : nil }
+    /// an area set's shapes read (from the data server, kept for the session)
+    func loadSetShapes(_ id: String) {
+        guard setScenes[id] == nil, !setLoading.contains(id), let path = CollectionStore.shared.collection(id)?.shapes else { return }
+        setLoading.insert(id)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var scene: SetScene?
+            if case .ok(let d) = await Servers.data.file(path), let s = UrbanFile.parse(d) { scene = SetScene(id: id, shapes: s) }
+            await MainActor.run {
+                guard let self else { return }
+                self.setLoading.remove(id)
+                if let scene { self.setScenes[id] = scene; self.needsFrame = true }
+            }
+        }
+    }
+    /// the shaped places of a scene that are yours: stamped, wished
+    func setMarks(_ sc: SetScene) -> (stamped: [String], wished: [String]) {
+        var st: [String] = [], wi: [String] = []
+        // (only the places of the list that is up: a set cut down to its seas has no ocean filled)
+        let up = markCollection.map { CollectionStore.shared.ids($0) }
+        for (k, s) in MarkStore.shared.marks where k.kind == .thing && (s.stamped || s.wished) {
+            let id = String(k.id.dropFirst(3))
+            guard sc.runs[id] != nil, up?.contains(id) ?? true else { continue }
+            if s.stamped { st.append(id) } else { wi.append(id) }
+        }
+        return (st, wi)
+    }
+    /// A SET'S PLACE IS ITS MARK (11 Nov: its own shape where it has one to see; otherwise the map's diamond, the same
+    /// for every place): no shape of its own, or one still under 8 pt across
+    func setMarkShown(_ it: CollectionStore.Item, _ scene: SetScene?) -> Bool {
+        guard let scene, let a = scene.across(it.id) else { return true }
+        // (a sea has no tint and no line: until it is wide enough for its name, about 6.5 pt a letter, its mark stands for it)
+        return Double(a) * k < (scene.untinted ? Double(it.short.count) * 6.5 + 12 : 8)
+    }
+    /// the set looked at ("towns", or a collection's id)
+    var placesSet: String { placesCollection == CollectionStore.capitals ? CollectionStore.towns : placesCollection ?? CollectionStore.towns }
+    /// the kind it is cut down to (the menu's second lime bar), or nil
+    var placesKind: String? { placesCollection == CollectionStore.capitals ? CollectionStore.capitals : placesType }
+
+    /// A KIND PICKED under the set (seas of one type): the same set cut down to it; nil: all of it again
+    func showPlacesType(_ t: String?) {
+        guard placesMode else { return }
+        CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
+        townPressed = nil; thingPressed = nil
+        needsFrame = true
+        if placesSet == CollectionStore.towns {
+            placesType = nil
+            placesCollection = t == nil ? nil : CollectionStore.capitals
+            if t == nil, let cc = placeOpenID { loadTowns(cc) }
+        } else { placesType = t }
+        // (a kind of a few places spread over the world, the five oceans: the world, so they are in sight)
+        if placeOpen == nil, placesArea == nil, let c = markCollection, c.items.count <= 12, let w = world {
+            let xs = c.items.map(\.at.x)
+            if let lo = xs.min(), let hi = xs.max(), hi - lo > w.width * 0.45 { goHome() }
+        }
+    }
+    /// THE MENU AGAIN (a tap on the lime bar): no set picked, the map the cities' as it is when Places opens
+    func clearPlacesSet() {
+        guard placesMode else { return }
+        CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
+        townPressed = nil; thingPressed = nil
+        placesPicked = false; placesType = nil; placesCollection = nil
+        needsFrame = true
+    }
+
+    /// A SET PICKED from Places' menu (9 Nov): its places on the map. The country open stays open (the set narrowed to
+    /// it); a short list with no country open is framed whole (a season's circuits); a long one comes onto the map where
+    /// it is.
+    func showPlacesSet(_ id: String) {
+        guard placesMode else { return }
+        CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
+        townPressed = nil; thingPressed = nil
+        needsFrame = true
+        placesPicked = true; placesType = nil
+        if id == CollectionStore.towns {
+            placesCollection = nil
+            if let cc = placeOpenID { loadTowns(cc) }
+            return
+        }
+        placesCollection = id
+        loadSetShapes(id)
+        guard placeOpen == nil, placesArea == nil, let c = CollectionStore.shared.collection(id), c.items.count <= 60, c.shapes == nil,
+              let f = box(of: .collection(id)) else { return }
+        if f.z - f.x > (world?.width ?? 1000) * 0.45 { goHome() }
+        else { frameArea(SIMD4(Double(f.x), Double(f.y), Double(f.z), Double(f.w))) }
+    }
+
     /// a collection's place whose mark is under a screen point (the collection's map up)
     func collectionHit(at p: CGPoint) -> CollectionStore.Item? {
-        guard placesMode, let id = placesCollection, let items = CollectionStore.shared.collection(id)?.items else { return nil }
+        guard let items = markCollection?.items else { return nil }
+        // a name up (TownNamesView keeps their frames), else the nearest mark within a fingertip (14 pt)
+        for (q, f) in thingFrames where f.insetBy(dx: -4, dy: -6).contains(p) {
+            if let it = items.first(where: { $0.id == q }) { return it }
+        }
+        let scene = setScene
         var best: (CollectionStore.Item, CGFloat)?
-        for (q, f) in thingFrames {
-            guard f.insetBy(dx: -8, dy: -8).contains(p), let it = items.first(where: { $0.id == q }) else { continue }
-            let d = hypot(f.minX + 5 - p.x, f.midY - p.y)
-            if best == nil || d < best!.1 { best = (it, d) }
+        for it in items where setMarkShown(it, scene) {
+            let q = screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+            let d = hypot(q.x - p.x, q.y - p.y)
+            if d <= 14, best == nil || d < best!.1 { best = (it, d) }
         }
         return best?.0
     }
@@ -332,8 +447,13 @@ extension MapController {
     var townsK: Double { Double(view.width) / 25 }
     /// the countries whose towns are drawn now: the open one's, else the ones in view close in
     var townCountries: [String] {
+        // (Regions' towns level: the country's towns whatever Places looks at)
+        if regionTowns, let cc = placeOpenID { return [cc] }
+        // (a collection's map shows its own places only: no towns under them; and with no set picked the map shows
+        // none: the menu is up and the map is its borders, 11 Nov)
+        guard placesCollection == nil, placesPicked || !placesMode else { return [] }
         if let cc = placeOpenID { return [cc] }
-        guard placesMode, regionScene == nil, placesCollection == nil else { return [] }
+        guard placesMode, regionScene == nil else { return [] }
         return nearbyTowns
     }
     /// worked out again when the camera has moved a fifth of a screen or zoomed by a fifth (called by the renderer)

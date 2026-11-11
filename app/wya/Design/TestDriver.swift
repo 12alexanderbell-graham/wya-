@@ -11,6 +11,8 @@ final class TestDriver {
     weak var water: Water?
     weak var head: HeadState?
     private var lastID = ""
+    /// the pin `pins add` made (the only pin `pins unadd` ever takes away)
+    private var testPin: UUID?
     private var lostOwner = false
     /// the command file is being read (off the main thread), since when, and whether a stuck read was said
     private var reading = false, readSince = 0.0, saidStuck = false
@@ -297,6 +299,13 @@ final class TestDriver {
                     // pins routeempty | layers: the dock's Route and Layers tools
                     } else if a == "routeempty" { PinRoutes.shared.openEmpty()
                     } else if a == "layers" { PinsDockState.shared.tool = .layers
+                    // pins add: the toolkit's Add pin; pins unadd: the pin it made taken away again (a test's own pin)
+                    // (only ever the pin this test added: its id is kept from the add)
+                    } else if a == "add", let w = water {
+                        let before = Set(PinStore.shared.pins.map(\.id))
+                        PinsDockState.shared.addPin(water: w)
+                        testPin = PinStore.shared.pins.first { !before.contains($0.id) }?.id
+                    } else if a == "unadd", let id = testPin { PinStore.shared.remove(id, undoable: false); testPin = nil
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
                         for (i, r) in PinRoutes.shared.routes.enumerated() {
@@ -492,6 +501,22 @@ final class TestDriver {
                     if a == "everywhere" { map?.showPlacesMap(.everywhere) }
                     else if a == "cont" { map?.showPlacesMap(.continent(rest)) }
                     else if a == "reg" { map?.showPlacesMap(.region(rest)) }
+                    else if a == "colfirst" {
+                        // the first collection (pick colfirst): its map, as picking it in Places' search does
+                        CollectionStore.shared.load()
+                        for _ in 0 ..< 50 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                        if let c = CollectionStore.shared.all.first { map?.showPlacesMap(.collection(c.id)) }
+                    }
+                    else if a == "type" {
+                        // pick type kind:3 / pick type f1-2026: a row of Places' menu tapped
+                        CollectionStore.shared.load(); ThingIndex.shared.load()
+                        for _ in 0 ..< 80 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                        map?.showPlacesSet(rest)
+                        if CollectionStore.shared.types(rest).isEmpty { water?.go(.quarter) }
+                    }
+                    // pick kind ocean / pick kind none: a kind under the picked set tapped; pick menu: the lime set tapped
+                    else if a == "kind" { map?.showPlacesType(rest == "none" ? nil : rest) }
+                    else if a == "menu" { map?.clearPlacesSet(); if water?.stop == .quarter { water?.go(.half) } }
                     else if a == "col" {
                         CollectionStore.shared.load()
                         for _ in 0 ..< 50 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
@@ -572,17 +597,31 @@ final class TestDriver {
                 // thingtap <words>: a tap on the open collection's stop whose name holds the words, at its mark; its mark
                 // state logged a second later (D7: a stop's day as a visit)
                 case "thingtap":
-                    if let m = map, let cid = m.placesCollection, let c = CollectionStore.shared.collection(cid) {
+                    if let m = map, let c = m.markCollection {
                         let q = p.dropFirst().joined(separator: " ").lowercased()
-                        if let it = c.items.first(where: { $0.name.lowercased().contains(q) || $0.label.lowercased().contains(q) }),
-                           let f = m.thingFrames[it.id] {
-                            let pt = CGPoint(x: f.midX, y: f.midY)
-                            if let i = m.hit(at: pt) { m.onPlaceTap?(i, pt) }
+                        if let it = c.items.first(where: { $0.name.lowercased().contains(q) || $0.label.lowercased().contains(q) }) {
+                            // (its name when it is up; otherwise its own point: its mark, or the middle of its shape)
+                            let pt = m.thingFrames[it.id].map { CGPoint(x: $0.midX, y: $0.midY) } ?? m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+                            if let i = m.hit(at: pt) { m.onPlaceTap?(i, pt) } else { m.onSeaTap?() }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                                 let st = MarkStore.shared.state(it.key)
                                 NSLog("wya thingtap %@ (%@): stamped %d wished %d visits %d", it.name, it.date, st.stamped ? 1 : 0, st.wished ? 1 : 0, st.visits)
                             }
                         } else { NSLog("wya thingtap %@: no mark", q) }
+                    }
+                // rcard stamp | wish | close: the region card's place stamped or unstamped (wished or not) through the store,
+                // as its buttons do; the card closed
+                case "rcard":
+                    let card = RegionCardState.shared
+                    if a == "close", let m = map { card.close(map: m) }
+                    else if let k = card.key {
+                        let st = MarkStore.shared.state(k)
+                        if a == "stamp" {
+                            if st.stamped { await MarkStore.shared.unstamp(k, name: card.name) } else { await MarkStore.shared.stamp(k, name: card.name) }
+                        } else if a == "wish" {
+                            if st.wished { await MarkStore.shared.unwish(k, name: card.name) } else { await MarkStore.shared.wish(k, name: card.name) }
+                        }
+                        map?.needsFrame = true
                     }
                 // picker on|off | picker at <x 0-1> <y 0-1> | picker strength <0-1>: the colour picker's test host (Part 15)
                 case "picker":

@@ -23,6 +23,10 @@ nonisolated final class RegionScene: @unchecked Sendable {
     let runs: [(start: Int, count: Int)]
     /// the lines between regions, ten floats a segment: its ends, where its ends lie along their border (0 to 1), unused
     let segs: [Float]
+    /// THE PARENTS' BORDERS: of those lines, the ones between two regions of different parents (a state's line among
+    /// its counties'), in the same layout; drawn again, bolder, so the level above reads through the deeper one.
+    /// Empty where the regions share one parent or have none
+    let bold: [Float]
     /// each entry's box and rings in map units, for the finger
     private let boxes: [SIMD4<Float>]
     private let rings: [[[SIMD2<Float>]]]
@@ -39,7 +43,9 @@ nonisolated final class RegionScene: @unchecked Sendable {
         return out
     }
 
-    init?(place: Int, id: String, row: Int, file f: RegionFile) {
+    /// `above`: the next coarser level's file, for a file whose regions do not name their parents (France's
+    /// departments): each region's parent is then the coarser region most of it lies in
+    init?(place: Int, id: String, row: Int, file f: RegionFile, above: RegionFile? = nil) {
         guard let rows = RegionCatalog.shared.levels[id], row >= 1, row <= rows.count else { return nil }
         self.place = place; self.id = id; self.row = row; level = rows[row - 1]
         var ids: [String] = [], names: [String] = [], parents: [String?] = [], index: [String: Int] = [:]
@@ -81,12 +87,111 @@ nonisolated final class RegionScene: @unchecked Sendable {
             }
         }
         guard !rn.isEmpty, all.x < all.z else { return nil }
+        // the parents' borders: a line's segment is an edge of the rings on both its sides (the file's arcs are the
+        // rings' own points), so each segment takes the parents of the rings it is an edge of; two different: bold
+        var bd: [Float] = []
+        var parentIndex: [String: Int32] = [:]
+        var pidx: [Int32] = parents.map { p in
+            guard let p else { return 0 }
+            if let i = parentIndex[p] { return i }
+            let i = Int32(parentIndex.count + 1); parentIndex[p] = i; return i
+        }
+        if parentIndex.isEmpty, let above {
+            pidx = Self.parents(of: f, in: above, index: index, count: ids.count)
+            parentIndex = Dictionary(uniqueKeysWithValues: Set(pidx).filter { $0 > 0 }.map { (String($0), $0) })
+        }
+        if parentIndex.count > 1 {
+            func key(_ p: SIMD2<Float>, _ q: SIMD2<Float>) -> SIMD4<Int32> {
+                let a = SIMD2(Int32((p.x * 2e4).rounded()), Int32((p.y * 2e4).rounded()))
+                let b = SIMD2(Int32((q.x * 2e4).rounded()), Int32((q.y * 2e4).rounded()))
+                return (a.x, a.y) < (b.x, b.y) ? SIMD4(a.x, a.y, b.x, b.y) : SIMD4(b.x, b.y, a.x, a.y)
+            }
+            // (-1: no ring seen yet; -2: rings of two parents)
+            var sides: [SIMD4<Int32>: Int32] = [:]
+            sides.reserveCapacity(sg.count / 10)
+            for i in stride(from: 0, to: sg.count, by: 10) { sides[key(SIMD2(sg[i], sg[i + 1]), SIMD2(sg[i + 2], sg[i + 3]))] = -1 }
+            for (e, mine) in rs.enumerated() {
+                let par = pidx[eu[e]]
+                for m in mine {
+                    for j in m.indices {
+                        let k = key(m[j], m[(j + 1) % m.count])
+                        guard let v = sides[k], v != -2 else { continue }
+                        sides[k] = v == -1 || v == par ? par : -2
+                    }
+                }
+            }
+            for i in stride(from: 0, to: sg.count, by: 10)
+            where sides[key(SIMD2(sg[i], sg[i + 1]), SIMD2(sg[i + 2], sg[i + 3]))] == -2 { bd += sg[i ..< i + 10] }
+        }
+        bold = bd
         unitIDs = ids; unitNames = names; unitParents = parents; entryUnit = eu
         var ue = [[Int]](repeating: [], count: ids.count)
         for (e, u) in eu.enumerated() { ue[u].append(e) }
         unitEntries = ue
         points = pts; fans = fan; runs = rn; segs = sg
         boxes = bx; rings = rs; box = all
+    }
+
+    /// EACH REGION'S PARENT BY WHERE IT LIES (a file that names none): four points inside the region's biggest ring
+    /// (its middle, and three points a little in from its edge toward the middle) are looked up in the coarser level's
+    /// regions; the one holding most of them is the parent (its number from 1; 0: none)
+    private static func parents(of f: RegionFile, in above: RegionFile, index: [String: Int], count: Int) -> [Int32] {
+        func area(_ r: [SIMD2<Double>]) -> Double {
+            var a = 0.0
+            for i in r.indices { let p = r[i], q = r[(i + 1) % r.count]; a += p.x * q.y - q.x * p.y }
+            return a / 2
+        }
+        func holds(_ r: [SIMD2<Double>], _ p: SIMD2<Double>) -> Bool {
+            var inside = false
+            var j = r.count - 1
+            for i in r.indices {
+                let a = r[i], b = r[j]
+                if (a.y > p.y) != (b.y > p.y), p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x { inside.toggle() }
+                j = i
+            }
+            return inside
+        }
+        // the coarser regions: their number by id, each entry's box and rings
+        var number: [String: Int32] = [:]
+        var up: [(n: Int32, box: SIMD4<Double>, rings: [[SIMD2<Double>]])] = []
+        for u in above.units {
+            let n = number[u.id] ?? Int32(number.count + 1)
+            number[u.id] = n
+            var b = SIMD4<Double>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+            for r in u.rings { for p in r { b = SIMD4(min(b.x, p.x), min(b.y, p.y), max(b.z, p.x), max(b.w, p.y)) } }
+            up.append((n, b, u.rings))
+        }
+        // each region's biggest ring (over all its entries)
+        var biggest = [[SIMD2<Double>]?](repeating: nil, count: count)
+        var size = [Double](repeating: 0, count: count)
+        for u in f.units {
+            guard let ui = index[u.id] else { continue }
+            for r in u.rings where r.count >= 3 {
+                let a = abs(area(r))
+                if a > size[ui] { size[ui] = a; biggest[ui] = r }
+            }
+        }
+        return biggest.map { ring in
+            guard let r = ring else { return 0 }
+            let a = area(r)
+            var c = SIMD2<Double>(0, 0)
+            if abs(a) > 1e-12 {
+                for i in r.indices {
+                    let p = r[i], q = r[(i + 1) % r.count], w = p.x * q.y - q.x * p.y
+                    c += (p + q) * w
+                }
+                c /= 6 * a
+            } else { c = r.reduce(SIMD2<Double>(0, 0), +) / Double(r.count) }
+            let samples = [c] + [r.count / 6, r.count / 2, r.count * 5 / 6].map { r[$0] + (c - r[$0]) * 0.15 }
+            var votes: [Int32: Int] = [:]
+            for p in samples {
+                for u in up where p.x >= u.box.x && p.x <= u.box.z && p.y >= u.box.y && p.y <= u.box.w {
+                    // (even-odd over the entry's rings: a ring inside another is a hole)
+                    if u.rings.reduce(false, { $0 != holds($1, p) }) { votes[u.n, default: 0] += 1; break }
+                }
+            }
+            return votes.max { $0.value < $1.value }?.key ?? 0
+        }
     }
 
     /// a ring or line in the map's units; one lying mostly past 180° east (the old files' 0 to 360) is brought round to

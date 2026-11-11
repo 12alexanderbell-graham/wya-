@@ -24,7 +24,12 @@ struct LabelPlan {
         let threshold: Double
         /// higher first among names with the same threshold
         let rank: Double
+        /// other boxes it may take instead (a mark's name to its left, under it, over it): the one that lets it show
+        /// soonest is taken, the first on a tie
+        var alts: [CGRect] = []
     }
+    /// which box each item took (0: its own, n: its nth other), by id
+    private(set) var choice: [String: Int] = [:]
     /// each item's zoom, by id
     private(set) var zoom: [String: Double] = [:]
     /// the items by their zoom, lowest first (a frame stops at the first one past the camera's zoom)
@@ -37,26 +42,33 @@ struct LabelPlan {
         }
         guard let lowest = order.first.map({ max(1e-9, items[$0].threshold) }) else { return }
         // a grid in map units: two names can only meet past the lowest threshold within this reach of each other
-        let maxW = items.map { Double($0.box.width) }.max() ?? 0, maxH = items.map { Double($0.box.height) }.max() ?? 0
-        let maxOff = items.map { Double(max(abs($0.box.minX), abs($0.box.maxX), abs($0.box.minY), abs($0.box.maxY))) }.max() ?? 0
+        let every = items.flatMap { [$0.box] + $0.alts }
+        let maxW = every.map { Double($0.width) }.max() ?? 0, maxH = every.map { Double($0.height) }.max() ?? 0
+        let maxOff = every.map { Double(max(abs($0.minX), abs($0.maxX), abs($0.minY), abs($0.maxY))) }.max() ?? 0
         let reach = (Swift.max(maxW, maxH) + 2 * maxOff + Double(gap)) / lowest
         let cell = Swift.max(reach, 1e-9)
         var grid: [SIMD2<Int>: [Int]] = [:]
         var placed = [Double](repeating: .infinity, count: items.count)
+        var boxes = items.map(\.box)
         for b in order {
             let B = items[b]
-            var z = B.threshold
             let c = SIMD2(Int((B.at.x / cell).rounded(.down)), Int((B.at.y / cell).rounded(.down)))
-            for dx in -1 ... 1 {
-                for dy in -1 ... 1 {
-                    for a in grid[c &+ SIMD2(dx, dy)] ?? [] {
-                        let s = Self.separation(items[a], B, gap: Double(gap))
-                        // only an earlier name that is up before they separate keeps this one back
-                        if s > placed[a], s > z { z = s }
-                    }
+            var near: [Int] = []
+            for dx in -1 ... 1 { for dy in -1 ... 1 { near += grid[c &+ SIMD2(dx, dy)] ?? [] } }
+            var best = Double.infinity, pick = 0
+            for (n, box) in ([B.box] + B.alts).enumerated() {
+                var z = B.threshold
+                for a in near {
+                    let s = Self.separation(items[a].at, boxes[a], B.at, box, gap: Double(gap))
+                    // only an earlier name that is up before they separate keeps this one back
+                    if s > placed[a], s > z { z = s }
                 }
+                if z < best { best = z; pick = n }
+                if z <= B.threshold { break }
             }
-            placed[b] = z
+            placed[b] = best
+            boxes[b] = pick == 0 ? B.box : B.alts[pick - 1]
+            if pick != 0 { choice[B.id] = pick }
             grid[c, default: []].append(b)
         }
         for i in items.indices { zoom[items[i].id] = placed[i] }
@@ -64,8 +76,9 @@ struct LabelPlan {
     }
 
     /// the zoom past which two labels never overlap again (0 when they never overlap)
-    static func separation(_ A: Item, _ B: Item, gap g: Double) -> Double {
-        let d = B.at - A.at
+    static func separation(_ A: Item, _ B: Item, gap g: Double) -> Double { separation(A.at, A.box, B.at, B.box, gap: g) }
+    static func separation(_ aAt: SIMD2<Double>, _ aBox: CGRect, _ bAt: SIMD2<Double>, _ bBox: CGRect, gap g: Double) -> Double {
+        let d = bAt - aAt
         // on one axis: B's box minus A's box (screen) is d * k + e; they overlap there while -(B's size + g) < d*k + e <
         // A's size + g
         func axisEnd(_ d: Double, _ e: Double, _ lo: Double, _ hi: Double) -> Double {
@@ -73,9 +86,9 @@ struct LabelPlan {
             if abs(d) < 1e-12 { return (lo < e && e < hi) ? .infinity : 0 }
             return d > 0 ? Swift.max(0, (hi - e) / d) : Swift.max(0, (lo - e) / d)
         }
-        let ex = Double(B.box.minX - A.box.minX), ey = Double(B.box.minY - A.box.minY)
-        let x = axisEnd(d.x, ex, -(Double(B.box.width) + g), Double(A.box.width) + g)
-        let y = axisEnd(d.y, ey, -(Double(B.box.height) + g), Double(A.box.height) + g)
+        let ex = Double(bBox.minX - aBox.minX), ey = Double(bBox.minY - aBox.minY)
+        let x = axisEnd(d.x, ex, -(Double(bBox.width) + g), Double(aBox.width) + g)
+        let y = axisEnd(d.y, ey, -(Double(bBox.height) + g), Double(aBox.height) + g)
         return Swift.min(x, y)
     }
 }

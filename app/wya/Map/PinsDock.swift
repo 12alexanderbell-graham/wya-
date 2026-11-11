@@ -1,18 +1,33 @@
 import SwiftUI
+import MapKit
 
-/// PINS' DOCK (8.5,, 23 Oct): at the water's top, how many pins you have in one grey line, and under it one row of
-/// tools,
-/// the app's own icons drawn in ink straight on the water (no glass, no words; a hold names a tool in Apple's menu). It rides the
-/// water's edge at every stop; at 50% your saved pins and routes are under it.
-/// Tools so far: Saved (the water to 50% with your pins, or back), Route (the Route row in the tools' place), Share
-/// (every pin as an Apple Maps link) and Layers (Apple's three looks in the tools' place). Draw, Track and Moment come with
-/// their own features.
+/// PINS' TOOLKIT (8.5): one bar where every map's caption sits, 44 pt tall across the water, its four tools as words
+/// sharing it evenly (the system's own segmented bar: one shape that holds the tools, not four loose pills). Words,
+/// not icons: a tool's name cannot be misread. No count of pins over them: a number there says nothing about the tools.
+/// - Add pin: a pin in the middle of the map on screen, chosen, so its name is up and it can be dragged into place
+///   (a hold on the map still drops one where the finger is).
+/// - Route: the Route row in the tools' place.
+/// - Layers: Apple's three looks in the tools' place.
+/// - Saved: the water to 50% with your pins and routes under the row, its capsule lime while they are up; again, down.
+/// Sharing is each pin's own (its menu, its sheet). Draw, Track and Moment come with their own features.
 @MainActor @Observable
 final class PinsDockState {
     static let shared = PinsDockState()
     /// a tool whose controls are in the row (Route has its own state, PinRoutes.open)
     enum Tool { case layers }
     var tool: Tool?
+
+    /// ADD PIN: a pin where the middle of the map on screen is (between the head and the water), as a hold there would
+    /// drop it: chosen, named once the phone knows the place, one undo step
+    func addPin(water: Water) {
+        guard let v = PinsMapState.shared.view, let map = PinsMapState.shared.map, !map.locked else { Feel.refuse(); return }
+        let L = water.layout
+        let p = CGPoint(x: L.W / 2, y: (L.headBottom + water.level) / 2)
+        let c = v.convert(v.convert(p, from: nil), toCoordinateFrom: v)
+        guard CLLocationCoordinate2DIsValid(c) else { Feel.refuse(); return }
+        PinStore.shared.drop(at: c, country: PinsMapView.Coordinator.country(map, c))
+        if water.stop != .quarter { water.go(.quarter) }
+    }
 }
 
 struct PinsDock: View {
@@ -23,22 +38,14 @@ struct PinsDock: View {
     @State private var dock = PinsDockState.shared
     @State private var routes = PinRoutes.shared
 
-    /// the count line's middle and the tools' row middle, from the dock's top
-    static func countY(_ top: CGFloat) -> CGFloat { top + 25 }
-    static func rowY(_ top: CGFloat) -> CGFloat { top + 68 }
+    /// the row's middle from the dock's top: the caption's own middle on every other map
+    static func rowY(_ top: CGFloat) -> CGFloat { top + 72 }
     /// where what is under the dock starts (Saved's rows)
-    static func bottom(_ top: CGFloat) -> CGFloat { top + 98 }
+    static func bottom(_ top: CGFloat) -> CGFloat { top + 104 }
 
     var body: some View {
         let L = water.layout
-        let n = store.pins.count
         ZStack(alignment: .topLeading) {
-            Text(n == 0 ? "Hold the map to drop a pin" : n == 1 ? "1 pin" : "\(n) pins")
-                .font(.subheadline)
-                .foregroundStyle(Palette.ink.opacity(0.5))
-                .contentTransition(.numericText(value: Double(n)))
-                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                .position(x: L.W / 2, y: Self.countY(top))
             if routes.open {
                 // the Route row in the tools' place (its cross closes it)
                 RouteRow(water: water, captionY: Self.rowY(top))
@@ -56,55 +63,68 @@ struct PinsDock: View {
     private var savedOn: Bool { water.stop == .half || water.stop == .full }
 
     private var tools: some View {
-        HStack(spacing: 12) {
-            tool("saved", "Saved", on: savedOn) {
-                if savedOn { water.go(.quarter) } else if n > 0 { water.go(.half) } else { Feel.refuse(); return }
-            }
-            tool("route", "Route") {
+        let L = water.layout
+        // (16 pt inside the water each side, as its rows; the tools 4 pt inside the bar)
+        let w = (L.W - 2 * L.sheetInset - 32 - 8) / 4
+        return HStack(spacing: 0) {
+            tool("Add pin", width: w) { dock.addPin(water: water) }
+            tool("Route", width: w) {
                 water.go(.quarter)
                 routes.openEmpty()
             }
-            tool("share", "Share") { share() }
-            tool("layers", "Layers") {
+            tool("Layers", width: w) {
                 water.go(.quarter)
                 dock.tool = .layers
             }
+            // (with nothing saved there is nothing to show: the capsule is grey and refuses)
+            tool("Saved", width: w, on: savedOn, dim: n == 0) {
+                if savedOn { water.go(.quarter) } else if n > 0 { water.go(.half) } else { Feel.refuse() }
+            }
         }
+        .padding(4)
+        // (one even ground whatever the map under the water is: white at 45%)
+        .background(Capsule().fill(Color.white.opacity(0.45)))
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
-    private var n: Int { store.pins.count }
+    private var n: Int { store.pins.count + routes.routes.count }
 
-    /// one tool: its icon 22 pt in a 44 pt slot; on, a 36 pt ink circle behind it and the icon white (A18.3)
-    private func tool(_ key: String, _ name: String, on: Bool = false, _ act: @escaping () -> Void) -> some View {
+    /// one tool: its word in its quarter of the bar; on, its whole part lime
+    private func tool(_ name: String, width: CGFloat, on: Bool = false, dim: Bool = false, _ act: @escaping () -> Void) -> some View {
         Button {
             Feel.tap()
             act()
         } label: {
-            ZStack {
-                if on { Circle().fill(Palette.ink).frame(width: 36, height: 36) }
-                Icon5(key: key, ink: on ? .white : Palette.ink, size: 22)
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Rectangle())
+            Text(name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 6)
+                .frame(width: width, height: 36)
+                .background(Capsule().fill(on ? Palette.lime : Color.clear))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // a hold names the tool in Apple's menu (29 Oct); choosing it does the tool
-        .contextMenu { Button(name) { Feel.tap(); act() } }
         .accessibilityLabel(name)
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 
-    // MARK: Layers' row: the cross, then Apple's three looks as words, the one in use bold (the region map's level line)
+    // MARK: Layers' row, in the toolkit's own bar: the cross, then Apple's three looks as words, the one in use its
+    // whole part lime
 
     private var layersRow: some View {
         let looks: [(String, String)] = [("apple-standard", "Standard"), ("apple-satellite", "Satellite"), ("apple-hybrid", "Hybrid")]
         let now = MapSettingsStore.shared.value.pinsMap
         let current = looks.contains { $0.0 == now } ? now : "apple-standard"
-        return HStack(spacing: 20) {
+        let L = water.layout
+        // (the bar's width less the cross's 36 pt and the 4 pt inside each end, in three)
+        let w = (L.W - 2 * L.sheetInset - 32 - 8 - 36) / 3
+        return HStack(spacing: 0) {
             Button {
                 Feel.tap()
                 dock.tool = nil
             } label: {
-                Icon5(key: "cross", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
+                Icon5(key: "cross", ink: Palette.ink, size: 18).frame(width: 36, height: 36).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close layers")
@@ -114,28 +134,21 @@ struct PinsDock: View {
                     Feel.tap()
                     MapSettingsStore.shared.change { $0.pinsMap = l.0 }
                 } label: {
-                    Text(l.1).font(l.0 == current ? .body.weight(.semibold) : .body)
-                        .foregroundStyle(Palette.ink.opacity(l.0 == current ? 1 : 0.5))
-                        .frame(minHeight: 44)
+                    Text(l.1).font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(width: w, height: 36)
+                        .background(Capsule().fill(l.0 == current ? Palette.lime : Color.clear))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(l.0 == current ? [.isButton, .isSelected] : .isButton)
             }
         }
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .padding(4)
+        .background(Capsule().fill(Color.white.opacity(0.45)))
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 
-    // MARK: Share: every pin as its name and an Apple Maps link, in the system's share sheet
-
-    private func share() {
-        guard !store.pins.isEmpty else { Feel.refuse(); return }
-        let lines = store.pins.reversed().compactMap { p -> String? in
-            let q = p.title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "Pin"
-            return "\(p.title)\nhttps://maps.apple.com/?ll=\(p.lat),\(p.lon)&q=\(q)"
-        }
-        var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
-        while let next = top?.presentedViewController { top = next }
-        top?.present(UIActivityViewController(activityItems: [lines.joined(separator: "\n\n")], applicationActivities: nil), animated: true)
-    }
 }

@@ -18,24 +18,34 @@ final class RegionCardState {
     var stampedHere = false
     @ObservationIgnored var closedAt: CFTimeInterval = 0
     @ObservationIgnored private var closing = false
+    /// the water the card stands on (set once by the screen)
+    @ObservationIgnored weak var water: Water?
     var isOpen: Bool { key != nil }
 
     /// out of the water (A6.11): the map never moves; the region stays darkened while the card is up
-    func open(_ key: PlaceKey, name: String, parents: String, place: Int, map: MapController, day: String? = nil) {
+    func open(_ key: PlaceKey, name: String, parents: String, place: Int?, map: MapController, day: String? = nil) {
         guard self.key == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
         self.key = key; self.name = name; self.parents = parents; self.place = place; self.day = day
         stampedHere = false
         map.kept = place
         p = 0
         Feel.tap()
-        DispatchQueue.main.async { [weak self] in
-            withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { self?.p = 1 }
+        // THE WATER HIGHER THAN 25% (Places' menu at 50%; a pressed sea had nothing to act on): the
+        // card stands on the 25% water, so the water goes down first and the card comes out of it once it is there
+        // (0.3 s later; coming at once, its buttons showed through the glass on the way down)
+        var wait = 0.0
+        if map.placesMode, let w = water, w.stop == .half || w.stop == .full { w.go(.quarter); wait = 0.3 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self, self.key == key else { return }
+            withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { self.p = 1 }
         }
     }
     /// back into the water, every change kept
     /// `instant`: gone in this frame, no fold (a mode change moves nothing)
     func close(map: MapController, instant: Bool = false) {
         guard key != nil else { return }
+        // (a set's place stays darkened while its card is up, as a region does; it is let go as the card goes)
+        if map.markCollection != nil, map.thingPressed != nil { map.thingPressed = nil; map.needsFrame = true }
         if instant {
             closing = false
             closedAt = CACurrentMediaTime()

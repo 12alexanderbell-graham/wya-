@@ -211,7 +211,7 @@ struct SheetContent: View {
             // (nor at history height: the shelf's cards peeked behind the range bar there, 31 Oct 06:25)
             if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
                !water.historyUp, !PlacePageState.shared.isOpen, map.regionScene == nil {
-                PlacesShelf(water: water, map: map, form: form, captionY: max(L.headBottom + 12 + 52, form.top + 72))
+                PlacesSheet(water: water, map: map, captionY: max(L.headBottom + 12 + 52, form.top + 72), top: form.top, captionUp: captionShown)
             }
             // REGIONS' SELECTION MENU (6.3), riding the water's top; kept while its rows leave
             if water.menuShown || water.menuLeaving, let head = water.head {
@@ -261,7 +261,7 @@ struct SheetContent: View {
                     let dockTop = max(form.top, L.headBottom + 8)
                     PinsDock(water: water, top: dockTop)
                     if !PinRoutes.shared.open, PinsDockState.shared.tool == nil, !PinStore.shared.pins.isEmpty {
-                        PinsList(water: water, captionY: cy, top: PinsDock.bottom(dockTop))
+                        PinsList(water: water, captionY: cy, top: PinsDock.bottom(dockTop), rest: abs(form.top - L.top(.half)) < 1.5)
                     }
                 } else {
                     PinsWater(water: water, form: form, captionY: cy)
@@ -282,11 +282,17 @@ struct SheetContent: View {
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
                     let hc = water.historyUp ? map.historyInfo?.caption : nil
-                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "Everywhere") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
+                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
                             tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                            night: FullView.night(form.page), visible: captionShown, quiet: water.modeSwitching,
-                            maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + 24))
+                            // (Places before a set is picked: the menu alone, no count of "places" as a whole, 11 Nov 12:33)
+                            night: FullView.night(form.page), visible: captionShown && !(map.placesMode && hc == nil && placesCaption == nil),
+                            quiet: water.modeSwitching,
+                            // (Places: the name keeps clear of the back arrow on its line)
+                            maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + (map.placesMode ? 60 : 24)))
+                // (Places: a set picked or left is the water's content changing at once, the caption with it: its words
+                // rolled out over the menu's first rows, 11 Nov)
+                .transaction(value: map.placesPicked) { $0.animation = nil; $0.disablesAnimations = true }
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so the
                 // edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its full
@@ -337,23 +343,7 @@ struct SheetContent: View {
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
                     .contextMenu {
                         if map.placesMode {
-                            // Places: your maps (8 Nov answer 8), Everywhere, the countries you have places in, the
-                            // collections; then this map's stamped list
-                            let counts = PlacesMaps.counts()
-                            Section("Maps") {
-                                Button("Everywhere") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.everywhere) } }
-                                    .disabled(map.placesPick == .everywhere)
-                                if let w = map.world {
-                                    ForEach(w.places.indices.filter { (counts[w.places[$0].id.lowercased()] ?? 0) > 0 }, id: \.self) { i in
-                                        Button(w.places[i].n) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.country(i)) } }
-                                            .disabled(map.placesPick == .country(i))
-                                    }
-                                }
-                                ForEach(CollectionStore.shared.all, id: \.id) { c in
-                                    Button(c.title) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.showPlacesMap(.collection(c.id)) } }
-                                        .disabled(map.placesPick == .collection(c.id))
-                                }
-                            }
+                            // Places: this map's stamped list (the types are the water's own menu, 9 Nov)
                             Button("Its stamped list") { if listCount > 0 { water.openList() } else { Feel.refuse() } }
                         } else if let here {
                             // the planet's own menu (11.5), the continent you are on unavailable as the current row
@@ -375,6 +365,11 @@ struct SheetContent: View {
             }
         }
         .onChange(of: water.pageUp) { _, v in DispatchQueue.main.async { pageWasUp = v } }
+        // PINS AT FULL is a name or note being typed, or a route's colour: when the pin or the colour goes (deleted,
+        // done, put away) the water comes back to 50%, where the toolkit and the list are
+        .onChange(of: PinStore.shared.selected == nil && PinRoutes.shared.colouring == nil) { _, none in
+            if none, map.pinsMode, water.stop == .full, !water.settings, !water.details, !water.upload, !water.pageSheet { water.go(.half) }
+        }
         .onChange(of: captionFits, initial: true) { _, fits in
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
             // (a mode change swaps the caption with no roll)
@@ -412,27 +407,33 @@ struct SheetContent: View {
         map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.count.0
     }
 
-    /// the open country's Places caption (7.4): its name, its towns you stamped, of its towns
+    /// PLACES' CAPTION (9 Nov): the set looked at, your places of it, of how many it lists; narrowed to a country,
+    /// of how many it has there ("of 61 in Italy"). The towns' set says its total only
+    /// in a country (the world's towns are not a list anyone holds: "Towns 12").
     private var placesCaption: (name: String, count: Int, tail: String)? {
-        // a collection's map: its title, your places of it, of how many (an event collection: "of 23 stops")
-        if let id = map.placesCollection, let c = CollectionStore.shared.collection(id) {
-            _ = map.townsVersion
-            return (c.title, map.stampedTowns(on: .collection(id)), "of \(c.items.count)" + (c.event ? " stops" : " places"))
+        _ = map.townsVersion; _ = MarkStore.shared.changes; _ = CollectionStore.shared.ready
+        let place: String? = map.placeOpen.flatMap { i in map.world.map { $0.places[i].n } }
+        // (no set picked yet: the menu's rows, and how many places are yours in all)
+        guard map.placesPicked else { return nil }
+        if let c = map.setCollection {
+            let n = c.items.filter { MarkStore.shared.state($0.key).stamped }.count
+            // (the set's own name whatever kind it is cut down to: the lime bar under it says the kind)
+            return (CollectionStore.shared.title(map.placesSet), n, "of " + Self.number(c.total) + (place.map { " in " + $0 } ?? ""))
         }
-        // a continent's or world region's map: its name and your towns in it (no "of N" yet: its towns are not all read)
-        if let a = map.placesArea {
-            _ = map.townsVersion
-            // (every number says what it counts, 8 Nov)
-            let n = map.stampedTowns(on: map.placesPick)
-            return (a, n, n == 1 ? "place" : "places")
+        let n = map.stampedTowns(on: map.placesPick)
+        let cities = "Cities"
+        if let cc = map.placeOpenID, let place {
+            let total = map.townScenes[cc]?.towns.count ?? 0
+            return (cities, n, total > 0 ? "of " + Self.number(total) + " in " + place : "in " + place)
         }
-        guard let i = map.placeOpen, let w = map.world, let cc = map.placeOpenID else { return nil }
-        _ = map.townsVersion
-        _ = MarkStore.shared.changes
-        // your places in it (towns, things and your own, as its row on Everywhere counts them: Monaco's circuit made
-        // the row say 1 place and the caption 0 of 2 towns)
-        let n = PlacesMaps.counts()[cc] ?? 0
-        return (w.places[i].n, n, n == 1 ? "place" : "places")
+        if let a = map.placesArea { return (cities, n, "in " + a) }
+        return (cities, n, "")
+    }
+
+    /// a count as people read it ("28,246")
+    static func number(_ n: Int) -> String {
+        let nf = NumberFormatter(); nf.numberStyle = .decimal; nf.locale = Locale(identifier: "en_GB")
+        return nf.string(from: NSNumber(value: n)) ?? "\(n)"
     }
 
     /// is a region map up (the caption's own taps stand down for it)
@@ -448,6 +449,8 @@ struct SheetContent: View {
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
             || water.pageSheet
+            // and history's (the years sat on its orbit: hidden)
+            || water.historyUp
             // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places), and Pins' its pins
             || map.placesMode || map.pinsMode
             // and a region map's (the system is the Countries world's; it sat in France's sheet at 50%)

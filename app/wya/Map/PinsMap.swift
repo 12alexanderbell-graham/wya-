@@ -48,6 +48,8 @@ final class PinStore {
     @ObservationIgnored var dropping: UUID?
     /// the hold menu's Colour: the chosen pin's sheet opens with the picker out
     var colourAsked = false
+    /// a name or a note is being typed (the one time Pins' water goes to full: the keyboard needs the room)
+    var typing = false
 
     private var url: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("pins.json")
@@ -440,9 +442,11 @@ struct PinsMapView: UIViewRepresentable {
         v.isPitchEnabled = false
         v.register(PinAnnotationView.self, forAnnotationViewWithReuseIdentifier: PinAnnotationView.id)
         v.setRegion(PinsMapState.region(from: map), animated: false)
-        // HOLD THE MAP 0.4 s ANYWHERE (8.4): a pin drops there; a finger moving more than 8 pt is a pan, not a drop
+        // HOLD THE MAP ANYWHERE (8.4), the system's half second, and let go: a pin drops there. A finger that moves
+        // (before the half second or after it) is a pan, not a drop: a hold that turned into a drag of the map left
+        // a pin behind at every start, pins nobody meant
         let hold = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.held(_:)))
-        hold.minimumPressDuration = 0.4
+        hold.minimumPressDuration = 0.5
         hold.allowableMovement = 8
         hold.delegate = context.coordinator
         v.addGestureRecognizer(hold)
@@ -776,17 +780,33 @@ struct PinsMapView: UIViewRepresentable {
             }
         }
 
+        /// where a hold began, until the finger moves away or lifts
+        private var heldAt: CGPoint?
         @objc func held(_ g: UILongPressGestureRecognizer) {
-            guard g.state == .began, let v = g.view as? MKMapView else { return }
-            WhatsHere.shared.close()
-            if closedThisTouch { return }
+            guard let v = g.view as? MKMapView else { return }
             let p = g.location(in: v)
-            // on a pin: its own menu, not a new pin; on a route: the route's menu (the lock keeps menus: it only refuses
-            // a new pin)
-            if v.hitTest(p, with: nil) is PinAnnotationView || route(at: p, in: v) != nil { return }
-            // the lock stops dropping, never looking (as on every map)
-            if map.locked { Feel.refuse(); return }
-            Feel.tick()
+            switch g.state {
+            case .began:
+                heldAt = nil
+                WhatsHere.shared.close()
+                if closedThisTouch { return }
+                // on a pin: its own menu, not a new pin; on a route: the route's menu (the lock keeps menus: it only
+                // refuses a new pin)
+                if v.hitTest(p, with: nil) is PinAnnotationView || route(at: p, in: v) != nil { return }
+                // the lock stops dropping, never looking (as on every map)
+                if map.locked { Feel.refuse(); return }
+                // (the tick says the hold has taken; the pin falls when the finger lifts)
+                Feel.tick()
+                heldAt = p
+            case .changed:
+                if let a = heldAt, hypot(p.x - a.x, p.y - a.y) > 10 { heldAt = nil }
+            case .ended:
+                if let a = heldAt { heldAt = nil; drop(at: a, in: v) }
+            default:
+                heldAt = nil
+            }
+        }
+        private func drop(at p: CGPoint, in v: MKMapView) {
             let c = v.convert(p, toCoordinateFrom: v)
             // (a new pin is chosen: the Route row goes first, its sheet hidden behind it otherwise)
             if PinRoutes.shared.open { PinRoutes.shared.close() }
@@ -1142,47 +1162,56 @@ struct PinsWater: View {
 }
 
 
-/// YOUR PINS (8.8's list) at 50% and full when none is chosen: newest first, the same rows as your maps in Places
+/// YOUR PINS (8.8's list) at 50% when none is chosen: newest first, the same rows as your maps in Places
 /// (the pin in its colour, its name in body, its place and day in a grey line, 56 pt a row). A tap chooses the pin:
-/// Apple's map goes to it and the water to 25%, under its name. The rows scroll only at full.
+/// Apple's map goes to it and the water to 25%, under its name. The list is there once the water rests at 50% (no
+/// row comes up alone on the way), holds whole rows, and scrolls there row by row: the list never takes the screen.
 struct PinsList: View {
     let water: Water
     /// the caption's centre
     let captionY: CGFloat
     /// where the rows start (under the dock), else under the caption's foot
     var top: CGFloat? = nil
+    /// the water is standing at 50%
+    var rest = true
     var store = PinStore.shared
+
+    static let rowH: CGFloat = 56
 
     var body: some View {
         let L = water.layout
         // (under the dock, or under the caption's foot as Places' rows)
         let foot = self.top.map { $0 - 8 } ?? captionY + 65
-        let fade = L.capsule.minY - 44
         let rowsTop = foot + 8
-        ScrollView(.vertical) {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%;
-                // the pins need no name of their own: the caption over them already says Pins
-                let routes = PinRoutes.shared.routes
-                // (below full only whole rows, none cut by the soft edge over the tabs)
-                let cut: CGFloat? = water.stop == .full ? nil : L.capsule.minY - 44 - 14
-                ForEach(store.pins.reversed()) { p in row(p).whole(cut) }
-                if !routes.isEmpty {
-                    header("Routes").padding(.top, 12).whole(cut, need: 56)
-                    ForEach(routes.reversed()) { r in routeRow(r).whole(cut) }
+        // (as many whole rows as stand clear of the tabs; the soft edge sits right under the last of them, so at rest
+        // no row is cut and a row scrolled past it goes out softly)
+        let n = max(0, Int(floor((L.capsule.minY - 16 - rowsTop) / Self.rowH)))
+        let fade = rowsTop + CGFloat(n) * Self.rowH + 12
+        if rest, n > 0 {
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%
+                    let routes = PinRoutes.shared.routes
+                    ForEach(store.pins.reversed()) { p in row(p) }
+                    if !routes.isEmpty {
+                        header("Routes").padding(.top, 12)
+                        ForEach(routes.reversed()) { r in routeRow(r) }
+                    }
+                    Color.clear.frame(height: max(0, L.H - fade))
                 }
-                Color.clear.frame(height: L.H - fade + 24)
+                .scrollTargetLayout()
             }
+            // (row by row, so whole rows are what it comes to rest on)
+            .scrollTargetBehavior(.viewAligned)
+            // 16 pt inside the water, as the Stamped list's rows (the box already starts at the water's edge)
+            .contentMargins(.horizontal, 16, for: .scrollContent)
+            .scrollIndicators(.hidden)
+            .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - rowsTop))
+            .padding(.top, rowsTop)
+            .frame(width: L.W, height: L.H, alignment: .top)
+            .mask { PlacesShelf.band(top: foot - 8, bottom: fade, H: L.H) }
+            .transaction { $0.animation = nil }
         }
-        // 16 pt inside the water, as the Stamped list's rows (the box already starts at the water's edge)
-        .contentMargins(.horizontal, 16, for: .scrollContent)
-        .scrollIndicators(.hidden)
-        .scrollDisabled(water.stop != .full)
-        .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - rowsTop))
-        .padding(.top, rowsTop)
-        .frame(width: L.W, height: L.H, alignment: .top)
-        .mask { PlacesShelf.band(top: foot - 8, bottom: fade, H: L.H) }
-        .allowsHitTesting(water.stop != .quarter && water.stop != .closed)
     }
 
     private func header(_ t: String) -> some View {
@@ -1365,14 +1394,15 @@ struct PinSheet: View {
                         .focused($typing)
                         .frame(minHeight: 44)
                     }
-                    if whole { fullRows(p) }
+                    fullRows(p, cut: whole ? nil : fade - 8)
                   }
                     Color.clear.frame(height: L.H - fade + 24)
                 }
                 .padding(.horizontal, 16)
             }
             .scrollIndicators(.hidden)
-            .scrollDisabled(water.stop != .full)
+            // (at 50% as at full: every row of the pin is reached where the sheet stands, never by a full screen)
+            .scrollDisabled(water.stop == .quarter || water.stop == .closed)
             .scrollDismissesKeyboard(.immediately)
             .frame(width: L.W - 2 * L.sheetInset, height: max(0, L.H - top))
             // the rows go out through a soft edge above the tabs, never cut by a hard line (P3)
@@ -1386,7 +1416,11 @@ struct PinSheet: View {
             }
             .position(x: L.W / 2, y: top + max(0, L.H - top) / 2)
             // typing: the water goes to full (Part 4.4's rule), the keyboard under it
-            .onChange(of: typing) { _, t in if t { water.go(.full) } }
+            // (and back to 50% when the keyboard goes)
+            .onChange(of: typing) { _, t in
+                store.typing = t
+                if t { water.go(.full) } else if water.stop == .full { water.go(.half) }
+            }
             .onChange(of: store.selected) { _, _ in picking = false; colourIfAsked() }
             .onChange(of: store.colourAsked) { _, _ in colourIfAsked() }
             // pulled down below full, the picker goes back into its row
@@ -1394,13 +1428,14 @@ struct PinSheet: View {
             .onAppear { colourIfAsked() }
             // the picker going away (closed, Reset, another pin, the water down): its moves are one undo
             .onChange(of: picking) { _, on in if on, let id = store.selected { store.colourStart(id) } else if !on { store.colourEnd() } }
-            .onDisappear { store.colourEnd() }
+            .onDisappear { store.colourEnd(); store.typing = false }
         }
     }
 
     /// the rows seen at full: Coordinates (Apple's marked place has them; a tap copies them), then Delete pin, the last
     /// row, in red words (as Apple's own Remove; at once, the undo drop brings it back)
-    @ViewBuilder private func fullRows(_ p: Pin) -> some View {
+    /// (`cut`: below full, a row is there once it is whole above the soft edge over the tabs, never cut by it)
+    @ViewBuilder private func fullRows(_ p: Pin, cut: CGFloat?) -> some View {
         section("Coordinates") {
             Button {
                 Feel.tap()
@@ -1413,6 +1448,7 @@ struct PinSheet: View {
             .buttonStyle(.plain)
             .accessibilityHint("Copies the coordinates")
         }
+        .whole(cut)
         // Share, a row of its own (it was a circle under the head's plus, whose arrow read as undo)
         Button { Feel.tap(); PinStore.share(p) } label: {
             Text("Share").font(.body).foregroundStyle(Palette.ink)
@@ -1420,12 +1456,14 @@ struct PinSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .whole(cut)
         Button { Feel.lift(); store.remove(p.id); water.go(.quarter) } label: {
             Text("Delete pin").font(.body).foregroundStyle(Palette.red)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .whole(cut)
     }
 
     private func section<C: View>(_ name: String, @ViewBuilder _ c: () -> C) -> some View {

@@ -298,6 +298,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var awayCache: [String: (units: [Int], places: Set<Int>)] = [:]
     /// each place's towns' buffers (points, fan index), made once per scene
     private var townBuffers: [String: (scene: TownScene, points: MTLBuffer, fans: MTLBuffer)] = [:]
+    private var setBuffer: (scene: SetScene, points: MTLBuffer, fans: MTLBuffer)?
+    /// a set's marks (the diamonds of its places with no shape to see), filled each frame
+    private var setMarkBuffer: MTLBuffer?
+    /// an outlined set's boundaries (SetScene.segs)
+    private var setSegs: (scene: SetScene, buffer: MTLBuffer)?
     /// the open country's plain towns and its dots, kept until the marks or the pressed town change
     private var plainCache: [String: (key: String, list: [Int])] = [:]
     private var dotCache: [String: (key: String, buffer: MTLBuffer?, count: Int)] = [:]
@@ -311,6 +316,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var regionStampedIndex: (MTLBuffer, Int)?, regionWishedIndex: (MTLBuffer, Int)?
     private var regionPoints: MTLBuffer?
     private var regionFans: MTLBuffer?
+    /// the scene's parents' borders (RegionScene.bold) and their own coverage
+    private var regionBold: MTLBuffer?
+    private var coverageBold: MTLTexture?
     /// the three sets of the borders' change and the change they were made for
     private weak var linesBuilt: RegionLines?
     private var linesShared: MTLBuffer?, linesNew: MTLBuffer?, linesOld: MTLBuffer?
@@ -321,6 +329,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     }
     private func buildRegion(_ s: RegionScene) {
         regionBuilt = s
+        regionBold = s.bold.isEmpty ? nil : device.makeBuffer(bytes: s.bold, length: s.bold.count * 4)
         regionPoints = s.points.isEmpty ? nil : device.makeBuffer(bytes: s.points, length: s.points.count * MemoryLayout<SIMD2<Float>>.stride)
         regionFans = s.fans.isEmpty ? nil : device.makeBuffer(bytes: s.fans, length: s.fans.count * 4)
     }
@@ -423,6 +432,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             td.storageMode = .private
             coverage = device.makeTexture(descriptor: td)
         }
+        var boldOn = false, boldDrawn = false
         if let cov = coverage, let cp = coveragePipe {
             let d = MTLRenderPassDescriptor()
             d.colorAttachments[0].texture = cov
@@ -479,8 +489,63 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     set(linesShared, l.shared.count / 10, 1)
                     set(linesNew, l.new.count / 10, tIn >= 0 ? 1 : 0)
                     set(linesOld, l.old.count / 10, tIn >= 0 ? 0 : 1)
+                    // (the level above's lines, darker and bolder, have a coverage of their own: below)
+                    if tIn >= 0, let sc = controller.regionScene, regionBuilt === sc, regionBold != nil { boldOn = true }
+                }
+                // A SET'S BOUNDARIES (a national park has a border, an outline): the
+                // parks' own boundaries drawn as the borders are, each once it is big enough to see as a shape (8 pt)
+                if controller.placesMode, let sc = controller.setScene, sc.outlined, !sc.segs.isEmpty, let c = controller.markCollection {
+                    if setSegs?.scene !== sc, let b = device.makeBuffer(bytes: sc.segs, length: sc.segs.count * 4) { setSegs = (sc, b) }
+                    if let sb = setSegs, sb.scene === sc {
+                        var st = ls
+                        st.colour.w = 1
+                        var m: Float = 1
+                        ce.setRenderPipelineState(cp)
+                        ce.setVertexBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 2)
+                        ce.setVertexBytes(&m, length: 4, index: 3)
+                        ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
+                        ce.setVertexBuffer(sb.buffer, offset: 0, index: 0)
+                        let a = controller.mapPoint(.zero), b = controller.mapPoint(CGPoint(x: controller.view.width, y: controller.view.height))
+                        let lo = SIMD2(Float(min(a.x, b.x)), Float(min(a.y, b.y))), hi = SIMD2(Float(max(a.x, b.x)), Float(max(a.y, b.y)))
+                        for it in c.items {
+                            guard let r = sc.segRuns[it.id], r.count > 0, let bx = sc.box(it.id), bx.z >= lo.x, bx.x <= hi.x, bx.w >= lo.y, bx.y <= hi.y,
+                                  Double(max(bx.z - bx.x, bx.w - bx.y)) * controller.k >= 8 else { continue }
+                            ce.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: r.count, baseInstance: r.start)
+                        }
+                    }
                 }
                 ce.endEncoding()
+            }
+        }
+        // THE LEVEL ABOVE, DARKER AND BOLDER (a state's line among its counties'): the parents' borders into a coverage
+        // of their own at twice the width, laid over the map after the other lines at nearly full ink (the one
+        // coverage is one strength; in it a wider line of the same grey sank into a dense mesh of the level's own)
+        if boldOn, let sc = controller.regionScene, let bb = regionBold, let rp = regionCoveragePipe {
+            if coverageBold == nil || coverageBold!.width != tw || coverageBold!.height != th {
+                let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r8Unorm, width: tw, height: th, mipmapped: false)
+                td.usage = [.renderTarget, .shaderRead]
+                td.storageMode = .private
+                coverageBold = device.makeTexture(descriptor: td)
+            }
+            let d = MTLRenderPassDescriptor()
+            d.colorAttachments[0].texture = coverageBold
+            d.colorAttachments[0].loadAction = .clear
+            d.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            d.colorAttachments[0].storeAction = .store
+            if coverageBold != nil, let be = cb.makeRenderCommandEncoder(descriptor: d) {
+                var st = ls
+                st.colour.w = 1
+                st.width = ls.width * 2
+                var q: Float = 1
+                be.setRenderPipelineState(rp)
+                be.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
+                be.setVertexBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 2)
+                be.setVertexBytes(&q, length: 4, index: 3)
+                be.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
+                be.setVertexBuffer(bb, offset: 0, index: 0)
+                be.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: sc.bold.count / 10 * 2)
+                be.endEncoding()
+                boldDrawn = true
             }
         }
         // THE OPEN COUNTRY'S MASK (Regions, Places): its shape, so the lines outside it can go with the rest of the world
@@ -775,6 +840,67 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // settings' Town dots on
         // (with no country open, the towns of the countries in view once the map is close enough: PlacesMap's
         // townCountries; each country's towns drawn as the open one's are)
+        // 3c'. AN AREA SET'S SHAPES (9 Nov, SetScene): a sea, a range, a lake that is yours filled lime as a country is,
+        // wished blue; the one under the finger darkened (in its colour when it has one). One that is not yours is only
+        // its name, as on any map. They just appear.
+        if placesOn, let sc = controller.setScene, !sc.fans.isEmpty {
+            if setBuffer?.scene !== sc,
+               let pb = device.makeBuffer(bytes: sc.points, length: sc.points.count * MemoryLayout<SIMD2<Float>>.stride),
+               let fb = device.makeBuffer(bytes: sc.fans, length: sc.fans.count * 4) {
+                setBuffer = (sc, pb, fb)
+            }
+            if let sb = setBuffer, sb.scene === sc {
+                func shapes(_ ids: [String], _ colour: SIMD4<Float>) {
+                    let runs = ids.compactMap { sc.runs[$0] }.filter { $0.count > 0 }
+                    guard !runs.isEmpty else { return }
+                    enc.setDepthStencilState(markGroup)
+                    enc.setRenderPipelineState(fanPipe)
+                    enc.setVertexBuffer(sb.points, offset: 0, index: 0)
+                    enc.setVertexBuffer(sb.points, offset: 0, index: 2)
+                    var one: Float = 1
+                    enc.setVertexBytes(&one, length: 4, index: 3)
+                    for r in runs {
+                        enc.drawIndexedPrimitives(type: .triangle, indexCount: r.count, indexType: .uint32, indexBuffer: sb.fans,
+                                                  indexBufferOffset: r.start * 4)
+                    }
+                    enc.setDepthStencilState(insideGroup); enc.setStencilReferenceValue(2)
+                    relief(3, colour)
+                }
+                let marks = controller.setMarks(sc)
+                let held = controller.thingPressed.flatMap { sc.runs[$0] != nil ? $0 : nil }
+                let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
+                // (under a finger a sea darkens as water, in the sea's own blue; land, an island or a range, as a country does)
+                let plain = sc.water ? Palette.blueV * SIMD4<Float>(0.82, 0.82, 0.82, 1) : Palette.whiteV * shade
+                // EVERY PLACE OF THE LIST IS ON THE MAP (11 Nov): one that is not yours a step deeper than what it lies in
+                // (a sea in the water's blue, a park or a range in the land's white), no line round it; an ocean is the open
+                // water itself and has no tint. Only those in sight and big enough to see as a shape (8 pt: under that a
+                // place is its mark, drawn with the marks below)
+                // (not the water's: a sea's limits are straight lines drawn across open water, and tinted they read as
+                // borders in the sea, which read as borders drawn across the ocean; a sea that is not yours is its
+                // name, and its whole shape only under a finger or once it is yours)
+                if let c = controller.markCollection, !sc.untinted {
+                    let mine = Set(marks.stamped).union(marks.wished)
+                    // (a park in the palette's teal, a range in its brown, each well mixed into the land's white: a grey
+                    // step read as the relief's own shading and as the press's grey)
+                    let mix = { (c: SIMD4<Float>, t: Float) in Palette.whiteV * (1 - t) + c * t }
+                    let base = sc.outlined ? mix(Palette.tealV, 0.60) : mix(Palette.brownV, 0.26)
+                    let a = controller.mapPoint(.zero), b = controller.mapPoint(CGPoint(x: controller.view.width, y: controller.view.height))
+                    let lo = SIMD2(Float(min(a.x, b.x)), Float(min(a.y, b.y))), hi = SIMD2(Float(max(a.x, b.x)), Float(max(a.y, b.y)))
+                    for it in c.items where it.type != "ocean" && it.id != held && !mine.contains(it.id) {
+                        guard let bx = sc.box(it.id), bx.z >= lo.x, bx.x <= hi.x, bx.w >= lo.y, bx.y <= hi.y,
+                              Double(max(bx.z - bx.x, bx.w - bx.y)) * controller.k >= 8 else { continue }
+                        shapes([it.id], base)
+                    }
+                }
+                // (one at a time: each shape's own stencil pass, so two that touch or overlap never cut each other out)
+                if controller.showsStamped { for id in marks.stamped where id != held { shapes([id], Palette.limeV) } }
+                if controller.showsWished { for id in marks.wished where id != held { shapes([id], Palette.blueV) } }
+                if let held {
+                    shapes([held], marks.stamped.contains(held) ? Palette.limeV * shade : marks.wished.contains(held) ? Palette.blueV * shade : plain)
+                }
+            }
+        }
+
         if placesOn { controller.updateNearbyTowns() }
         for cc in (placesOn || controller.regionTowns ? controller.townCountries : []) {
             guard let sc = controller.townScenes[cc] else { continue }
@@ -875,6 +1001,14 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             enc.setFragmentBytes(&ls, length: MemoryLayout<LineStyle>.stride, index: 0)
             enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
+        if boldDrawn, let cp = compositePipe, let cov = coverageBold {
+            var dark = ls
+            dark.colour.w = min(1, ls.colour.w + 0.4)
+            enc.setRenderPipelineState(cp)
+            enc.setFragmentTexture(cov, index: 0)
+            enc.setFragmentBytes(&dark, length: MemoryLayout<LineStyle>.stride, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        }
         // 5b. on a continent, the rest of the world goes into one blue (each place keeping its own colour until the
         // blue has it, so nothing pops); drawn over the lines, so their borders go into the blue with them
         if flat > 0.001, let k = awayKey {
@@ -908,7 +1042,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         enc.setDepthStencilState(noStencil)
         // 6. the small places' diamonds, while they are too small to see (one zoom for all of them)
-        if controller.anyDiamond, let dp = diamondPipe {
+        // (Places: borders only, 9 Nov 20:43: a country's diamond, lime or white, is the countries' map's)
+        if controller.anyDiamond, !controller.placesMode, let dp = diamondPipe {
             struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
             var ds: [D] = []
             for i in controller.tinyPlaces where controller.showsDiamond(i) {
@@ -932,6 +1067,43 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.setRenderPipelineState(dp)
                 ds.withUnsafeBytes { enc.setVertexBytes($0.baseAddress!, length: $0.count, index: 0) }
                 enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
+            }
+        }
+        // 6'. A SET'S MARKS (one mark for all of them, the diamond): a place with no shape to see
+        // (a World Heritage site, a peak, a park still under 8 pt across) is the map's diamond, smaller than a country's,
+        // the same for every place: cream, lime when stamped, blue when wished, darker under a finger. All of the list's
+        // places at every zoom; nothing comes or goes as the map moves.
+        if placesOn, let c = controller.markCollection, !(c.shapes != nil && controller.setScene == nil), let dp = diamondPipe {
+            struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
+            let scene = controller.setScene
+            var plain: [D] = [], wished: [D] = [], stamped: [D] = []
+            let W = Float(controller.view.width), H = Float(controller.view.height)
+            // (one size for all of them at any zoom, smaller far out where they are many: 4.6 pt across at the world's
+            // size, 9.5 pt from eight times that, by the zoom)
+            let zt = Float(min(1, max(0, (controller.worldKMin > 0 ? controller.k / controller.worldKMin : 1) - 1) / 7))
+            let size = 0.40 + 0.42 * zt * zt * (3 - 2 * zt)
+            for it in c.items where controller.setMarkShown(it, scene) {
+                let q = controller.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+                guard Float(q.x) > -10, Float(q.x) < W + 10, Float(q.y) > -10, Float(q.y) < H + 10 else { continue }
+                let st = MarkStore.shared.state(it.key)
+                // (one that is yours and big enough to see is its filled shape, not also a mark on it)
+                if st.stamped || st.wished, let a = scene?.across(it.id), Double(a) * controller.k >= 8 { continue }
+                // (ink until it is yours: cream on the land's white was a speck nobody could see)
+                var col = st.stamped && controller.showsStamped ? Palette.limeV : st.wished && controller.showsWished ? Palette.blueV : Palette.inkV
+                if controller.thingPressed == it.id { col = st.stamped || st.wished ? col * SIMD4<Float>(0.80, 0.79, 0.77, 1) : SIMD4<Float>(0.45, 0.45, 0.45, 1) }
+                let d = D(p: it.at, pad: SIMD2(size, 0), colour: col)
+                if st.stamped { stamped.append(d) } else if st.wished { wished.append(d) } else { plain.append(d) }
+            }
+            let ds = plain + wished + stamped
+            if !ds.isEmpty {
+                let need = ds.count * MemoryLayout<D>.stride
+                if setMarkBuffer == nil || setMarkBuffer!.length < need { setMarkBuffer = device.makeBuffer(length: max(need, 4096) * 2) }
+                if let buf = setMarkBuffer {
+                    ds.withUnsafeBytes { buf.contents().copyMemory(from: $0.baseAddress!, byteCount: need) }
+                    enc.setRenderPipelineState(dp)
+                    enc.setVertexBuffer(buf, offset: 0, index: 0)
+                    enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
+                }
             }
         }
         _ = w
@@ -1372,7 +1544,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         c.onTouch?()
         let now = active(event)
         if now.count == touches.count { c.grab(); pinched = false; velocity = .zero; lastMoveTime = 0 }
-        if now.count >= 2 { pinched = true; c.pressed = nil; downAt = nil }
+        if now.count >= 2 { pinched = true; c.pressed = nil; downAt = nil; c.dropSetPress() }
         if now.count == 2, let e = event, now.allSatisfy({ e.timestamp - $0.timestamp < 0.12 }) || twoAt == nil {
             let a = now[0].location(in: self), b = now[1].location(in: self)
             twoAt = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2); twoTime = now.map(\.timestamp).min() ?? 0; twoMoved = false
@@ -1429,7 +1601,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 lastMoveTime = t.timestamp
             }
             last = p
-            if let d0 = downAt, hypot(p.x - d0.x, p.y - d0.y) > 8 { c.pressed = nil; downAt = nil }
+            // (a press that became a drag is no press: a set's place it darkened is let go with it)
+            if let d0 = downAt, hypot(p.x - d0.x, p.y - d0.y) > 8 { c.pressed = nil; downAt = nil; c.dropSetPress() }
         }
     }
 
@@ -1455,7 +1628,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         if !cancelled, let at = twoAt, !twoMoved, let t, t.timestamp - twoTime < 0.3 {
             twoAt = nil
             c.twoFingerTap(at: at)
-            c.pressed = nil
+            c.pressed = nil; c.dropSetPress()
             downAt = nil; last = nil; lastMid = nil; lastMoveTime = 0; velocity = .zero
             touching(false, c)
             return
@@ -1467,7 +1640,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             if downAt == nil || cancelled {
                 lastTapTime = 0
                 c.release(velocity: nil)
-                c.pressed = nil
+                c.pressed = nil; c.dropSetPress()
                 downAt = nil; last = nil; lastMid = nil; lastMoveTime = 0; velocity = .zero
                 return
             }
@@ -1476,7 +1649,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         // one window for the double tap and for a single tap's wait, so one gesture never does both)
         if !cancelled, let d0 = downAt, let t, t.timestamp - downTime < 0.3 {
             if t.timestamp - lastTapTime < Map.doubleTapWindow, hypot(d0.x - lastTapAt.x, d0.y - lastTapAt.y) < 30 {
-                c.doubleTap(at: d0); lastTapTime = 0
+                c.doubleTap(at: d0); lastTapTime = 0; c.dropSetPress()
             } else {
                 lastTapTime = t.timestamp; lastTapAt = d0
                 // THE JOURNEY (13.4): a capsule or a leg within 12 pt takes the tap (once the double-tap window has
@@ -1486,7 +1659,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 // A NAME (31 Oct): a town's or thing's name on the map opens its page (its shape or mark still
                 // stamps or opens its card)
                 let name = journey == nil ? townNames.nameHit(d0) : nil
-                if c.locked { Feel.refuse(); c.lockedPress() }
+                if c.locked { Feel.refuse(); c.lockedPress(); c.dropSetPress() }
                 // (one press, one job: this touch closed a card, the book or Details; the journey's tap is not also made)
                 else if let journey, CACurrentMediaTime() - c.touchClosedAt > 0.6 {
                     let stamp = t.timestamp
@@ -1502,7 +1675,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                         // (a name's tap answers to the place tap's guards; refused, it opens nothing)
                         guard c.namePageAllowed?() ?? true else { return }
                         // no page (a collection's stop): the tap goes on as a tap on what is under it
-                        if !self.townNames.openPage(name, c), let hit { c.onPlaceTap?(hit, d0) }
+                        // (a place of no country, a sea's name: its tap comes as a tap off every country)
+                        if !self.townNames.openPage(name, c) { if let hit { c.onPlaceTap?(hit, d0) } else { c.onSeaTap?() } }
                     }
                 }
                 else if let hit = c.pressed {
@@ -1525,7 +1699,10 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             }
         } else if !cancelled, c.locked, downAt != nil {
             // LOCKED, a hold that didn't move (11.7): refused once, the padlock pressing in
-            Feel.refuse(); c.lockedPress()
+            Feel.refuse(); c.lockedPress(); c.dropSetPress()
+        } else {
+            // no tap (held, dragged, taken away): nothing stays darkened
+            c.dropSetPress()
         }
         let recent = t.map { $0.timestamp - lastMoveTime < 0.08 } ?? false
         c.release(velocity: (!pinched && !cancelled && recent && downAt == nil) ? velocity : nil)

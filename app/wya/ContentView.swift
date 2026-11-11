@@ -125,6 +125,9 @@ struct ContentView: View {
                     // a dated stamp made or undone while the journey is up joins or leaves the line (A13.6)
                     .onChange(of: MarkStore.shared.changes) { _, _ in
                         if head.history { map.refreshHistory() }
+                        // (the map draws what is yours: a set's place stamped from its card stayed as it was until the
+                        // map next moved, 11 Nov)
+                        map.needsFrame = true
                     }
                     // the upload from Regions: once finding starts the wheel turns to Countries by itself, because the
                     // review always opens on the Countries map (6.3's connections, A6.4)
@@ -229,9 +232,15 @@ struct ContentView: View {
                     && !BookState.shared.isOpen && CACurrentMediaTime() - BookState.shared.closedAt > 0.4
             }
             // a tap on the sea at the review leaves it, the finds waiting (9.5)
-            map.onSeaTap = { [water] in if water.upload { UploadState.shared.leaveReview() } }
+            RegionCardState.shared.water = water
+            map.onSeaTap = { [water, map] in
+                if water.upload { UploadState.shared.leaveReview(); return }
+                // (an area set's place, a sea, a range, is no country's: its tap comes here)
+                if map.placesMode, !map.locked, map.thingPressed != nil, map.markCollection != nil { thingTapped() }
+            }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.regionMapUp = { [map] in map.regionScene != nil }
+            water.placesMenuUp = { [map] in map.placesMode && !map.placesPicked }
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
                 WhatsHere.shared.close()
@@ -260,6 +269,8 @@ struct ContentView: View {
                     if map.ownPressed != nil { ownTapped() }
                     else if map.thingPressed != nil { thingTapped() }
                     else if map.townPressed != nil { townTapped() }
+                    // (an area set, seas, ranges, is no country's yet: a country under it opens nothing)
+                    else if map.setScene?.water == true { return }
                     else if map.placeOpen != i { closeCard(); map.openPlace(i) }
                     // quick add on the open country's empty land: your own place there (7.8, A7.11)
                     else if head.quickStamp { map.makeOwnPlace(at: p) }
@@ -475,6 +486,9 @@ struct ContentView: View {
         if old == .regions { map.leaveRegionTowns() }
         map.placesMode = new == .places
         map.pinsMode = new == .pins
+        // (Places opens on its menu, which stands at 50%: the water is there at once, a mode change moves nothing;
+        // out of the capsule it stays in the capsule)
+        if new == .places, water.stop == .quarter { water.jump(.half) }
         if new != .pins { PinStore.shared.selected = nil; PinStore.shared.colourAsked = false; PinRoutes.shared.close() }
         // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
         // drawn on
@@ -553,13 +567,29 @@ struct ContentView: View {
     /// card from the water
     private func thingTapped() {
         // a collection's place (its map up): the card with its stop's line, or quick add
-        if let cid = map.placesCollection, let id = map.thingPressed,
-           let it = CollectionStore.shared.collection(cid)?.items.first(where: { $0.id == id }), let w = map.world, let place = w.placeIndex[it.cc] {
-            defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id { map.thingPressed = nil } } }
+        if let c = map.markCollection, let id = map.thingPressed,
+           let it = c.items.first(where: { $0.id == id }), let w = map.world {
+            // (its country, when it is one country's: a sea or a range has none, and stamps no country; a place shared
+            // by countries is the open country's when that is one of them: the Matterhorn in Switzerland is Switzerland's)
+            let place = map.placeOpenID.flatMap { it.ccs.contains($0) ? w.placeIndex[$0] : nil } ?? w.placeIndex[it.cc]
+            // (its card says every country it is in, up to three: "Italy, Switzerland")
+            let lands = it.ccs.count > 1 && it.ccs.count <= 3 ? it.ccs.compactMap { cc in w.placeIndex[cc].map { w.places[$0].n } }.joined(separator: ", ") : (place.map { w.places[$0].n } ?? "")
+            // (darkened while its card is up; with no card, quick add, let go after the press)
+            defer { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if map.thingPressed == id, RegionCardState.shared.key != it.key { map.thingPressed = nil; map.needsFrame = true } } }
             let line = CollectionStore.line(it)
             guard head.quickStamp else {
-                RegionCardState.shared.open(it.key, name: it.name, parents: line.isEmpty ? w.places[place].n : line, place: place, map: map,
-                                            day: it.date)
+                RegionCardState.shared.open(it.key, name: it.name, parents: line.isEmpty ? lands : line,
+                                            place: place, map: map, day: it.date)
+                return
+            }
+            guard let place else {
+                let st = MarkStore.shared.state(it.key)
+                if st.stamped { Feel.lift() } else { Feel.stamp() }
+                Task {
+                    if st.stamped { await MarkStore.shared.unstamp(it.key, name: it.name) }
+                    else { await MarkStore.shared.stamp(it.key, name: it.name, source: .quick) }
+                    map.needsFrame = true
+                }
                 return
             }
             // quick add (D7): a stop that has been is stamped with its day as a visit; one still to come is wished with
@@ -1244,6 +1274,8 @@ private struct SheetWatch: View {
     let map: MapController
     var body: some View {
         Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
-            .onChange(of: water.form().top) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t) } }
+            // (from the start: until the water first moved the map took its top for 0, and a continent picked then was
+            // framed for the wrong room and jumped into place later)
+            .onChange(of: water.form().top, initial: true) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t) } }
     }
 }

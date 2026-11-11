@@ -13,6 +13,7 @@ final class ThingIndex {
         let file: String
         let id: String
         let kind: Int
+        let fame: Int
         let lat: Double
         let lon: Double
         var key: String { "m:wd:" + id }
@@ -33,7 +34,7 @@ final class ThingIndex {
                 for r in all {
                     guard r.count >= 7, let n = r[0] as? String, let f = r[1] as? String, let id = r[2] as? String else { continue }
                     let h = Hit(name: n, file: f, id: id, kind: (r[3] as? NSNumber)?.intValue ?? 11,
-                                lat: (r[5] as? NSNumber)?.doubleValue ?? 0, lon: (r[6] as? NSNumber)?.doubleValue ?? 0)
+                                fame: (r[4] as? NSNumber)?.intValue ?? 0, lat: (r[5] as? NSNumber)?.doubleValue ?? 0, lon: (r[6] as? NSNumber)?.doubleValue ?? 0)
                     let codes = r.count > 7 ? (r[7] as? String ?? "").split(separator: "|").map { $0.lowercased() } : []
                     out.append((n.townFolded, codes, h))
                 }
@@ -77,6 +78,18 @@ final class ThingIndex {
     }
     /// each thing's row by its id, made once at the first look-up
     @ObservationIgnored private var byID: [String: Int]?
+    /// A KIND'S THINGS EVERYWHERE (Places' types, 9 Nov): the best known first (fame, then the index's own order, which
+    /// is the data's), made once per kind
+    func kind(_ k: Int) -> [Hit] {
+        guard ready else { return [] }
+        if let c = byKind[k] { return c }
+        let out = rows.lazy.map(\.hit).filter { $0.kind == k }.enumerated()
+            .sorted { $0.element.fame != $1.element.fame ? $0.element.fame > $1.element.fame : $0.offset < $1.offset }
+            .map(\.element)
+        byKind[k] = out
+        return out
+    }
+    @ObservationIgnored private var byKind: [Int: [Hit]] = [:]
     /// is this hit found by its code (it leads the results)
     func byCode(_ h: Hit, _ query: String) -> Bool {
         let code = query.trimmingCharacters(in: .whitespaces).lowercased()

@@ -194,10 +194,18 @@ final class MapController {
         // PLACES (7.4): a town under the finger answers (its country is the press's place; the town darkens)
         // (outside the open country, or on the world, a country answers as ever: the tap opens it)
         // A COLLECTION'S MAP (7.2): its places' marks answer, the press's place being the place's country
-        if placesMode, placesCollection != nil {
+        if let c = markCollection {
             thingPressed = collectionHit(at: p)?.id
-            if let id = thingPressed, let it = CollectionStore.shared.collection(placesCollection!)?.items.first(where: { $0.id == id }),
-               let i = w.placeIndex[it.cc] { needsFrame = true; return i }
+            // (an area set: the shape under the finger, where no name is)
+            if thingPressed == nil, let sc = setScene {
+                let mp = mapPoint(p)
+                thingPressed = sc.hit(at: SIMD2(Float(mp.x), Float(mp.y)), among: CollectionStore.shared.ids(c))
+            }
+            if let id = thingPressed, let it = c.items.first(where: { $0.id == id }) {
+                needsFrame = true
+                // (a sea or a range is no country's: its tap comes as a tap off every country, ContentView's onSeaTap)
+                return w.placeIndex[it.cc]
+            }
         }
         if placesMode, let open = placeOpen {
             // your own places first (their marks sit over the towns), then the towns
@@ -391,13 +399,23 @@ final class MapController {
     /// Pins is the mode: Apple's map is up (PinsMap.swift) and the zoom column works it
     var pinsMode = false
     var placesMode = false {
-        didSet { if placesMode != oldValue { needsFrame = true; townPressed = nil; if !placesMode { closePlace(); placesArea = nil; placesCollection = nil } } }
+        didSet {
+            guard placesMode != oldValue else { return }
+            needsFrame = true; townPressed = nil
+            if !placesMode { closePlace(); placesArea = nil; placesCollection = nil; placesType = nil; placesPicked = false; return }
+            CollectionStore.shared.load()
+            ThingIndex.shared.load()
+        }
     }
     /// THE CURRENT PLACES MAP when it is wider than a country (7.2): a continent or a world region by name; nil with a
     /// country open (placeOpen) or on Everywhere
     var placesArea: String?
     /// the current Places map is a collection (7.2), by id
     var placesCollection: String?
+    /// the kind the set looked at is cut down to (seas: "ocean"; 11 Nov), or nil for all of it
+    var placesType: String?
+    /// a set was picked from Places' menu (until then the menu is its rows, none in lime, and the map the cities')
+    var placesPicked = false
     /// the countries whose towns are drawn with none open (Places close in), and where the camera was when they were found
     // HISTORY (Part 13): the journey up, and how much of it is drawn (0 to 1), moving from `historyFrom` to `historyTo`
     @ObservationIgnored var historyTrack: HistoryTrack?
@@ -514,6 +532,9 @@ final class MapController {
     /// your own place under the finger (7.8), by id
     @ObservationIgnored var ownPressed: String?
     @ObservationIgnored var townScenes: [String: TownScene] = [:]
+    /// an area set's shapes once they have come, by the set's id (SetScene)
+    @ObservationIgnored var setScenes: [String: SetScene] = [:]
+    @ObservationIgnored var setLoading: Set<String> = []
     @ObservationIgnored var townLoading: Set<String> = []
     /// places whose shapes failed to come (their towns are asked for again on the next opening)
     @ObservationIgnored var retryShapes: Set<String> = []
@@ -599,7 +620,14 @@ final class MapController {
             if case .ok(let f) = load { file = f } else { file = nil }
             let failed: Bool
             if case .failed = load { failed = true } else { failed = false }
-            let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0) }
+            // (a file whose regions name no parents: the next coarser level's file gives them, for the bolder lines)
+            var coarser: RegionFile?
+            if let f = file, !f.units.contains(where: { $0.parent != nil }) {
+                let order = RegionCatalog.shared.used(id)
+                if let k = order.firstIndex(where: { $0.row == r }), k > 0 { coarser = await RegionCatalog.shared.fetch(id, row: order[k - 1].row) }
+            }
+            let above = coarser
+            let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0, above: above) }
             let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {
                 guard let self, self.regionJob == job else { return }
@@ -664,7 +692,9 @@ final class MapController {
         continent = nil
         drawnContinent = nil
         let W = Double(view.width), H = Double(view.height)
-        let room = layout.room(sheetTop: layout.top(.quarter))
+        // (Places with its menu up at 50%: the country is framed in the map left above the water, not half under it; 11 Nov)
+        let high = placesMode && sheetTop > 0 && sheetTop <= layout.top(.half) + 1
+        let room = layout.room(sheetTop: layout.top(high ? .half : .quarter))
         let top = Double(room.lowerBound), bottom = Double(room.upperBound)
         let fw = max(0.05, f.z - f.x), fh = max(0.05, f.w - f.y)
         // centred, never shifted for the zoom column (20 Oct answer 16) and never under it: the same room kept clear
@@ -903,6 +933,15 @@ final class MapController {
         updateHome()
         needsFrame = true
     }
+    /// A SET'S PLACE LET GO: a press on a sea, a range or a collection's stop that turned out to be no tap (a drag, a
+    /// pinch, a hold, a refused tap) darkens nothing any more. Only on a set's map: a town's or a thing's press on the
+    /// towns map is kept by its card.
+    func dropSetPress() {
+        guard markCollection != nil, thingPressed != nil else { return }
+        thingPressed = nil
+        needsFrame = true
+    }
+
     /// the fingers are off. A quick one-finger flick glides on (never after a pinch); the glide's end is inside the world
     func release(velocity v: SIMD2<Double>?) {
         touching = false
@@ -1145,10 +1184,18 @@ final class MapController {
             guard let self else { return }
             self.drawnContinent = k; self.continentFrame = f; self.continentK = nk
             // framed for the room at 50%: from here the camera follows the room's middle as the sheet moves (A1.16)
-            self.followMid = roomMid
-            self.continentY = self.clamped(centre, nk).y
+            // (the flight goes straight to where the sheet stands now: flown to the 50% framing with the water at 25%,
+            // the continent landed high and then jumped down into the room's middle once the flight was over)
+            let now = self.layout.room(sheetTop: max(self.sheetTop > 0 ? self.sheetTop : self.layout.top(.half), self.layout.top(.half)))
+            let midNow = (Double(now.lowerBound) + 14 + Double(now.upperBound) - 2) / 2
+            // (as the sheet's own move does it: from the 50% framing held to the world, then down by the room's
+            // difference, which may take the view past the world's edge into the flat blue)
+            self.continentY = nil
+            let landing = SIMD2(centre.x, self.clamped(centre, nk).y - (midNow - roomMid) / nk)
+            self.followMid = midNow
+            self.continentY = landing.y
             self.updateHome()
-            self.fly(to: self.clamped(centre, nk), k: nk, dur: Self.flight) { [weak self] in
+            self.fly(to: self.clamped(landing, nk), k: nk, dur: Self.flight) { [weak self] in
                 guard let self else { return }
                 self.sheetMoved(top: self.sheetTop)
             }

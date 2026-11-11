@@ -533,15 +533,16 @@ struct RouteRow: View {
         let L = water.layout
         // the two ends share the water's width: halves, unless one name needs more and the other less (a fixed 138 pt
         // cut "Cause-de-Cléra..." beside a near-empty "Mut", 8 Nov); a name too long for what is left is cut at its end
-        let room = L.W - 2 * L.sheetInset - 32 - 44 - 24
+        // (in the toolkit's own bar: 4 pt inside each end, the cross 36 pt, 8 pt between the three)
+        let room = L.W - 2 * L.sheetInset - 32 - 8 - 36 - 16
         let (fromW, toW) = Self.split(room, need(.from, r.from), need(.to, r.to))
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             Button {
                 Feel.tap()
                 r.close()
             } label: {
-                Icon5(key: "cross", ink: Palette.ink, size: 22)
-                    .frame(width: 44, height: 44)
+                Icon5(key: "cross", ink: Palette.ink, size: 18)
+                    .frame(width: 36, height: 36)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -549,6 +550,8 @@ struct RouteRow: View {
             chip(.from, r.from, word: "From", width: fromW)
             chip(.to, r.to, word: r.noRoute ? "No route" : "To", width: toW)
         }
+        .padding(4)
+        .background(Capsule().fill(Color.white.opacity(0.45)))
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .position(x: L.W / 2, y: captionY)
     }
@@ -587,10 +590,8 @@ struct RouteRow: View {
             }
             .padding(.horizontal, 12)
             .frame(width: width, height: 36)
-            // the one waiting for a pin: filled lime, ink words; the others a quiet ground on the water (no glass, no edge)
+            // the one waiting for a pin: filled lime, ink words; the other a quiet ground in the bar
             .background(Capsule().fill(waiting ? Palette.lime : Palette.ink.opacity(0.06)))
-            // the touch is the full 44 pt row height
-            .frame(height: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
