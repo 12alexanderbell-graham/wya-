@@ -297,7 +297,10 @@ extension MapController {
         if let c = setCollection {
             // (a long list with the whole world on screen: its best known and yours; a continent picked, the map
             // nearer, or a country opened: all of them)
-            return placeOpen == nil && continentK == nil && k < longListK && c.items.count > CollectionStore.longList ? CollectionStore.shared.known(c) : c
+            // (on the way somewhere, by where the map is going: flying out to the world, every park of the land
+            // passed over came up for a moment and went again)
+            let zoom = flight.map { exp($0.to.z) } ?? k
+            return placeOpen == nil && continent == nil && zoom < longListK && c.items.count > CollectionStore.longList ? CollectionStore.shared.known(c) : c
         }
         guard placesMode, placesPicked, placesCollection == nil, placeOpen == nil, placesArea == nil, regionScene == nil,
               k < townsK else { return nil }
