@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var water = Water()
     @State private var head = HeadState()
     @State private var tab = 0
+    /// where the map's water stood when the Profile took the screen
+    @State private var mapStop: Water.Stop = .quarter
     @State private var launch = Launch.shared
     @State private var side = Sideways.shared
     @State private var pageStack = PlacePageState.shared
@@ -73,10 +75,14 @@ struct ContentView: View {
                 // the capsule stays at the bottom as on every pushed page in iOS, 16.3) and under the head (A16.1)
                 PlacePageView(map: map, water: water)
 
+                // THE PROFILE (the triangle): its own screen over the map, under the water (which holds its numbers)
+                if tab == 2 { ProfileView(water: water) }
+
                 WaterView(water: water, map: map, tab: $tab)
                     .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
 
-                if !Perf.shared.off.contains("head") {
+                // (the Profile's top is empty: no head on it)
+                if !Perf.shared.off.contains("head"), tab != 2 {
                     HeadView(map: map, water: water, head: head)
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
                 }
@@ -141,7 +147,7 @@ struct ContentView: View {
                         if ph == .finding, map.continent != nil { map.goHome() }
                     }
 
-                if !Perf.shared.off.contains("pull") { TopPullView(head: head, water: water) }
+                if !Perf.shared.off.contains("pull"), tab != 2 { TopPullView(head: head, water: water) }
             }
             // THE LOADING SCREEN (12.3) over everything until the map is ready; then it lifts away in one piece, the
             // map and all its chrome already in place under it; touches wait until it has gone
@@ -366,9 +372,16 @@ struct ContentView: View {
             DispatchQueue.main.async { Prewarm.textInput() }
         }
         .task {
+            // (the Profile's gradient shader made ready under the loading screen, not on the tab's first frame)
+            FieldView.prewarm()
             await map.load()
             // finds left waiting at the last review are darkened again (9.6)
             UploadState.shared.restoreWaiting(map: map)
+            // the Profile's numbers counted once your marks are read, so they are there when its tab opens
+            Task {
+                for _ in 0 ..< 100 where !MarkStore.shared.loaded { try? await Task.sleep(for: .milliseconds(100)) }
+                await ProfileNumbers.shared.count(map: map)
+            }
             // the time zones' shapes read once in the background, so the first upload's days don't wait for them (D13)
             Task.detached(priority: .utility) { _ = ZoneShapes.shared.zone(lat: 0, lon: 0) }
             // the flags of the places you have stamped or wished, drawn ahead for the rows that show them (D14)
@@ -421,6 +434,19 @@ struct ContentView: View {
         .onChange(of: water.menuShown, initial: true) { _, v in head.filtersMenu = v }
         .onChange(of: map.continent) { _, _ in saveSession(after: 0.5) }
         .onChange(of: tab) { _, _ in saveSession(after: 0) }
+        // THE PROFILE'S WATER: at 25% with its numbers, simply there (a tab is a change of screen, nothing moves); back
+        // on the Map the water is where the map left it
+        .onChange(of: tab, initial: true) { was, t in
+            water.tabSwitchedAt = CACurrentMediaTime()
+            if t == 2, !water.profile {
+                mapStop = water.stop
+                water.profile = true
+                water.jump(.quarter)
+            } else if t != 2, water.profile {
+                water.profile = false
+                water.jump(mapStop == .full ? .quarter : mapStop)
+            }
+        }
         // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
         .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
         // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)

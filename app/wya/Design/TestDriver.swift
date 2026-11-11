@@ -230,6 +230,23 @@ final class TestDriver {
                     if a == "placesideas" { PlacesIdeas.make() }
                     if a == "emblems" { ReviewSheet.emblems() }
                     if a == "flagshapes" { ReviewSheet.flagShapes(world: map?.world) }
+                // profile name|handle|code|bio <words> | clear: the Profile's words, as its editor will set them (a test's
+                // own words are taken away again with clear)
+                case "profile":
+                    let words = p.dropFirst(2).joined(separator: " ")
+                    ProfileStore.shared.set { me in
+                        switch a {
+                        case "name": me.name = words
+                        case "handle": me.handle = words
+                        case "code": me.code = words
+                        case "bio": me.bio = words
+                        case "clear": me = ProfileStore.Me()
+                        default: break
+                        }
+                    }
+                    // profile look <saturation> <power>: the gradient's strength, to compare (0 0 = its own)
+                    if a == "look", p.count > 3 { ProfileView.look = SIMD2(Double(p[2]) ?? 0, Double(p[3]) ?? 0) }
+                    NSLog("wya profile: stats %d stamps %d badges %d ready %d", ProfileNumbers.shared.stats, ProfileNumbers.shared.stamps, ProfileNumbers.shared.badges, ProfileNumbers.shared.ready ? 1 : 0)
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 // tabgo 0|1|2: that tab, as its button does when it is another tab (the tab change's own hook first)
                 case "tabgo":

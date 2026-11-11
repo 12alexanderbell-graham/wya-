@@ -75,6 +75,8 @@ final class FieldView: UIView {
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
     private static let shared = FieldGPU()
+    /// the shader compiled now (once), so the first field on screen draws at once
+    static func prewarm() { _ = shared.ready }
 
     private var link: CADisplayLink?
     private var cur: [SIMD3<Double>] = []

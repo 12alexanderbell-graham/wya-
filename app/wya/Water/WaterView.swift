@@ -31,7 +31,12 @@ struct WaterView: View {
             }
 
             // what rides inside it, cut only by the water's own curved outline (never a straight mask)
-            if !Perf.shared.off.contains("sheet") {
+            if water.profile {
+                // (the Profile's own water: its three numbers, in place of everything the map's water holds)
+                ProfileWater(water: water, form: f, map: map)
+                    .frame(width: L.W, height: L.H, alignment: .topLeading)
+                    .mask(shape)
+            } else if !Perf.shared.off.contains("sheet") {
                 SheetContent(water: water, map: map, form: f)
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
                     .mask(shape)
@@ -40,7 +45,7 @@ struct WaterView: View {
 
             // the OpenStreetMap credit, on the map just above the water (outside the water's own outline)
             // (not over Apple's map in Pins: Apple's own credit is on it)
-            if !map.pinsMode { StartCredit(water: water, form: f) }
+            if !map.pinsMode, !water.profile { StartCredit(water: water, form: f) }
 
             // the tabs sit on the water itself; at full the night leaves the capsule's place clear, so they are still
             // on that same glass
@@ -376,7 +381,8 @@ struct SheetContent: View {
             if captionShown != fits {
                 // (a page coming or going is the screen changing at once: the caption with it, 8 Nov: it faded over
                 // the page's first frames)
-                if water.modeSwitching || water.pageUp != pageWasUp { captionShown = fits }
+                // (and a tab coming back: the map's caption is there with the map)
+                if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
         }

@@ -90,6 +90,11 @@ final class Water {
     /// `regions` is on from the wheel landing on Regions until a country is picked or another mode comes; while
     /// settings or the upload sheet are up over it the water goes where they need it, and back to the menu after.
     var regions = false
+    /// THE PROFILE TAB is the screen: the water holds its three numbers and rests at 25% or in the capsule, no higher
+    var profile = false
+    /// when the tab last changed: what a tab swaps in and out of the water is simply there (no roll)
+    @ObservationIgnored var tabSwitchedAt: CFTimeInterval = 0
+    var tabSwitching: Bool { CACurrentMediaTime() - tabSwitchedAt < 0.4 }
     /// when the map's mode last changed: what the change swaps in and out of the water goes with no movement
     @ObservationIgnored var modeSwitchedAt: CFTimeInterval = 0
     var modeSwitching: Bool { CACurrentMediaTime() - modeSwitchedAt < 0.4 }
@@ -458,7 +463,8 @@ final class Water {
 
     /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
     var halfAllowed: Bool {
-        !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet
+        if profile { return false }
+        return !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet
           && !regions && !historyUp)
     }
     /// a country's region map is on screen (set once by the screen)
