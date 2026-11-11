@@ -294,18 +294,30 @@ extension MapController {
     /// world or a continent on screen, where a town's own shape is nothing yet), the cities people know. Nearer, and
     /// in an open country, Cities is the towns' own shapes and this is nil
     var markCollection: CollectionStore.Collection? {
-        if let c = setCollection { return c }
+        if let c = setCollection {
+            // (a long list with the whole world on screen: its best known and yours; a continent picked, the map
+            // nearer, or a country opened: all of them)
+            return placeOpen == nil && continentK == nil && k < longListK && c.items.count > CollectionStore.longList ? CollectionStore.shared.known(c) : c
+        }
         guard placesMode, placesPicked, placesCollection == nil, placeOpen == nil, placesArea == nil, regionScene == nil,
               k < townsK else { return nil }
-        return CollectionStore.shared.collection(CollectionStore.famousCities)
+        return CollectionStore.shared.collection(CollectionStore.famousCities).map(onContinent)
     }
-    /// the set looked at (picked from the menu), narrowed to its kind and to the open country; nil for Cities
+    /// a list cut down to the continent picked (its places in the flat blue beside it are not on this map)
+    private func onContinent(_ c: CollectionStore.Collection) -> CollectionStore.Collection {
+        guard let k = continent, let w = world else { return c }
+        return CollectionStore.shared.within(c, continent: k) { cc in
+            (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.inCont($0, k) } ?? false
+        } ?? c
+    }
+    /// the set looked at (picked from the menu), narrowed to its kind and to the open country or the picked continent;
+    /// nil for Cities
     var setCollection: CollectionStore.Collection? {
         guard placesMode, let id = placesCollection else { return nil }
         if let cc = placeOpenID, let i = placeOpen, let w = world {
             return CollectionStore.shared.narrowed(id, type: placesType, cc: cc) { w.place(at: $0) == i }
         }
-        return CollectionStore.shared.typed(id, placesType)
+        return CollectionStore.shared.typed(id, placesType).map(onContinent)
     }
     /// the area set's shapes that are up (the set looked at, once its shapes have come)
     var setScene: SetScene? { placesMode ? placesCollection.flatMap { setScenes[$0] } : nil }
@@ -339,6 +351,9 @@ extension MapController {
     /// for every place): no shape of its own, or one still under 8 pt across
     func setMarkShown(_ it: CollectionStore.Item, _ scene: SetScene?) -> Bool {
         guard let scene, let a = scene.across(it.id) else { return true }
+        // (every park has the mark, its boundary or not: half the parks as shapes and half as marks read as two kinds
+        // of thing; the boundary is drawn as well where there is one)
+        if scene.outlined { return true }
         // (a sea has no tint and no line: until it is wide enough for its name, about 6.5 pt a letter, its mark stands for it)
         return Double(a) * k < (scene.untinted ? Double(it.short.count) * 6.5 + 12 : 8)
     }
@@ -445,6 +460,9 @@ extension MapController {
     // of the countries in view are read and drawn as an open country's are, the nearest six at most
     /// the zoom from which they come
     var townsK: Double { Double(view.width) / 25 }
+    /// the zoom from which a long list shows all of its places: half as near again as the whole world (Europe as a
+    /// continent on screen is twice as near: its 600 parks stand apart there, where at the world's size they are a blot)
+    var longListK: Double { worldKMin * 1.5 }
     /// the countries whose towns are drawn now: the open one's, else the ones in view close in
     var townCountries: [String] {
         // (Regions' towns level: the country's towns whatever Places looks at)

@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import PhotosUI
 
 // PINS (Part 8; 7 Nov: Apple's map, decided 31 Oct 11:19; one plain black pin until its
 // colour is changed, 7 Nov 16:37). First slice: Apple's map under the head and the water whenever Pins is the mode, the
@@ -23,6 +24,10 @@ struct Pin: Codable, Identifiable, Hashable {
     var made = Date()
     /// the country our own map has under it (its id), when it is on land
     var cc: String? = nil
+    /// its category, one of the twelve kinds a place of your own is filed under; nil: none given
+    var kind: String? = nil
+    /// its photo's file in Application Support/pin-photos, or nil
+    var photo: String? = nil
     /// gamma-encoded P3, or nil for the plain black
     var colour: [Double]? { pick.map { let v = $0.p3; return [v.x, v.y, v.z] } }
 
@@ -50,6 +55,8 @@ final class PinStore {
     var colourAsked = false
     /// a name or a note is being typed (the one time Pins' water goes to full: the keyboard needs the room)
     var typing = false
+    /// a test's ask: the chosen pin's sheet scrolled to its end (its last rows filmed)
+    var endAsked = 0
 
     private var url: URL? {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("pins.json")
@@ -171,6 +178,45 @@ final class PinStore {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         pins[k].note = n.isEmpty ? nil : String(n.prefix(600))
         save()
+    }
+    /// its category (3 Oct: a pin is filed under one of the twelve kinds, as a place of your own is); nil: none
+    func kind(_ id: UUID, _ kind: String?) {
+        guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
+        pins[k].kind = kind
+        save()
+    }
+    /// its photo (3 Oct): the picture kept beside pins.json, no bigger than 1,600 px on its longer side; nil takes it
+    /// away. A pin deleted keeps its file (its undo brings the pin back with it)
+    func photo(_ id: UUID, _ data: Data?) {
+        guard let k = pins.firstIndex(where: { $0.id == id }), let dir = Self.photos else { return }
+        if let old = pins[k].photo {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(old))
+            Self.shown.removeObject(forKey: old as NSString)
+        }
+        pins[k].photo = nil
+        if let data, let full = UIImage(data: data) {
+            let longer = max(full.size.width, full.size.height)
+            let scale = min(1, 1600 / max(1, longer))
+            let small = scale < 1 ? full.preparingThumbnail(of: CGSize(width: full.size.width * scale, height: full.size.height * scale)) ?? full : full
+            let name = UUID().uuidString + ".jpg"
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let jpeg = small.jpegData(compressionQuality: 0.85), (try? jpeg.write(to: dir.appendingPathComponent(name), options: .atomic)) != nil {
+                pins[k].photo = name
+            }
+        }
+        save()
+    }
+    private static var photos: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("pin-photos")
+    }
+    private static let shown = NSCache<NSString, UIImage>()
+    /// a pin's photo, read once
+    static func image(_ p: Pin) -> UIImage? {
+        guard let name = p.photo, let dir = photos else { return nil }
+        if let i = shown.object(forKey: name as NSString) { return i }
+        guard let i = UIImage(contentsOfFile: dir.appendingPathComponent(name).path) else { return nil }
+        shown.setObject(i, forKey: name as NSString)
+        return i
     }
 
     /// Share (the hold menu's and the sheet's): Apple Maps' link to the spot, under its name
@@ -1321,6 +1367,9 @@ struct PinSheet: View {
     /// field would be grey); nothing is picked until the finger moves
     static let nearBlack = ColourPick(hue: 0, light: ColourPick.lightBottom, strength: 0.8)
     @FocusState private var typing: Bool
+    @State private var choosingPhoto = false
+    @State private var chosenPhoto: PhotosPickerItem?
+    @State private var rows = ScrollPosition()
 
     var body: some View {
         let L = water.layout
@@ -1363,6 +1412,24 @@ struct PinSheet: View {
                         .submitLabel(.done)
                         .frame(minHeight: 44)
                     }
+                    // ITS CATEGORY (3 Oct): one of the twelve kinds, picked from a menu as a place of your own picks its
+                    // kind (the one it has is unavailable, as every menu's current row)
+                    section("Category") {
+                        Menu {
+                            ForEach(OwnPlaces.kinds, id: \.self) { k in
+                                Button(k.capitalizedFirst) { Feel.tap(); store.kind(p.id, k) }.disabled(k == p.kind)
+                            }
+                            if p.kind != nil {
+                                Divider()
+                                Button("None") { Feel.tap(); store.kind(p.id, nil) }
+                            }
+                        } label: {
+                            Text(p.kind?.capitalizedFirst ?? "Add a category").font(.body)
+                                .foregroundStyle(Palette.ink.opacity(p.kind == nil ? 0.5 : 1))
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                    }
                     section("Colour") {
                         Button {
                             Feel.tap()
@@ -1401,6 +1468,8 @@ struct PinSheet: View {
                 .padding(.horizontal, 16)
             }
             .scrollIndicators(.hidden)
+            .scrollPosition($rows)
+            .onChange(of: store.endAsked) { _, _ in rows.scrollTo(edge: .bottom) }
             // (at 50% as at full: every row of the pin is reached where the sheet stands, never by a full screen)
             .scrollDisabled(water.stop == .quarter || water.stop == .closed)
             .scrollDismissesKeyboard(.immediately)
@@ -1426,6 +1495,15 @@ struct PinSheet: View {
             // pulled down below full, the picker goes back into its row
             .onChange(of: water.stop) { _, s in if s == .quarter || s == .closed { picking = false } }
             .onAppear { colourIfAsked() }
+            // its photo: Apple's picker (no permission asked), one picture
+            .photosPicker(isPresented: $choosingPhoto, selection: $chosenPhoto, matching: .images)
+            .onChange(of: chosenPhoto) { _, item in
+                guard let item, let id = store.selected else { return }
+                Task {
+                    if let d = try? await item.loadTransferable(type: Data.self) { store.photo(id, d) }
+                    chosenPhoto = nil
+                }
+            }
             // the picker going away (closed, Reset, another pin, the water down): its moves are one undo
             .onChange(of: picking) { _, on in if on, let id = store.selected { store.colourStart(id) } else if !on { store.colourEnd() } }
             .onDisappear { store.colourEnd(); store.typing = false }
@@ -1436,6 +1514,30 @@ struct PinSheet: View {
     /// row, in red words (as Apple's own Remove; at once, the undo drop brings it back)
     /// (`cut`: below full, a row is there once it is whole above the soft edge over the tabs, never cut by it)
     @ViewBuilder private func fullRows(_ p: Pin, cut: CGFloat?) -> some View {
+        // ITS PHOTO (3 Oct): one picture; a tap on it offers another or none
+        section("Photo") {
+            if let img = PinStore.image(p) {
+                Menu {
+                    Button("Choose another") { Feel.tap(); choosingPhoto = true }
+                    Button("Remove", role: .destructive) { Feel.lift(); store.photo(p.id, nil) }
+                } label: {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: 180)
+                        .overlay { Image(uiImage: img).resizable().scaledToFill() }
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Photo")
+            } else {
+                Button { Feel.tap(); choosingPhoto = true } label: {
+                    Text("Add a photo").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .whole(cut)
         section("Coordinates") {
             Button {
                 Feel.tap()

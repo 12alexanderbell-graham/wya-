@@ -121,6 +121,49 @@ final class CollectionStore {
     }
     @ObservationIgnored private var narrow: [String: Collection] = [:]
 
+    /// A LONG LIST'S BEST KNOWN (the whole world on screen with no country open: 3,333 national parks or 1,274 World
+    /// Heritage sites are a black mass over Europe there): its first 150 (every list is kept best known first, by how
+    /// many Wikipedia languages write about a place) and every one that is yours; the same for every long list (fame 3
+    /// alone left 450 World Heritage sites, still a blot). Kept per list and per change of marks
+    func known(_ c: Collection) -> Collection {
+        let key = c.tag + "|known|\(MarkStore.shared.changes)"
+        if let k = knownCut, k.key == key { return k.list }
+        let items = c.items.enumerated().filter { n, it in
+            if n < Self.bestKnown { return true }
+            let s = MarkStore.shared.state(it.key)
+            return s.stamped || s.wished
+        }.map(\.element)
+        let list = Collection(id: c.id, title: c.title, scope: c.scope, event: c.event, source: c.source,
+                              items: items, offMap: c.offMap, unmapped: c.unmapped, shapes: c.shapes,
+                              // (the tag says how many, so what is kept per list, its ids and its names' plan, is made again when one of yours joins)
+                              tag: c.tag + "|known|\(items.count)")
+        knownCut = (key, list)
+        return list
+    }
+    @ObservationIgnored private var knownCut: (key: String, list: Collection)?
+
+    /// A LIST ON A CONTINENT (the rest of the world is one flat blue there, and a mark out on the blue is nobody's): its
+    /// places in that continent's countries, the list's scope the continent's name. A list of places that are no
+    /// country's (seas, ranges) is not cut: nil. Kept per list and continent
+    func within(_ c: Collection, continent k: String, has: (String) -> Bool) -> Collection? {
+        let key = c.tag + "|in|" + k
+        if let x = contCuts[key] { return x }
+        var list: Collection?
+        if c.items.filter({ !$0.ccs.isEmpty }).count * 2 > c.items.count {
+            let off = c.unmapped.filter { $0.contains(where: has) }
+            list = Collection(id: c.id, title: c.title, scope: k, event: c.event, source: c.source,
+                              items: c.items.filter { $0.ccs.contains(where: has) }, offMap: off.count, unmapped: off,
+                              shapes: c.shapes, tag: key)
+        }
+        contCuts[key] = .some(list)
+        return list
+    }
+    @ObservationIgnored private var contCuts: [String: Collection?] = [:]
+    /// how long a list is before only its best known show far out
+    static let longList = 600
+    /// how many of a long list show with the whole world on screen
+    static let bestKnown = 150
+
     func load() {
         guard !ready, !loading else { return }
         loading = true
@@ -128,7 +171,7 @@ final class CollectionStore {
             var out: [Collection] = []
             // (collections-4 has World Heritage, its best known first; the older file if the server still holds only that)
             var data: Data?
-            for f in ["native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
+            for f in ["native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let raw = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] {

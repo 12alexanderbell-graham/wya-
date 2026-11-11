@@ -318,9 +318,9 @@ final class TownNamesView: UIView {
     //   any map;
     // - a mark's name stands to its right (a park's on its shape), the list's best known first. These names are all
     //   up or all away (some marks named and some not reads as broken: either all are
-    //   named or none are): up when at most 30 of the list's marks are in sight and at least half of
-    //   them have room for their names (the few left out stand closer together than a name is wide, and get theirs a
-    //   little further in), away otherwise. Decided when the map comes to rest, never while it moves.
+    //   named or none are): up when at most 30 of the list's marks are in sight and every one of them has
+    //   room for its name, away otherwise (half of them named was still some with and some without). Decided when
+    //   the map comes to rest, never while it moves.
     // Names just appear.
     private var setLabels: [String: UILabel] = [:]
     private var setKey: [Double] = []
@@ -351,9 +351,9 @@ final class TownNamesView: UIView {
             var items: [LabelPlan.Item] = []
             var markNames: [String: [CGRect]] = [:]
             for (n, it) in c.items.enumerated() where setBoxes[it.id] == nil {
-                let w = thingWidths[it.id] ?? {
-                    let w = ceil((it.short as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
-                    thingWidths[it.id] = w
+                let w = thingWidths["s:" + it.id] ?? {
+                    let w = ceil((Self.setName(it, c) as NSString).size(withAttributes: [.font: Self.thingFont]).width) + 4
+                    thingWidths["s:" + it.id] = w
                     return w
                 }()
                 let at = SIMD2(Double(it.at.x), Double(it.at.y))
@@ -361,14 +361,11 @@ final class TownNamesView: UIView {
                     let box = CGRect(x: -w / 2, y: -9, width: w, height: 18)
                     setBoxes[it.id] = box
                     items.append(LabelPlan.Item(id: it.id, at: at, box: box, threshold: Double(w + 8) / Double(across), rank: Double(across)))
-                } else if scene?.across(it.id) != nil {
-                    // a park: its name on its shape
-                    let box = CGRect(x: -w / 2, y: -9, width: w, height: 18)
-                    setBoxes[it.id] = box; setGated.insert(it.id)
-                    items.append(LabelPlan.Item(id: it.id, at: at, box: box, threshold: 0, rank: Double(c.items.count - n)))
                 } else {
                     // a mark and its name beside it, kept clear together: to its right, or its left, under it, over it,
                     // whichever lets the name show soonest (the name's own box is set once the plan has chosen)
+                    // (a park too, with or without a boundary: every park has the mark, and a name set on a small
+                    // park's middle ran through its own mark)
                     setBoxes[it.id] = CGRect(x: 8, y: -9, width: w, height: 18); setGated.insert(it.id)
                     markNames[it.id] = [CGRect(x: 8, y: -9, width: w, height: 18), CGRect(x: -8 - w, y: -9, width: w, height: 18),
                                         CGRect(x: -w / 2, y: 6, width: w, height: 18), CGRect(x: -w / 2, y: -24, width: w, height: 18),
@@ -405,7 +402,7 @@ final class TownNamesView: UIView {
                 if (plan.zoom[it.id] ?? .infinity) <= m.k * 1.0001 { named += 1 }
                 if seen > 30 { break }
             }
-            setOn = seen > 0 && seen <= 30 && named * 2 >= seen
+            setOn = seen > 0 && seen <= 30 && named == seen
         }
         // (a card up: it stands on the 25% water, its name about 220 pt above it; no name of the map's under it)
         let cardTop: CGFloat = card ? m.layout.top(.quarter) - 240 : .greatestFiniteMagnitude
@@ -417,8 +414,24 @@ final class TownNamesView: UIView {
             if setGated.contains(id), !setOn { continue }
             let q = m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
             guard live.contains(q) else { continue }
-            let r = b.offsetBy(dx: q.x, dy: q.y)
+            var r = b.offsetBy(dx: q.x, dy: q.y)
             guard r.maxY < cardTop else { continue }
+            // (a mark's name that would run under the zoom column or off the screen's side stands on another side of
+            // its mark, the first that is whole and free: right, left, under, over. Switzerland's one park, at its east
+            // end, read "Swiss Nation"; a mark under the zoom column has the screen's edge as its limit)
+            if setGated.contains(id) {
+                let lo: CGFloat = 4, hi = q.x <= box.maxX ? box.maxX : bounds.width - 4
+                if r.minX < lo || r.maxX > hi {
+                    let w = r.width
+                    let sides = [CGRect(x: q.x + 8, y: q.y - 9, width: w, height: 18), CGRect(x: q.x - 8 - w, y: q.y - 9, width: w, height: 18),
+                                 CGRect(x: q.x - w / 2, y: q.y + 6, width: w, height: 18), CGRect(x: q.x - w / 2, y: q.y - 24, width: w, height: 18)]
+                    // (none whole: a mark at the very edge of the screen goes without, never with half a name)
+                    guard let side = sides.first(where: { s in
+                        s.minX >= lo && s.maxX <= hi && !rects.values.contains { $0.intersects(s.insetBy(dx: -3, dy: -1)) }
+                    }) else { continue }
+                    r = side
+                }
+            }
             rects[id] = r
         }
         for (id, r) in rects {
@@ -426,7 +439,7 @@ final class TownNamesView: UIView {
             let l = setLabels[id] ?? {
                 let l = UILabel()
                 l.isUserInteractionEnabled = false
-                l.attributedText = Self.words(it.short, Self.thingFont)
+                l.attributedText = Self.words(Self.setName(it, c), Self.thingFont)
                 l.textAlignment = .center
                 Self.glow(l)
                 addSubview(l)
@@ -438,6 +451,20 @@ final class TownNamesView: UIView {
         for (id, l) in setLabels where rects[id] == nil { l.removeFromSuperview(); setLabels[id] = nil }
         thingNameFrames = rects
         m.thingFrames = rects
+    }
+    /// a set's place's name on the map: under National parks a park is "Plitvice Lakes", "Yellowstone" (the set says
+    /// what they are, and the two words on every long name left few with room); a short one keeps them ( is short
+    /// as it is, and "Swiss" alone is no name)
+    private static func setName(_ it: CollectionStore.Item, _ c: CollectionStore.Collection) -> String {
+        guard c.id == "parks" else { return it.short }
+        var s = it.short
+        for tail in [" National Park and Preserve", " National Park Reserve", " National Park"] where s.lowercased().hasSuffix(tail.lowercased()) {
+            s = String(s.dropLast(tail.count)); break
+        }
+        // ("National Park Kornati": the words in front; never "National Park of American Samoa")
+        let head = "National Park "
+        if s.lowercased().hasPrefix(head.lowercased()), !s.dropFirst(head.count).lowercased().hasPrefix("of ") { s = String(s.dropFirst(head.count)) }
+        return s.count >= 6 ? s : it.short
     }
     private func clearThings() {
         for v in thingViews.values { v.dot.removeFromSuperview(); v.name.removeFromSuperview() }

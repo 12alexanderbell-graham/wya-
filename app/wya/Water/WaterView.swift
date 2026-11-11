@@ -411,14 +411,16 @@ struct SheetContent: View {
     /// of how many it has there ("of 61 in Italy"). The towns' set says its total only
     /// in a country (the world's towns are not a list anyone holds: "Towns 12").
     private var placesCaption: (name: String, count: Int, tail: String)? {
-        _ = map.townsVersion; _ = MarkStore.shared.changes; _ = CollectionStore.shared.ready
+        _ = map.townsVersion; _ = MarkStore.shared.changes; _ = CollectionStore.shared.ready; _ = map.continent
         let place: String? = map.placeOpen.flatMap { i in map.world.map { $0.places[i].n } }
         // (no set picked yet: the menu's rows, and how many places are yours in all)
         guard map.placesPicked else { return nil }
         if let c = map.setCollection {
             let n = c.items.filter { MarkStore.shared.state($0.key).stamped }.count
             // (the set's own name whatever kind it is cut down to: the lime bar under it says the kind)
-            return (CollectionStore.shared.title(map.placesSet), n, "of " + Self.number(c.total) + (place.map { " in " + $0 } ?? ""))
+            // (a continent picked: of how many it has there, "of 612 in Europe")
+            let area = place ?? (MapController.continents.contains(c.scope) ? c.scope : nil)
+            return (CollectionStore.shared.title(map.placesSet), n, "of " + Self.number(c.total) + (area.map { " in " + $0 } ?? ""))
         }
         let n = map.stampedTowns(on: map.placesPick)
         let cities = "Cities"

@@ -269,6 +269,20 @@ final class TestDriver {
                         // pins colour <n>: a pick made in its picker and the picker closed (one undo step)
                         let s = PinStore.shared, id = s.pins[n].id
                         s.colourStart(id); s.colour(id, ColourPick(hue: 0.6, light: 0.5, strength: 0.9)); s.colourEnd()
+                    } else if a == "kind" || a == "photo", p.count > 2, let n0 = Int(p[2]),
+                              case let n = n0 < 0 ? PinStore.shared.pins.count + n0 : n0, n >= 0, n < PinStore.shared.pins.count {
+                        // pins kind <n> <kind>|none: pin n's category (n -1: the last pin)
+                        // pins photo <n> on|off: a drawn test picture as its photo, or none
+                        let s = PinStore.shared, id = s.pins[n].id
+                        if a == "kind" { s.kind(id, p.count > 3 && p[3] != "none" ? p[3] : nil) }
+                        else if p.count > 3, p[3] == "on" {
+                            let img = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 800)).image { c in
+                                let g = CGGradient(colorsSpace: nil, colors: [UIColor.systemTeal.cgColor, UIColor.systemOrange.cgColor] as CFArray, locations: nil)!
+                                c.cgContext.drawLinearGradient(g, start: .zero, end: CGPoint(x: 1200, y: 800), options: [])
+                            }
+                            s.photo(id, img.jpegData(compressionQuality: 0.9))
+                        } else { s.photo(id, nil) }
+                    } else if a == "end" { PinStore.shared.endAsked += 1
                     } else if a == "state" {
                         // pins state: how many pins and routes, each pin's colour and where it is
                         let s = PinStore.shared
@@ -299,6 +313,32 @@ final class TestDriver {
                     // pins routeempty | layers: the dock's Route and Layers tools
                     } else if a == "routeempty" { PinRoutes.shared.openEmpty()
                     } else if a == "layers" { PinsDockState.shared.tool = .layers
+                    // pins days: how many pins were made on each day, logged with every pin (name, place, day, where)
+                    // pins prune <yyyy-mm-dd> ...: the pins made on those days deleted, after pins.json is copied beside
+                    // itself (pins-backup-<time>.json); the routes that end on them go with them
+                    } else if a == "days" || a == "prune" {
+                        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+                        let s = PinStore.shared
+                        var per: [String: Int] = [:]
+                        for (i, pin) in s.pins.enumerated() {
+                            let d = f.string(from: pin.made)
+                            per[d, default: 0] += 1
+                            NSLog("wya pin %d | %@ | %@ | %@ | %.4f,%.4f", i, pin.title, pin.place, d, pin.lat, pin.lon)
+                        }
+                        NSLog("wya pins by day: %@; routes %d", per.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", "), PinRoutes.shared.routes.count)
+                        if a == "prune" {
+                            let days = Set(p.dropFirst(2))
+                            let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                            guard let from = dir?.appendingPathComponent("pins.json"),
+                                  let to = dir?.appendingPathComponent("pins-backup-\(Int(Date().timeIntervalSince1970)).json"),
+                                  (try? FileManager.default.copyItem(at: from, to: to)) != nil else {
+                                NSLog("wya pins backup FAILED: nothing deleted"); break
+                            }
+                            NSLog("wya pins backup: %@", to.path)
+                            let gone = s.pins.filter { days.contains(f.string(from: $0.made)) }
+                            for pin in gone { s.remove(pin.id, undoable: false) }
+                            NSLog("wya pins pruned: %d gone, %d left, routes %d", gone.count, s.pins.count, PinRoutes.shared.routes.count)
+                        }
                     // pins add: the toolkit's Add pin; pins unadd: the pin it made taken away again (a test's own pin)
                     // (only ever the pin this test added: its id is kept from the add)
                     } else if a == "add", let w = water {
