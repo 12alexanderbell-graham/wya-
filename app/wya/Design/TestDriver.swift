@@ -282,6 +282,13 @@ final class TestDriver {
                             }
                             s.photo(id, img.jpegData(compressionQuality: 0.9))
                         } else { s.photo(id, nil) }
+                    } else if a == "routedrop", p.count > 3 {
+                        // pins routedrop <from> <to>: a test's own route taken away again, found by its two spots' names
+                        // (only a route between spots of exactly those names; never one between pins)
+                        let r = PinRoutes.shared
+                        let mine = r.routes.filter { ($0.spots ?? []).count == 2 && Set(($0.spots ?? []).map(\.name)) == Set([p[2], p[3]]) }
+                        for x in mine { r.remove(x.id, undoable: false) }
+                        NSLog("wya pins routedrop: %d gone, %d left", mine.count, r.routes.count)
                     } else if a == "end" { PinStore.shared.endAsked += 1
                     } else if a == "state" {
                         // pins state: how many pins and routes, each pin's colour and where it is
@@ -624,6 +631,19 @@ final class TestDriver {
                     if let m = map, let t = TownIndex.shared.hits(p.dropFirst().joined(separator: " "), open: m.placeOpenID).first {
                         head?.searching = false
                         m.showTown(file: t.file, id: t.id)
+                    }
+                // pinsfind paris: Pins' search's first town taken to on Apple's map (as a tap on its row would)
+                case "pinsfind":
+                    TownIndex.shared.load()
+                    for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let t = TownIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first {
+                        head?.searching = false
+                        let c = CLLocationCoordinate2D(latitude: t.lat, longitude: t.lon)
+                        if !PinRoutes.shared.landTapped(c, country: t.name) {
+                            PinStore.shared.selected = nil
+                            water?.go(.quarter)
+                            PinsMapState.shared.show(lat: t.lat, lon: t.lon, metres: t.people >= 1_000_000 ? 60_000 : 25_000)
+                        }
                     }
                 // itemfind yellowst: Places' search's first set place shown (as a tap on its row would)
                 case "itemfind":

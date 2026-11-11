@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 /// The head's state: the mode, search, the plus's tools, and how far the top pull has come.
 @MainActor
@@ -971,13 +972,17 @@ struct SearchResults: View {
             : hits.isEmpty ? (typed ? [guess.map { .place($0) } ?? .miss] : []) : hits.map { .place($0) }
         // PLACES (7.4's head): towns first, the open country's before everywhere else's, then the maps (countries) by name
         let placesSearch = map.placesMode && map.regionScene == nil && !head.settingsOpen
-        let _ = placesSearch ? TownIndex.shared.load() : ()
-        let townHits = placesSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
-        let _ = placesSearch ? ThingIndex.shared.load() : ()
-        let thingHits = placesSearch && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        // (Pins finds the same places, to go to them on Apple's map: a pin tool that finds only your own pins and
+        // countries cannot be taken to Paris or the Eiffel Tower)
+        let spotSearch = placesSearch || (map.pinsMode && !head.settingsOpen)
+        let _ = spotSearch ? TownIndex.shared.load() : ()
+        let townHits = spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        let _ = spotSearch ? ThingIndex.shared.load() : ()
+        let thingHits = spotSearch && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
         // (the sets' own places: the parks, peaks, lakes and the rest of Places' menu, the set looked at first)
-        let itemHits = placesSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
-        let townGuess = placesSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty && itemHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
+        let _ = map.pinsMode ? CollectionStore.shared.load() : ()
+        let itemHits = spotSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
+        let townGuess = spotSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty && itemHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
@@ -988,15 +993,8 @@ struct SearchResults: View {
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
         let pinHits = pinsSearch && typed ? Self.pinMatches(head.query) : []
-        let found: [ResultKey] = pinsSearch && typed
-            ? { () -> [ResultKey] in
-                let k = pinHits.prefix(5).map { ResultKey.pin($0.id) } + hits.prefix(max(3, 8 - min(5, pinHits.count))).map { .place($0) }
-                return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
-            }()
-            : !placesSearch ? mapKeys
-            // (nothing typed: nothing, as everywhere; the types are the water's own menu, 9 Nov)
-            : !typed ? []
-            : typed ? { () -> [ResultKey] in
+        // the places found, in Places' order (Pins: after your pins, and without the types of place, which are Places')
+        let spots: () -> [ResultKey] = {
                 // a country typed by a name people use for it ("UK", "Britain") or by its own whole name leads; then the
                 // towns; then the other countries found
                 let q = head.query.trimmingCharacters(in: .whitespaces).lowercased()
@@ -1020,7 +1018,7 @@ struct SearchResults: View {
                 let others = cut.filter { !$0.name.townFolded.contains(folded) }.map { ResultKey.town($0.key) }
                 let known = thingHits.filter { $0.fame >= 3 && !inSets.contains($0.id) }.prefix(2).map { ResultKey.thing($0.key) }
                 // the types of place it names first ("lakes", "castle", "f1"), then the places themselves
-                let sets = Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
+                let sets = map.pinsMode ? [] : Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
                 // (what was typed as a whole name leads, a town then a set's place: "bali" is Bali before Balikpapan,
                 // "london" London before the Tower of London; then the big towns that start with it, 300,000 people and
                 // more: "par" is Paris before Parinacota (at 100,000 "taj" was Tajimi before the Taj Mahal); then the
@@ -1038,7 +1036,18 @@ struct SearchResults: View {
                 // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
                 return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
-            }() : baseKeys
+        }
+        let found: [ResultKey] = pinsSearch && typed
+            ? { () -> [ResultKey] in
+                // (your pins, four at most, then the places; "No results" only when there is neither)
+                let pins = pinHits.prefix(4).map { ResultKey.pin($0.id) }
+                let rest = spots()
+                return Array((pins + (pins.isEmpty || rest != [.miss] ? rest : [])).prefix(8))
+            }()
+            : !placesSearch ? mapKeys
+            // (nothing typed: nothing, as everywhere; the types are the water's own menu, 9 Nov)
+            : !typed ? []
+            : typed ? spots() : baseKeys
         // each result once: a region or a thing found by two of its names is one key, and a key twice in the rows drew
         // one of them blank (8 Nov)
         var seen = Set<ResultKey>()
@@ -1374,7 +1383,18 @@ struct SearchResults: View {
         Feel.tap()
         head.searching = false
         PlacePageState.shared.closeAll()
-        if let h { map.showTown(file: h.file, id: h.id) }
+        guard let h else { return }
+        if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: h.people >= 1_000_000 ? 60_000 : 25_000, name: h.name) }
+        else { map.showTown(file: h.file, id: h.id) }
+    }
+    /// A PLACE FOUND IN PINS: Apple's map goes to it, the spot in the middle of the map's room (where Add pin drops a
+    /// pin, so found and pinned is two taps); with the Route row waiting for an end, the spot fills it
+    private func pinsGo(lat: Double, lon: Double, metres: Double, name: String) {
+        let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        if PinRoutes.shared.landTapped(c, country: name) { return }
+        if PinStore.shared.selected != nil { PinStore.shared.selected = nil }
+        if let w = head.water, w.stop != .quarter { w.go(.quarter) }
+        PinsMapState.shared.show(lat: lat, lon: lon, metres: metres)
     }
     private func setAct(_ p: MapController.PlacesPick) {
         Feel.tap(); Sound.tap()
@@ -1474,7 +1494,9 @@ struct SearchResults: View {
         Feel.tap()
         head.searching = false
         PlacePageState.shared.closeAll()
-        if let h { map.showThing(file: h.file, id: h.id) }
+        guard let h else { return }
+        if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: 4_000, name: h.name) }
+        else { map.showThing(file: h.file, id: h.id) }
     }
     private func thingRow(_ h: ThingIndex.Hit?) -> some View {
         let country = h.flatMap { h in map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } } } ?? ""
@@ -1502,6 +1524,13 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
         guard let h else { return }
+        if map.pinsMode {
+            // (as far across as its shape, where its set's shapes have come; else some 150 km)
+            let at = EqualEarth.unproject(SIMD2(Double(h.item.at.x), Double(h.item.at.y)))
+            let across = map.setScenes[h.list]?.across(h.item.id).map { Double($0) * 111_000 * 1.6 }
+            pinsGo(lat: at.lat, lon: at.lon, metres: min(4_000_000, max(20_000, across ?? 150_000)), name: h.item.name)
+            return
+        }
         head.water?.go(.quarter)
         map.showSetPlace(h.list, id: h.item.id)
     }

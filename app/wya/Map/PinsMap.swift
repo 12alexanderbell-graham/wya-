@@ -324,10 +324,9 @@ final class PinsMapState {
         // turned on: the whole journey framed between the head and the water at its stop (as on our own map, 13.4);
         // the top clears a pin's own height under the head
         if historyOn, let v = view, let j = journey, let w = water {
-            let L = w.layout
-            let pad = UIEdgeInsets(top: L.headBottom + 30 + 16, left: 40,
-                                   bottom: L.H - w.y(w.stop == .full ? .half : w.stop) + 32, right: 72)
-            v.setVisibleMapRect(j.boundingMapRect, edgePadding: pad, animated: true)
+            // (the map's margins are the head and the water already: only the gaps are padding. Given again, the
+            // journey was framed in a third of its room)
+            v.setVisibleMapRect(j.boundingMapRect, edgePadding: UIEdgeInsets(top: 30 + 16, left: 32, bottom: 32, right: 60), animated: true)
         }
         return historyOn || !on
     }
@@ -423,9 +422,10 @@ final class PinsMapState {
     /// a route just made: Apple's map frames it between the head and the water if it is not all in view
     func frame(route id: UUID?, always: Bool = false) {
         guard let v = view, let id, let l = routeOverlays.first(where: { ($0 as? PinRouteLine)?.routeID == id }) else { return }
-        let L = water?.layout
-        // (the line's box ends at the pins' tips: room above for their heads, and at the sides for their names)
-        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 56, left: 76, bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 40, right: 84)
+        // (the line's box ends at the pins' tips: room above for their heads, and at the sides for their names; the
+        // head and the water are the map's own margins already, and given again here they left a route a third of
+        // its room)
+        let pad = UIEdgeInsets(top: 56, left: 68, bottom: 40, right: 76)
         let seen = v.visibleMapRect
         if always || !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
     }
@@ -444,10 +444,28 @@ final class PinsMapState {
         let p1 = MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, min(85, a.lat)), longitude: a.lon))
         let p2 = MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, min(85, b.lat)), longitude: b.lon))
         let r = MKMapRect(x: min(p1.x, p2.x), y: min(p1.y, p2.y), width: abs(p2.x - p1.x), height: abs(p2.y - p1.y))
-        let L = water?.layout
-        let pad = UIEdgeInsets(top: (L?.headBottom ?? 120) + 16, left: 24,
-                               bottom: (L.map { $0.H - $0.top(.quarter) } ?? 220) + 16, right: 72)
-        v.setVisibleMapRect(r, edgePadding: pad, animated: true)
+        // (the map's own margins already are the head and the water where it stands, and a rect is fitted inside them:
+        // the head and the water given again as padding left France a third of the room, up in its top half. The
+        // padding is only the gap, and the zoom column's side)
+        v.setVisibleMapRect(r, edgePadding: UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 60), animated: true)
+    }
+
+    /// Apple's map over a place found in search (a town, a sight): the spot in the middle of the map's room, between
+    /// the head and the 25% water (where Add pin drops its pin), the map `metres` across
+    func show(lat: Double, lon: Double, metres: Double) {
+        guard let v = view else { return }
+        var centre = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        // (the map's own margins are the head and the water (its credit's place), and Apple's map calls the middle of
+        // what is left its middle: a region about the spot stands in the map's room by itself. A padded rect on top of
+        // that put the spot 49 pt above Add pin's point and the map twice as far out as asked.) The room is the one
+        // above the 25% water, where the water is going; its middle is 4 pt right of the screen's (the credit's room on
+        // the left), so the map's middle is set that much east of the spot.
+        if let L = water?.layout {
+            v.layoutMargins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: L.H - L.top(.quarter), right: L.sheetInset)
+            let room = Double(L.W - 2 * L.sheetInset - 8)
+            centre.longitude += 4 * metres / max(1, room) / (111_320 * max(0.2, cos(lat * .pi / 180)))
+        }
+        v.setRegion(MKCoordinateRegion(center: centre, latitudinalMeters: metres, longitudinalMeters: metres), animated: true)
     }
 
     /// Apple's map over a pin picked from the list: the pin in the middle, no farther out than 400 km
