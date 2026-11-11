@@ -28,6 +28,20 @@ final class TownIndex {
     @ObservationIgnored private var alt: [String] = []
     @ObservationIgnored private var last: (q: String, open: String?, hits: [Hit])?
 
+    /// EACH FIRST-LEVEL DIVISION'S PEOPLE, the sum of its towns' ("us|california": 39 million), by country and the
+    /// division's folded name: how the regions' search tells California from Çal. Made once.
+    func regionPeople() -> [String: Int] {
+        if let p = peopleByRegion { return p }
+        guard ready else { return [:] }
+        var out: [String: Int] = [:]
+        for r in rows where !r.hit.region.isEmpty {
+            out[r.hit.file.lowercased() + "|" + r.hit.region.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), default: 0] += r.hit.people
+        }
+        peopleByRegion = out
+        return out
+    }
+    @ObservationIgnored private var peopleByRegion: [String: Int]?
+
     /// read the index once (in the background)
     func load() {
         guard !ready, !loading else { return }

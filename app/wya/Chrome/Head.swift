@@ -986,6 +986,8 @@ struct SearchResults: View {
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
+        // (the towns' index too: it tells the regions' search how many people live in each)
+        let _ = countriesSearch ? TownIndex.shared.load() : ()
         let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
         let mapKeys: [ResultKey] = anyRegionHits.isEmpty ? baseKeys
             : Array((hits.prefix(max(4, 8 - anyRegionHits.count)).map { ResultKey.place($0) } + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))

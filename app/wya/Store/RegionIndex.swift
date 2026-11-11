@@ -18,7 +18,7 @@ final class RegionIndex {
     private(set) var ready = false
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, hit: Hit)] = []
-    @ObservationIgnored private var last: (q: String, hits: [Hit])?
+    @ObservationIgnored private var last: (q: String, towns: Bool, hits: [Hit])?
 
     func load() {
         guard !ready, !loading else { return }
@@ -42,10 +42,28 @@ final class RegionIndex {
         }
     }
 
+    /// each region's people where the towns' index tells (a first-level region under any of its names, by its id):
+    /// made once both indexes have come
+    private func people() -> [String: Int] {
+        if let p = peopleByID { return p }
+        let towns = TownIndex.shared.regionPeople()
+        guard !towns.isEmpty else { return [:] }
+        var out: [String: Int] = [:]
+        for r in rows where r.hit.row == 1 {
+            if let n = towns[r.hit.place.lowercased() + "|" + r.folded] { out[r.hit.place + "|" + r.hit.id] = max(out[r.hit.place + "|" + r.hit.id] ?? 0, n) }
+        }
+        peopleByID = out
+        return out
+    }
+    @ObservationIgnored private var peopleByID: [String: Int]?
+
     func hits(_ query: String, limit: Int = 4) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         guard ready, q.count >= 2 else { return [] }
-        if let l = last, l.q == q { return l.hits }
+        // (read first, so the list is made again when the towns' index comes)
+        let townsIn = TownIndex.shared.ready
+        if let l = last, l.q == q, l.towns == townsIn { return l.hits }
+        let lives = people()
         // every name starting with it, ranked (the file's order put "Texiguat" before Texas): the whole name typed
         // first, then the first level before the second, then the shorter name (a state's "Texas" before a town's
         // "Texcaltitlán"); then names with a later word starting with it
@@ -62,11 +80,17 @@ final class RegionIndex {
             // a country's first level (states, regions) before its second (the communes that filled "fra" with Fram,
             // Frata and Frasin, 8 Nov)
             if a.h.row != b.h.row { return a.h.row < b.h.row }
+            // the region more people live in first ("cal" is California, 39 million, before Çal and Caldas: by the
+            // shorter name alone California never made the list)
+            let pa = lives[a.h.place + "|" + a.h.id] ?? 0, pb = lives[b.h.place + "|" + b.h.id] ?? 0
+            if pa != pb { return pa > pb }
             if a.f.count != b.f.count { return a.f.count < b.f.count }
             return a.f < b.f
         }
-        let h = Array((starts.map(\.h) + inside).prefix(limit))
-        last = (q, h)
+        // (a region under two of its names, Caldas and Caldas Department, once)
+        var seen = Set<String>()
+        let h = Array((starts.map(\.h) + inside).filter { seen.insert($0.place + "|" + $0.id).inserted }.prefix(limit))
+        last = (q, townsIn, h)
         return h
     }
 }
