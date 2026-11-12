@@ -374,9 +374,11 @@ final class TestDriver {
                         PinRoutes.shared.start(.from, at: PinStore.shared.pins[n].id)
                         _ = PinRoutes.shared.pinTapped(PinStore.shared.pins[k].id)
                     } else if a == "look", p.count > 4, let la = Double(p[2]), let lo = Double(p[3]), let d = Double(p[4]), let v = PinsMapState.shared.view {
-                        // pins look <lat> <lon> <degrees>: Apple's map there, that many degrees tall
-                        v.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: la, longitude: lo),
-                                                       span: MKCoordinateSpan(latitudeDelta: d, longitudeDelta: d)), animated: false)
+                        // pins look <lat> <lon> <degrees>: Apple's map there, that many degrees tall (kept to a span Apple's
+                        // map takes: a span past the world stopped the app)
+                        let dd = min(170, max(0.001, d))
+                        v.setRegion(MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: max(-85, min(85, la)), longitude: max(-180, min(180, lo))),
+                                                       span: MKCoordinateSpan(latitudeDelta: dd, longitudeDelta: min(359, dd))), animated: false)
                     } else if a == "routeland", p.count > 3, let la = Double(p[2]), let lo = Double(p[3]) {
                         // pins routeland <lat> <lon>: a tap on land there while a chip waits
                         let c = CLLocationCoordinate2D(latitude: la, longitude: lo)

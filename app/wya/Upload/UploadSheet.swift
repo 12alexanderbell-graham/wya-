@@ -1303,7 +1303,8 @@ struct UploadSheet: View {
     var body: some View {
         let L = water.layout
         let w = (L.W - 2 * L.sheetInset - 2 * 16 - 12) / 2
-        let top = form.top + 20
+        // (never above the head's foot, as the finding's row: at full the choices stood under the status bar)
+        let top = max(form.top + 20, L.headBottom + 12)
         ZStack(alignment: .topLeading) {
             if u.phase == .choosing {
                 ForEach(0 ..< 2, id: \.self) { side in
