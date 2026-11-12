@@ -117,7 +117,8 @@ struct RegionsMenu: View {
         ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map)
     }
 
-    private func row(_ r: RegionsMenuModel.Row) -> some View {
+    /// `note` in place of the row's count line ("Did you mean?", as search's own rows say it)
+    private func row(_ r: RegionsMenuModel.Row, note: String? = nil) -> some View {
         HStack(spacing: 12) {
             Group {
                 if let f = Flags.square(r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
@@ -130,7 +131,7 @@ struct RegionsMenu: View {
                 // (one line, so every row is the list's 56 pt step and none is cut at rest: a long name gets a
                 // little smaller instead of a second line)
                 Text(r.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Text(r.sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(note ?? r.sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
                     .contentTransition(.numericText(value: Double(r.count)))
                     .animation(Motion.quick, value: r.count)
             }
@@ -164,22 +165,16 @@ struct RegionsMenu: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// nothing matches: "Did you mean <name>?" (the nearest country of the list; a tap searches for it), else (the
-    /// old app's guessNode)
-    private var missRow: some View {
-        let near = SearchResults.nearest(map: map, query: query).flatMap { i in model.rows.first { $0.place == i } }
-        return Group {
-            if let near {
-                Text("Did you mean \(Text(near.name).fontWeight(.semibold))?")
-                    .font(.body).foregroundStyle(Palette.ink)
-                    .onTapGesture { Feel.tap(); head.query = near.name }
-            } else {
-                Text("No results").font(.body).foregroundStyle(Palette.ink)
-            }
+    /// nothing matches: the nearest country's own row, its line saying "Did you mean?" (as search's rows say it; a tap
+    /// opens its regions), else "No results" (the old app's guessNode)
+    @ViewBuilder private var missRow: some View {
+        if let near = SearchResults.nearest(map: map, query: query).flatMap({ i in model.rows.first { $0.place == i } }) {
+            row(near, note: "Did you mean?")
+        } else {
+            Text("No results").font(.body).foregroundStyle(Palette.ink)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, minHeight: Self.rowH, alignment: .leading)
         }
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity, minHeight: Self.rowH, alignment: .leading)
-        .contentShape(Rectangle())
     }
 
     /// a row tapped: its flag lifts, its region file starts loading, search closes; the flight into the country (6.4)
