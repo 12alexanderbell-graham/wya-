@@ -87,7 +87,8 @@ extension ColourPick {
 }
 
 /// THE BACKGROUND SHEET (water at 50%): the living gradient's four colours as four circles, the one being changed in
-/// the picker's own white ring; under them the colour picker, the page behind following the finger
+/// the picker's own white ring; under them the colour picker, the page behind following the finger (its suggested
+/// colour your picture's)
 struct ProfileGroundSheet: View {
     let width: CGFloat
     @State private var store = ProfileStore.shared
@@ -119,7 +120,7 @@ struct ProfileGroundSheet: View {
             ColourPicker(colour: Binding(get: { pick }, set: { c in
                 pick = c
                 set(c, keep: false)
-            }), suggested: nil, width: width) { c in set(c, keep: true) }
+            }), suggested: store.me.picture == nil ? store.me.colour : nil, width: width) { c in set(c, keep: true) }
         }
         .frame(width: width, alignment: .leading)
     }
@@ -155,6 +156,10 @@ struct ProfilePictureSheet: View {
     @State private var item: PhotosPickerItem?
     @State private var pick = ProfileStore.shared.me.colour ?? ProfilePictureSheet.start
 
+    /// THE SUGGESTED COLOUR, from what your profile already has: the strongest of your background's four
+    private var suggested: ColourPick? {
+        (store.me.ground ?? ColourPick.field).max { $0.strength * (1 - abs($0.light - 0.6)) < $1.strength * (1 - abs($1.light - 0.6)) }
+    }
     /// the picker's spot before any colour is picked: the field at its full colour, the marker at its deepest (the
     /// picture stays black until a colour is touched)
     static let start = ColourPick(hue: 250, light: ColourPick.lightBottom, strength: 1)
@@ -164,7 +169,7 @@ struct ProfilePictureSheet: View {
             ColourPicker(colour: Binding(get: { pick }, set: { c in
                 pick = c
                 store.set({ $0.colour = c; $0.picture = nil }, keep: false)
-            }), suggested: nil, width: width) { c in
+            }), suggested: suggested, width: width) { c in
                 store.set { $0.colour = c; $0.picture = nil }
             }
             HStack(spacing: 12) {
