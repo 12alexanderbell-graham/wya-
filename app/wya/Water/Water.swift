@@ -466,6 +466,8 @@ final class Water {
         // (nor over Places' map: its set's rows hold at 50%)
         // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
         // or note, and a route's colour, go to full, for the keyboard and the picker)
+        // (on the Profile: only while your nationalities' search is typed in, clear of the keyboard)
+        if profile { return ProfileEdit.shared.searching }
         if stampedList || settings || details || upload || pageSheet || regions { return true }
         switch head?.mode ?? .countries {
         case .countries, .places: return false
@@ -476,7 +478,8 @@ final class Water {
 
     /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
     var halfAllowed: Bool {
-        if profile { return false }
+        // (on the Profile: only for its picture's and nationalities' sheets)
+        if profile { return ProfileEdit.shared.sheet != nil }
         // (Upload's two choices are all there is while you choose: the water stays at 25%, never an empty 50% or full)
         if upload, UploadState.shared.phase == .choosing { return false }
         return !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet

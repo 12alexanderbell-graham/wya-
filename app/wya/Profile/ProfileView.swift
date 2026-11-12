@@ -10,6 +10,8 @@ import SwiftUI
 struct ProfileView: View {
     let water: Water
     @State private var store = ProfileStore.shared
+    @State private var edit = ProfileEdit.shared
+    @FocusState private var typing: ProfileEdit.Field?
 
     static let picture: CGFloat = 132
     static let gap: CGFloat = 16
@@ -27,23 +29,22 @@ struct ProfileView: View {
         ZStack(alignment: .topLeading) {
             LivingField(saturation: Self.look.x, power: Self.look.y)
                 .frame(width: L.W, height: L.H)
+            // the ground: a tap on it keeps what is typed and puts a sheet away (the map under the page takes nothing)
+            Color.clear
+                .frame(width: L.W, height: L.H)
+                .contentShape(Rectangle())
+                .onTapGesture { if edit.field != nil || edit.sheet != nil { edit.end(water: water) } }
+                .gesture(DragGesture(minimumDistance: 0).onChanged { _ in })
+                .accessibilityHidden(true)
             VStack(spacing: 0) {
-                picture(me)
-                if !me.name.isEmpty {
-                    Text(me.name)
-                        .font(Typeface.nature(34, relativeTo: .largeTitle))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(2)
-                        // (a long name a little smaller rather than cut short)
-                        .minimumScaleFactor(0.7)
-                        .allowsTightening(true)
-                        .padding(.top, Self.gap)
-                }
-                if !store.handleShown.isEmpty {
-                    Text(store.handleShown)
-                        .font(.body)
-                        .foregroundStyle(Palette.ink.opacity(0.5))
-                        .lineLimit(1)
+                Button { Feel.tap(); edit.open(.picture, water: water) } label: { picture(me) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Picture")
+                    .accessibilityHint("Changes your picture")
+                nameLine(me)
+                    .padding(.top, Self.gap)
+                if !store.handleShown.isEmpty || edit.field == .handle {
+                    handleLine
                         // (clear of the name's descenders)
                         .padding(.top, 4)
                 }
@@ -54,41 +55,161 @@ struct ProfileView: View {
                         .lineLimit(1)
                         .padding(.top, Self.gap)
                 }
-                if !me.bio.isEmpty {
-                    Text(me.bio)
-                        .font(.body)
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(3)
-                        .padding(.top, Self.gap)
-                }
+                bioLine(me)
+                    .padding(.top, Self.gap)
+                nationalitiesLine
+                    .padding(.top, Self.gap)
             }
             .multilineTextAlignment(.center)
             .frame(width: L.W - 2 * L.circle)
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            .frame(width: L.W, height: L.H - top, alignment: .top)
+            .frame(width: L.W, alignment: .top)
             .offset(y: top)
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
-        // (the map is under this page: no touch goes through to it)
-        .contentShape(Rectangle())
-        .onTapGesture {}
-        .gesture(DragGesture(minimumDistance: 0).onChanged { _ in })
+        .onChange(of: edit.field) { _, f in typing = f }
+        // (the keyboard put away: that line is kept; a tap from one line to another keeps typing)
+        .onChange(of: typing) { was, t in if t == nil, let w = was, w == edit.field { edit.field = nil } }
+        // (leaving the tab: typing kept, a sheet put away)
+        .onDisappear { edit.field = nil; edit.close(water: water, move: false) }
         .accessibilityElement(children: .contain)
     }
 
-    /// the picture: a full circle with no outline; with no photo, the first letter of your name in the app's font
+    // MARK: the lines, each its own text box when tapped
+
+    private func nameLine(_ me: ProfileStore.Me) -> some View {
+        let font = Typeface.nature(34, relativeTo: .largeTitle)
+        return Group {
+            if edit.field == .name {
+                TextField("", text: Binding(get: { store.me.name }, set: { v in
+                    if v.count > ProfileStore.nameMax { Feel.refuse() }
+                    store.set { $0.name = String(v.prefix(ProfileStore.nameMax)) }
+                }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                .font(font)
+                .textContentType(.name)
+                .submitLabel(.done)
+                .onSubmit { edit.field = nil }
+                .focused($typing, equals: .name)
+                .onAppear { typing = .name }
+            } else {
+                Text(me.name.isEmpty ? "Name" : me.name)
+                    .font(font)
+                    .lineLimit(2)
+                    // (a long name a little smaller rather than cut short)
+                    .minimumScaleFactor(0.7)
+                    .allowsTightening(true)
+                    .onTapGesture { Feel.tap(); edit.field = .name }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Edits your name")
+            }
+        }
+        .foregroundStyle(me.name.isEmpty && edit.field != .name ? Palette.ink.opacity(0.5) : Palette.ink)
+    }
+
+    private var handleLine: some View {
+        Group {
+            if edit.field == .handle {
+                HStack(spacing: 0) {
+                    Text("@")
+                    TextField("", text: Binding(get: { store.me.handle }, set: { v in
+                        // lowercase letters, digits and "_", 20 at most
+                        let h = String(v.lowercased().filter { ($0.isLetter && $0.isASCII) || $0.isNumber || $0 == "_" }.prefix(ProfileStore.handleMax))
+                        if h.count < v.count { Feel.refuse() }
+                        store.set { $0.handle = h }
+                    }), prompt: Text(String(store.handleShown.dropFirst())).foregroundStyle(Palette.ink.opacity(0.5)))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.asciiCapable)
+                    .submitLabel(.done)
+                    .onSubmit { edit.field = nil }
+                    .focused($typing, equals: .handle)
+                    .onAppear { typing = .handle }
+                    .fixedSize()
+                }
+            } else {
+                Text(store.handleShown)
+                    .lineLimit(1)
+                    .onTapGesture { Feel.tap(); edit.field = .handle }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Edits your handle")
+            }
+        }
+        .font(.body)
+        .foregroundStyle(Palette.ink.opacity(0.5))
+    }
+
+    private func bioLine(_ me: ProfileStore.Me) -> some View {
+        Group {
+            if edit.field == .bio {
+                VStack(spacing: 4) {
+                    TextField("", text: Binding(get: { store.me.bio }, set: { v in
+                        // (one paragraph: Return is Done)
+                        if v.contains("\n") { edit.field = nil; return }
+                        if v.count > ProfileStore.bioMax { Feel.refuse() }
+                        store.set { $0.bio = String(v.prefix(ProfileStore.bioMax)) }
+                    }), prompt: Text("Bio").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+                    .lineLimit(1 ... 3)
+                    .submitLabel(.done)
+                    .focused($typing, equals: .bio)
+                    .onAppear { typing = .bio }
+                    // the count, while typing only
+                    Text("\(store.me.bio.count)/\(ProfileStore.bioMax)")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(Palette.ink.opacity(0.5))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            } else {
+                Text(me.bio.isEmpty ? "Bio" : me.bio)
+                    .lineLimit(3)
+                    .foregroundStyle(me.bio.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
+                    .onTapGesture { Feel.tap(); edit.field = .bio }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Edits your bio")
+            }
+        }
+        .font(.body)
+        .foregroundStyle(Palette.ink)
+    }
+
+    /// your nationalities' flags in a row, the passport's first; none yet, the word at 50%
+    private var nationalitiesLine: some View {
+        Group {
+            if edit.nationalities.isEmpty {
+                Text("Nationality").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(edit.nationalities, id: \.self) { FlagCircle(cc: $0, size: 24) }
+                }
+            }
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture { Feel.tap(); edit.open(.nationalities, water: water) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Nationalities")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// the picture: a full circle with no outline. Your photo, or a flag of yours, or your initial on the colour you
+    /// picked (on black when none is); the initial is white on a deep colour and black on a pale one
     private func picture(_ me: ProfileStore.Me) -> some View {
         ZStack {
-            Circle().fill(Palette.ink)
-            if let first = me.name.trimmingCharacters(in: .whitespaces).first {
-                Text(String(first).uppercased())
-                    .font(Typeface.nature(Self.picture * 0.5, relativeTo: .largeTitle))
-                    .foregroundStyle(Palette.white)
-                    .dynamicTypeSize(.large)
+            if me.picture == "photo", let p = store.photo {
+                Image(uiImage: p).resizable().interpolation(.high).scaledToFill()
+            } else if let f = me.picture, f.hasPrefix("flag:") {
+                FlagCircle(cc: String(f.dropFirst(5)), size: Self.picture)
+            } else {
+                Circle().fill(me.colour?.color ?? Palette.ink)
+                if let first = me.name.trimmingCharacters(in: .whitespaces).first {
+                    Text(String(first).uppercased())
+                        .font(Typeface.nature(Self.picture * 0.5, relativeTo: .largeTitle))
+                        .foregroundStyle((me.colour?.light ?? 0) > 0.72 ? Palette.ink : Palette.white)
+                        .dynamicTypeSize(.large)
+                }
             }
         }
         .frame(width: Self.picture, height: Self.picture)
-        .accessibilityHidden(true)
+        .clipShape(Circle())
     }
 }
 
@@ -104,6 +225,7 @@ struct ProfileWater: View {
     /// the Map tab, as its button opens it (the stamps number's tap)
     var openMap: () -> Void = {}
     @State private var numbers = ProfileNumbers.shared
+    @State private var edit = ProfileEdit.shared
     @State private var shown = false
     /// how far the count up has come, 0...1 (1 once it has run)
     @State private var run: Double = ProfileWater.counted ? 1 : 0
@@ -119,6 +241,8 @@ struct ProfileWater: View {
         // (four digits and more: all three a size down together, so each still fits its column)
         let size: CGFloat = (values.max() ?? 0) >= 1000 ? big * 0.75 : big
         let fits = form.top <= L.capsule.minY - 134 && !(water.stop == .closed && !water.held)
+            // (a sheet up: they give it their place)
+            && !(edit.sheet != nil && (water.stop == .half || water.stop == .full))
         ZStack(alignment: .topLeading) {
             if numbers.ready {
                 ForEach(0 ..< 3, id: \.self) { i in
@@ -154,6 +278,24 @@ struct ProfileWater: View {
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { openMap() }
             }
+        }
+        // THE PICTURE'S AND THE NATIONALITIES' SHEETS, in the numbers' place once the water is at 50%
+        .overlay(alignment: .topLeading) {
+            let w = L.W - 2 * L.sheetInset - 32
+            if let s = edit.sheet, water.stop == .half || water.stop == .full, form.top <= L.top(.half) + 24 {
+                Group {
+                    switch s {
+                    case .picture: ProfilePictureSheet(water: water, width: w)
+                    case .nationalities:
+                        NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - (form.top + 16)))
+                    }
+                }
+                .offset(x: L.sheetInset + 16, y: form.top + (s == .picture ? 24 : 16))
+            }
+        }
+        // (the water pulled down from 50%: the sheet is put away with it)
+        .onChange(of: water.stop) { _, st in
+            if edit.sheet != nil, st == .quarter || st == .closed { edit.close(water: water, move: false) }
         }
         .onChange(of: fits, initial: true) { was, f in
             guard shown != f else { return }

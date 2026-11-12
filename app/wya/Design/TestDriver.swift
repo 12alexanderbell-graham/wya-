@@ -279,9 +279,39 @@ final class TestDriver {
                         case "handle": me.handle = words
                         case "code": me.code = words
                         case "bio": me.bio = words
-                        case "clear": me = ProfileStore.Me()
+                        case "clear": me = ProfileStore.Me(); DispatchQueue.main.async { ProfileStore.shared.removePhoto() }
                         default: break
                         }
+                    }
+                    // profile edit name|handle|bio|off: that line's text box, as its tap; profile sheet picture|nations|off;
+                    // profile colour <hue> <light> <strength>; profile picture none|photo|flag <id>; profile phototest (a
+                    // made-up photo through the upload's own crop); profile nats <id> <id>... | none (logs them)
+                    let edit = ProfileEdit.shared
+                    if a == "edit" { edit.field = p.count > 2 ? ["name": .name, "handle": .handle, "bio": .bio][p[2]] : nil }
+                    if a == "sheet", let w = water {
+                        if p.count > 2, p[2] == "picture" { edit.open(.picture, water: w) }
+                        else if p.count > 2, p[2] == "nations" { edit.open(.nationalities, water: w) }
+                        else { edit.end(water: w) }
+                    }
+                    if a == "colour", p.count > 4 {
+                        let c = ColourPick(hue: Double(p[2]) ?? 0, light: Double(p[3]) ?? 0.5, strength: Double(p[4]) ?? 1)
+                        ProfileStore.shared.set { $0.colour = c; $0.picture = nil }
+                    }
+                    if a == "picture" {
+                        ProfileStore.shared.set { $0.picture = p.count > 3 && p[2] == "flag" ? "flag:" + p[3] : p.count > 2 && p[2] == "photo" ? "photo" : nil }
+                        if p.count > 2, p[2] == "none" { ProfileStore.shared.set { $0.colour = nil } }
+                    }
+                    if a == "phototest" {
+                        let img = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600)).image { c in
+                            UIColor.systemTeal.setFill(); c.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                            UIColor.systemOrange.setFill(); c.cgContext.fillEllipse(in: CGRect(x: 300, y: 150, width: 300, height: 300))
+                        }
+                        if let d = img.pngData() { await ProfileStore.shared.setPhoto(d) }
+                    }
+                    if a == "natsearch" { edit.query = p.dropFirst(2).joined(separator: " ") }
+                    if a == "nats", let m = map {
+                        if p.count > 2 { edit.setNationalities(p[2] == "none" ? [] : Array(p.dropFirst(2)), map: m) }
+                        NSLog("wya profile nats: %@ picture %@", edit.nationalities.joined(separator: " "), ProfileStore.shared.me.picture ?? "-")
                     }
                     // profile look <saturation> <power>: the gradient's strength, to compare (0 0 = its own)
                     if a == "look", p.count > 3 { ProfileView.look = SIMD2(Double(p[2]) ?? 0, Double(p[3]) ?? 0) }
