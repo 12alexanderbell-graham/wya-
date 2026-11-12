@@ -467,7 +467,7 @@ final class Water {
         // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
         // or note, and a route's colour, go to full, for the keyboard and the picker)
         // (on the Profile: only while your nationalities' search is typed in, clear of the keyboard)
-        if profile { return ProfileEdit.shared.searching }
+        if profile { return ProfileEdit.shared.searching || ProfileEdit.shared.sheet == .stats }
         if stampedList || settings || details || upload || pageSheet || regions { return true }
         switch head?.mode ?? .countries {
         case .countries, .places: return false

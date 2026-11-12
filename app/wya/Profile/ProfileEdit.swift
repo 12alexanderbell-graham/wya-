@@ -10,7 +10,7 @@ import PhotosUI
 final class ProfileEdit {
     static let shared = ProfileEdit()
     enum Field: Hashable { case name, handle, bio }
-    enum Sheet { case picture, nationalities, ground }
+    enum Sheet { case picture, nationalities, ground, stats }
     /// the line being typed in
     var field: Field?
     /// what the water holds instead of the three numbers
@@ -24,9 +24,11 @@ final class ProfileEdit {
         field = nil
         searching = false
         sheet = s
-        water.go(.half)
+        // (your stats are a long list: the water at full)
+        let to: Water.Stop = s == .stats ? .full : .half
+        water.go(to)
         // (the water could not rise: no sheet left hidden under 25%)
-        if water.stop != .half { sheet = nil }
+        if water.stop != to { sheet = nil }
     }
     /// the sheet put away; `move: false` when the water has already gone down by itself
     func close(water: Water, move: Bool = true) {
@@ -128,6 +130,56 @@ struct ProfileGroundSheet: View {
         var g = four
         g[at] = c
         store.set({ $0.ground = g }, keep: keep)
+    }
+}
+
+/// YOUR STATS (the stats number's tap; the water at full): each group's title, then its rows, the name on the left and
+/// the value on the right; in "21 of 58" the "of 58" at 50%. A pull down puts it away.
+struct ProfileStatsList: View {
+    let width: CGFloat
+    let room: CGFloat
+    @State private var numbers = ProfileNumbers.shared
+
+    var body: some View {
+        let all = numbers.groups.map { ($0.title, $0.rows) } + numbers.sections.map { ($0.name, $0.rows) }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(all.enumerated()), id: \.offset) { i, g in
+                    Text(g.0).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .padding(.top, i == 0 ? 8 : 28).padding(.bottom, 4)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(g.1) { r in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(r.label).font(.body).foregroundStyle(Palette.ink)
+                                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            value(r.value).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            }
+            .frame(width: width, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+        .frame(width: width, height: room)
+        // (rows go soft under the water's top edge, never cut by a straight line)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 8)
+                Color.black
+            }
+        }
+    }
+    /// "21 of 58": the count in black, "of 58" at 50%; anything else as it is
+    private func value(_ v: String) -> Text {
+        if let r = v.range(of: " of "), v[..<r.lowerBound].allSatisfy({ $0.isNumber || $0 == "," }) {
+            return Text(v[..<r.lowerBound]).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
+                + Text(" of " + v[r.upperBound...]).font(.body.monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
+        }
+        return Text(v).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
     }
 }
 
