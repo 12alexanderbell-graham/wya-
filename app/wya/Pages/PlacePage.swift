@@ -232,7 +232,9 @@ extension PlacePageState.OnePage {
         if let v = PlacePageState.plugs(f["plug"]) { out.rows.append(("Plugs", v)) }
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
         if let e = f["emergency"] as? [String], let first = e.first { out.rows.append(("Emergency", first)) }
-        if let v = s("highestPoint") { out.rows.append(("Highest point", v)) }
+        // (the Netherlands here is the one in Europe, the Caribbean islands places of their own: Wikidata's highest point
+        // is Mount Scenery, on Saba)
+        if let v = cc == "nl" ? "Vaalserberg" : s("highestPoint") { out.rows.append(("Highest point", v)) }
         // each government's advice, with who says it and when it was checked
         let adv = j["advisories"] as? [String: Any] ?? [:]
         if let ca = adv["ca"] as? [String: Any], let t = ca["text"] as? String {
@@ -523,6 +525,12 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "\\(\\s*,\\s*", with: "(", options: .regularExpression)
             t = t.replacingOccurrences(of: "(\\w) ,", with: "$1,", options: .regularExpression)
         }
+        // a picture's or link's closing marks left with nothing before them ("]] Île-de-France is ..."), and a link's
+        // opening ones with nothing after: never words
+        if t.contains("]]") || t.contains("[[") {
+            t = t.replacingOccurrences(of: "^[\\s\\]|]+", with: "", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
+        }
         return t
     }
 
@@ -556,7 +564,9 @@ extension PlacePageState {
     /// app (metropolitan France: 543,940, the land register's figure); Macau's 115.3 counts its sea (its land: 33.3 in
     /// 2024, the government's yearbook). Under 10 km² one decimal ("2.1", "0.5"; the Vatican read "0 km²").
     static func area(_ v: Any?, cc: String) -> String? {
-        let own: [String: Double] = ["fr": 543_940, "mo": 33.3]
+        // (Norway without Svalbard and Jan Mayen, each a place of its own here: the Nordic Council's figure; the
+        // Netherlands in Europe with its lakes and rivers, without the sea: Wikidata's gave its waters too)
+        let own: [String: Double] = ["fr": 543_940, "mo": 33.3, "no": 323_781, "nl": 41_543]
         let all = (v as? [NSNumber])?.map(\.doubleValue) ?? (v as? NSNumber).map { [$0.doubleValue] } ?? []
         guard let a = own[cc] ?? all.max(), a > 0 else { return nil }
         return a < 10 ? String(format: "%.1f", a) : big(a)
@@ -691,7 +701,8 @@ private struct PageLayer: View {
                            y: page.origin.minY + (full.minY - page.origin.minY) * p + page.drag * 0.5,
                            width: page.origin.width + (full.width - page.origin.width) * p,
                            height: page.origin.height + (full.height - page.origin.height) * p)
-            let corner = min(page.origin.height / 2, 22) + (Self.screenCorner - min(page.origin.height / 2, 22)) * p
+            // (at full, the screen's own corner: a fixed 55 left triangles of map at the corners of phones rounded less)
+            let corner = min(page.origin.height / 2, 22) + (L.screenCorner - min(page.origin.height / 2, 22)) * p
             // (31 Oct 03:07: opening and leaving "strange"; the way Apple's zoom does it) what is under the page dims a
             // little as it grows, and the page itself fades over its first and last stretch, so it never lands as a small
             // card on the map where it opened from (the camera may have moved since)
@@ -713,7 +724,6 @@ private struct PageLayer: View {
         }
     }
 
-    private static let screenCorner: CGFloat = 55
 
     @ViewBuilder private func content(_ key: PlaceKey, L: Layout) -> some View {
         ScrollViewReader { reader in
@@ -736,7 +746,7 @@ private struct PageLayer: View {
                 if let f = page.facts, !f.activities.isEmpty { ActivitiesList(all: f.activities) }
                 if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
-                suggestions()
+                // (Suggestions stays away until it has something in it: a title over nothing was useless words, 12 Nov)
                 if MarkStore.shared.state(key).stamped { record(key) }
                 if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
                 Color.clear.frame(height: 140).id("end")

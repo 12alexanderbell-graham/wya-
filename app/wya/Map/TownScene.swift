@@ -69,6 +69,8 @@ nonisolated final class TownScene: @unchecked Sendable {
     }
 
     /// a town's box on the map (its shape's, or a small one round its point)
+    /// a town's built-up rings in map units (Apple's map draws them: Map/AppleWorld.swift)
+    func townRings(_ i: Int) -> [[SIMD2<Float>]] { i < rings.count ? rings[i] : [] }
     func box(_ i: Int) -> SIMD4<Float> {
         if let b = boxes[i] { return b }
         let p = at[i], r: Float = 0.0015

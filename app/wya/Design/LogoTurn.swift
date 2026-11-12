@@ -31,26 +31,52 @@ final class LogoTurnUIView: UIView {
 
     static let url = Bundle.main.url(forResource: "logo-turn", withExtension: "mov")
 
+    /// THE FILM MADE READY AT THE APP'S START (wyaApp.init, before any view): the player and its loop exist and the
+    /// file is opened while the first views are built, so the film is up with the loading screen (12 Nov: it came 2.6 s
+    /// after it, with the map's loading)
+    nonisolated(unsafe) private static var warmed: (player: AVQueuePlayer, looper: AVPlayerLooper)?
+    static func warm() {
+        guard warmed == nil, let url = url else { return }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url), automaticallyLoadedAssetKeys: ["playable", "tracks", "duration"])
+        let p = AVQueuePlayer()
+        p.isMuted = true
+        p.preventsDisplaySleepDuringVideoPlayback = false
+        p.automaticallyWaitsToMinimizeStalling = false
+        let looper = AVPlayerLooper(player: p, templateItem: item)
+        warmed = (p, looper)
+        // the turn starts now, with the app: the page's light goes round from this moment on its own thread, and the
+        // film joins it at the same point of the turn once its decoder is up
+        if GlassRender.filmStart == nil { GlassRender.filmStart = CACurrentMediaTime() }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
         backgroundColor = .clear
         playerLayer.videoGravity = .resizeAspect
         playerLayer.pixelBufferAttributes = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
-        guard let url = Self.url else { return }
-        let item = AVPlayerItem(url: url)
-        let p = AVQueuePlayer()
-        p.isMuted = true
-        p.preventsDisplaySleepDuringVideoPlayback = false
-        p.rate = Motion.reduce ? 0.5 : 1
-        looper = AVPlayerLooper(player: p, templateItem: item)
+        Self.warm()
+        guard let w = Self.warmed else { return }
+        let p = w.player
+        looper = w.looper
         playerLayer.player = p
         player = p
+        // (playing from the start, and its start told to the page's light here, on the film's own thread: the main thread
+        // is busy loading the map for up to 3 s, and waiting for it left the logo and its light standing still, 12 Nov)
+        let slow = Motion.reduce
+        let rate: Float = slow ? 0.5 : 1
+        p.playImmediately(atRate: rate)
         watch = playerLayer.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak self] l, _ in
             guard l.isReadyForDisplay else { return }
+            // (the film joins the turn where the light has got to: the same point of its 2.7 s, never from its start)
+            if let s = GlassRender.filmStart, let p = l.player {
+                let period = 2.7 * (slow ? 2 : 1)
+                let at = (CACurrentMediaTime() - s).truncatingRemainder(dividingBy: period) / (slow ? 2 : 1)
+                p.seek(to: CMTime(seconds: at, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                p.playImmediately(atRate: rate)
+            }
             DispatchQueue.main.async {
-                guard let self, let p = self.player else { return }
-                p.playImmediately(atRate: Motion.reduce ? 0.5 : 1)
+                guard let self, self.player != nil else { return }
                 #if DEBUG
                 NSLog("wya logoturn: film up %.3f s after launch", CACurrentMediaTime() - Launch.startTime)
                 #endif

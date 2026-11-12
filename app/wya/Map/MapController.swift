@@ -406,7 +406,33 @@ final class MapController {
     // MARK: PLACES (Part 7): our map's towns (PlacesMap.swift)
     /// Places is the mode: countries' fills drained; a country tapped opens with its towns
     /// Pins is the mode: Apple's map is up (PinsMap.swift) and the zoom column works it
-    var pinsMode = false
+    var pinsMode = false { didSet { if pinsMode != oldValue { holdZoom = 0; if !onApple { updateHome() } } } }
+    /// THE MAP: APPLE (Map/AppleWorld.swift): Apple's map is under the map instead of ours (the Map setting, outside Pins)
+    var appleWorld = false {
+        didSet {
+            guard appleWorld != oldValue else { return }
+            holdZoom = 0
+            // (our own map again: its points are its own, nothing follows Apple's frames)
+            if !appleWorld { apple = nil; onFrame = nil; appleOwner = nil }
+            if !onApple { updateHome() }
+        }
+    }
+    /// which Apple map view set `apple` and `onFrame` (a view taken down after its replacement was made must not clear
+    /// the new one's, 12 Nov: names stood still over a zooming map)
+    @ObservationIgnored var appleOwner: ObjectIdentifier?
+    /// Apple's map is the one on screen (Pins, or the Map setting): the zoom column, Reset and full screen move it
+    var onApple: Bool { pinsMode || appleWorld }
+    /// APPLE'S MAP UNDER THE MAP (Map/AppleWorld.swift): a point of ours on its screen and back, through Apple's own
+    /// projection, so the names, marks and presses laid over it stand where Apple draws the place. nil: our map is up
+    @ObservationIgnored var apple: (toScreen: (SIMD2<Double>) -> CGPoint, toMap: (CGPoint) -> SIMD2<Double>)?
+    /// our camera kept where Apple's is (its middle, and its scale at the middle), so what our zoom decides (which
+    /// towns, which names) follows Apple's map
+    func followApple(centre: SIMD2<Double>, k: Double) {
+        guard k.isFinite, k > 0 else { return }
+        c = centre
+        self.k = k
+        needsFrame = true
+    }
     /// Pins came from Places: our map, seen for the few frames Apple's takes to come up, stays as Places drew it
     /// (fills drained, no diamonds), not the Countries map's stamps for three frames
     var pinsDrained = false
@@ -432,7 +458,64 @@ final class MapController {
     // HISTORY (Part 13): the journey up, and how much of it is drawn (0 to 1), moving from `historyFrom` to `historyTo`
     @ObservationIgnored var historyTrack: HistoryTrack?
     @ObservationIgnored var historyShown: CGFloat = 0
+    /// each frame our map draws (it draws on under Apple's map): Apple's map follows the journey with it
+    @ObservationIgnored var onFrame: (() -> Void)?
     @ObservationIgnored private var historyAnim: (from: CGFloat, to: CGFloat, t0: CFTimeInterval, dur: Double)?
+    /// the journey being played (its start, its length, the camera's middle and width followed, the last frame's time)
+    @ObservationIgnored private var historyPlay: (t0: CFTimeInterval, dur: Double, centre: SIMD2<Double>, width: Double, last: CFTimeInterval)?
+    /// the leg being played and how far along it (eased), for Apple's map to follow (Map/AppleWorld.swift); nil when
+    /// no play is running
+    @ObservationIgnored private(set) var historyLeg: (j: Int, e: Double)?
+    /// a touch on Apple's map ends the play there, as one on ours does
+    func endHistoryPlay() { endPlay(frame: true) }
+    /// the play ended (a touch, the range moved, history off): the line whole and the journey framed
+    private func endPlay(frame: Bool) {
+        guard historyPlay != nil else { return }
+        historyPlay = nil
+        historyLeg = nil
+        historyShown = historyTrack == nil ? 0 : 1
+        if frame { frameHistory() }
+        needsFrame = true
+    }
+    /// one frame of the play: how much is drawn and where the camera is
+    private func stepPlay(_ now: CFTimeInterval) {
+        guard var p = historyPlay, let t = historyTrack, t.stops.count > 1, t.points.count > 1 else { endPlay(frame: false); return }
+        if touching { endPlay(frame: true); return }
+        let legs = t.stops.count - 1, segs = t.points.count - 1
+        let x = min(1, (now - p.t0) / p.dur)
+        let j = min(legs - 1, Int(x * Double(legs)))
+        let u = x * Double(legs) - Double(j)
+        // eased into each stop and out of it (smoothstep), so it reads as going place to place
+        let e = u * u * (3 - 2 * u)
+        historyLeg = (j, e)
+        let s0 = j < t.legStart.count ? t.legStart[j] : 0
+        let s1 = j + 1 < t.legStart.count ? t.legStart[j + 1] : segs
+        let at = Double(s0) + Double(s1 - s0) * e
+        historyShown = CGFloat(at / Double(segs))
+        // the line's end now
+        let i = min(segs - 1, Int(at)), f = at - Double(i)
+        let tip = t.breaks.contains(i) ? t.points[i] : t.points[i] + (t.points[i + 1] - t.points[i]) * f
+        // the camera follows it, wide enough for the leg it is on (a little room round it), never closer than the town
+        // level's start, eased (a fixed share a frame at 60 a second)
+        let a = t.stops[j].at, b = t.stops[j + 1].at
+        let room = layout.room(sheetTop: layout.top(.quarter) - 56)
+        let roomH = Swift.max(80, Double(room.upperBound - room.lowerBound) - 112)
+        let leg = Swift.max(abs(b.x - a.x), abs(b.y - a.y) * Double(view.width) / roomH)
+        let want = Swift.max(leg * 1.8, Double(view.width) / Swift.min(townsK, kMax))
+        let dt = p.last > 0 ? now - p.last : 1.0 / 60
+        let cs = 1 - pow(1 - 0.12, dt * 60), ws = 1 - pow(1 - 0.08, dt * 60)
+        p.centre += (tip - p.centre) * cs
+        p.width += (Swift.min(want, Double(view.width) / kMin) - p.width) * ws
+        p.last = now
+        historyPlay = p
+        k = Swift.max(kMin, Double(view.width) / p.width)
+        // the end in the middle of the room between the head and the water at history height
+        let top = Double(room.lowerBound) + 56, bottom = Double(room.upperBound) - 56
+        c = clamped(p.centre + SIMD2(0, (Double(view.height) / 2 - (top + bottom) / 2) / k), k)
+        updateHome()
+        needsFrame = true
+        if x >= 1 { endPlay(frame: true) }
+    }
 
     /// every dated stop of the scope (all time) and what the caption and the range bar show
     @ObservationIgnored var historyAll: [HistoryTrack.Stop] = []
@@ -453,12 +536,19 @@ final class MapController {
         let first = HistoryInfo.number(all.first!.from), last = max(HistoryInfo.number(today), HistoryInfo.number(all.last!.from))
         historyInfo = HistoryInfo(first: first, last: last, lo: HistoryInfo.number(r.0), hi: HistoryInfo.number(r.1), count: 0, km: 0)
         guard rebuildHistory() else { historyInfo = nil; return false }
-        // the whole journey framed between the head and the water at history height (31 Oct 10:52, asked whether
-        // turning history on should frame the trip: "i guess")
-        frameHistory()
         // (a new scope draws its line from the start again)
         historyShown = 0
-        historyAnim = (0, 1, CACurrentMediaTime(), Motion.reduce ? 0.3 : 1.2)
+        // THE JOURNEY PLAYED (the two histories the same, as Pins'): the line draws itself from the first stop to the
+        // last, the camera following its end, easing into each stop and out of it again, then the whole journey framed
+        // between the head and the water at history height. A touch ends it there. Reduce Motion, or one stop: framed
+        // at once, the line drawn in 0.3 s.
+        if !Motion.reduce, let t = historyTrack, t.stops.count > 1 {
+            historyPlay = (CACurrentMediaTime(), min(3.6, max(2.4, 0.35 * Double(t.stops.count - 1))), c, Double(view.width) / k, 0)
+            flight = nil
+        } else {
+            frameHistory()
+            historyAnim = (0, 1, CACurrentMediaTime(), Motion.reduce ? 0.3 : 1.2)
+        }
         needsFrame = true
         return true
     }
@@ -466,7 +556,7 @@ final class MapController {
     /// dated stamp made or undone while history is on. The range keeps where it was; if it reached the end, it still
     /// does, so a stop added today is in it. Nothing left: history stays on with no line.
     func refreshHistory() {
-        guard historyTrack != nil, historyAnim == nil, var info = historyInfo, let w = world else { return }
+        guard historyTrack != nil, historyAnim == nil, historyPlay == nil, var info = historyInfo, let w = world else { return }
         let all = regionScene.map { HistoryTrack.regionStops(scene: $0) }
             ?? (placesMode
                 ? HistoryTrack.placeStops(world: w, countries: members(of: placesPick).map { Set($0.map { w.places[$0].id.lowercased() }) })
@@ -488,6 +578,8 @@ final class MapController {
     /// a handle dragged, a year tapped, a menu row picked
     func setHistoryRange(lo: Int, hi: Int, live: Bool = false) {
         guard var info = historyInfo, historyTrack != nil else { return }
+        // (a handle moved while the journey plays: the play ends where it is, the new range drawn whole)
+        if historyPlay != nil { historyPlay = nil; historyLeg = nil }
         info.lo = min(lo, hi); info.hi = max(lo, hi)
         historyInfo = info
         _ = rebuildHistory()
@@ -512,12 +604,14 @@ final class MapController {
     func historyOff(fast: Bool = false, instant: Bool = false) {
         // (none, or already going: a second off never starts its draw-back again)
         guard historyTrack != nil, instant || historyAnim?.to != 0 else { return }
+        historyPlay = nil; historyLeg = nil
         // (under settings the map draws no frames, so an undraw would stall half way: the line simply goes)
         if instant { historyAnim = nil; historyShown = 0; historyTrack = nil; historyInfo = nil; needsFrame = true; return }
         historyAnim = (historyShown, 0, CACurrentMediaTime(), (Motion.reduce ? 0.2 : 0.6) / (fast ? 2 : 1))
         needsFrame = true
     }
     func stepHistory(_ now: CFTimeInterval) {
+        if historyPlay != nil { stepPlay(now); return }
         guard let a = historyAnim else { return }
         let x = min(1, (now - a.t0) / a.dur)
         // the settle curve's shape (47%, 82%, 95% at a quarter, a half, three quarters)
@@ -984,6 +1078,15 @@ final class MapController {
     /// still under 6 points across at that zoom keeps its diamond until its own shape is 6 points across, so there is
     /// always something to see and touch
     func showsDiamond(_ i: Int) -> Bool { diamondSize(i) > 0.001 }
+    /// THE MAP'S ONE MARK (12 Nov): a set's places, a country's things and your own places are
+    /// all the map's diamond at one size, by the zoom alone: 4.6 pt across at the world's size, 9.5 pt from eight times
+    /// that (its size as the diamond shader takes it; `markAcross` in points, tip to tip)
+    var markPad: Double {
+        let zt = min(1, max(0, (worldKMin > 0 ? k / worldKMin : 1) - 1) / 7)
+        return 0.40 + 0.42 * zt * zt * (3 - 2 * zt)
+    }
+    var markAcross: CGFloat { CGFloat(2 * 5.8 * markPad) }
+
     /// A1.19: the shared diamonds shrink about their centres into their places across 5 to 6 x kMin, tied to the
     /// zoom (0.75 of their size a quarter of the way, gone at 6 x kMin, back the same way out); a kept one shrinks
     /// while its own shape grows from 5 to 6 points across. Never a pop.
@@ -1056,10 +1159,12 @@ final class MapController {
     }
 
     func mapPoint(_ s: CGPoint) -> SIMD2<Double> {
-        c + (SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2) / k
+        if let a = apple { return a.toMap(s) }
+        return c + (SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2) / k
     }
     /// where a map point is on screen now (mapPoint's reverse)
     func screenPoint(_ m: SIMD2<Double>) -> CGPoint {
+        if let a = apple { return a.toScreen(m) }
         let s = (m - c) * k + SIMD2(Double(view.width), Double(view.height)) / 2
         return CGPoint(x: s.x, y: s.y)
     }
@@ -1132,11 +1237,11 @@ final class MapController {
     @ObservationIgnored var holdZoom: Int = 0 { didSet { if holdZoom != oldValue { holdTime = 0; needsFrame = true } } }
     @ObservationIgnored private var holdTime: Double = 0
     func zoomIn() {
-        if pinsMode { PinsMapState.shared.zoom(by: 1.6); return }
+        if onApple { PinsMapState.shared.zoom(by: 1.6); return }
         let t = min(kMax, k * 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
     }
     func zoomOut() {
-        if pinsMode { PinsMapState.shared.zoom(by: 1 / 1.6); return }
+        if onApple { PinsMapState.shared.zoom(by: 1 / 1.6); return }
         let t = max(kMin, k / 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
     }
     /// the continent picked from its planet, nil for the world: the caption names it and counts it
@@ -1199,6 +1304,17 @@ final class MapController {
             restVersion &+= 1; needsFrame = true
         }
     }
+    /// Apple's map back to the world (Reset, The world): the continent let go with it
+    func appleHome() {
+        continent = nil
+        PinsMapState.shared.world()
+    }
+    /// Apple's map come to rest: a continent is let go once the view's middle has left its frame (a pan or a pinch
+    /// away from it, as a search pick does on ours)
+    func appleSettled() {
+        guard let k = continent, let b = world?.contViews[k] else { return }
+        if c.x < b.x || c.x > b.z || c.y < b.y || c.y > b.w { continent = nil }
+    }
     private func offContinent() {
         drawnContinent = nil; continentFrame = nil; continentK = nil; continentY = nil; followMid = nil; focusPlace = nil
         updateHome()
@@ -1231,6 +1347,12 @@ final class MapController {
         #if DEBUG
         NSLog("wya show %@ frame %@ k %.3f (kMin %.3f) room %.0f-%.0f", p.id, String(describing: w.frame(of: i)), target, kMin, top, bottom)
         #endif
+        // (Apple's map up: it frames the place, as Pins does, and ours follows it)
+        if onApple {
+            if !p.tiny, w.frame(of: i) != nil { PinsMapState.shared.show(place: i, world: w) }
+            else { PinsMapState.shared.fly(centre: clamped(centre, target), k: target, size: view) }
+            return
+        }
         // the flash at the landing (A1.4), not as the flight sets off
         fly(to: clamped(centre, target), k: target, dur: 0.8) { [weak self] in self?.flash(i) }
     }
@@ -1307,6 +1429,13 @@ final class MapController {
     /// - from one continent to another the camera goes out to the world first, the rest coming back, then into the
     /// new one (11 Sep); picked again on the way, the last pick wins
     func show(continent k: String) {
+        // (Apple's map under the world: the continent framed on it, as the zoom column's menu does; ours follows it)
+        if appleWorld, !pinsMode {
+            if k == "World" { appleHome(); return }
+            continent = k
+            if let b = world?.contViews[k] { PinsMapState.shared.show(box: b) }
+            return
+        }
         if k == "World" { goHome(); return }
         guard let w = world else { return }
         continent = k
@@ -1490,7 +1619,15 @@ final class MapController {
     /// what happens when this flight lands (the second half of a continent-to-continent move)
     @ObservationIgnored private var afterFlight: (() -> Void)?
 
+    /// PINS: the zoom column's dimmed marks follow Apple's map, the one on screen (set as its camera moves)
+    func pinsLimits(out: Bool, close: Bool) {
+        guard onApple else { return }
+        if out != atHome { atHome = out }
+        if close != atMax { atMax = close }
+    }
     private func updateHome() {
+        // (Pins: Apple's map says where the limits are, pinsLimits)
+        if onApple { return }
         let h = k <= kMin * 1.01
         if h != atHome { atHome = h }
         let m = k >= kMax * 0.99
@@ -1511,6 +1648,13 @@ final class MapController {
         // HOLDING PLUS OR MINUS: the zoom keeps going about the screen's middle, gently faster the longer it is
         // held, from one
         // doubling a second to three at 1.2 s, until the limit or the finger lifts
+        // (Pins: the hold zooms Apple's map, the one on screen; ours under it stays where it is)
+        if holdZoom != 0, onApple {
+            holdTime += dt
+            let rate = (1 + 2 * Flow.smooth(0, 1.2, CGFloat(holdTime))) * log(2.0)
+            if !PinsMapState.shared.zoomStep(exp(Double(holdZoom) * Double(rate) * min(dt, 1.0 / 30))) { holdZoom = 0 }
+            return true
+        }
         if holdZoom != 0 {
             flight = nil
             holdTime += dt

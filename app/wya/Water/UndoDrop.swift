@@ -47,8 +47,9 @@ struct UndoDrop: View {
             .fixedSize()
             // its words at the standard sizes only: the pill is 36 pt high
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            // the water's own kind of glass (frosted over a page, clear on the map), so inside the water it merges away
-            .glassEffect(PageGlass.surface, in: .capsule)
+            // the water's own kind of glass (clear: its frost is under it, Water/WaterView.swift), so inside the water it
+            // merges away (frosted, it stood in the clear capsule as a second shape, 12 Nov)
+            .glassEffect(.clear, in: .capsule)
             // touched over 44 pt (the pill is drawn 36 pt high)
             .frame(minHeight: 44)
             .contentShape(Capsule())

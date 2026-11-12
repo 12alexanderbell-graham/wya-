@@ -40,8 +40,10 @@ struct RegionLevels: View {
                                 .multilineTextAlignment(.center)
                             // the mark grows from its own centre (A12.2) as its room opens beside the word, and goes
                             // back into it as the level arrives (A12.3); the words beside it move, never jump
+                            // (simply there once its room has opened, never a circle growing out of a point)
                             WorkingMark(size: 20, running: coming)
-                                .scaleEffect(coming ? 1 : 0.001)
+                                .opacity(coming ? 1 : 0)
+                                .transaction { $0.animation = nil }
                                 .frame(width: coming ? 26 : 0, alignment: .trailing)
                         }
                         .animation(Motion.quick, value: coming)

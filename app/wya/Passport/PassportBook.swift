@@ -118,7 +118,8 @@ struct PassportBook: View {
             // what lies under the leaf being turned: forward, the next page; backward, the current page
             PassportPage(id: "", order: b.order, hidden: nil, size: size,
                          pageIndex: b.turn > 0 ? min(current + 1, b.pages - 1) : current,
-                         menu: b.turn == 0 ? { stampMenu($0) } : nil)
+                         menu: b.turn == 0 ? { stampMenu($0) } : nil,
+                         name: { id in map.world?.places.first { $0.id == id }?.n ?? id.uppercased() })
             // THE LEAF keeps its height the whole way: it narrows toward the spine as it turns (the turn seen straight
             // on), never growing toward the eye; a flat squeeze keeps the page's glass and its light on every frame
             // (a 3D turn drops the glass while it moves)

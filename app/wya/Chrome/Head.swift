@@ -359,7 +359,6 @@ struct HeadView: View {
         .animation(Motion.chrome, value: head.searching)
         .animation(Motion.chrome, value: head.toolsOpen)
         .animation(Motion.quick, value: head.query.isEmpty)
-        .animation(Motion.quick, value: head.searching)
     }
 
     // MARK: search

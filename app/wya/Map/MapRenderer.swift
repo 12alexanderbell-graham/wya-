@@ -411,9 +411,14 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         if controller.view != view.bounds.size { controller.view = view.bounds.size }
         let moving = controller.step(dt)
         // the Places map's names (7.4), placed for this frame's camera
-        (view as? MapMTKView)?.townNames.update(controller, moving: moving || controller.touching)
+        // (Apple's map up: its own names' layer is over it, Map/AppleWorld.swift; ours under it rests)
+        if let names = (view as? MapMTKView)?.townNames {
+            if controller.appleWorld { if !names.isHidden { names.isHidden = true } }
+            else { if names.isHidden { names.isHidden = false }; names.update(controller, moving: moving || controller.touching) }
+        }
         // the history line (Part 13), drawn along for this frame
         controller.stepHistory(now)
+        controller.onFrame?()
         // (and once more after the line has gone back, so its capsules go with it: they stayed on the map after history
         // was turned off, 7 Nov)
         if let mv = view as? MapMTKView, controller.historyTrack != nil || controller.historyShown > 0 || !mv.historyLine.isHidden {
@@ -1126,10 +1131,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             let scene = controller.setScene
             var plain: [D] = [], wished: [D] = [], stamped: [D] = [], pressed: [D] = []
             let W = Float(controller.view.width), H = Float(controller.view.height)
-            // (one size for all of them at any zoom, smaller far out where they are many: 4.6 pt across at the world's
-            // size, 9.5 pt from eight times that, by the zoom)
-            let zt = Float(min(1, max(0, (controller.worldKMin > 0 ? controller.k / controller.worldKMin : 1) - 1) / 7))
-            let size = 0.40 + 0.42 * zt * zt * (3 - 2 * zt)
+            // (one size for all of them at any zoom, smaller far out where they are many: the map's one mark)
+            let size = Float(controller.markPad)
             for it in c.items where controller.setMarkShown(it, scene) {
                 let q = controller.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
                 guard Float(q.x) > -10, Float(q.x) < W + 10, Float(q.y) > -10, Float(q.y) < H + 10 else { continue }

@@ -48,7 +48,8 @@ final class LogoGlassView: UIView {
     required init?(coder: NSCoder) { fatalError("not from a storyboard") }
 
     func set(phase: Double, spot: LogoLightSpot, still: Bool, turn: Double?, turnStart: CFTimeInterval?) {
-        render?.update(phase: phase, turn: turnStart == nil ? nil : turn, turnStart: turnStart ?? 0, still: still,
+        // (a turn asked for with no start yet: it starts with the logo's film, read on the light's own thread, Launch)
+        render?.update(phase: phase, turn: turn, turnStart: turnStart ?? -1, still: still,
                        spot: SIMD4(Float(spot.centre.x), Float(spot.centre.y), Float(spot.radius), Float(spot.strength)),
                        glow: SIMD4(Float(spot.glow.midX), Float(spot.glow.midY), Float(spot.glow.width / 2), Float(spot.glow.height / 2)))
         render?.start()
@@ -92,6 +93,9 @@ nonisolated final class GlassRender: NSObject, @unchecked Sendable {
         return asin(1 / (phi * phi))
     }()
     static let clockStart = CACurrentMediaTime()
+    /// WHEN THE LOGO'S FILM STARTED MOVING (set on the film's own thread, LogoTurn.swift): the loading screen's light
+    /// turns from then, whatever the main thread is busy with (12 Nov: the light stood still for 3 s while the map loaded)
+    nonisolated(unsafe) static var filmStart: CFTimeInterval?
 
     init(layer: CAMetalLayer, queue: any MTLCommandQueue, pipeline: any MTLRenderPipelineState) {
         self.layer = layer; self.queue = queue; self.pipeline = pipeline
@@ -127,7 +131,7 @@ nonisolated final class GlassRender: NSObject, @unchecked Sendable {
 
     @objc private func step(_ l: CADisplayLink) {
         lock.lock()
-        let turning = turn != nil
+        let turning = turn != nil && (turnStart >= 0 || Self.filmStart != nil)
         let need = dirty || turning || (!still && l.timestamp - lastDraw >= 1.0 / 30)
         lock.unlock()
         guard need else { return }
@@ -141,8 +145,8 @@ nonisolated final class GlassRender: NSObject, @unchecked Sendable {
         let sz = size, sp = spot, gl = glow, still = still
         let now = CACurrentMediaTime() - Self.clockStart
         // a turn by itself: half speed with Reduce Motion, never still (Part 0.4: a still mark reads as stuck)
-        let since = CACurrentMediaTime() - turnStart
-        let ph = turn.map { Self.rest + 2 * .pi * since / ($0 * (still ? 2 : 1)) } ?? phase
+        let from = turnStart >= 0 ? turnStart : Self.filmStart
+        let ph = turn.flatMap { t in from.map { Self.rest + 2 * .pi * (CACurrentMediaTime() - $0) / (t * (still ? 2 : 1)) } } ?? phase
         dirty = false
         lock.unlock()
         guard sz.x > 0, let drawable = layer.nextDrawable() else { return }

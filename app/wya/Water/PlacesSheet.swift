@@ -136,11 +136,10 @@ struct PlacesMenu: View {
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity)
                 .frame(height: PlacesSheet.rowH)
-                // (a button: a quiet ground on the water, white at 45% as Pins' toolkit; the one picked its whole
-                // capsule in lime glass)
-                .background(Capsule().fill(Color.white.opacity(r.on ? 0 : 0.45)))
+                // (a button is its own glass capsule, as the head's circles and the water's tools: never a see-through
+                // ground: frosted, so the map under the water does not show through, 12 Nov; the one picked in lime glass)
                 .contentShape(Capsule())
-                .glassEffect(r.on ? .clear.tint(Palette.lime) : .identity, in: .capsule)
+                .glassEffect(r.on ? PageGlass.surface.tint(Palette.lime) : PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
         .transition(.identity)

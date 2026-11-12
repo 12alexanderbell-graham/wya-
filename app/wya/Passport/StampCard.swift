@@ -550,6 +550,8 @@ struct PassportPage: View {
     var pageIndex: Int? = nil
     /// the book's stamps answer a hold with Apple's menu (4.3.3); the card's page does not
     var menu: ((String) -> [StampMenuItem])? = nil
+    /// a place's name as the map spells it (the hold menu's title)
+    var name: ((String) -> String)? = nil
 
     static let fill: [(col: Int, row: Int)] = [(0, 0), (1, 1), (0, 2), (1, 0), (0, 1), (1, 2)]
 
@@ -586,7 +588,7 @@ struct PassportPage: View {
                         .resizable()
                         .frame(width: at.size.width, height: at.size.height)
                         .rotationEffect(.degrees(at.turn))
-                        .modifier(StampHold(items: menu?(pid), title: Locale.current.localizedString(forRegionCode: pid.uppercased()) ?? ""))
+                        .modifier(StampHold(items: menu?(pid), title: name?(pid) ?? pid.uppercased()))
                         .position(at.center)
                 }
             }

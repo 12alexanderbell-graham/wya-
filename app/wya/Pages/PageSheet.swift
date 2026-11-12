@@ -135,7 +135,8 @@ struct PageSheet: View {
                 .foregroundStyle(.white)
                 .contentTransition(.identity)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Capsule().fill(Palette.ink.opacity(reason == nil ? 0.3 : 1)))
+                // (not ready yet: 50%, as every control that cannot be used)
+                .background(Capsule().fill(Palette.ink.opacity(reason == nil ? 0.5 : 1)))
         }
         .buttonStyle(.plain)
         .padding(.top, 16)
@@ -157,8 +158,8 @@ struct PageSheet: View {
         } label: {
             Text(r).font(.subheadline).foregroundStyle(Palette.ink)
                 .frame(width: width, height: 44)
-                .background(Capsule().fill(on ? Palette.lime : Color.clear))
-                .glassEffect(on ? .identity : PageGlass.control, in: .capsule)
+                // (the one picked in lime glass, as every picked capsule)
+                .glassEffect(on ? PageGlass.control.tint(Palette.lime) : PageGlass.control, in: .capsule)
         }
         .buttonStyle(.plain)
     }

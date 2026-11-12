@@ -81,10 +81,14 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
     ]
 
-    /// Style's choices follow the Map row
+    /// ROWS THE APP DOES NOT FOLLOW YET (12 Nov audit: saved, never read): in their "not yet" look, refusing a tap, as
+    /// All settings (A.1.5: never a control that silently does nothing). A row leaves this list when its part is built.
+    static let notYet: Set<String> = ["projection", "quickAlways", "territories", "start", "pinMarksPlace", "tracking"]
+
+    /// Style's choices follow the Map row (Apple's looks only once the Map row is followed)
     static func choices(_ row: SettingRow, _ s: MapSettings) -> [SettingRow.Choice] {
         if row.id == "style" {
-            return s.map == "apple" ? c([("standard", "Standard"), ("satellite", "Satellite"), ("hybrid", "Hybrid")])
+            return s.map == "apple" && !notYet.contains("map") ? c([("standard", "Standard"), ("satellite", "Satellite"), ("hybrid", "Hybrid")])
                                     : c([("detailed", "Detailed"), ("simple", "Simple")])
         }
         return row.choices ?? []
@@ -93,7 +97,7 @@ enum MapSettingsRows {
     /// SET A ROW (the sheet, search, Reset, VoiceOver and the AI all come here): saved at once; the map follows
     @discardableResult
     static func set(_ id: String, _ value: String, map: MapController) async -> Bool {
-        guard let row = all.first(where: { $0.id == id }) else { return false }
+        guard let row = all.first(where: { $0.id == id }), !notYet.contains(id) else { return false }
         let store = MapSettingsStore.shared
         let before = store.value
         let ok = row.page == "borders" || choices(row, before).contains { $0.id == value }
@@ -120,7 +124,7 @@ enum MapSettingsRows {
         }
         map.diamondsOff = b.diamonds == "nowhere"
         map.diamondsEverywhere = b.diamonds == "everywhere"
-        map.simple = b.map == "native" && b.style == "simple"
+        map.simple = (b.map == "native" || notYet.contains("map")) && b.style == "simple"
     }
 
     /// every row as an action the AI, Siri and links can call ("setting.count" with "countries")

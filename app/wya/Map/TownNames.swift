@@ -41,6 +41,32 @@ final class TownNamesView: UIView {
     static func words(_ name: String, _ font: UIFont) -> NSAttributedString {
         NSAttributedString(string: name, attributes: [.font: font, .foregroundColor: UIColor.black])
     }
+    /// THE MAP'S ONE MARK in a view (12 Nov): the diamond the map draws for a set's places
+    /// and the small countries (MapShaders' diamondFragment): its colour inside, a rim of 50% black, `across` tip to tip,
+    /// centred on `q`
+    static func diamond(_ v: UIView, _ fill: UIColor, across: CGFloat, at q: CGPoint) {
+        v.backgroundColor = .clear
+        v.layer.cornerRadius = 0
+        v.frame = CGRect(x: q.x - across / 2, y: q.y - across / 2, width: across, height: across)
+        let s = (v.layer.sublayers?.first as? CAShapeLayer) ?? {
+            let l = CAShapeLayer()
+            l.lineJoin = .miter
+            l.lineWidth = 0.8
+            l.strokeColor = UIColor(Palette.ink).withAlphaComponent(0.5).cgColor
+            v.layer.addSublayer(l)
+            return l
+        }()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // (the rim inside the diamond, as the shader's)
+        let h = across / 2, e: CGFloat = 0.57
+        let p = UIBezierPath()
+        p.move(to: CGPoint(x: h, y: e)); p.addLine(to: CGPoint(x: across - e, y: h))
+        p.addLine(to: CGPoint(x: h, y: across - e)); p.addLine(to: CGPoint(x: e, y: h)); p.close()
+        s.path = p.cgPath
+        s.fillColor = fill.cgColor
+        CATransaction.commit()
+    }
+
     private static let cream = UIColor(red: 0xfb / 255, green: 0xf6 / 255, blue: 0xf2 / 255, alpha: 1)
 
     /// the one on screen (the test driver's `nametap`)
@@ -82,6 +108,50 @@ final class TownNamesView: UIView {
         ensurePlan(m)
         let named = names(m, moving: moving, taken: own)
         thingMarks(m, taken: named, moving: moving)
+        setMarks(m)
+    }
+
+    // A SET'S MARKS ON APPLE'S MAP (Map/AppleWorld.swift): there our renderer's diamonds are under Apple's map, so the
+    // names' layer draws them, as the renderer does (MapRenderer, 6'): the map's one mark, ink until yours, the one
+    // pressed half as big again; one that is yours and big enough to see is its shape, one named on its middle its name
+    /// this layer is the one over Apple's map
+    var marksHere = false
+    private var setMarkViews: [String: UIView] = [:]
+    private var setMarkKey: [Double] = []
+    private func setMarks(_ m: MapController) {
+        guard marksHere, m.placesMode, let c = m.markCollection, !(c.shapes != nil && m.setScene == nil) else {
+            for v in setMarkViews.values { v.removeFromSuperview() }
+            setMarkViews = [:]; setMarkKey = []
+            return
+        }
+        let key: [Double] = [m.c.x, m.c.y, m.k, Double(bounds.width), Double(MarkStore.shared.changes), Double(c.items.count),
+                             Double(m.thingPressed?.hashValue ?? 0), Double(m.setMiddleNamed.count), Double(m.filter)]
+        guard key != setMarkKey else { return }
+        setMarkKey = key
+        let scene = m.setScene
+        let size = m.markAcross
+        var seen = Set<String>()
+        for it in c.items where m.setMarkShown(it, scene) {
+            let q = m.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
+            guard bounds.insetBy(dx: -10, dy: -10).contains(q) else { continue }
+            let st = MarkStore.shared.state(it.key)
+            if st.stamped || st.wished, let a = scene?.across(it.id), Double(a) * m.k >= 8 { continue }
+            if m.setMiddleNamed.contains(it.id), m.thingPressed != it.id { continue }
+            let pressed = m.thingPressed == it.id
+            let fill = pressed && (st.stamped || st.wished) ? Self.pressed
+                : st.stamped && m.showsStamped ? UIColor(Palette.lime) : st.wished && m.showsWished ? UIColor(Palette.blue) : UIColor(Palette.ink)
+            let v = setMarkViews[it.id] ?? {
+                let d = UIView()
+                d.isUserInteractionEnabled = false
+                insertSubview(d, at: 0)
+                setMarkViews[it.id] = d
+                return d
+            }()
+            Self.diamond(v, fill, across: pressed ? size * 1.5 : size, at: q)
+            if pressed { bringSubviewToFront(v) }
+            seen.insert(it.id)
+        }
+        for (id, v) in setMarkViews where !seen.contains(id) { v.removeFromSuperview(); setMarkViews[id] = nil }
     }
 
     /// the plan for what is on the map now: the towns of the countries in play (the same candidates as before: a shape,
@@ -223,8 +293,8 @@ final class TownNamesView: UIView {
         var frames: [String: CGRect] = [:]
         var named = Set<String>()
         var nameRects: [String: CGRect] = [:]
-        // ONE MARK, ONE SIZE: 6 pt at every zoom, ink until it is yours
-        let size: CGFloat = 6
+        // ONE MARK, ONE SIZE: the map's diamond, ink until it is yours
+        let size = m.markAcross
         var centres: [CGPoint] = []
         let scene = m.setScene
         func put(_ t: ThingStore.Thing, _ st: MarkState, _ r: CGRect, _ nr: CGRect, name: Bool, dot: Bool = true) {
@@ -240,10 +310,10 @@ final class TownNamesView: UIView {
             }()
             // (one found by search, not yours, is held while its card is up: ink, the one mark to look for; the press
             // shade on white land was the faintest thing on the map)
-            v.dot.backgroundColor = m.thingPressed == t.id && (st.stamped || st.wished) ? Self.pressed
+            let fill = m.thingPressed == t.id && (st.stamped || st.wished) ? Self.pressed
                 : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.ink)
-            v.dot.frame = r
-            v.dot.layer.cornerRadius = size / 2
+            // (the one pressed or found: half as big again, as a set's)
+            Self.diamond(v.dot, fill, across: m.thingPressed == t.id ? size * 1.5 : size, at: CGPoint(x: r.midX, y: r.midY))
             v.dot.isHidden = !dot
             frames[t.id] = dot ? r : nr
             if dot { centres.append(CGPoint(x: r.midX, y: r.midY)) }
@@ -483,11 +553,10 @@ final class TownNamesView: UIView {
         thingViews = [:]
     }
 
-    // MARK: YOUR OWN PLACES' MARKS (7.8; 31 Oct 01:17: a lime circle is right for these): a small dot when the map
-    // is far out, growing with the zoom (by the zoom,
-    // never on a timer) to a 20 pt circle close in; lime when stamped, blue when wished, cream otherwise; no outline, no
-    // shadow; its name (13 pt semibold, the cream halo) under it from twice the country's framing zoom. The kind's icon
-    // inside waits for the twelve kinds' icons (their review, Step 3b).
+    // MARK: YOUR OWN PLACES' MARKS (7.8; one mark for all): the map's diamond at the map's one size (by the zoom, never
+    // on a timer); lime when stamped, blue when wished, ink otherwise; its name (13 pt semibold, the cream halo) under
+    // it from twice the country's framing zoom. The kind's icon inside waits for the twelve kinds' icons (their review,
+    // Step 3b).
     private var marks: [String: (dot: UIView, name: UILabel)] = [:]
     /// returns the frames of the names it put up (the towns' names keep clear of them)
     private func ownMarks(_ m: MapController) -> [CGRect] {
@@ -497,8 +566,8 @@ final class TownNamesView: UIView {
         let box = CGRect(x: 6, y: room.lowerBound, width: bounds.width - 6 - 64, height: room.upperBound - room.lowerBound)
         var taken: [CGRect] = []
         let z = m.k / k0
-        // 7 pt (a dot) until 4x the country's framing zoom, 20 pt from 20x, smoothly between (by the zoom)
-        let t = min(1, max(0, (z - 4) / 16)), size = CGFloat(7 + 13 * t * t * (3 - 2 * t))
+        // (the map's one mark)
+        let size = m.markAcross
         let named = z >= 6
         var seen = Set<String>()
         for o in OwnPlaces.shared.all {
@@ -514,10 +583,9 @@ final class TownNamesView: UIView {
                 return (d, l)
             }()
             let st = MarkStore.shared.state(o.key)
-            let tint = st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : Self.cream
-            mk.dot.backgroundColor = tint
-            mk.dot.frame = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
-            mk.dot.layer.cornerRadius = size / 2
+            // (ink until it is yours, as every mark on the map: cream on the cream land could not be seen, 12 Nov)
+            let tint = st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.ink)
+            Self.diamond(mk.dot, tint, across: size, at: q)
             // A DRAWN PLACE (Map/DrawTool.swift): its outline on the map, filled in the mark's colour, once it is more than
             // a mark across on screen; smaller, the mark as any place's
             var drawn = false
@@ -536,7 +604,8 @@ final class TownNamesView: UIView {
                     }()
                     CATransaction.begin(); CATransaction.setDisableActions(true)
                     s.path = path.cgPath
-                    s.fillColor = tint.withAlphaComponent(0.6).cgColor
+                    // (a drawn place not yours yet: its outline on a light fill, never a black blot)
+                    s.fillColor = (st.stamped || st.wished ? tint : Self.cream).withAlphaComponent(0.6).cgColor
                     s.strokeColor = UIColor(Palette.ink).withAlphaComponent(0.5).cgColor
                     CATransaction.commit()
                     drawn = true
@@ -576,7 +645,9 @@ final class TownNamesView: UIView {
         let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
         // (close in with none open, the same zoom whatever framed the camera last: a country flown to, a continent or the world)
         let near = m.placesMode && m.placeOpen == nil
-        guard !ccs.isEmpty, let k0 = near ? m.townsK / 3 : m.continentK else { clear(); return own }
+        // (over Apple's map Apple names the towns itself: none of ours over its own, as in the old app; a town still
+        // answers a tap through its shape)
+        guard !marksHere, !ccs.isEmpty, let k0 = near ? m.townsK / 3 : m.continentK else { clear(); return own }
         let setKey = ccs.joined(separator: ",")
         if key != setKey { clear(); key = setKey }
         let k = m.k

@@ -211,6 +211,10 @@ private struct SettingsList: View {
                         }
                     }
                 }
+            } else if MapSettingsRows.notYet.contains(row.id) {
+                // (saved but not followed by the map yet: its "not yet" look, as All settings, and a refused tap)
+                RowWords(name: row.name, value: "", dim: true)
+                    .onTapGesture { Feel.refuse() }
             } else {
                 RowWords(name: row.name, value: row.valueName(s))
                     .onTapGesture { tap(row, choices, s) }
@@ -424,13 +428,13 @@ private struct SettingsPage: View {
 
     // 5.8: Places map, Pins map, Afghanistan's flag
     @ViewBuilder private func advanced(_ s: MapSettings) -> some View {
-        let maps: [(String, String)] = [("same", "Same as Map"), ("native-detailed", "Native, Detailed"), ("native-simple", "Native, Simple"),
-                                        ("apple-standard", "Apple, Standard"), ("apple-satellite", "Apple, Satellite"),
-                                        ("apple-hybrid", "Apple, Hybrid")]
-        advancedRow("placesMap", "Places map", maps, s.placesMap) { v in MapSettingsStore.shared.change { $0.placesMap = v } }
+        // (Pins is Apple's map: our map's looks did nothing there; Places map and Afghanistan's flag are saved but not
+        // followed yet, so they are in their "not yet" look and refuse, as All settings)
+        let maps: [(String, String)] = [("same", "Same as Map"), ("apple-standard", "Apple, Standard"),
+                                        ("apple-satellite", "Apple, Satellite"), ("apple-hybrid", "Apple, Hybrid")]
+        RowWords(name: "Places map", value: "", dim: true).onTapGesture { Feel.refuse() }
         advancedRow("pinsMap", "Pins map", maps, s.pinsMap) { v in MapSettingsStore.shared.change { $0.pinsMap = v } }
-        advancedRow("afghanistanFlag", "Afghanistan's flag", [("tricolour", "The tricolour"), ("taliban", "The Taliban's")],
-                    s.afghanistanFlag) { v in MapSettingsStore.shared.change { $0.afghanistanFlag = v } }
+        RowWords(name: "Afghanistan's flag", value: "", dim: true).onTapGesture { Feel.refuse() }
     }
     @ViewBuilder private func advancedRow(_ id: String, _ name: String, _ choices: [(String, String)], _ current: String,
                                           _ set: @escaping (String) -> Void) -> some View {

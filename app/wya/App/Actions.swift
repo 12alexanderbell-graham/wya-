@@ -79,7 +79,8 @@ final class Actions {
             return true
         })
         register(.init(id: "map.home", name: "World", role: .normal, available: { map.ready }) { _, _ in
-            map.goHome(); return true
+            if map.onApple { map.appleHome() } else { map.goHome() }
+            return true
         })
         register(.init(id: "map.filter", name: "Filter", role: .normal, available: { map.ready }) { arg, _ in
             guard let s = arg.flatMap(Int.init), (0 ... 4).contains(s) else { return false }

@@ -469,7 +469,7 @@ final class Water {
         if stampedList || settings || details || upload || pageSheet || regions { return true }
         switch head?.mode ?? .countries {
         case .countries, .places: return false
-        case .pins: return PinStore.shared.typing || PinRoutes.shared.colouring != nil
+        case .pins: return PinStore.shared.typing || PinRoutes.shared.colouring != nil || PinDrawings.shared.colouring != nil
         case .regions: return true
         }
     }

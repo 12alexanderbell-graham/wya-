@@ -32,7 +32,8 @@ enum SettingsSearch {
         func starts(_ s: String) -> Bool { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).hasPrefix(q) }
         let s = MapSettingsStore.shared.value
         var out: [(Hit, Int)] = []
-        for row in MapSettingsRows.all where row.shows(s) && row.page != "all" {
+        // (as All settings, the rows not followed yet are not offered: they refuse)
+        for row in MapSettingsRows.all where row.shows(s) && row.page != "all" && !MapSettingsRows.notYet.contains(row.id) {
             let choices = MapSettingsRows.choices(row, s)
             if has(row.name) {
                 out.append((Hit(id: "row:\(row.id)", name: row.name, note: row.page == nil ? row.valueName(s) : ""), starts(row.name) ? 0 : 1))

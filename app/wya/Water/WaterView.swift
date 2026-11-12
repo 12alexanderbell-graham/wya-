@@ -14,6 +14,15 @@ struct WaterView: View {
         let L = water.layout
         let shape = WaterShape(form: f)
         ZStack(alignment: .topLeading) {
+            // THE FROST (12 Nov: fading to none as it gets smaller): one shape, its frost
+            // under the clear glass, at the water's own width between capsule and sheet; none in the capsule, all of it
+            // once it is the sheet, frame by frame with the water (never a switch, never a second shape)
+            if !Perf.shared.off.contains("sheetglass"), f.sheet > 0.001 {
+                shape.fill(.thinMaterial)
+                    .opacity(Double(f.sheet))
+                    .frame(width: L.W, height: L.H)
+                    .allowsHitTesting(false)
+            }
             // the sheet's glass
             // the sheet's glass and the undo drop in one container: the drop is the water's own glass rising out of
             // its edge (Part 3.10), never glass on glass
@@ -23,7 +32,9 @@ struct WaterView: View {
                         Color.clear
                             .frame(width: L.W, height: L.H)
                             // over a place's page, the page's frosted glass like the head's (16.3)
-                            .glassEffect(PageGlass.surface, in: shape)
+                            // (clear Liquid Glass always: in the capsule it is the system's minimized tab bar; the
+                            // frost under it says how much of a sheet it is)
+                            .glassEffect(.clear, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)
@@ -34,7 +45,12 @@ struct WaterView: View {
             // what rides inside it, cut only by the water's own curved outline (never a straight mask)
             if water.profile {
                 // (the Profile's own water: its three numbers, in place of everything the map's water holds)
-                ProfileWater(water: water, form: f, map: map)
+                ProfileWater(water: water, form: f, map: map, openMap: {
+                    water.onTabChange?()
+                    tab = 0
+                    Feel.tap()
+                    Sound.tap()
+                })
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
                     .mask(shape)
             } else if !Perf.shared.off.contains("sheet") {
@@ -189,16 +205,8 @@ struct SheetContent: View {
                     // up through its frosted bottom (8 Nov 20:42)
                     .opacity(cosmosOut ? 0 : 1)
                     .animation(nil, value: cosmosOut)
-                    // NEVER OVER THE TABS: as the water moves the system sinks past the tabs' capsule; it fades out
-                    // over the 16 pt above the capsule's top and is never drawn on it
-                    .mask {
-                        VStack(spacing: 0) {
-                            Rectangle().frame(height: max(0, water.layout.capsule.minY - 22))
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
-                            Spacer(minLength: 0)
-                        }
-                        .frame(width: water.layout.W, height: water.layout.H)
-                    }
+                    // (12 Nov: it comes up from the water's own bottom edge as the water rises, behind the tabs' glass,
+                    // never out of a soft band above the tabs; the water's outline is its only edge)
 
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
@@ -219,7 +227,8 @@ struct SheetContent: View {
             // (never under a place's page: the water there is only the tab capsule or the page's sheet)
             // (nor at history height: the shelf's cards peeked behind the range bar there, 31 Oct 06:25)
             // THE DRAW BAR (Map/DrawTool.swift) in the caption's place while a shape or line is drawn
-            if DrawTool.shared.on, !water.settings { DrawBar(water: water) }
+            // (in Pins its controls are the tools' own circles, changing in place: PinsDock)
+            if DrawTool.shared.on, !water.settings, !map.pinsMode { DrawBar(water: water).transition(.opacity.animation(Motion.quick)) }
             if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
                !water.historyUp, !PlacePageState.shared.isOpen, map.regionScene == nil, !DrawTool.shared.on {
                 PlacesSheet(water: water, map: map, captionY: max(L.headBottom + 12 + 52, form.top + 72), top: form.top, captionUp: captionShown)
@@ -261,32 +270,46 @@ struct SheetContent: View {
             // PINS (Part 8): its own words where the caption sits: the count, or the chosen pin's name and place
             // (settings, details and the upload take the water as they do in every mode: Pins' words step out)
             // (and only where every map's caption fits: never inside the closed capsule over the tabs)
-            if map.pinsMode, captionFits, !water.pageSheet {
+            if map.pinsMode, waterFits, !water.pageSheet {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
+                // (the water's three contents, the tools, a pin, a colour, give way to each other blurred and faded, Apple's
+                // blur replace; at once, a pin chosen swapped the tools for its name in one frame, 17:46)
+                let kind = PinRoutes.shared.colouring != nil || PinDrawings.shared.colouring != nil ? 0
+                    : PinStore.shared.selected == nil || PinRoutes.shared.open || DrawTool.shared.on ? 1 : 2
+                ZStack {
                 // a route's colour being picked takes the water (its name where the pins' caption sits)
-                if PinRoutes.shared.colouring != nil {
-                    RouteColourSheet(water: water, captionY: cy)
-                } else if PinStore.shared.selected == nil {
-                    // THE DOCK (8.5): the pins' count and the tools at the water's top (the Route row and Layers' looks
-                    // in the tools' place); your saved pins and routes under it from 50%
+                if kind == 0 {
+                    RouteColourSheet(water: water, captionY: cy).transition(.blurReplace)
+                } else if kind == 1 {
+                    Group {
+                    // THE DOCK (8.5): the tools in glass circles at the water's top, what you have under them (a route
+                    // being made: what it wants next); your saved pins, routes and drawings under it from 50%
                     let dockTop = max(form.top, L.headBottom + 8)
                     PinsDock(water: water, top: dockTop)
-                    if !PinRoutes.shared.open, PinsDockState.shared.tool == nil, !PinStore.shared.pins.isEmpty {
+                    if !PinRoutes.shared.open, !DrawTool.shared.on,
+                       !PinStore.shared.pins.isEmpty || !PinRoutes.shared.routes.isEmpty || !PinDrawings.shared.all.isEmpty {
+                        // (how far the water is from 25% towards 50%: at 25% no row shows at all, no words poking
+                        // out of the bottom; by a third of the way they are whole)
+                        let up = (L.top(.quarter) - form.top) / max(1, L.top(.quarter) - L.top(.half))
                         PinsList(water: water, captionY: cy, top: PinsDock.bottom(dockTop), rest: abs(form.top - L.top(.half)) < 1.5)
+                            .opacity(min(1, max(0, Double(up) * 3)))
                     }
+                    }
+                    .transition(.blurReplace)
                 } else {
+                    Group {
                     PinsWater(water: water, form: form, captionY: cy)
-                    // the Route row (8.6) near the water's top
-                    if PinRoutes.shared.open {
-                        RouteRow(water: water, captionY: cy - 30)
-                    }
                     // the pin's sheet under its name, once the water is above 25% (8.8)
-                    else if water.stop != .quarter, water.stop != .closed {
+                    if water.stop != .quarter, water.stop != .closed {
                         // (the name sits on the caption's name line, about 42 pt over the caption's middle, its place line
                         // under it; the sheet's rows 10 pt under the place line; Share is a row of the sheet at full, and in the pin's menu)
                         PinSheet(water: water, top: cy + 6)
                     }
+                    }
+                    .transition(.blurReplace)
                 }
+                }
+                .animation(Motion.quick, value: kind)
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil || (water.historyUp && map.historyInfo != nil), !water.pageSheet, !map.pinsMode {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
@@ -318,7 +341,9 @@ struct SheetContent: View {
             // (at 0 it refuses); with the list up the same tap closes it
             // (not in Pins: its caption is its own, and its number is not your stamps)
             // (the journey's caption over a picked sun: its count opens the journey's list)
-            if captionShown, !map.pinsMode, !map.sunPicked || water.historyUp, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
+            // (only where the caption is your stamped count: not over Places' menu, where it was a blank square on the
+            // buttons, nor the journey's caption, whose number is not that count)
+            if captionShown, !map.pinsMode, !map.placesMode, !water.historyUp, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())
@@ -362,7 +387,7 @@ struct SheetContent: View {
         .onChange(of: water.settings || water.details || water.upload) { _, v in DispatchQueue.main.async { takenWas = v } }
         // PINS AT FULL is a name or note being typed, or a route's colour: when the pin or the colour goes (deleted,
         // done, put away) the water comes back to 50%, where the toolkit and the list are
-        .onChange(of: PinStore.shared.selected == nil && PinRoutes.shared.colouring == nil) { _, none in
+        .onChange(of: PinStore.shared.selected == nil && PinRoutes.shared.colouring == nil && PinDrawings.shared.colouring == nil) { _, none in
             if none, map.pinsMode, water.stop == .full, !water.settings, !water.details, !water.upload, !water.pageSheet { water.go(.half) }
         }
         .onChange(of: captionFits, initial: true) { _, fits in
@@ -437,9 +462,11 @@ struct SheetContent: View {
 
     /// A2.5: the top at or above the capsule's top less 134 pt (PM 739, 17e 627: 10 pt under the 25% stop); and not
     /// on its way into the capsule (sent there, not held), so the words go as the water starts down, not after
-    private var captionFits: Bool {
+    private var captionFits: Bool { waterFits && !DrawTool.shared.on }
+    /// the water has room for what sits where the caption does (Pins' tools stay while drawing: they become its controls)
+    private var waterFits: Bool {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
-            && !water.upload && !water.regions && !water.menuLeaving && !water.pageUp && !DrawTool.shared.on
+            && !water.upload && !water.regions && !water.menuLeaving && !water.pageUp
     }
     /// the solar system is down out of the water while something else is the water's content
     private var cosmosOut: Bool {

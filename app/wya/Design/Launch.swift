@@ -5,12 +5,11 @@ import SwiftUI
 /// (OnboardingView.hello, SLICE 175), without its words and buttons: our cream, the logo big in the middle with its
 /// light going round and round, the planet turning, and the logo's light thrown over the whole page by the old app's
 /// own shader (LogoGlassSurface, the living field split by a giant planet's day and night). The light is drawn on its
-/// own thread. When the map is ready the whole screen lifts up and away in one piece, the map already in place under it
-/// (author's default, asked).
+/// own thread. When the map is ready the whole screen fades away in one piece, the map already in place under it.
 @MainActor @Observable
 final class Launch {
     static let shared = Launch()
-    /// how far the loading screen has lifted away (0 whole, 1 gone), on the chrome curve
+    /// how far the loading screen has faded away (0 whole, 1 gone)
     var reveal: CGFloat = 0
     /// the loading screen has gone (it stops drawing)
     var done = false
@@ -28,7 +27,7 @@ final class Launch {
     init() { _ = Self.startTime }
 }
 
-/// THE LOADING SCREEN: lifted by `reveal` x its height
+/// THE LOADING SCREEN: faded by `reveal`
 struct LoadingScreen: View {
     var reveal: CGFloat
     @State private var launch = Launch.shared
@@ -46,17 +45,21 @@ struct LoadingScreen: View {
                 // the logo at rest until its film is up, then the film turning on the video hardware (LogoTurn.swift)
                 ZStack {
                     if launch.turnStart == nil { LogoMark(phase: GlassRender.rest) }
-                    LogoTurnView { launch.turnStart = CACurrentMediaTime() }
+                    LogoTurnView { launch.turnStart = GlassRender.filmStart ?? CACurrentMediaTime() }
                 }
                 .frame(width: mark, height: mark)
                 .position(c)
             }
             .frame(width: W, height: H)
-            .offset(y: -H * reveal)
+            .opacity(1 - reveal)
         }
         .ignoresSafeArea()
         .accessibilityElement()
         .accessibilityLabel("Loading")
+        #if DEBUG
+        .onAppear { NSLog("wya launch: loading screen up at %.3f s", CACurrentMediaTime() - Launch.startTime) }
+        .onChange(of: launch.turnStart) { _, t in if let t { NSLog("wya launch: logo film turning from %.3f s (told at %.3f s)", t - Launch.startTime, CACurrentMediaTime() - Launch.startTime) } }
+        #endif
     }
 
     static func spot(_ c: CGPoint, planet: CGFloat, size: CGSize) -> LogoLightSpot {

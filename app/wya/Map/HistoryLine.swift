@@ -175,11 +175,8 @@ struct HistoryTrack {
 
     /// the line's colour at a share of its length: black to our blue (31 Oct 11:47: no edge any more, so it ends in
     /// the blue, not white, which would vanish on white land)
-    static func colour(_ t: Double) -> UIColor {
-        let blue = SIMD3<Double>(0x78 / 255.0, 0xae / 255.0, 0xf8 / 255.0)
-        let v = blue * t
-        return UIColor(red: v.x, green: v.y, blue: v.z, alpha: 1)
-    }
+    /// (12 Nov: plain black all along, as Pins' journey; no more black to blue)
+    static func colour(_ t: Double) -> UIColor { UIColor(Palette.ink) }
 }
 
 /// THE LINE ON THE MAP: its paths made once in map units, in 40 pieces along its length (each its own colour on the
@@ -646,7 +643,7 @@ struct HistoryBar: View {
                     .contextMenu {
                         // LATEST TRIP (13.4): the latest run of days away from home; with no home yet (Profile), the
                         // last 12 months, as the book's fallback
-                        Button("Latest trip") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
+                        Button("Last 12 months") { map.setHistoryRange(lo: max(info.first, info.last - 365), hi: info.last) }
                         Button("This year") { map.setHistoryRange(lo: max(info.first, info.dayNumber(LocalDay(y: info.lastYear, m: 1, d: 1))), hi: info.last) }
                         Button("All time") { map.setHistoryRange(lo: info.first, hi: info.last) }
                     }

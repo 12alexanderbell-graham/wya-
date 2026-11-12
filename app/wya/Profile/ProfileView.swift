@@ -98,6 +98,8 @@ struct ProfileWater: View {
     let water: Water
     let form: Water.Form
     let map: MapController
+    /// the Map tab, as its button opens it (the stamps number's tap)
+    var openMap: () -> Void = {}
     @State private var numbers = ProfileNumbers.shared
     @State private var shown = false
     /// how far the count up has come, 0...1 (1 once it has run)
@@ -126,6 +128,8 @@ struct ProfileWater: View {
                         .frame(width: column)
                         .position(x: L.W / 2 + CGFloat(i - 1) * column, y: form.top + 76)
                         .accessibilityLabel("\(values[i]) \(names[i])")
+                        // (the stamps number is read as its button, below)
+                        .accessibilityHidden(i == 1)
                 }
             }
         }
@@ -133,13 +137,31 @@ struct ProfileWater: View {
         // (never drawn over the tabs)
         .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) }
         .allowsHitTesting(false)
+        // THE STAMPS NUMBER OPENS YOUR MAP, as you left it (each number opens what it counts; the stats and the badge
+        // levels have no pages yet, so they take no tap)
+        .overlay(alignment: .topLeading) {
+            if numbers.ready, shown {
+                Color.clear
+                    .frame(width: column, height: max(44, size + 12))
+                    .contentShape(Rectangle())
+                    .onTapGesture { openMap() }
+                    .position(x: L.W / 2, y: form.top + 76)
+                    .accessibilityElement()
+                    .accessibilityLabel("\(numbers.stamps) stamps")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { openMap() }
+            }
+        }
         .onChange(of: fits, initial: true) { was, f in
             guard shown != f else { return }
             // (the tab opening: the numbers are simply there; the water pulled: they roll out and in at its edge)
             if was == f || water.tabSwitching { shown = f }
             else { withAnimation(f ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { shown = f } }
         }
-        .task(id: numbers.asks) { await numbers.count(map: map) }
+        // (counted again when your marks change, and when the map's own count does: the Count setting, the borders)
+        .task(id: numbers.asks + " \(map.shares["World"]?.have ?? -1)/\(map.shares["World"]?.total ?? -1) \(CountKind.current)") {
+            await numbers.count(map: map)
+        }
         .task(id: numbers.ready) {
             // THE COUNT UP, once: from nought to each number over 0.8 s, quick first and slowing to the end
             guard numbers.ready, !Self.counted else { return }

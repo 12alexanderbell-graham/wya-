@@ -11,6 +11,8 @@ import MapKit
 /// transport choice (driving until then) and the Route tool in the dock.
 struct PinRoute: Codable, Identifiable, Hashable {
     var id = UUID()
+    /// the map of yours it is in (Map/PinMaps.swift); nil: none
+    var map: UUID? = nil
     var from: UUID
     var to: UUID
     /// the line, as [latitude, longitude] pairs
@@ -66,6 +68,29 @@ final class PinRouteLine: MKPolyline {
 }
 
 /// a route's distance and time, over its middle
+/// an end of the route being made that is a spot on land: a small black dot where the tap was
+final class RouteEnd: NSObject, MKAnnotation {
+    let id: UUID
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    init(id: UUID, at c: CLLocationCoordinate2D) { self.id = id; coordinate = c }
+}
+final class RouteEndView: MKAnnotationView {
+    static let id = "routeEnd"
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: 10, height: 10)
+        backgroundColor = UIColor(Palette.ink)
+        layer.cornerRadius = 5
+        isUserInteractionEnabled = false
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    /// it is simply there where the finger was, as a dropped pin is (no growing circle, no bounce)
+    func appear() {
+        transform = .identity
+        alpha = 1
+    }
+}
+
 final class RouteLabel: NSObject, MKAnnotation {
     let id: UUID
     @objc dynamic var coordinate: CLLocationCoordinate2D
@@ -209,7 +234,9 @@ final class PinRoutes {
     }
     /// a pin tapped while the row waits for an end: it fills that end (true: the tap was the row's)
     func pinTapped(_ pin: UUID) -> Bool {
-        guard open, let w = waiting else { return false }
+        guard open else { return false }
+        freshIfMade()
+        guard let w = waiting else { return false }
         Feel.tap()
         set(w, pin)
         return true
@@ -217,23 +244,36 @@ final class PinRoutes {
     /// a tap on land while the row waits for an end: a spot there fills it, named after the nearest town within 15 km
     /// ("Kreuzberg" in it, "Near Kreuzberg" outside it), else the country; no pin is made (true: the tap was the row's)
     func landTapped(_ c: CLLocationCoordinate2D, country: String) -> Bool {
-        guard open, let w = waiting else { return false }
+        guard open else { return false }
+        freshIfMade()
+        guard let w = waiting else { return false }
         Feel.tap()
-        // in the town (within 3 km of its point) its name alone; further out "Near" it
-        let name = TownIndex.shared.nearest(lat: c.latitude, lon: c.longitude).map { t in
+        // in a town (within 3 km of its point) the town; anywhere else its country (12 Nov: no made-up names, no
+        // "Near ...")
+        let name = TownIndex.shared.nearest(lat: c.latitude, lon: c.longitude).flatMap { t in
             CLLocation(latitude: t.lat, longitude: t.lon).distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude)) < 3000
-                ? t.name : "Near \(t.name)"
+                ? t.name : nil
         } ?? country
         let spot = RouteSpot(lat: c.latitude, lon: c.longitude, name: name)
         temp[spot.id] = spot
         set(w, spot.id)
         return true
     }
-    /// a chip tapped: it waits for a pin
-    func choose(_ end: End) {
-        guard open else { return }
-        Feel.tap()
-        waiting = end
+    /// TAP TWO PINS (12 Nov 17:08): with a route made (both ends set), the next tap starts another, from there
+    private func freshIfMade() {
+        guard waiting == nil, from != nil, to != nil else { return }
+        from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1
+        waiting = .from
+        PinsMapState.shared.redrawRoutes()
+    }
+    /// the route being made: its ends that are spots on land (an end on a pin is the pin), for the map to mark
+    /// (while Apple finds the way, 2 to 6 s, nothing showed where the taps were)
+    var spotEnds: [(id: UUID, lat: Double, lon: Double)] {
+        guard open else { return [] }
+        return [from, to].compactMap { id in
+            guard let id, let e = end(id), e.pin == nil else { return nil }
+            return (id, e.lat, e.lon)
+        }
     }
     /// the cross: the row closes; the route stays (no Save)
     func close() {
@@ -257,6 +297,7 @@ final class PinRoutes {
         // the ends changed: an answer on its way is for the old ones
         asking += 1
         if from != nil, to != nil { ask() }
+        PinsMapState.shared.redrawRoutes()
     }
 
     /// Apple's directions between the two pins (driving until the transport choice comes with its icons)
@@ -277,7 +318,10 @@ final class PinRoutes {
                 // across an ocean by car: the To chip says so for 2 s
                 Feel.refuse()
                 noRoute = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in if me == asking { noRoute = false } }
+                // (then the end waits again: another tap is where it ends)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [self] in
+                    if me == asking { noRoute = false; to = nil; waiting = .to; PinsMapState.shared.redrawRoutes() }
+                }
                 return
             }
             // the same two ends already kept (by car): that route is the one changed, never a second copy
@@ -312,6 +356,7 @@ final class PinRoutes {
             changed(id, was: was)
         } else {
             var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
+            new.map = PinMaps.shared.shown
             new.spots = kept
             current = new.id
             routes.append(new)
@@ -480,14 +525,14 @@ final class PinRoutes {
         let reverse = UIAction(title: "Reverse") { [weak self] _ in after { self?.reask(id, reverse: true) } }
         let walk = UIAction(title: "Walk", attributes: walking ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
         let drive = UIAction(title: "Drive", attributes: walking ? [] : .disabled) { [weak self] _ in after { self?.reask(id, walk: false) } }
-        // Colour: the picker in the water at full, the line taking each colour as the finger moves (8.3)
+        // Colour: the picker in the water at 50%, as a pin's, the line taking each colour as the finger moves (8.3)
         let colour = UIAction(title: "Colour") { [weak self] _ in
             after {
                 PinStore.shared.selected = nil
                 // (the Route row keeps the water at 25%: it goes first)
                 self?.close()
                 self?.colouring = id
-                PinsMapState.shared.water?.go(.full)
+                if let w = PinsMapState.shared.water, w.stop == .quarter || w.stop == .closed { w.go(.half) }
             }
         }
         let directions = UIAction(title: "Directions in Apple Maps") { [weak self] _ in self?.directions(id) }
@@ -523,146 +568,79 @@ final class PinRoutes {
     }
 }
 
-/// THE ROUTE ROW, in the caption's place while it is open: the cross, From, To (8.6)
-struct RouteRow: View {
-    let water: Water
-    let captionY: CGFloat
-    @State private var r = PinRoutes.shared
 
-    var body: some View {
-        let L = water.layout
-        // the two ends share the water's width: halves, unless one name needs more and the other less (a fixed 138 pt
-        // cut "Cause-de-Cléra..." beside a near-empty "Mut", 8 Nov); a name too long for what is left is cut at its end
-        // (in the toolkit's own bar: 4 pt inside each end, the cross 36 pt, 8 pt between the three)
-        let room = L.W - 2 * L.sheetInset - 32 - 8 - 36 - 16
-        let (fromW, toW) = Self.split(room, need(.from, r.from), need(.to, r.to))
-        HStack(spacing: 8) {
-            Button {
-                Feel.tap()
-                r.close()
-            } label: {
-                Icon5(key: "cross", ink: Palette.ink, size: 18)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close route")
-            chip(.from, r.from, word: "From", width: fromW)
-            chip(.to, r.to, word: r.noRoute ? "No route" : "To", width: toW)
-        }
-        .padding(4)
-        .background(Capsule().fill(Color.white.opacity(0.45)))
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .position(x: L.W / 2, y: captionY)
-    }
-
-    /// the width an end's chip needs to show its words whole (its dot, 6 pt, the words, 12 pt each side)
-    private func need(_ end: PinRoutes.End, _ pin: UUID?) -> CGFloat {
-        let sub = UIFont.preferredFont(forTextStyle: .subheadline), body = UIFont.preferredFont(forTextStyle: .body)
-        if let p = r.end(pin), !(end == .to && r.noRoute) {
-            let w = (p.title as NSString).size(withAttributes: [.font: sub]).width
-            return ceil(w) + (p.pin != nil ? 18 : 0) + 24 + 2
-        }
-        let word = end == .from ? "From" : r.noRoute ? "No route" : "To"
-        return ceil((word as NSString).size(withAttributes: [.font: body]).width) + 24 + 2
-    }
-    /// halves when both fit (or neither does); else the one that needs more takes it from the other's spare room
-    static func split(_ room: CGFloat, _ a: CGFloat, _ b: CGFloat) -> (CGFloat, CGFloat) {
-        let half = room / 2
-        if a <= half && b <= half || a > half && b > half { return (half, half) }
-        if a > half { let w = min(a, room - max(b, 72)); return (w, room - w) }
-        let w = min(b, room - max(a, 72)); return (room - w, w)
-    }
-
-    private func chip(_ end: PinRoutes.End, _ pin: UUID?, word: String, width: CGFloat) -> some View {
-        let p = r.end(pin)
-        let waiting = r.waiting == end
-        return Button { r.choose(end) } label: {
-            HStack(spacing: 6) {
-                if let p, !(end == .to && r.noRoute) {
-                    // a pin's colour dot; a spot on land is its name alone
-                    if let pin = p.pin { Circle().fill(PinRows.colour(pin)).frame(width: 12, height: 12) }
-                    // (one size always; cut at its end, never its middle: "Caus...lérans")
-                    Text(p.title).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.tail)
-                } else {
-                    Text(word).font(.body).foregroundStyle(waiting ? Palette.ink : Palette.ink.opacity(0.5))
-                }
-            }
-            .padding(.horizontal, 12)
-            .frame(width: width, height: 36)
-            // the one waiting for a pin: filled lime, ink words; the other a quiet ground in the bar
-            .background(Capsule().fill(waiting ? Palette.lime : Palette.ink.opacity(0.06)))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(end == .from ? "From" : "To")
-        .accessibilityValue(end == .to && r.noRoute ? "No route" : [p?.title, waiting ? "waiting for a pin or a tap on the map" : nil].compactMap { $0 }.joined(separator: ", ").ifEmpty("not set"))
-    }
-}
-
-/// a pin's colour as a SwiftUI colour (the plain black, or the picker's)
-enum PinRows {
-    static func colour(_ p: Pin) -> Color {
-        guard let c = p.colour else { return Palette.ink }
-        return Color(.displayP3, red: c[0], green: c[1], blue: c[2])
-    }
-}
-
+/// A ROUTE'S OR A DRAWING'S COLOUR in the water at full (its hold menu's Colour, 8.3): its name and distance (a
+/// drawing's length or area) where a pin's name sits, the colour picker under them, the line taking each colour live;
+/// Reset to black once it has one. The water going below full puts it away (the colour is kept as it was last picked)
 private extension String {
-    func ifEmpty(_ s: String) -> String { isEmpty ? s : self }
     var firstUp: String { prefix(1).uppercased() + dropFirst() }
 }
 
-/// A ROUTE'S COLOUR in the water at full (its hold menu's Colour, 8.3): its name and distance where a pin's name sits,
-/// the colour picker under them, the line taking each colour live; Reset to black once it has one. The water going
-/// below full puts it away (the colour is kept as it was last picked)
 struct RouteColourSheet: View {
     let water: Water
     let captionY: CGFloat
     @State private var r = PinRoutes.shared
+    @State private var dr = PinDrawings.shared
     @State private var pick = PinSheet.nearBlack
 
     var body: some View {
-        let L = water.layout
         if let id = r.colouring, let route = r.routes.first(where: { $0.id == id }) {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(spacing: 4) {
-                    Text("\(r.end(route.from, route)?.title ?? "Pin") to \(r.end(route.to, route)?.title ?? "Pin")")
-                        .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
-                    Text(route.words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                HStack {
-                    Text(route.pick.map { ColourNames.name($0).firstUp } ?? "Black").font(.body).foregroundStyle(Palette.ink)
-                    Spacer(minLength: 8)
-                    Circle().fill(route.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
-                }
-                .frame(minHeight: 44)
-                .accessibilityElement(children: .combine)
-                ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; r.colour(id, c, keep: false) }),
-                             suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c); r.keepColours() }
-                if route.pick != nil {
+            sheet(title: "\(r.end(route.from, route)?.title ?? "Pin") to \(r.end(route.to, route)?.title ?? "Pin")",
+                  words: route.words, now: route.pick,
+                  set: { c, keep in r.colour(id, c, keep: keep) }, kept: { r.keepColours() }, off: { r.colouring = nil })
+        } else if let id = dr.colouring, let d = dr.drawing(id) {
+            sheet(title: d.name.isEmpty ? (d.isShape ? "Shape" : "Line") : d.name, words: d.measure, now: d.pick,
+                  set: { c, keep in dr.colour(id, c, keep: keep) }, kept: { dr.keepColours() }, off: { dr.colouring = nil })
+        } else if r.colouring != nil || dr.colouring != nil {
+            // its route or drawing gone: the water is the pins' again
+            Color.clear.onAppear { r.colouring = nil; dr.colouring = nil }
+        }
+    }
+
+    private func sheet(title: String, words: String, now: ColourPick?, set: @escaping (ColourPick?, Bool) -> Void,
+                       kept: @escaping () -> Void, off: @escaping () -> Void) -> some View {
+        let L = water.layout
+        return VStack(alignment: .leading, spacing: 16) {
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                Text(words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            // ONE COLOUR PICKER (12 Nov): as a pin's, at 50%: the colour and its name, Reset and Done on one line, the
+            // picker under it
+            HStack(spacing: 16) {
+                Circle().fill(now?.color ?? Palette.ink).frame(width: 28, height: 28)
+                Text(now.map { ColourNames.name($0).firstUp } ?? "Black").font(.headline).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                if now != nil {
                     Button {
-                        // (the picker back where a black route starts, so a nudge never brings the old colour back)
-                        Feel.tap(); r.colour(id, nil); pick = PinSheet.nearBlack
+                        // (the picker back where a black line starts, so a nudge never brings the old colour back)
+                        Feel.tap(); set(nil, true); pick = PinSheet.nearBlack
                     } label: {
-                        Text("Reset to black").font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        Text("Reset").font(.body).foregroundStyle(Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
+                Button { Feel.tap(); off() } label: {
+                    Text("Done").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .frame(width: L.W - 2 * L.sheetInset)
-            // its name on the line a pin's name takes at full (about 42 pt over the caption's middle)
-            .padding(.top, captionY - 58)
-            .frame(width: L.W, height: L.H, alignment: .top)
-            .onAppear { pick = route.pick ?? PinSheet.nearBlack }
-            .onDisappear { r.keepColours() }
-            .onChange(of: water.stop) { _, s in if s != .full { r.colouring = nil } }
-        } else if r.colouring != nil {
-            // its route gone: the water is the pins' again
-            Color.clear.onAppear { r.colouring = nil }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; set(c, false) }),
+                         suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c); kept() }
         }
+        .padding(.horizontal, 16)
+        .frame(width: L.W - 2 * L.sheetInset)
+        // its name on the line a pin's name takes at full (about 42 pt over the caption's middle)
+        .padding(.top, captionY - 58)
+        .frame(width: L.W, height: L.H, alignment: .top)
+        .onAppear { pick = now ?? PinSheet.nearBlack }
+        .onDisappear { kept() }
+        // pulled down below 50%, it goes back into the route's menu (as a pin's)
+        .onChange(of: water.stop) { _, s in if s == .quarter || s == .closed { off() } }
     }
 }

@@ -77,6 +77,8 @@ nonisolated final class SetScene: @unchecked Sendable {
 
     /// a place's box on the map
     func box(_ id: String) -> SIMD4<Float>? { boxes[id] }
+    /// a place's rings in map units (Apple's map draws them: Map/AppleWorld.swift)
+    func shapeRings(_ id: String) -> [[SIMD2<Float>]] { rings[id] ?? [] }
     /// how far across its shape is (the longer side of its box, map units)
     func across(_ id: String) -> Float? { boxes[id].map { max($0.z - $0.x, $0.w - $0.y) } }
 

@@ -45,11 +45,14 @@ struct ZoomColumn: View {
                 .allowsHitTesting(slide(1) < 30)
             // on a region map: back to the country's frame (6.5)
             // (Pins: Apple's map has its own camera, so Reset is always there for it)
-            let rest = map.atRest && !map.pinsMode
+            let rest = map.atRest && !map.onApple
             cell("reset", label: map.regionScene != nil ? "Back to the country" : "Back to the world", ink: ink,
                  dim: map.regionScene == nil && rest) {
                 // Places with a country open: back to the world, the towns going (7.4)
-                if map.pinsMode { PinsMapState.shared.world() }
+                // (Apple's map: a region map's Reset frames its country on it, as the label says)
+                if map.onApple {
+                    if let sc = map.regionScene { PinsMapState.shared.show(place: sc.place, world: map.world) } else { map.appleHome() }
+                }
                 else if let sc = map.regionScene { map.frameRegion(sc.place) } else { map.closePlace(); map.goHome() }
             }
                 .disabled(rest)
@@ -85,21 +88,27 @@ struct ZoomColumn: View {
         if map.regionScene == nil {
             Button("The world") {
                 after {
-                    if map.pinsMode { PinsMapState.shared.world() } else { map.closePlace(); map.goHome() }
+                    if map.onApple { map.appleHome() } else { map.closePlace(); map.goHome() }
                 }
             }
             // asks for your location at the press (only then), as Apple Maps' own button does
             Button("Around you") {
                 Task {
                     guard case .fix(let l) = await OneFix.shared.get() else { Feel.refuse(); return }
-                    if map.pinsMode { PinsMapState.shared.around(l.coordinate) }
+                    if map.onApple { PinsMapState.shared.around(l.coordinate) }
                     else { map.closePlace(); map.showAround(lon: l.coordinate.longitude, lat: l.coordinate.latitude) }
                 }
             }
             if !map.pinsMode {
                 Section {
                     ForEach(["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"], id: \.self) { k in
-                        Button(k) { after { map.closePlace(); map.show(continent: k) } }
+                        Button(k) {
+                            after {
+                                // (Apple's map under the world: the continent framed on it)
+                                if map.appleWorld { map.show(continent: k) }
+                                else { map.closePlace(); map.show(continent: k) }
+                            }
+                        }
                     }
                 }
             }
@@ -200,7 +209,8 @@ struct LimitIcon: View {
     let ink: Color
     let dim: Bool
     var body: some View {
-        Icon5(key: key, on: on, ink: dim ? Palette.ink.opacity(0.5) : ink, size: 22)
+        // (its own ink at 50%: black by day, white over the night at full, where 50% black was a dark smudge)
+        Icon5(key: key, on: on, ink: dim ? ink.opacity(0.5) : ink, size: 22)
             .transaction { $0.animation = nil }
     }
 }

@@ -142,6 +142,10 @@ final class TestDriver {
                 case "quick": head?.quickStamp = a == "on"
                 case "dial": head?.testDial = a == "off" ? nil : CGFloat(Double(a) ?? 0)
                 case "mode": head?.mode = HeadState.Mode(rawValue: Int(a) ?? 0) ?? .countries
+                // zoomhold 1|-1|0: + or − held (as the zoom column's hold), or let go; logs the limits
+                case "zoomhold":
+                    map?.holdZoom = Int(a) ?? 0
+                    if let m = map { NSLog("wya zoomhold %d home %d max %d dist %.0f", m.holdZoom, m.atHome ? 1 : 0, m.atMax ? 1 : 0, PinsMapState.shared.view?.camera.centerCoordinateDistance ?? -1) }
                 // neighbours <id>: who borders it in this borders view (D19)
                 case "neighbours":
                     if let w = map?.world, let i = w.placeIndex[a] {
@@ -177,6 +181,13 @@ final class TestDriver {
                     if a == "in" { map?.zoomIn() } else if a == "out" { map?.zoomOut() } else { map?.goHome() }
                 case "show":
                     if let m = map, let i = m.world?.placeIndex[a] { m.show(place: i) }
+                // reset: what the zoom column's Reset does where the map is (Apple's map included)
+                case "reset":
+                    if let m = map {
+                        if m.onApple {
+                            if let sc = m.regionScene { PinsMapState.shared.show(place: sc.place, world: m.world) } else { m.appleHome() }
+                        } else if let sc = m.regionScene { m.frameRegion(sc.place) } else { m.closePlace(); m.goHome() }
+                    }
                 case "continent": map?.show(continent: p.dropFirst().joined(separator: " "))
                 case "look":
                     // look lon lat zoom
@@ -214,6 +225,23 @@ final class TestDriver {
                             NSLog("wya ax %@ | %@", e.accessibilityLabel ?? "?", (e.accessibilityCustomActions ?? []).map(\.name).joined(separator: ", "))
                         }
                     }
+                // axpress <words>: the first accessibility element whose label holds the words, its frame logged and
+                // activated (what VoiceOver's double tap does)
+                case "axpress":
+                    let want = p.dropFirst().joined(separator: " ")
+                    func walk(_ o: NSObject, _ depth: Int) -> NSObject? {
+                        if depth > 40 { return nil }
+                        if let l = o.accessibilityLabel, l.contains(want), o.isAccessibilityElement { return o }
+                        let kids: [Any] = (o as? UIView).map { v in (v.accessibilityElements ?? []) + v.subviews } ?? (o.accessibilityElements ?? [])
+                        for k in kids { if let k = k as? NSObject, let f = walk(k, depth + 1) { return f } }
+                        let n = o.accessibilityElementCount()
+                        if n > 0, n != NSNotFound { for i in 0 ..< n { if let k = o.accessibilityElement(at: i) as? NSObject, let f = walk(k, depth + 1) { return f } } }
+                        return nil
+                    }
+                    let win = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+                    if let w = win, let e = walk(w, 0) {
+                        NSLog("wya axpress %@ at %@ -> %d", e.accessibilityLabel ?? "?", NSCoder.string(for: e.accessibilityFrame), e.accessibilityActivate() ? 1 : 0)
+                    } else { NSLog("wya axpress %@: none", want) }
                 case "placetap":
                     if let m = map, let i = m.world?.placeIndex[a] { let r = m.screenRect(of: i); m.onPlaceTap?(i, CGPoint(x: r.midX, y: r.midY)) }
                 // whatshere x y | whatshere off: What's here? at that screen point (A11.4), or taken away
@@ -356,10 +384,14 @@ final class TestDriver {
                     } else if a == "routecolour", p.count > 3, let n = Int(p[2]), n < PinRoutes.shared.routes.count, let h = Double(p[3]) {
                         // pins routecolour <n> <hue>: route n in that colour, as the picker sets it
                         PinRoutes.shared.colour(PinRoutes.shared.routes[n].id, ColourPick(hue: h, light: 0.55, strength: 0.9))
-                    } else if a == "routeclose" { PinRoutes.shared.close(); PinsDockState.shared.tool = nil
-                    // pins routeempty | layers: the dock's Route and Layers tools
+                    } else if a == "routepick", p.count > 2, let n = Int(p[2]), n < PinRoutes.shared.routes.count, let w = water {
+                        // pins routepick <n>: its Colour picked from the route's menu (nothing changed until a colour is moved)
+                        PinStore.shared.selected = nil; PinRoutes.shared.close()
+                        PinRoutes.shared.colouring = PinRoutes.shared.routes[n].id
+                        if w.stop == .quarter || w.stop == .closed { w.go(.half) }
+                    } else if a == "routeclose" { PinRoutes.shared.close()
+                    // pins routeempty: the dock's Route tool
                     } else if a == "routeempty" { PinRoutes.shared.openEmpty()
-                    } else if a == "layers" { PinsDockState.shared.tool = .layers
                     // pins days: how many pins were made on each day, logged with every pin (name, place, day, where)
                     // pins prune <yyyy-mm-dd> ...: the pins made on those days deleted, after pins.json is copied beside
                     // itself (pins-backup-<time>.json); the routes that end on them go with them
@@ -438,6 +470,10 @@ final class TestDriver {
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }
+                // recent: the recent searches in the log; recent drop <id>: one taken out again (a test's own pick)
+                case "recent":
+                    if a == "drop", p.count > 2 { MapSettingsStore.shared.change { $0.recent.removeAll { $0 == p[2] } } }
+                    NSLog("wya recent searches: %@", MapSettingsStore.shared.value.recent.joined(separator: ","))
                 case "tap":
                     // tap x y (screen points): what a finger there would press, logged and pressed
                     if p.count > 2, let x = Double(p[1]), let y = Double(p[2]), let m = map {
@@ -604,6 +640,16 @@ final class TestDriver {
                         for _ in 0 ..< 50 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
                         if let c = CollectionStore.shared.all.first { map?.showPlacesMap(.collection(c.id)) }
                     }
+                    // pick row <n>: the n-th row of Places' menu (0: Cities), as a tap on it
+                    else if a == "row", let n = Int(rest) {
+                        CollectionStore.shared.load(); ThingIndex.shared.load()
+                        for _ in 0 ..< 80 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                        let menu = CollectionStore.shared.menu
+                        if n < menu.count {
+                            NSLog("wya pick row %d = %@", n, menu[n])
+                            map?.showPlacesSet(menu[n])
+                        }
+                    }
                     else if a == "type" {
                         // pick type kind:3 / pick type f1-2026: a row of Places' menu tapped
                         CollectionStore.shared.load(); ThingIndex.shared.load()
@@ -634,6 +680,7 @@ final class TestDriver {
                               (f?.activities.prefix(8).map { $0.name + " [" + String($0.line.prefix(28)) + "]" } ?? []).joined(separator: " | "))
                         NSLog("wya page highlights %@: %@", PlacePageState.shared.top?.name ?? "?", (f?.highlights.prefix(8).map(\.name) ?? []).joined(separator: " | "))
                         NSLog("wya page lines %@: %@", PlacePageState.shared.top?.name ?? "?", (f?.activities.prefix(6).map(\.line) ?? []).joined(separator: " || "))
+                        NSLog("wya page rows %@: %@", PlacePageState.shared.top?.name ?? "?", (f?.rows.map { "\($0.0): \($0.1)" } ?? []).joined(separator: " | "))
                     }
                     else if a == "end" { PlacePageState.shared.toEnd += 1 }
                     // page city: the open page's first city pushed on top (16.7); page back: the top page closed
@@ -642,6 +689,12 @@ final class TestDriver {
                                                    from: CGRect(x: 16, y: 520, width: 398, height: 52))
                     }
                     else if a == "back" { PlacePageState.shared.close() }
+                    // page region: the open page's first region pushed on top, as its Regions row does
+                    else if a == "region", let r = PlacePageState.shared.facts?.regions.first {
+                        PlacePageState.shared.push(r.key, name: r.name, what: "Region of \(PlacePageState.shared.top?.name ?? "")",
+                                                   country: PlacePageState.shared.country, code: r.code,
+                                                   from: CGRect(x: 16, y: 520, width: 398, height: 52))
+                    }
                     // page at <0..1>: the top page held part way open, to look at one frame of its growing
                     // page report <reason words>: Report a mistake open with that reason; page send: Send
                     else if a == "report" { PlacePageState.shared.reportTest = p.dropFirst(2).joined(separator: " ") }
@@ -658,6 +711,17 @@ final class TestDriver {
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
+                // owntest lat lon | owntest off: one own place made for a check (its name "owntest"), and only those taken
+                // away again (the person's own places are never touched)
+                case "owntest":
+                    if a == "off" { for o in OwnPlaces.shared.all where o.name == "owntest" { OwnPlaces.shared.remove(o.id) } }
+                    else if p.count > 2, let la = Double(a), let lo = Double(p[2]) {
+                        _ = OwnPlaces.shared.make(name: "owntest", lat: la, lon: lo, cc: "es")
+                    }
+                // appletap x y: a tap on Apple's map under the world (Map: Apple), at that screen point
+                case "appletap":
+                    if p.count > 2, let x = Double(a), let y = Double(p[2]), let c = AppleWorldView.Coordinator.current,
+                       let v = PinsMapState.shared.view { c.tap(at: CGPoint(x: x, y: y), in: v) }
                 // ownclear: every own place removed with its stamp (test data)
                 // (ownclear drawn: only the places with a drawn outline, the draw tool's test places)
                 case "ownclear":
@@ -954,6 +1018,18 @@ final class TestDriver {
                             for i in 1 ... k { t.touchMoved(CGPoint(x: a.x + (b.x - a.x) * CGFloat(i) / CGFloat(k), y: a.y + (b.y - a.y) * CGFloat(i) / CGFloat(k))) }
                         }
                         t.touchEnded(pts[pts.count - 1])
+                    } else if a == "pins", let v = PinsMapState.shared.view, let w = water {
+                        // draw pins: the tool on Apple's map (Pins' Draw)
+                        PinDrawings.shared.start(on: v, water: w)
+                    } else if a == "clearpins" {
+                        // draw clearpins: the drawings in Pins made in the last 30 minutes taken away (test data; older
+                        // ones are never touched)
+                        for d in PinDrawings.shared.all where d.made > Date().addingTimeInterval(-1800) { PinDrawings.shared.remove(d.id, undoable: false) }
+                    } else if a == "colour", let w = water, let d = PinDrawings.shared.all.last {
+                        // draw colour [hue]: the newest drawing's colour sheet up (its menu's Colour); with a hue, that colour
+                        PinDrawings.shared.colouring = d.id
+                        w.go(.full)
+                        if p.count > 2, let h = Double(p[2]) { PinDrawings.shared.colour(d.id, ColourPick(hue: h, light: 0.55, strength: 0.9)) }
                     } else if a == "redraw", let m = map, let w = water, let o = OwnPlaces.shared.all.last {
                         // draw redraw: the newest own place drawn again (as its menu's Draw its shape / Redraw)
                         ContentView.redrawOwn(o, map: m, water: w)

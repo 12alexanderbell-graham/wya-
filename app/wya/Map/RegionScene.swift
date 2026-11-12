@@ -249,6 +249,11 @@ nonisolated final class RegionScene: @unchecked Sendable {
         return ring.map { EqualEarth.project(lon: $0.x + shift, lat: $0.y) }
     }
 
+    /// a region's rings, all its entries' (Apple's map draws them: Map/AppleWorld.swift)
+    func unitRings(_ u: Int) -> [[SIMD2<Float>]] {
+        entryUnit.indices.filter { entryUnit[$0] == u }.flatMap { rings[$0] }
+    }
+
     /// the region under a map point (the smallest whose rings hold it), or nil
     func unit(at p: SIMD2<Float>) -> Int? {
         var best: (Int, Float)?

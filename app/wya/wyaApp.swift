@@ -10,6 +10,8 @@ struct wyaApp: App {
                 CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
             }
         }
+        // the loading screen's turning logo opened before any view is built (Design/LogoTurn.swift)
+        LogoTurnUIView.warm()
         Snap.start()
         Task { @MainActor in Hitches.start(); HangWatch.start() }
         Task.detached(priority: .utility) { await DevDataClient.refresh() }

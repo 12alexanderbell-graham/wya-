@@ -57,7 +57,8 @@ final class Hints {
         lastTouch = Date()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [self] in
             guard Date().timeIntervalSince(lastTouch) >= 1.19 else { return }
-            play(only: [.water, .pull, .hold].filter(due))
+            // (the water's part is gone: the water never moves by itself any more, and it played a lone haptic)
+            play(only: [.pull, .hold].filter(due))
         }
     }
 

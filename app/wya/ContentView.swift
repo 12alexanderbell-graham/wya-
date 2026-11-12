@@ -28,6 +28,15 @@ struct ContentView: View {
         Color.clear.overlay(alignment: .topLeading) { screen }
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
+            // THE MAP: APPLE (Map/AppleWorld.swift): Apple's map under Countries when the Map setting is Apple's
+            .onChange(of: appleWanted, initial: true) { _, on in map.appleWorld = on }
+    }
+
+    /// Apple's map is asked for here and now (the Map setting, outside Pins, which has its own)
+    private var appleWanted: Bool {
+        MapSettingsStore.shared.value.map == "apple" && !MapSettingsRows.notYet.contains("map")
+            // (every map but Pins, which is always Apple's; towns and cities stay on ours)
+            && head.mode != .pins && !map.regionTowns
     }
 
     private var screen: some View {
@@ -39,7 +48,9 @@ struct ContentView: View {
                 if !Perf.shared.off.contains("map") { sidewaysMap }
                 // PINS (Part 8): Apple's map over ours while Pins is the mode; it takes our camera when it comes
                 // (the switch is just a switch, 30 Oct 21:42)
-                if head.mode == .pins { PinsMapView(map: map, water: water).ignoresSafeArea() }
+                // (in full screen it turns with ours: the same frame and the same quarter turn about the centre)
+                if head.mode == .pins { sideways(PinsMapView(map: map, water: water)) }
+                else if map.appleWorld { sideways(AppleWorldView(map: map, water: water)) }
                 // THE DRAWING over whichever map is drawn on (Map/DrawTool.swift); takes no touches
                 DrawLayer()
 
@@ -412,12 +423,12 @@ struct ContentView: View {
                 DeepLink.waiting = nil
                 if await DeepLink.open(url, map: map, close: {}) { try? await Task.sleep(for: .milliseconds(850)) }
             }
-            // the map's first frame drawn under the loading screen, then the screen lifts away
+            // the map's first frame drawn under the loading screen, then the screen fades away (0.5 s, eased both ends)
             try? await Task.sleep(for: .milliseconds(80))
             #if DEBUG
             NSLog("wya launch: map ready, lifting at %.3f s", CACurrentMediaTime() - Launch.startTime)
             #endif
-            withAnimation(Motion.chrome) { launch.reveal = 1 } completion: {
+            withAnimation(.easeInOut(duration: 0.5)) { launch.reveal = 1 } completion: {
                 launch.done = true
                 launch.settled = true
                 // the start credit once all is at rest (A1.20)
@@ -431,7 +442,7 @@ struct ContentView: View {
         .onChange(of: head.settingsOpen) { _, open in
             // (the tools close first, and history and quick stamping with them: the book's "the tool closes, then the gear")
             // (a route's colour sheet goes too: hidden under settings, it came back in the 25% water after them, 8 Nov)
-            if open { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.colouring = nil; head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
+            if open { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.colouring = nil; PinDrawings.shared.colouring = nil; head.toolsOpen = false; head.history = false; head.quickStamp = false; water.openSettings() } else { water.closeSettings() }
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
         // (What's here? goes back into its point too: its name no longer stands under the search or settings)
@@ -520,8 +531,6 @@ struct ContentView: View {
         map.sunPicked = false
         // (the towns' index, for a town's page and search: read as the maps that show towns come up)
         if new != .countries { TownIndex.shared.load() }
-        // Pins' dock: a tool's controls go with the mode
-        PinsDockState.shared.tool = nil
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
         if water.upload { UploadState.shared.leaveReview(); UploadState.shared.close() }
         // mid-finding the wheel stops the read (leaving the review and closing do nothing then; the review would have
@@ -598,7 +607,7 @@ struct ContentView: View {
         closeCard()
         map.closeRegions()
         water.openMenu()
-        map.goHome()
+        if map.onApple { map.appleHome() } else { map.goHome() }
     }
     /// YOUR OWN PLACE TAPPED (7.8): quick add toggles its stamp; otherwise its card
     private func ownTapped() {
@@ -772,12 +781,14 @@ struct ContentView: View {
     /// THE MAP, turned sideways about the screen's centre (1.11): portrait size at rest, the diagonal's square while it
     /// turns (no corner ever empty), landscape size at rest sideways; the camera's centre stays the screen's centre,
     /// so a size change shows the same picture
-    private var sidewaysMap: some View {
+    private var sidewaysMap: some View { sideways(MapLayer(controller: map)) }
+
+    private func sideways(_ v: some View) -> some View {
         let L = water.layout
         let D = (L.W * L.W + L.H * L.H).squareRoot().rounded(.up)
         let w = side.square ? D : (side.landscape ? L.H : L.W)
         let h = side.square ? D : (side.landscape ? L.W : L.H)
-        return MapLayer(controller: map)
+        return v
             .frame(width: w, height: h)
             .rotationEffect(.degrees(side.angle))
             .position(x: L.W / 2, y: L.H / 2)
@@ -1211,7 +1222,8 @@ struct ContentView: View {
         let copy = UIAction(title: "Copy coordinates") { _ in
             UIPasteboard.general.string = String(format: "%.4f, %.4f", ll.lat, ll.lon)
         }
-        return UIMenu(children: [add, here, copy])
+        // (named for the country, as every other hold menu is for its place)
+        return UIMenu(title: map.world.map { $0.places[place].n } ?? "", children: [add, here, copy])
     }
 
     /// A THING'S HOLD MENU (11.5's town or thing menu): Stamp or Unstamp, Wish or Unwish | Details, Verify | Open its
@@ -1287,6 +1299,23 @@ struct ContentView: View {
     /// A REGION'S HOLD MENU (11.5, Regions mode): Stamp or Unstamp, Wish or Unwish, Lived here | Details, Verify | Go one
     /// level down, Its places | Open its page, Share. Stamping stamps its parents too (A6.12). Details and Verify: the
     /// region card rises, then that sheet (6.7). Add to a list and Add to a plan wait for Lists (20).
+    /// a region's card with its parents' line as a tap gives it ("Centre-Val de Loire, France" under Cher; the country
+    /// alone at the first level), then `then` (the menu's Details, Verify, Lived here)
+    @MainActor static func openRegionCard(_ u: Int, in sc: RegionScene, key: PlaceKey, name: String, country: String,
+                                          map: MapController, then: (() -> Void)? = nil) {
+        guard sc.unitParents[u] != nil else {
+            RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+            then?()
+            return
+        }
+        Task { @MainActor in
+            let up = await RegionStamps.parents(of: u, in: sc).first?.1
+            guard map.regionScene === sc else { return }
+            RegionCardState.shared.open(key, name: name, parents: up.map { "\($0), \(country)" } ?? country, place: sc.place, map: map)
+            then?()
+        }
+    }
+
     @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water,
                                       head: HeadState) -> UIMenu {
         let key = PlaceKey(.region, sc.unitIDs[u])
@@ -1312,24 +1341,27 @@ struct ContentView: View {
             Task {
                 if !st.stamped { Feel.stamp(); await RegionStamps.stamp(u, in: sc, source: .hand) }
                 after {
-                    RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                        DetailsState.shared.open(key, name: name, water: water, lived: true)
+                    openRegionCard(u, in: sc, key: key, name: name, country: country, map: map) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                            DetailsState.shared.open(key, name: name, water: water, lived: true)
+                        }
                     }
                 }
             }
         }
         let details = UIAction(title: "Details", attributes: st.stamped || st.wished ? [] : .disabled) { _ in
             after {
-                RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }
+                openRegionCard(u, in: sc, key: key, name: name, country: country, map: map) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { DetailsState.shared.open(key, name: name, water: water) }
+                }
             }
         }
         let verify = UIAction(title: "Verify", attributes: st.stamped ? [] : .disabled) { _ in
             after {
-                RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    VerifyState.shared.open(key, name: name, place: sc.place, water: water)
+                openRegionCard(u, in: sc, key: key, name: name, country: country, map: map) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        VerifyState.shared.open(key, name: name, place: sc.place, water: water)
+                    }
                 }
             }
         }

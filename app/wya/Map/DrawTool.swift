@@ -12,7 +12,8 @@ import SwiftUI
 final class DrawTool {
     static let shared = DrawTool()
 
-    enum Kind { case line, shape }
+    /// a line, a shape, or either (Pins: a stroke back to its start closes a shape, Done keeps a line)
+    enum Kind { case line, shape, any }
     struct Geo: Hashable, Codable { var lat: Double; var lon: Double }
 
     private(set) var on = false
@@ -54,7 +55,7 @@ final class DrawTool {
     func done() {
         guard on else { return }
         guard canFinish else { Feel.refuse(); return }
-        let k = kind, p = points, f = finish
+        let k: Kind = kind == .any ? .line : kind, p = points, f = finish
         end()
         Feel.tap()
         f?(k, p)
@@ -104,7 +105,7 @@ final class DrawTool {
         var closes = false
         var kept = stroke
         let first = points.first.flatMap { toScreen?($0) } ?? stroke.first
-        if kind == .shape, let f = first, let last = kept.last, points.count + kept.count - 1 >= 3,
+        if kind != .line, let f = first, let last = kept.last, points.count + kept.count - 1 >= 3,
            hypot(last.x - f.x, last.y - f.y) <= Self.closeDistance {
             kept.removeLast(); closes = true
         }
@@ -114,7 +115,7 @@ final class DrawTool {
             points += geo
             if !closes { Feel.tick() }
         }
-        if closes { done() }
+        if closes { if kind == .any { kind = .shape }; done() }
     }
 
     /// a second finger came down, or the system took the touch: the stroke so far is dropped, nothing is kept
@@ -159,7 +160,7 @@ final class DrawTool {
 
     /// the words for a measure ("850 m", "2.4 km", "12 km²", "0.3 ha")
     static func words(km d: Double) -> String {
-        d < 1 ? "\(Int((d * 1000 / 10).rounded()) * 10) m" : d < 10 ? String(format: "%.1f km", d) : "\(Int(d.rounded())) km"
+        d < 1 ? "\(Int((d * 1000 / 10).rounded()) * 10) m" : d < 10 ? String(format: "%.1f km", d) : "\(Int(d.rounded()).formatted()) km"
     }
     static func words(km2 a: Double) -> String {
         a < 1 ? String(format: "%.1f ha", a * 100) : a < 10 ? String(format: "%.1f km²", a) : "\(Int(a.rounded()).formatted()) km²"
@@ -219,7 +220,7 @@ struct DrawLayer: View {
                         ctx.fill(Path(r.insetBy(dx: 1.5, dy: 1.5)), with: .color(Palette.ink))
                     }
                     // where a shape closes, once it has the corners to
-                    if tool.kind == .shape, tool.points.count >= 2, let f = pts.first {
+                    if tool.kind != .line, tool.points.count >= 2, let f = pts.first {
                         let d = DrawTool.closeDistance
                         let c = Path(ellipseIn: CGRect(x: f.x - d, y: f.y - d, width: 2 * d, height: 2 * d))
                         ctx.stroke(c, with: .color(Palette.ink.opacity(0.5)), style: StrokeStyle(lineWidth: 1.5))
@@ -232,52 +233,32 @@ struct DrawLayer: View {
     }
 }
 
-/// THE DRAW BAR, in the water where a map's caption sits: its measure as the caption (the line's length, or the shape's
-/// area once it has three corners), and under it one bar of words: Undo, Cancel, Done (Done grey until there is
-/// enough to make)
+/// THE DRAW TOOL'S CONTROLS, in the water where a map's caption sits (12 Nov 17:12: glass circles, as Pins' tools):
+/// Undo, Cancel, Done, and under them its measure (the line's length, or the shape's area once it has three corners);
+/// Undo and Done at 50% until there is something to take back or enough to make
 struct DrawBar: View {
     let water: Water
     var tool = DrawTool.shared
 
     var body: some View {
         let L = water.layout
-        let top = max(L.headBottom + 12, water.level)
-        let w = (L.W - 2 * L.sheetInset - 32 - 8) / 3
-        VStack(spacing: 10) {
-            Text(caption)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Palette.ink.opacity(tool.points.count < 2 ? 0.5 : 1))
-                .monospacedDigit()
-                .contentTransition(.identity)
-            HStack(spacing: 0) {
-                word("Undo", width: w, dim: tool.marks.isEmpty) { tool.undo() }
-                word("Cancel", width: w) { tool.cancel() }
-                word("Done", width: w, dim: !tool.canFinish) { tool.done() }
-            }
-            .padding(4)
-            .background(Capsule().fill(Color.white.opacity(0.45)))
-        }
-        .dynamicTypeSize(...DynamicTypeSize.xLarge)
-        .position(x: L.W / 2, y: top + 56)
+        // (where Pins' tools and every map's caption sit: the tools step aside for these three)
+        let top = max(L.headBottom + 8, water.level)
+        WaterTools(tools: Self.tools(tool), words: Self.caption(tool))
+        .position(x: L.W / 2, y: PinsDock.rowY(top))
     }
 
-    private var caption: String {
-        if tool.points.count < 2 { return tool.kind == .shape ? "Draw round the place" : "Draw the line" }
+    static func tools(_ tool: DrawTool) -> [WaterTools.Tool] {
+        [.init(icon: "undo", label: "Undo", dim: tool.marks.isEmpty) { tool.undo() },
+         .init(icon: "cross", label: "Cancel") { tool.cancel() },
+         // (a plain tick of two bars; never the tapered one)
+         .init(icon: "done", label: "Done", dim: !tool.canFinish) { tool.done() }]
+    }
+
+    static func caption(_ tool: DrawTool) -> String {
+        // (no instructions; the line is empty until there is something to measure)
+        if tool.points.count < 2 { return "" }
         if tool.kind == .shape, tool.points.count >= 3 { return DrawTool.words(km2: tool.areaKm2) }
         return DrawTool.words(km: tool.lengthKm)
-    }
-
-    private func word(_ name: String, width: CGFloat, dim: Bool = false, _ act: @escaping () -> Void) -> some View {
-        Button(action: act) {
-            Text(name)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(width: width, height: 36)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(name)
     }
 }
