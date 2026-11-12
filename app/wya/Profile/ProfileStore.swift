@@ -19,6 +19,8 @@ final class ProfileStore {
         var picture: String?
         /// the picture's colour, picked on the colour picker (no presets)
         var colour: ColourPick?
+        /// THE BACKGROUND'S FOUR COLOURS, picked on the colour picker; nil is the app's own living gradient
+        var ground: [ColourPick]?
     }
     private(set) var me = Me()
     /// the uploaded photo, read once

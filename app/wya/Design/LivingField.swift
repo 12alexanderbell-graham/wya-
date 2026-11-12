@@ -11,6 +11,8 @@ import QuartzCore
 struct LivingField: View {
     /// four of the twelve, by name (app.js FIELD_COLS: teal, lime, blue, cream)
     var colours: [String] = ["teal", "lime", "blue", "cream"]
+    /// four colours of your own instead (sRGB, 0 to 1): the Profile's background as you picked it
+    var custom: [SIMD3<Double>]? = nil
     var speed: Double = 0.55
     var seed: Double = 0
     var paused: Bool = false
@@ -26,7 +28,7 @@ struct LivingField: View {
 
     var body: some View {
         GeometryReader { geo in
-            FieldSurface(colours: colours, speed: speed, seed: seed, paused: paused, still: still,
+            FieldSurface(colours: colours, custom: custom, speed: speed, seed: seed, paused: paused, still: still,
                          look: SIMD3(Float(saturation), Float(power), Float(wash)))
                 .frame(width: geo.size.width * 1.08, height: geo.size.height * 1.08)
                 .offset(x: -geo.size.width * 0.04, y: -geo.size.height * 0.04)
@@ -41,6 +43,7 @@ struct LivingField: View {
 
 private struct FieldSurface: UIViewRepresentable {
     let colours: [String]
+    var custom: [SIMD3<Double>]? = nil
     let speed: Double
     let seed: Double
     let paused: Bool
@@ -50,12 +53,12 @@ private struct FieldSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> FieldView {
         let v = FieldView(frame: .zero)
         v.saturation = look.x; v.power = look.y; v.wash = look.z
-        v.configure(colours: colours, speed: speed, seed: seed, paused: paused, still: still, first: true)
+        v.configure(colours: colours, custom: custom, speed: speed, seed: seed, paused: paused, still: still, first: true)
         return v
     }
     func updateUIView(_ v: FieldView, context: Context) {
         v.saturation = look.x; v.power = look.y; v.wash = look.z
-        v.configure(colours: colours, speed: speed, seed: seed, paused: paused, still: still, first: false)
+        v.configure(colours: colours, custom: custom, speed: speed, seed: seed, paused: paused, still: still, first: false)
     }
     static func dismantleUIView(_ v: FieldView, coordinator: ()) { v.stop() }
 }
@@ -97,8 +100,9 @@ final class FieldView: UIView {
     /// blurred by 8 points; the map's lights, blurred by 10 in v, are drawn coarser still, so the stretch blurs them
     var resolution: CGFloat = 0.34
 
-    func configure(colours: [String], speed: Double, seed: Double, paused: Bool, still: Bool, first: Bool) {
-        let cs = (0..<4).map { k in Palette.named[colours.isEmpty ? "cream" : colours[k % colours.count]] ?? .one }
+    func configure(colours: [String], custom: [SIMD3<Double>]? = nil, speed: Double, seed: Double, paused: Bool, still: Bool, first: Bool) {
+        let cs = custom.flatMap { $0.count == 4 ? $0 : nil }
+            ?? (0..<4).map { k in Palette.named[colours.isEmpty ? "cream" : colours[k % colours.count]] ?? .one }
         if first {
             cur = cs; want = cs; t = seed * 37.1
             metalLayer.device = Self.shared.device

@@ -291,6 +291,7 @@ final class TestDriver {
                     if a == "sheet", let w = water {
                         if p.count > 2, p[2] == "picture" { edit.open(.picture, water: w) }
                         else if p.count > 2, p[2] == "nations" { edit.open(.nationalities, water: w) }
+                        else if p.count > 2, p[2] == "ground" { edit.open(.ground, water: w) }
                         else { edit.end(water: w) }
                     }
                     if a == "colour", p.count > 4 {
@@ -307,6 +308,14 @@ final class TestDriver {
                             UIColor.systemOrange.setFill(); c.cgContext.fillEllipse(in: CGRect(x: 300, y: 150, width: 300, height: 300))
                         }
                         if let d = img.pngData() { await ProfileStore.shared.setPhoto(d) }
+                    }
+                    // profile ground <hue> <light> <strength> (the first colour) | none
+                    if a == "ground" {
+                        if p.count > 4 {
+                            var g = ProfileStore.shared.me.ground ?? ColourPick.field
+                            g[0] = ColourPick(hue: Double(p[2]) ?? 0, light: Double(p[3]) ?? 0.5, strength: Double(p[4]) ?? 1)
+                            ProfileStore.shared.set { $0.ground = g }
+                        } else { ProfileStore.shared.set { $0.ground = nil } }
                     }
                     if a == "natsearch" { edit.query = p.dropFirst(2).joined(separator: " ") }
                     if a == "nats", let m = map {

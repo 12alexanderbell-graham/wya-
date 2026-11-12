@@ -27,15 +27,22 @@ struct ProfileView: View {
         let mid = (L.safeTop + L.top(.quarter)) / 2
         let top = (mid - Self.column / 2).rounded()
         ZStack(alignment: .topLeading) {
-            LivingField(saturation: Self.look.x, power: Self.look.y)
+            LivingField(custom: me.ground?.map(\.srgb), saturation: Self.look.x, power: Self.look.y)
                 .frame(width: L.W, height: L.H)
-            // the ground: a tap on it keeps what is typed and puts a sheet away (the map under the page takes nothing)
+            // the ground: a tap on it keeps what is typed and puts a sheet away; with nothing open, it brings the
+            // background's colours (the map under the page takes nothing)
             Color.clear
                 .frame(width: L.W, height: L.H)
                 .contentShape(Rectangle())
-                .onTapGesture { if edit.field != nil || edit.sheet != nil { edit.end(water: water) } }
+                .onTapGesture {
+                    if edit.field != nil || edit.sheet != nil { edit.end(water: water) }
+                    else { Feel.tap(); edit.open(.ground, water: water) }
+                }
                 .gesture(DragGesture(minimumDistance: 0).onChanged { _ in })
-                .accessibilityHidden(true)
+                .accessibilityElement()
+                .accessibilityLabel("Background")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { edit.open(.ground, water: water) }
             VStack(spacing: 0) {
                 Button { Feel.tap(); edit.open(.picture, water: water) } label: { picture(me) }
                     .buttonStyle(.plain)
@@ -286,11 +293,12 @@ struct ProfileWater: View {
                 Group {
                     switch s {
                     case .picture: ProfilePictureSheet(water: water, width: w)
+                    case .ground: ProfileGroundSheet(width: w)
                     case .nationalities:
                         NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - (form.top + 16)))
                     }
                 }
-                .offset(x: L.sheetInset + 16, y: form.top + (s == .picture ? 24 : 16))
+                .offset(x: L.sheetInset + 16, y: form.top + (s == .nationalities ? 16 : 24))
             }
         }
         // (the water pulled down from 50%: the sheet is put away with it)
