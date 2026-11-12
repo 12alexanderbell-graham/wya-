@@ -327,7 +327,8 @@ struct ProfileWater: View {
             else { withAnimation(f ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { shown = f } }
         }
         // (counted again when your marks change, and when the map's own count does: the Count setting, the borders)
-        .task(id: numbers.asks + " \(map.shares["World"]?.have ?? -1)/\(map.shares["World"]?.total ?? -1) \(CountKind.current)") {
+        .task(id: numbers.asks + " \(map.shares["World"]?.have ?? -1)/\(map.shares["World"]?.total ?? -1) \(CountKind.current) "
+              + edit.nationalities.joined(separator: ",")) {
             await numbers.count(map: map)
         }
         .task(id: numbers.ready) {

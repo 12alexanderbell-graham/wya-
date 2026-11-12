@@ -92,6 +92,11 @@ final class ProfileNumbers {
                                          gid: Int(id.drop { $0 != "/" }.dropFirst()) ?? 0))
             }
             y.markIds = Set(thingRows.map { String($0.key.dropFirst(2)) })
+            // YOUR HOME: the passport you show (your first nationality), for Neighbours and Farthest from home
+            if let n = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).first?.lowercased(),
+               let p = book.world.places[n], p.c.count == 2 {
+                y.home = .init(cc: n, lat: p.c[1], lon: p.c[0])
+            }
             for (set, kind) in Self.setKinds {
                 for it in store.collection(set)?.items ?? [] where marks[it.key]?.stamped ?? false { y.marks.append(kind) }
             }
