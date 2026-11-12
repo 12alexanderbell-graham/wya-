@@ -184,8 +184,10 @@ struct SheetContent: View {
             Group {
                 // no stars under Regions' list (the whole screen is the list there)
                 // nor in Places or Pins (the stars are the countries you have left: they mean nothing there, 7 Nov)
-                // nor over a place's page and its sheet (the page is the screen there)
+                // nor over a place's page and its sheet (the page is the screen there), nor behind Details, Map settings
+                // or Upload risen to full (they are the screen there too: the stars stood behind their words as specks)
                 if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode || water.pageSheet
+                    || water.details || water.settings || water.upload
                     // nor on a country's region map (the solar system is the Countries world's; it stood in France's sheet)
                     || map.regionScene != nil {
                     Color.clear
