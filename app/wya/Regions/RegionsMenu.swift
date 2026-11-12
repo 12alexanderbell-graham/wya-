@@ -24,12 +24,16 @@ struct RegionsMenu: View {
         // with the water's top while it comes and goes; under the head once it is up
         let top = max(restTop, form.top + 8)
         let rows = shownRows
+        let found = regionHits
         ScrollViewReader { reader in
             ScrollView(.vertical) {
                 LazyVStack(spacing: 0) {
                     Color.clear.frame(height: 0).id("top")
-                    if rows.isEmpty, !query.isEmpty { missRow }
+                    if rows.isEmpty, found.isEmpty, !query.isEmpty { missRow }
                     ForEach(rows) { r in row(r) }
+                    // the regions anywhere whose name matches, under the countries (as the map's own search finds
+                    // them): Bavaria from the list opens Germany's map on Bavaria
+                    ForEach(found, id: \.key) { h in regionRow(h) }
                 }
                 .scrollTargetLayout()
             }
@@ -38,7 +42,10 @@ struct RegionsMenu: View {
             .scrollTargetBehavior(RowSnap(row: Self.rowH))
             .frame(width: L.W - 2 * L.sheetInset, height: h)
             .position(x: L.W / 2, y: top + h / 2)
-            .onChange(of: query) { _, _ in reader.scrollTo("top", anchor: .top) }
+            .onChange(of: query) { _, q in
+                if !q.isEmpty { RegionIndex.shared.load() }
+                reader.scrollTo("top", anchor: .top)
+            }
             .onChange(of: water.regions) { _, on in if on { lifted = nil; reader.scrollTo("top", anchor: .top) } }
         }
         // soft at the top (under the head) and at the foot (above the tabs), never a straight cut (P3); the foot stays
@@ -70,6 +77,44 @@ struct RegionsMenu: View {
         guard !query.isEmpty else { return model.rows }
         let byPlace = Dictionary(model.rows.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
         return SearchResults.matches(map: map, query: query).compactMap { byPlace[$0] }
+    }
+
+    /// regions of every place whose name matches what was typed (the index the map's search reads)
+    private var regionHits: [RegionIndex.Hit] {
+        guard !query.isEmpty, let w = map.world else { return [] }
+        return RegionIndex.shared.hits(query, limit: 6).filter { w.placeIndex[$0.place] != nil }
+    }
+    /// a region found: its country's flag, its name, its country under it; a tap opens the country's region map on it
+    private func regionRow(_ h: RegionIndex.Hit) -> some View {
+        let place = map.world?.placeIndex[h.place]
+        let country = place.flatMap { map.world?.places[$0].n } ?? ""
+        return HStack(spacing: 12) {
+            Group {
+                if let f = Flags.square(h.place.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+            }
+            .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(h.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                Text(country).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: Self.rowH)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .contentShape(Rectangle())
+        .onTapGesture { open(h) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(h.name), \(country)")
+        .accessibilityHint("Opens its region map")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open(h) }
+    }
+    private func open(_ h: RegionIndex.Hit) {
+        guard let i = map.world?.placeIndex[h.place] else { Feel.refuse(); return }
+        Feel.tap()
+        if head.searching { head.searching = false }
+        ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map)
     }
 
     private func row(_ r: RegionsMenuModel.Row) -> some View {
