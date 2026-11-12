@@ -139,7 +139,7 @@ struct ProfileWater: View {
             if was == f || water.tabSwitching { shown = f }
             else { withAnimation(f ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { shown = f } }
         }
-        .task(id: "\(MarkStore.shared.changes) \(CollectionStore.shared.ready)") { await numbers.count(map: map) }
+        .task(id: numbers.asks) { await numbers.count(map: map) }
         .task(id: numbers.ready) {
             // THE COUNT UP, once: from nought to each number over 0.8 s, quick first and slowing to the end
             guard numbers.ready, !Self.counted else { return }

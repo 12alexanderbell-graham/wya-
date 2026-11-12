@@ -55,6 +55,7 @@ def put_raw(rel, raw):
 
 def main():
     t0 = time.time()
+    prev = None
     if os.path.isdir(OUT):
         # rebuilt from scratch every time, so nothing stale survives; the old tree is moved,
         # not deleted, so a bad build can be rolled back by hand
@@ -63,7 +64,13 @@ def main():
             try: shutil.rmtree(old)
             except OSError: old = OUT + '.previous-' + time.strftime('%Y%m%d-%H%M%S')   # a folder that can't delete
         os.rename(OUT, old)
+        prev = old
     os.makedirs(OUT)
+    # the folders other scripts build into v1 (the native packs: towns, things, regions, badges, collections; the next
+    # places) are not made here: carried over from the tree just moved aside, or a rebuild would lose them
+    for keep in ('native', 'places-next'):
+        if prev and os.path.isdir(os.path.join(prev, keep)):
+            shutil.copytree(os.path.join(prev, keep), os.path.join(OUT, keep))
 
     world = json.load(io.open(os.path.join(SRC, 'world.json'), encoding='utf-8'))
     facts = load('country-facts.json')                  # ISO2 upper -> facts
@@ -205,6 +212,9 @@ def main():
     for cc, d in regs.items(): put('regions/%s.json' % cc, d)
 
     cities = load('cities.json'); ccl = load('climate-cities.json')
+    # each city's photo: Wikidata's image of the item with its GeoNames id, or for a city with none the nearest item of
+    # its name with a population (city-images.json, made by fetch_city_images.py and fetch_by_name.py)
+    cim = load('city-images.json') if os.path.isfile(os.path.join(DATA, 'city-images.json')) else {}
     for place, lst in cities.items():
         cc = name2cc.get(place.lower())
         if not cc: continue
@@ -213,6 +223,9 @@ def main():
             c = dict(c)
             cl = ccl.get(str(c.get('gid'))) if c.get('gid') else ccl.get(place + '/' + c.get('n', ''))
             if cl: c['climate'] = {'hi': cl['hi'], 'lo': cl['lo'], 'mm': cl['mm']}
+            ll = c.get('ll') or [None, None]
+            img = cim.get(str(c['gid'])) if c.get('gid') else cim.get('%s/%s@%s,%s' % (cc, c.get('n', ''), ll[0], ll[1]))
+            if img: c['img'] = [img]
             out.append(c)
         put('cities/%s.json' % cc, out)
 
@@ -333,7 +346,7 @@ def main():
             'placeindex/{cc}.json': 'every Wikivoyage article in the country: [title, kind, in, lat, lon, key]',
             'place/{cc}/{key}.json': 'one article and its listings: {t: title, g: the guide, l: the listings}; key from placeindex',
             'regions/{cc}.json': 'level-1 regions: picture, flag, arms, population, capital, climate',
-            'cities/{cc}.json': 'cities with population, height, time zone and climate',
+            'cities/{cc}.json': 'cities with population, height, time zone, climate and a photo (Wikidata)',
             'shapes/{cc}-{level}.js': 'the map shapes for one country at one level',
             'credits/{xx}.json': 'photo credits; xx = the low byte of FNV-1a(filename), in hex (API.shardOf)',
             'phrasebooks.json, phrasebooks/{lang}.json': 'phrases with pronunciation',

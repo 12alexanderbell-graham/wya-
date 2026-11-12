@@ -1,11 +1,14 @@
 import Foundation
 import simd
 
-/// The world, already projected: Equal Earth into a box 1000 map units wide, y down from the North Pole. Built once
-/// from the old app's topology by tools/prep.py, so the app never projects at launch. world.wyam: "WYAM", u32 version
-/// 1, f32 width, f32 height, u32 units, then per unit u16 owner (the place's index in world-meta.json, 0xFFFF none),
-/// u32 rings, then per ring u16 unit (0xFFFF = a lake), u32 n, n × (f32 x, f32 y), u32 segments, then per segment 6 ×
-/// f32: x0 y0 x1 y1, distance along its line, flags (bit 1 dashed, bit 2 border).
+/// The world, already projected: Equal Earth (the default, 20 Oct #64) into a box 1000 map units wide, y down from
+/// the North Pole. Built once from the old app's topology (Natural Earth 10m with the corrections) by
+/// tools/prep.py, so the app never projects at launch.
+///
+/// world.wyam: "WYAM", u32 version 1, f32 width, f32 height,
+///   u32 units, then per unit u16 owner (the place's index in world-meta.json, 0xFFFF none),
+///   u32 rings, then per ring u16 unit (0xFFFF = a lake), u32 n, n × (f32 x, f32 y),
+///   u32 segments, then per segment 6 × f32: x0 y0 x1 y1, distance along its line, flags (bit 1 dashed, bit 2 border).
 nonisolated final class World: @unchecked Sendable {
     struct Place: Decodable, Sendable {
         let id: String
@@ -174,8 +177,8 @@ nonisolated final class World: @unchecked Sendable {
         var owners: [Int] = []
         owners.reserveCapacity(nu)
         for _ in 0..<nu { let v = u16(); owners.append(v == 0xFFFF ? -1 : v) }
-        // WHOSE EACH UNIT IS IN THE VIEW: the file's owners were the data's defaults; with the disputes, each unit goes
-        // to whom the view gives it, the old app's way
+        // WHOSE EACH UNIT IS IN THE VIEW: the file's owners were the
+        // data's defaults; with the disputes, each unit goes to whom the view gives it, the old app's way
         var oo: [String: String] = [:]
         for p in m.places { for o in p.objs ?? [] { oo[o] = p.id } }
         objOwner = oo
@@ -229,10 +232,10 @@ nonisolated final class World: @unchecked Sendable {
         }
         // THE PIECES OVER THE DATE LINE: a country's piece on the far side of 180° from the rest of it is moved over
         // the line to sit beside it, Chukotka's tip beside Russia, the Aleutians past 180° beside Alaska, Fiji's and
-        // New Zealand's islands east of the line beside them. Each point moves by its own parallel's width (360°
-        // there), the same as drawing it at its longitude ± 360°, so the shape is exactly its own. Antarctica (it is
-        // the whole width) and Kiribati (it truly spans the line, with no side to belong to) stay where they are. The
-        // relief and the sea run on past the edge, so the moved pieces have their own ground under them.
+        // New Zealand's islands east of the line beside them. Each point moves by its own parallel's width (360° there),
+        // the same as drawing it at its longitude ± 360°, so the shape is exactly its own. Antarctica (it is the whole
+        // width) and Kiribati (it truly spans the line, with no side to belong to) stay where they are. The relief and
+        // the sea run on past the edge, so the moved pieces have their own ground under them.
         func lonAt(_ x: Float, _ y: Float) -> Double { EqualEarth.lon(x: Double(x), lat: EqualEarth.lat(y: Double(y))) }
         var biggest: [Int: (area: Float, ring: Int)] = [:]
         for (ri, r) in rs.enumerated() where r.unit >= 0 && owners[r.unit] >= 0 {
@@ -301,9 +304,9 @@ nonisolated final class World: @unchecked Sendable {
                 while i < sg.count { sg[i] = sg[i] >= 2 ? 2 : 0; i += 6 }
             }
         }
-        // THE LAKES' SHORES at the world's own level too: the world file has the lakes as shapes but no shore lines,
-        // while the slices draw every shore, so going in a level made the shores appear at once. Each lake ring's edges
-        // are added here as coast (BUILD-BOOK 1.6: "lake shores exist at every level").
+        // THE LAKES' SHORES at the world's own level too: the world file
+        // has the lakes as shapes but no shore lines, while the slices draw every shore, so going in a level made the
+        // shores appear at once. Each lake ring's edges are added here as coast (BUILD-BOOK 1.6).
         for li in lr {
             let r = rs[li]
             guard r.count >= 3 else { continue }
@@ -337,45 +340,103 @@ nonisolated final class World: @unchecked Sendable {
         return try World(wyam: Data(contentsOf: a), meta: Data(contentsOf: b), disputes: d, view: Borders.view)
     }
 
-    /// The part of a place to frame when it is flown to: its biggest piece of land and the pieces close to it, gathered
-    /// outward one after another (a gap under a twelfth of the biggest piece's size), so the United States is the 48
-    /// states and not Alaska and Hawaii too, Russia is not stretched over the date line by its piece past 180°, and
-    /// Indonesia is all its islands. A small archipelago (all of it under 30 map units, about 1,200 km) is framed
-    /// whole: the Bahamas, Cape Verde, the Maldives. x0 y0 x1 y1 in map units.
-    func frame(of place: Int) -> SIMD4<Float>? {
+    /// The part of a place to frame when it is flown to (23 Oct 14:17: a search result zooms): its biggest
+    /// piece of land and the pieces
+    /// close to it, gathered outward one after another (a gap under a twelfth of the biggest piece's size), so the
+    /// United States is the 48 states and not Alaska and Hawaii too, Russia is not stretched over the date line by its
+    /// piece past 180°, and Indonesia is all its islands. A small archipelago (all of it under 30 map units, about
+    /// 1,200 km) is framed whole: the Bahamas, Cape Verde, the Maldives. x0 y0 x1 y1 in map units.
+    /// `whole`: for the place's own map (Regions, Places), where every part of it has to be in sight: an archipelago
+    /// with no main land and a country in two halves are framed whole (see `gather`)
+    func frame(of place: Int, whole: Bool = false) -> SIMD4<Float>? {
         var boxes: [SIMD4<Float>] = []
         for (u, owner) in unitOwner.enumerated() where owner == place {
             for ri in unitRings[u] { boxes.append(rings[ri].box) }
         }
+        return Self.gather(boxes, whole: whole)
+    }
+    /// the gathering itself, for any pieces' boxes. `cut`: the pieces are a country cut into its regions (a region
+    /// file's rings), so the ones that touch are made one piece first and the reach is that piece's
+    static func gather(_ boxes: [SIMD4<Float>], cut: Bool = false, whole: Bool = false) -> SIMD4<Float>? {
         func area(_ b: SIMD4<Float>) -> Float { (b.z - b.x) * (b.w - b.y) }
         func union(_ a: SIMD4<Float>, _ b: SIMD4<Float>) -> SIMD4<Float> {
             SIMD4(min(a.x, b.x), min(a.y, b.y), max(a.z, b.z), max(a.w, b.w))
         }
-        guard let mi = boxes.indices.max(by: { area(boxes[$0]) < area(boxes[$1]) }) else { return nil }
-        let all = boxes.dropFirst().reduce(boxes[0], union)
-        if max(all.z - all.x, all.w - all.y) < 30 { return all }
-        var f = boxes[mi]
-        let reach = max(f.z - f.x, f.w - f.y) / 12
-        var left = boxes
+        guard let first = boxes.first else { return nil }
+        let all = boxes.dropFirst().reduce(first, union)
+        let span = max(all.z - all.x, all.w - all.y)
+        if span < 30 { return all }
+        // (a country cut into its regions: the boxes that touch are one piece, so the pieces are its mainland and
+        // each island or island group apart from it)
+        let pieces = cut ? joined(boxes, reach: 0.01) : boxes
+        guard let mi = pieces.indices.max(by: { area(pieces[$0]) < area(pieces[$1]) }) else { return nil }
+        var f = pieces[mi]
+        var left = pieces
         left.remove(at: mi)
-        var grew = true
-        while grew {
-            grew = false
+        if cut || whole, span < 120 {
+            // (not for a place that runs round the date line, Kiribati: 120 units is 4,800 km)
+            // AN ARCHIPELAGO WITH NO MAIN LAND (its biggest piece under 15% of its length: Micronesia opened on
+            // Pohnpei alone, the Marshall Islands on one atoll, French Polynesia on Tahiti): its regions are all of
+            // it, so it is framed whole
+            if max(f.z - f.x, f.w - f.y) < 0.15 * span { return all }
+            // A COUNTRY IN TWO HALVES (Malaysia opened on Borneo alone): a piece at least 40% of the biggest is as
+            // much the country as the biggest is
+            let main = area(f) * 0.4
             left.removeAll { b in
-                let dx = max(f.x - b.z, 0, b.x - f.z), dy = max(f.y - b.w, 0, b.y - f.w)
-                guard (dx * dx + dy * dy).squareRoot() <= reach else { return false }
+                guard area(b) >= main else { return false }
                 f = union(f, b)
-                grew = true
                 return true
             }
         }
+        func grow(_ reach: Float) {
+            var grew = true
+            while grew {
+                grew = false
+                left.removeAll { b in
+                    let dx = max(f.x - b.z, 0, b.x - f.z), dy = max(f.y - b.w, 0, b.y - f.w)
+                    guard (dx * dx + dy * dy).squareRoot() <= reach else { return false }
+                    f = union(f, b)
+                    grew = true
+                    return true
+                }
+            }
+        }
+        grow(max(f.z - f.x, f.w - f.y) / 12)
         return f
+    }
+    /// boxes that touch (within `reach`) made one box each: a sweep from the west, each box joined to the ones still
+    /// open across it that it reaches (a chain of touching boxes is one piece; a box only inside another piece's
+    /// box, touching none of its boxes, stays its own)
+    private static func joined(_ boxes: [SIMD4<Float>], reach: Float) -> [SIMD4<Float>] {
+        let order = boxes.indices.sorted { boxes[$0].x < boxes[$1].x }
+        var parent = Array(boxes.indices)
+        func root(_ i: Int) -> Int {
+            var i = i
+            while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }
+            return i
+        }
+        var open: [Int] = []
+        for i in order {
+            let b = boxes[i]
+            open.removeAll { boxes[$0].z + reach < b.x }
+            for j in open where boxes[j].w + reach >= b.y && boxes[j].y - reach <= b.w {
+                let a = root(i), c = root(j)
+                if a != c { parent[a] = c }
+            }
+            open.append(i)
+        }
+        var out: [Int: SIMD4<Float>] = [:]
+        for i in boxes.indices {
+            let r = root(i), b = boxes[i]
+            out[r] = out[r].map { SIMD4(min($0.x, b.x), min($0.y, b.y), max($0.z, b.z), max($0.w, b.w)) } ?? b
+        }
+        return Array(out.values)
     }
 
     /// The place under a point of the map (map units), by the even-odd rule on its rings; nil over the sea or a lake.
     /// Where several hold it (an enclave and the country round it, the Vatican and Italy), the smallest piece there
-    /// wins; a tiny piece within `reach` of the point wins over land round it, so a place smaller than a fingertip can
-    /// be touched.
+    /// wins (29 Oct 02:10); a tiny piece within `reach` of the point wins over land round it, so a place smaller
+    /// than a fingertip can be touched.
     func place(at p: SIMD2<Float>, reach: Float = 0, tiny: Float = 0) -> Int? {
         var inside: [Int: (on: Bool, size: Float)] = [:]
         for (i, r) in rings.enumerated() where r.unit >= 0 {

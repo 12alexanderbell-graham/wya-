@@ -87,7 +87,7 @@ final class CardState {
         guard place == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
         // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water
         // goes to the highest stop that leaves it 300 or more, and the card starts 0.1 s after the water starts. The
-        // card never shrinks to fit a high sheet
+        // card never shrinks to fit a high sheet (30 Oct 12:37 on Sudan's small book over the 50% water)
         if let water {
             let L = water.layout
             let fits: (Water.Stop) -> Bool = { StampCard.Geometry(L: L, sheetTop: water.y($0)).bookH >= 300 }
@@ -99,8 +99,8 @@ final class CardState {
             }
         }
         place = i
-        // THE PASSPORT COMES FROM WHERE IT IS KEPT: it grows out of the plus, the passport tool's home, and goes back
-        // into it; the place keeps its darkening
+        // THE PASSPORT COMES FROM WHERE IT IS KEPT: it grows out of the
+        // plus, the passport tool's home, on the same arc, and goes back into it; the place keeps its darkening
         if let L = water?.layout { at = CGPoint(x: L.rightX, y: L.headY) } else { at = point }
         stampedHere = false
         landing = false
@@ -163,7 +163,7 @@ final class CardState {
 
 /// THE STAMPING CARD (Part 4.2): the place's name, Stamp | Wishlist, your passport open on the page where its stamp is
 /// (or would go), Details | Verify?, one straight mirror-symmetrical column in the open map; the map never moves.
-/// As built: the glass tints change in one frame (no fronts); haptics only (no sounds).
+/// As built by 30 Oct rules: the glass tints change in one frame (no fronts); haptics only (no sounds).
 struct StampCard: View {
     let map: MapController
     let water: Water
@@ -186,7 +186,7 @@ struct StampCard: View {
             let bookBottom = g.mid.y + g.bookH / 2 + 28
             let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
             let detailsUp = details.isOpen || verify.isOpen
-            // THE CARD GOES BACK (replacing A4.8's first version): once the bottom pair has
+            // THE CARD GOES BACK: once the bottom pair has
             // gone, the name, Stamp | Wishlist and the book shrink as one about their top centre, Apple's way with the
             // screen behind a sheet, so the book's bottom stays 12 pt above the water every frame; at full it has gone
             let colTop = g.mid.y - (168 + g.bookH) / 2
@@ -200,7 +200,7 @@ struct StampCard: View {
             // along the arc itself (ArcPlace), not on a straight line between the two ends
             let c = CGPoint(x: g.mid.x, y: g.mid.y)
             // from the plus the way is straight down and in: an arc bowed upward ran the growing card across the
-            // head's dot, and nothing may cross anything
+            // head's dot (burst 30 Oct 13:01), and nothing may cross anything (the 12:43)
             let ctrl = CGPoint(x: (card.at.x + c.x) / 2, y: (card.at.y + c.y) / 2)
             let half = (g.bookW - 12) / 2
             VStack(spacing: 12) {
@@ -212,8 +212,11 @@ struct StampCard: View {
                 PassportPage(id: id, order: card.order, hidden: card.flying ? id : nil,
                              size: CGSize(width: g.bookW, height: g.bookH))
                 HStack(spacing: 12) {
-                    detailsButton(state, key: key, name: w.places[i].n, w: half, words: !detailsUp && r < 0.4)
-                    verifyButton(state, key: key, name: w.places[i].n, place: i, w: half, words: !detailsUp && r < 0.4)
+                    // (their words go as the pair has shrunk part of the way into the book's edge, and are back at the
+                    // same point coming out; they are not blanked the moment Details opens: with no roll that left two
+                    // full-size empty capsules standing for a beat, 12 Nov)
+                    detailsButton(state, key: key, name: w.places[i].n, w: half, words: r < 0.4)
+                    verifyButton(state, key: key, name: w.places[i].n, place: i, w: half, words: r < 0.4)
                 }
                 .scaleEffect(max(0.001, 1 - r))
                 .offset(y: -34 * r)
@@ -285,10 +288,10 @@ struct StampCard: View {
             .foregroundStyle(Palette.ink)
             .multilineTextAlignment(.center)
             // one line, a little smaller for a long name: the card's rows are laid out for a 44 pt name, and a second
-            // line put the stamp's slot and its landing 12 pt off
+            // line put the stamp's slot and its landing 12 pt off (8 Nov)
             .lineLimit(1)
             .minimumScaleFactor(0.55)
-            // just the name: no glass box round it
+            // just the name: no glass box round it (30 Oct 10:34)
             .frame(minHeight: 44)
             .frame(maxWidth: width + 32)
     }
@@ -302,7 +305,7 @@ struct StampCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink)
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .frame(width: w, height: 44)
                 .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
         }
@@ -346,7 +349,7 @@ struct StampCard: View {
     }
 
     private func wishButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
-        // a place you have been is never on your wishlist (Q4.4),
+        // a place you have been is never on your wishlist (Q4.4)
         // the same on every card (7 Nov: one meaning everywhere)
         let blocked = s.stamped
         return Button {
@@ -383,7 +386,7 @@ struct StampCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(dim || !live ? 0.5 : 1))
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(.clear, in: .capsule)
@@ -403,7 +406,7 @@ struct StampCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .animation(Motion.quick, value: proofWord)
                 .frame(width: w, height: 44)
@@ -429,7 +432,7 @@ struct StampCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(s.stamped || s.wished ? 1 : 0.5))
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(.clear, in: .capsule)

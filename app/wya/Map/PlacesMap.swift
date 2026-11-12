@@ -19,7 +19,7 @@ extension MapController {
     func openPlace(_ i: Int) {
         guard placesMode, let w = world, i >= 0, i < w.places.count, placeOpen != i else { return }
         townPressed = nil
-        // (the set looked at stays: the country narrows it: national parks in one country)
+        // (the set looked at stays: the country narrows it, national parks in one country)
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
@@ -105,8 +105,9 @@ extension MapController {
         showBox(SIMD4(at.x - d, at.y - d, at.x + d, at.y + d), place: i)
     }
 
-    /// A THING FOUND BY SEARCH: its country opened (if it isn't), then, once its things have come, the thing framed and
-    /// darkened for two seconds
+    /// A THING FOUND BY SEARCH: its country opened (if it isn't), then, once its things have come, the thing framed with
+    /// its mark and name, then its card, as a tap on its mark gives (the towns' map shows only the things that are
+    /// yours: one found was marked for two seconds and then gone, the map left on a spot with nothing on it)
     func showThing(file cc: String, id: String) {
         guard let w = world, let i = w.placeIndex[cc] else { return }
         ShowJob.n += 1
@@ -123,11 +124,17 @@ extension MapController {
             guard me == ShowJob.n else { return }
             guard let self, self.placeOpen == i, let t = ThingStore.shared.things(cc)?.first(where: { $0.id == id }) else { Feel.refuse(); return }
             self.thingPressed = id
-            // close enough that its band shows it (the rest of its fame's band: 16x the framing zoom covers every thing)
-            let r: Float = 0.004
-            self.showBox(SIMD4(t.at.x - r, t.at.y - r, t.at.x + r, t.at.y + r), place: i)
-            try? await Task.sleep(for: .milliseconds(2600))
-            if self.thingPressed == id { self.thingPressed = nil; self.needsFrame = true }
+            // (a tenth of a degree round it, as a set's landmark; its card will stand on the 25% water, 240 pt of the
+            // map's room, so the box runs on under it by that share and the thing is framed in the room above the card)
+            var b = SIMD4(t.at.x - 0.1, t.at.y - 0.1, t.at.x + 0.1, t.at.y + 0.1)
+            let room = self.layout.room(sheetTop: self.layout.top(.quarter))
+            let free = max(120, room.upperBound - room.lowerBound - 240)
+            b.w += (b.w - b.y) * Float((room.upperBound - room.lowerBound) / free - 1)
+            self.showBox(b, place: i)
+            try? await Task.sleep(for: .milliseconds(1100))
+            guard me == ShowJob.n, self.placeOpen == i, self.thingPressed == id else { return }
+            self.needsFrame = true
+            self.onThingFound?(id)
         }
     }
 
@@ -176,11 +183,22 @@ extension MapController {
         }
     }
 
-    /// your own place whose mark is under a screen point (within 22 pt of its point)
+    /// your own place whose mark is under a screen point (within 22 pt of its point), or whose drawn outline it is inside
     func ownHit(at p: CGPoint) -> String? {
         var best: (String, CGFloat)?
         for o in OwnPlaces.shared.all {
             let q = screenPoint(SIMD2(Double(o.point.x), Double(o.point.y)))
+            if let r = o.ring, r.count > 2 {
+                let path = CGMutablePath()
+                for (i, c) in r.enumerated() {
+                    let m = EqualEarth.project(lon: c[1], lat: c[0])
+                    let s = screenPoint(SIMD2(Double(m.x), Double(m.y)))
+                    if i == 0 { path.move(to: s) } else { path.addLine(to: s) }
+                }
+                path.closeSubpath()
+                // (inside: as near as its middle; a smaller one inside a bigger one wins by being nearer)
+                if path.contains(p) { let d = hypot(q.x - p.x, q.y - p.y); if best == nil || d < best!.1 { best = (o.id, d) }; continue }
+            }
             let d = hypot(q.x - p.x, q.y - p.y)
             if d <= 22, best == nil || d < best!.1 { best = (o.id, d) }
         }
@@ -190,9 +208,20 @@ extension MapController {
     /// ("Near Kyoto"), stamped as it is made (with its region chain and country). From the land's hold menu (Add a
     /// place here) it is made unstamped, its card to follow.
     @discardableResult
-    func makeOwnPlace(at p: CGPoint, stamp: Bool = true) -> OwnPlaces.Place? {
+    func makeOwnPlace(at p: CGPoint, stamp: Bool = true, ring: [DrawTool.Geo]? = nil) -> OwnPlaces.Place? {
         guard let open = placeOpen, let cc = placeOpenID else { return nil }
-        let m = mapPoint(p)
+        // (a drawn place: its point is its outline's middle, the mean of its corners weighted by the edges round them)
+        var m = mapPoint(p)
+        if let r = ring, r.count > 2 {
+            var sx = 0.0, sy = 0.0, sw = 0.0
+            let q = r.map { EqualEarth.project(lon: $0.lon, lat: $0.lat) }
+            for i in 0 ..< q.count {
+                let a = q[i], b = q[(i + 1) % q.count]
+                let w = Double(simd_distance(a, b))
+                sx += Double(a.x + b.x) / 2 * w; sy += Double(a.y + b.y) / 2 * w; sw += w
+            }
+            if sw > 0 { m = SIMD2(sx / sw, sy / sw) }
+        }
         let ll = EqualEarth.unproject(m)
         let mp = SIMD2(Float(m.x), Float(m.y))
         var near: String?
@@ -201,7 +230,7 @@ extension MapController {
             for (i, a) in sc.at.enumerated() { let d = simd_distance_squared(a, mp); if d < bd { bd = d; near = sc.towns[i].name } }
         }
         let name = near.map { "Near \($0)" } ?? "Your place"
-        let place = OwnPlaces.shared.make(name: name, lat: ll.lat, lon: ll.lon, cc: cc)
+        let place = OwnPlaces.shared.make(name: name, lat: ll.lat, lon: ll.lon, cc: cc, ring: ring?.map { [$0.lat, $0.lon] })
         Feel.tap()
         needsFrame = true
         if stamp { Task { await TownStamps.stamp(place.key, name: place.name, cc: cc, source: .quick, place: open, at: mp) } }
@@ -410,7 +439,7 @@ extension MapController {
     /// the kind it is cut down to (the menu's second lime bar), or nil
     var placesKind: String? { placesCollection == CollectionStore.capitals ? CollectionStore.capitals : placesType }
 
-    /// A KIND PICKED under the set (seas of one type): the same set cut down to it; nil: all of it again
+    /// A KIND PICKED under the set: the same set cut down to it; nil: all of it again
     func showPlacesType(_ t: String?) {
         guard placesMode else { return }
         CardState.shared.close(map: self); RegionCardState.shared.close(map: self)

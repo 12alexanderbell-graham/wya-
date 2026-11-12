@@ -138,6 +138,12 @@ struct DetailsSheet: View {
         }
     }
 
+    /// A PLACE THAT IS NOT SOMEWHERE YOU STAY (a mountain, a museum, a park, a sea, a place of your own): nobody lives
+    /// on Mount Everest or is there "through the airport". Its Details are when you were there, how often, your notes,
+    /// your rating and who with: no Lived here, no How, no Trip, no places inside it. A country, a region and a town
+    /// keep them all.
+    private var aThing: Bool { s.key?.kind == .thing || s.key?.kind == .yours }
+
     var body: some View {
         let L = water.layout
         let top = max(form.top + 20, L.headBottom + 8)
@@ -152,7 +158,7 @@ struct DetailsSheet: View {
                     // the place's name heads the sheet only when no card shows above it (at full the card has gone)
                     if form.page > 0.5 || !CardState.shared.isOpen {
                         Text(sheetGone || s.rollingOut ? Caption.blank(s.name, "\u{2002}") : s.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                            .contentTransition(.numericText(value: sheetGone || s.rollingOut ? 0 : 1))
+                            .contentTransition(.identity)
                             .edgeRow()
                             .accessibilityAddTraits(.isHeader)
                     }
@@ -160,16 +166,18 @@ struct DetailsSheet: View {
                         wishBlock
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
-                            band("Lived here", on: s.lived, blank: sheetGone || s.rollingOut) { Feel.notch(); swapBlock() }
+                            if !aThing {
+                                band("Lived here", on: s.lived, blank: sheetGone || s.rollingOut) { Feel.notch(); swapBlock() }
+                            }
                             // A4.14's block swap, one thing at a time: the old block's words roll out and its shapes
                             // shrink; then the rows below move to the new block's height; then its words roll in
                             // (never a fade: both blocks come and go with no transition of their own)
                             Group {
-                                if shownLived ?? s.lived { livedBlock } else { visitsBlock }
+                                if !aThing, shownLived ?? s.lived { livedBlock } else { visitsBlock }
                             }
                             .transition(.identity)
                         }
-                        placesBlock
+                        if !aThing { placesBlock }
                         section("Notes", blank: out) {
                             if out || shownLived != nil {
                                 fieldWords("What you did", s.d.did, gone: out)
@@ -213,7 +221,8 @@ struct DetailsSheet: View {
             .scrollTargetBehavior(GapSnap(cuts: cuts))
             .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
             .onChange(of: typing) { _, id in
-                // typing takes Details to full, card or not (the card goes back as the water rises); the field scrolls above the keyboard; keyboard down, back to 50%
+                // typing takes Details to full, card or not (the card goes back as the water rises; 30 Oct
+                // 10:59); the field scrolls above the keyboard; keyboard down, back to 50%
                 if let id {
                     if water.stop != .full { water.go(.full) }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .center) } }
@@ -333,7 +342,7 @@ struct DetailsSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(gone ? Caption.blank("When", "\u{2002}") : "When").font(.body).foregroundStyle(Palette.ink)
-                    .contentTransition(.numericText(value: gone ? 0 : 1))
+                    .contentTransition(.identity)
                     .frame(minHeight: 44).contentShape(Rectangle())
                     // A VISIT HELD by its first word (11.5; never over its text field, whose own hold moves the
                     // cursor): Duplicate (a new visit with its how, why and time in words) · Delete (only with more
@@ -350,7 +359,7 @@ struct DetailsSheet: View {
                     let w = v.isEmpty ? "Add" : v
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
                         .foregroundStyle(v.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
-                        .contentTransition(.numericText(value: gone ? 0 : 1))
+                        .contentTransition(.identity)
                         .frame(minHeight: 44).edgeRow()
                 } else {
                     // a visit's time in words until our own calendar exists (40 characters); the empty field says only
@@ -364,15 +373,18 @@ struct DetailsSheet: View {
                 }
             }
             .frame(minHeight: 52).edgeRow()
+            if !aThing {
             choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
             if s.d[keyPath: mode] == "other" {
                 if plain { fieldWords("How, in your words", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
                 else { field("How, in your words", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
             }
-            choice("Trip", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
-            if s.d[keyPath: purpose] == "other" {
-                if plain { fieldWords("Trip, in your words", s.d[keyPath: tk(i, \.purposeOther)], gone: gone) }
-                else { field("Trip, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
+            // ("Why", not the old field's name "Trip": the row asks why you went, after When and How)
+            choice("Why", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
+            }
+            if !aThing, s.d[keyPath: purpose] == "other" {
+                if plain { fieldWords("Why, in your words", s.d[keyPath: tk(i, \.purposeOther)], gone: gone) }
+                else { field("Why, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
             }
         }
     }
@@ -402,7 +414,7 @@ struct DetailsSheet: View {
         let t = (v ?? "").isEmpty ? empty : v!
         return Text(gone ? Caption.blank(t, "\u{2002}") : t).font(.body)
             .foregroundStyle((v ?? "").isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
-            .contentTransition(.numericText(value: gone ? 0 : 1))
+            .contentTransition(.identity)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: trailing ? .trailing : .leading).edgeRow()
     }
 
@@ -470,7 +482,7 @@ struct DetailsSheet: View {
                     }
                     if now && last {
                         Text(gone ? Caption.blank("Now", "\u{2002}") : "Now").font(.body).foregroundStyle(Palette.ink)
-                            .contentTransition(.numericText(value: gone ? 0 : 1))
+                            .contentTransition(.identity)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
                     } else if plain {
                         monthWords(stay.to, empty: "Moved out", gone: gone)
@@ -481,7 +493,7 @@ struct DetailsSheet: View {
                     }
                     if let len = Self.length(stay.from, now && last ? nil : stay.to, toNow: now && last) {
                         Text(gone ? Caption.blank(len, "\u{2002}") : len).font(.body).foregroundStyle(Palette.ink).fixedSize()
-                            .contentTransition(.numericText(value: gone ? 0 : 1))
+                            .contentTransition(.identity)
                     }
                     if t.count > 1 {
                         xCircle { removeLived(i) }
@@ -520,11 +532,11 @@ struct DetailsSheet: View {
                 let gone = out || arriving.contains(k) || leaving.contains(k)
                 HStack(spacing: 12) {
                     Text(gone ? Caption.blank(p.n, "\u{2002}") : p.n).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
-                        .contentTransition(.numericText(value: gone ? 0 : 1))
+                        .contentTransition(.identity)
                     Spacer(minLength: 8)
                     let w = Self.word(p.k)
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body).foregroundStyle(Palette.ink)
-                        .contentTransition(.numericText(value: gone ? 0 : 1))
+                        .contentTransition(.identity)
                     xCircle { removePlace(Int(placeIDs.firstIndex(of: k) ?? 0)) }
                     .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 }
@@ -644,7 +656,7 @@ struct DetailsSheet: View {
         let w = shown ?? empty
         return Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
             .foregroundStyle(shown == nil ? Palette.ink.opacity(0.5) : Palette.ink)
-            .contentTransition(.numericText(value: gone ? 0 : 1))
+            .contentTransition(.identity)
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
     }
 
@@ -654,7 +666,7 @@ struct DetailsSheet: View {
     private func section<C: View>(_ name: String, blank: Bool = false, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.headline).foregroundStyle(Palette.ink)
-                .contentTransition(.numericText(value: blank ? 0 : 1))
+                .contentTransition(.identity)
                 .frame(minHeight: 32, alignment: .bottom).edgeRow()
                 .accessibilityAddTraits(.isHeader)
             c()
@@ -665,7 +677,7 @@ struct DetailsSheet: View {
     private func row<V: View>(_ name: String, blank: Bool = false, @ViewBuilder _ value: () -> V) -> some View {
         HStack(spacing: 12) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
-                .contentTransition(.numericText(value: blank ? 0 : 1))
+                .contentTransition(.identity)
             Spacer(minLength: 8)
             value()
         }
@@ -676,7 +688,7 @@ struct DetailsSheet: View {
     /// appearing in one frame
     private func band(_ name: String, on: Bool, blank: Bool = false, tap: @escaping () -> Void) -> some View {
         Text(blank ? Caption.blank(name, "\u{2002}") : name)
-            .contentTransition(.numericText(value: blank ? 0 : 1))
+            .contentTransition(.identity)
             .font(.body)
             .foregroundStyle(on ? .white : Palette.ink)
             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
@@ -701,7 +713,7 @@ struct DetailsSheet: View {
                              set: @escaping (String?) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
-                .contentTransition(.numericText(value: blank ? 0 : 1))
+                .contentTransition(.identity)
                 .frame(minHeight: 44, alignment: .leading)
             chips(items, chosen: chosen, blank: blank) { set(chosen == $0 ? nil : $0) }
                 .padding(.bottom, 8)
@@ -715,7 +727,7 @@ struct DetailsSheet: View {
         FlowLayout(spacing: 4) {
             ForEach(items, id: \.0) { id, word in
                 Text(blank ? Caption.blank(word, "\u{2002}") : word)
-                    .contentTransition(.numericText(value: blank ? 0 : 1))
+                    .contentTransition(.identity)
                     .font(.body)
                     .foregroundStyle(chosen == id ? .white : Palette.ink)
                     .padding(.horizontal, 12)
@@ -739,7 +751,7 @@ struct DetailsSheet: View {
     private var stepper: some View {
         HStack(spacing: 4) {
             // the floor is the number of visit rows
-            circle("minus", blank: out) { if s.times > timesFloor { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
+            circle("minus", blank: out, dim: s.times <= timesFloor) { if s.times > timesFloor { s.times -= 1; Feel.tap() } else { Feel.refuse() } }
             Text(out ? Caption.blank("\(s.times)", "\u{2002}") : "\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: out ? -1 : Double(s.times)))
                 .animation(Motion.quick, value: s.times)
@@ -769,11 +781,12 @@ struct DetailsSheet: View {
     }
     /// Times never goes below the visit rows there are
     private var timesFloor: Int { 1 + (s.d.trips?.count ?? 0) }
-    private func circle(_ g: String, blank: Bool = false, _ act: @escaping () -> Void) -> some View {
+    /// `dim`: it can do nothing now (the minus at the floor): 50%, as the zoom column's minus is at home
+    private func circle(_ g: String, blank: Bool = false, dim: Bool = false, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             // the app's own icons only, never SF Symbols (0.8.7): "plus" and "minus" from Icons5
             Icon5Still(key: g, progress: 0, ink: Palette.white, size: 17)
-                .frame(width: 36, height: 36).background(Palette.ink, in: .circle)
+                .frame(width: 36, height: 36).background(Palette.ink.opacity(dim ? 0.5 : 1), in: .circle)
                 .opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .frame(width: 44, height: 44)
                 // the whole 44 pt touches (only the drawn circle did)

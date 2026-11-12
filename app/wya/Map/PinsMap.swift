@@ -2,11 +2,11 @@ import SwiftUI
 import MapKit
 import PhotosUI
 
-// PINS (Part 8; 7 Nov: Apple's map, decided 31 Oct 11:19; one plain black pin until its
-// colour is changed, 7 Nov 16:37). First slice: Apple's map under the head and the water whenever Pins is the mode, the
+// PINS (Part 8; 7 Nov: Apple's map,; one plain black pin until its
+// colour is changed, the 16:37). First slice: Apple's map under the head and the water whenever Pins is the mode, the
 // camera taken over from our map; hold the map 0.4 s and a pin drops there, named after the finest place it is in;
 // tap a pin and the water shows its name and place; hold a pin for its menu. Pins are kept on the phone (pins.json).
-// Still to come (8.5 to 8.8): the dock's tools (they need their icons first), the pin's sheet at 50%, routes, drawing.
+// Still to come (8.5 to 8.8): the dock's tools (they need the icons first), the pin's sheet at 50%, routes, drawing.
 
 /// ONE PIN
 struct Pin: Codable, Identifiable, Hashable {
@@ -32,6 +32,11 @@ struct Pin: Codable, Identifiable, Hashable {
     var colour: [Double]? { pick.map { let v = $0.p3; return [v.x, v.y, v.z] } }
 
     var title: String { !name.isEmpty ? name : place.components(separatedBy: ", ").first.flatMap { $0.isEmpty ? nil : $0 } ?? "Pin" }
+    /// the pins just dropped whose place is still being asked for (a second or so): such a pin shows no name yet. It
+    /// read "Pin" and then swapped to its place's name
+    nonisolated(unsafe) static var naming: Set<UUID> = []
+    /// the title as it is drawn: none while its place is being asked for
+    var shownTitle: String { name.isEmpty && place.isEmpty && Self.naming.contains(id) ? "" : title }
     /// its place and day; under the place's own name (no name given) the rest of the place, never the name twice
     var line: String {
         let day = made.formatted(.dateTime.day().month(.abbreviated).year())
@@ -80,6 +85,7 @@ final class PinStore {
         var p = Pin(lat: c.latitude, lon: c.longitude)
         p.cc = country?.id
         dropping = p.id
+        Pin.naming.insert(p.id)
         pins.append(p)
         selected = p.id
         save()
@@ -181,8 +187,8 @@ final class PinStore {
         pins[k].note = n.isEmpty ? nil : String(n.prefix(600))
         save()
     }
-    /// PINS NAMED BEFORE THE COUNTRY WAS KEPT (the first days' pins: a town's name alone, where a new pin there is
-    /// the town and its country): a pin on land whose place is one name gets the country our map has under it, so
+    /// PINS NAMED BEFORE THE COUNTRY WAS KEPT (the first days' pins: "Bordj Omar Driss" alone, where a new pin there is
+    /// "Bordj Omar Driss, Algeria"): a pin on land whose place is one name gets the country our map has under it, so
     /// every row of the list says where it is. A pin at sea, or one named as its country, stays as it is.
     func nameCountries(_ country: (CLLocationCoordinate2D) -> (id: String, name: String)?) {
         var changed = false
@@ -265,6 +271,11 @@ final class PinStore {
     /// the finest place a pin is in, from Apple's reverse geocoding: "Kreuzberg, Berlin"; a town alone; a region and
     /// its country; the sea's name at sea
     private func name(_ id: UUID, country ours: String?, known: String? = nil) async {
+        // (asked or not, answered or not: the pin has its name from here, "Pin" if nothing came)
+        defer {
+            Pin.naming.remove(id)
+            if let k = pins.firstIndex(where: { $0.id == id }) { pins[k] = pins[k] }
+        }
         guard let p = pin(id), let req = MKReverseGeocodingRequest(location: CLLocation(latitude: p.lat, longitude: p.lon)) else { return }
         let item = try? await req.mapItems.first
         let a = item?.addressRepresentations
@@ -587,7 +598,7 @@ struct PinsMapView: UIViewRepresentable {
         context.coordinator.select(v, store.selected)
         let L = water.layout
         // Apple's credit (Legal) on the map just above the water, at the sheet's inner left (Apple asks for it to be
-        // seen; asked 30 Oct 03:00); at full nothing of the map is seen
+        // seen); at full nothing of the map is seen
         let top = water.y(water.stop == .full ? .half : water.stop)
         // the credit follows the water's edge as it moves (read every frame the water moves), never above 50%
         let edge = max(water.form().top, water.y(.half))
@@ -804,9 +815,10 @@ struct PinsMapView: UIViewRepresentable {
                     let stacked = fronts[frontIndex].1 > 0
                     frontIndex += 1
                     if !stacked {
-                        let s = PinAnnotationView.nameSize(p.title)
+                        let t = p.shownTitle
+                        let s = PinAnnotationView.nameSize(t)
                         let r = CGRect(x: pt.x - s.width / 2, y: pt.y + 2, width: s.width, height: s.height)
-                        if !taken.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -2)) }) { name = p.title; taken.append(r) }
+                        if !t.isEmpty, !taken.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -2)) }) { name = t; taken.append(r) }
                     }
                 }
                 pv.arrange(behind: back && p.id != sel, name: name)
@@ -1138,7 +1150,7 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         }
     }
 
-    /// a pin dropped is simply there (no fall any more, 8 Nov), with the notch of setting it down
+    /// a pin dropped is simply there (no fall any more, 8 Nov answer), with the notch of setting it down
     func fall() {
         transform = .identity
         Feel.notch()
@@ -1187,7 +1199,9 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
                 guard let v = state.view, let m = state.map, let now = PinStore.shared.pin(id) else { return }
                 let at = v.convert(now.coordinate, toPointTo: nil)
                 let land = PinsMapView.Coordinator.country(m, now.coordinate).flatMap { m.world?.placeIndex[$0.id] }
-                WhatsHere.shared.show(at: at, lat: now.lat, lon: now.lon, land: land, map: m)
+                // (a finger's reach on Apple's map: 44 pt of its height in degrees)
+                let reach = v.region.span.latitudeDelta * 44 / max(1, Double(v.bounds.height))
+                WhatsHere.shared.show(at: at, lat: now.lat, lon: now.lon, land: land, reach: reach, map: m)
             }
         }
         let share = UIAction(title: "Share") { _ in after { PinStore.share(p) } }
@@ -1224,7 +1238,7 @@ struct PinsWater: View {
                 ZStack(alignment: .top) {
                     Caption(name: " ", count: 0, tail: " ", night: false).hidden()
                     VStack(spacing: 4) {
-                        Text(p.title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
+                        Text(p.shownTitle.isEmpty ? " " : p.shownTitle).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
                         Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                     }
                 }
@@ -1350,7 +1364,7 @@ struct PinsList: View {
                 .scaleEffect(0.8)
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
-                Text(p.title).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                Text(p.shownTitle.isEmpty ? " " : p.shownTitle).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                 Text(p.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)

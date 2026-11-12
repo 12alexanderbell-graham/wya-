@@ -24,7 +24,7 @@ final class TownNamesView: UIView {
     private(set) var nameFrames: [String: CGRect] = [:]
     /// the things' names up now, by thing id (a tap on one opens its page)
     private(set) var thingNameFrames: [String: CGRect] = [:]
-    /// (31 Oct: bold system type with a hard cream outline read badly. Now as Apple Maps
+    /// (31 Oct 10:52, the: the names "look like" a meme: bold system type with a hard cream outline. Now as Apple Maps
     /// sets its names: San Francisco, medium, black, with a soft cream glow round the letters; Tellus was tried and read
     /// as handwriting at this size)
     private static let font = UIFont.systemFont(ofSize: 13, weight: .medium)
@@ -143,7 +143,7 @@ final class TownNamesView: UIView {
     /// a planned town's scene and index
     func townOf(_ id: String) -> (cc: String, i: Int)? { townPick[id].map { ($0.cc, $0.i) } }
 
-    /// A NAME TAPPED (31 Oct): a name opens its page wherever there is one: the town's or thing's page, growing from its name; false when it has none (a collection's stop)
+    /// A NAME TAPPED: the town's or thing's page, growing from its name; false when it has none (a collection's stop)
     @discardableResult
     func openPage(_ hit: (town: String?, thing: String?), _ m: MapController) -> Bool {
         let country = { (cc: String) -> String in m.world.flatMap { w in w.placeIndex[cc].map { w.places[$0].n } } ?? "" }
@@ -223,7 +223,7 @@ final class TownNamesView: UIView {
         var frames: [String: CGRect] = [:]
         var named = Set<String>()
         var nameRects: [String: CGRect] = [:]
-        // ONE MARK, ONE SIZE (dots of several sizes read as a mess): 6 pt at every zoom, ink until it is yours
+        // ONE MARK, ONE SIZE: 6 pt at every zoom, ink until it is yours
         let size: CGFloat = 6
         var centres: [CGPoint] = []
         let scene = m.setScene
@@ -238,7 +238,9 @@ final class TownNamesView: UIView {
                 thingViews[t.id] = (d, l)
                 return (d, l)
             }()
-            v.dot.backgroundColor = m.thingPressed == t.id ? Self.pressed
+            // (one found by search, not yours, is held while its card is up: ink, the one mark to look for; the press
+            // shade on white land was the faintest thing on the map)
+            v.dot.backgroundColor = m.thingPressed == t.id && (st.stamped || st.wished) ? Self.pressed
                 : st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : UIColor(Palette.ink)
             v.dot.frame = r
             v.dot.layer.cornerRadius = size / 2
@@ -312,13 +314,11 @@ final class TownNamesView: UIView {
 
     // MARK: A SET'S NAMES (11 Nov). The places themselves are the map's (their shapes and marks, MapRenderer: all of them
     // at every zoom). Here only their names, every one of them planned once per list (LabelPlan), so a name is up
-    // exactly when the zoom is past its own and panning never changes which are up (names must not come and go
-    // as the map is zoomed):
+    // exactly when the zoom is past its own and panning never changes which are up:
     // - a sea or a range has its name in its middle once it is big enough on screen to hold it, a bigger one first, as on
     //   any map;
     // - a mark's name stands to its right (a park's on its shape), the list's best known first. These names are all
-    //   up or all away (some marks named and some not reads as broken: either all are
-    //   named or none are): up when at most 30 of the list's marks are in sight and every one of them has
+    // up or all away: up when at most 30 of the list's marks are in sight and every one of them has
     //   room for its name, away otherwise (half of them named was still some with and some without). Decided when
     //   the map comes to rest, never while it moves.
     // Names just appear.
@@ -328,6 +328,7 @@ final class TownNamesView: UIView {
         guard !setLabels.isEmpty || !setKey.isEmpty else { return }
         for l in setLabels.values { l.removeFromSuperview() }
         setLabels = [:]; setKey = []; setPlan = nil; setPlanKey = ""; setOn = false
+        (superview as? MapMTKView)?.controller?.setMiddleNamed = []
     }
     private var setPlan: LabelPlan?
     private var setPlanKey = ""
@@ -434,8 +435,17 @@ final class TownNamesView: UIView {
                     r = side
                 }
             }
+            // (every name whole inside the map's room, under the head, over the water's rest, clear of the zoom column
+            // and the screen's sides, or not shown: "Arctic Ocean" was cut by the top edge, "Barents Sea" stood in the
+            // head's row, "Red Sea" ran into the column's lock)
+            // (a mark under the zoom column keeps the screen's edge as its limit, as above)
+            let right = setGated.contains(id) && q.x > box.maxX ? bounds.width - 4 : box.maxX
+            guard r.minX >= 4, r.maxX <= right, r.minY >= box.minY, r.maxY <= box.maxY else { continue }
             rects[id] = r
         }
+        // (a place named on its own middle, a sea or a range, has its name for a mark: the mark stood in the middle of
+        // the words, "Gulf of ◆ Guinea")
+        m.setMiddleNamed = Set(rects.keys.filter { !setGated.contains($0) })
         for (id, r) in rects {
             guard let it = setItems[id] else { continue }
             let l = setLabels[id] ?? {
@@ -504,27 +514,60 @@ final class TownNamesView: UIView {
                 return (d, l)
             }()
             let st = MarkStore.shared.state(o.key)
-            mk.dot.backgroundColor = st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : Self.cream
+            let tint = st.stamped ? UIColor(Palette.lime) : st.wished ? UIColor(Palette.blue) : Self.cream
+            mk.dot.backgroundColor = tint
             mk.dot.frame = CGRect(x: q.x - size / 2, y: q.y - size / 2, width: size, height: size)
             mk.dot.layer.cornerRadius = size / 2
-            if named {
+            // A DRAWN PLACE (Map/DrawTool.swift): its outline on the map, filled in the mark's colour, once it is more than
+            // a mark across on screen; smaller, the mark as any place's
+            var drawn = false
+            if let ring = o.ring, ring.count > 2 {
+                let pts = ring.map { c -> CGPoint in let p = EqualEarth.project(lon: c[1], lat: c[0]); return m.screenPoint(SIMD2(Double(p.x), Double(p.y))) }
+                let b = pts.reduce(CGRect.null) { $0.union(CGRect(origin: $1, size: .zero)) }
+                if max(b.width, b.height) > 24 {
+                    let path = UIBezierPath()
+                    path.move(to: pts[0]); for p in pts.dropFirst() { path.addLine(to: p) }; path.close()
+                    let s = shapes[o.id] ?? {
+                        let l = CAShapeLayer()
+                        l.lineWidth = 1; l.lineJoin = .round
+                        layer.insertSublayer(l, at: 0)
+                        shapes[o.id] = l
+                        return l
+                    }()
+                    CATransaction.begin(); CATransaction.setDisableActions(true)
+                    s.path = path.cgPath
+                    s.fillColor = tint.withAlphaComponent(0.6).cgColor
+                    s.strokeColor = UIColor(Palette.ink).withAlphaComponent(0.5).cgColor
+                    CATransaction.commit()
+                    drawn = true
+                }
+            }
+            if !drawn, let s = shapes[o.id] { s.removeFromSuperlayer(); shapes[o.id] = nil }
+            mk.dot.isHidden = drawn
+            if named || drawn {
                 if mk.name.attributedText?.string != o.name { mk.name.attributedText = Self.words(o.name, Self.font); Self.glow(mk.name) }
                 let w = ceil((o.name as NSString).size(withAttributes: [.font: Self.font]).width) + 4
-                let r = CGRect(x: q.x - w / 2, y: q.y + size / 2 + 2, width: w, height: 18)
+                // (a drawn place's name in its middle; a mark's under it)
+                let r = CGRect(x: q.x - w / 2, y: drawn ? q.y - 9 : q.y + size / 2 + 2, width: w, height: 18)
                 let fits = box.contains(r) && !taken.contains { $0.intersects(r.insetBy(dx: -4, dy: -4)) }
                 mk.name.frame = r
                 mk.name.isHidden = !fits
                 if fits { taken.append(r) }
             } else { mk.name.isHidden = true }
             // the mark itself is kept clear of too (a town's name never sits on it)
-            taken.append(mk.dot.frame)
+            if !drawn { taken.append(mk.dot.frame) }
         }
         for (id, mk) in marks where !seen.contains(id) { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview(); marks[id] = nil }
+        for (id, s) in shapes where !seen.contains(id) { s.removeFromSuperlayer(); shapes[id] = nil }
         return taken
     }
+    /// the drawn places' outlines on screen, by place
+    private var shapes: [String: CAShapeLayer] = [:]
     private func clearMarks() {
         for mk in marks.values { mk.dot.removeFromSuperview(); mk.name.removeFromSuperview() }
         marks = [:]
+        for s in shapes.values { s.removeFromSuperlayer() }
+        shapes = [:]
     }
 
     @discardableResult
@@ -542,6 +585,9 @@ final class TownNamesView: UIView {
         let W = bounds.width
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
+        // (a card up: it stands on the 25% water, its name about 220 pt above it; no town's name under it, as the sets'
+        // names: they ran through the card's own name and its buttons)
+        let cardTop: CGFloat = RegionCardState.shared.isOpen ? m.layout.top(.quarter) - 240 : .greatestFiniteMagnitude
         // FROM THE PLAN (31 Oct 11:10): a name is up once the zoom is past its own (LabelPlan), so names never swap while
         // you zoom or pan; it rolls in over the first 8% of zoom past it (by the zoom), whole at rest
         var taken: [CGRect] = own
@@ -555,7 +601,7 @@ final class TownNamesView: UIView {
                 let size = shown[e.id]?.size ?? Self.measure(sc.towns[pick.i].name)
                 let pt = m.screenPoint(SIMD2(Double(sc.at[pick.i].x), Double(sc.at[pick.i].y)))
                 let r = CGRect(x: pt.x - size.width / 2, y: pt.y - size.height / 2, width: size.width, height: size.height)
-                guard box.contains(r) else { continue }
+                guard box.contains(r), r.maxY < cardTop else { continue }
                 // (only your own places' marks and the journey's capsules can still be in the way: they are not planned)
                 guard !own.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -4)) }) else { continue }
                 taken.append(r)

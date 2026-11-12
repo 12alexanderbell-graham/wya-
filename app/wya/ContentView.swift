@@ -22,8 +22,9 @@ struct ContentView: View {
     var body: some View {
         // THE SCREEN, pinned to its top left: everything inside is sized from the window (Layout), never from the room
         // SwiftUI offers. With the keyboard up that room is shorter; a full-height ZStack in it was centred and the
-        // whole app slid up by half the keyboard. Laid over a Color.clear at its top left, it stays where it is and the
-        // keyboard simply covers the bottom.
+        // whole app slid up by half the keyboard (measured on the 17e: content at y = -140.5). Laid over a
+        // Color.clear
+        // at its top left, it stays where it is and the keyboard simply covers the bottom.
         Color.clear.overlay(alignment: .topLeading) { screen }
             .ignoresSafeArea()
             .ignoresSafeArea(.keyboard)
@@ -39,6 +40,8 @@ struct ContentView: View {
                 // PINS (Part 8): Apple's map over ours while Pins is the mode; it takes our camera when it comes
                 // (the switch is just a switch, 30 Oct 21:42)
                 if head.mode == .pins { PinsMapView(map: map, water: water).ignoresSafeArea() }
+                // THE DRAWING over whichever map is drawn on (Map/DrawTool.swift); takes no touches
+                DrawLayer()
 
                 // sideways (1.11) the head goes up past the top edge, the column off the right edge, the water down past
                 // the bottom edge
@@ -149,8 +152,8 @@ struct ContentView: View {
 
                 if !Perf.shared.off.contains("pull"), tab != 2 { TopPullView(head: head, water: water) }
             }
-            // THE LOADING SCREEN (12.3) over everything until the map is ready; then it lifts away in one piece, the
-            // map and all its chrome already in place under it; touches wait until it has gone
+            // THE LOADING SCREEN (12.3) over everything until the map is ready; then it lifts away in one piece, the map
+            // and all its chrome already in place under it; touches wait until it has gone
             if !launch.done {
                 LoadingScreen(reveal: launch.reveal)
             }
@@ -239,6 +242,12 @@ struct ContentView: View {
             }
             // a tap on the sea at the review leaves it, the finds waiting (9.5)
             RegionCardState.shared.water = water
+            map.onThingFound = { [map] id in
+                guard map.placesMode, let (cc, t) = ThingStore.shared.thing(id), let w = map.world,
+                      let place = w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()] else { return }
+                let line = t.line.isEmpty ? w.places[place].n : t.line.prefix(1).uppercased() + t.line.dropFirst()
+                RegionCardState.shared.open(t.key, name: t.name, parents: line, place: place, map: map)
+            }
             map.onSeaTap = { [water, map] in
                 if water.upload { UploadState.shared.leaveReview(); return }
                 // (an area set's place, a sea, a range, is no country's: its tap comes here)
@@ -246,7 +255,9 @@ struct ContentView: View {
             }
             // a finger in the water is using Details or Verify when they are up; otherwise it closes the card
             water.regionMapUp = { [map] in map.regionScene != nil }
-            water.placesMenuUp = { [map] in map.placesMode && !map.placesPicked }
+            // (not while a shape is drawn or a card is up: the drawing wants the map's room, and a card stands on the
+            // 25% water, under the menu's 50% it was hidden, 12 Nov)
+            water.placesMenuUp = { [map] in map.placesMode && !map.placesPicked && !DrawTool.shared.on && !RegionCardState.shared.isOpen }
             water.onTouch = { [head, map] in
                 Hints.shared.touched()
                 WhatsHere.shared.close()
@@ -278,8 +289,11 @@ struct ContentView: View {
                     // (an area set, seas, ranges, is no country's yet: a country under it opens nothing)
                     else if map.setScene?.water == true { return }
                     else if map.placeOpen != i { closeCard(); map.openPlace(i) }
-                    // quick add on the open country's empty land: your own place there (7.8, A7.11)
-                    else if head.quickStamp { map.makeOwnPlace(at: p) }
+                    // quick add on the open country's empty land: your own place there (7.8, A7.11), drawn round from where the
+                    // finger tapped (a place is a shape, never a dropped point), stamped as it is made
+                    else if head.quickStamp {
+                        Self.startOwnPlace(at: p, place: i, country: map.world.map { $0.places[i].n } ?? "", map: map, water: water, stamp: true)
+                    }
                     return
                 }
                 // sideways (1.11) a tap opens nothing; quick stamping still stamps
@@ -294,7 +308,8 @@ struct ContentView: View {
                 if head.quickStamp { if !UploadState.shared.stampWaiting(i) { Self.quickStamp(i, map: map) }; return }
                 // the tap that put the book away opens no card (one press, one job)
                 guard !BookState.shared.isOpen, CACurrentMediaTime() - BookState.shared.closedAt > 0.4 else { return }
-                // history on: a tap on a country opens nothing (the journey's line and its capsules are what is up)
+                // history on: a tap on a country opens nothing (the journey's line and its capsules are what is up;
+                // 8 Nov answer)
                 if head.history { return }
                 CardState.shared.open(i, at: p, map: map, water: water)
             }
@@ -318,7 +333,7 @@ struct ContentView: View {
             map.menuForOwn = { [map] id in
                 guard let o = OwnPlaces.shared.place(id), let pi = map.world?.placeIndex[o.cc] ?? map.world?.placeIndex[o.cc.uppercased()]
                 else { return nil }
-                return Self.ownMenu(o, place: pi, map: map)
+                return Self.ownMenu(o, place: pi, map: map, water: water)
             }
             map.menuForPlace = { [map, water, head] i in
                 let r = map.screenRect(of: i)
@@ -381,6 +396,10 @@ struct ContentView: View {
             Task {
                 for _ in 0 ..< 100 where !MarkStore.shared.loaded { try? await Task.sleep(for: .milliseconds(100)) }
                 await ProfileNumbers.shared.count(map: map)
+                // and again once the badges' pack has come (the first count has only the first ninety: the Profile's
+                // first look went 21 then 127 levels)
+                for _ in 0 ..< 150 where !BadgeStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                if BadgeStore.shared.ready { await ProfileNumbers.shared.count(map: map) }
             }
             // the time zones' shapes read once in the background, so the first upload's days don't wait for them (D13)
             Task.detached(priority: .utility) { _ = ZoneShapes.shared.zone(lat: 0, lon: 0) }
@@ -431,6 +450,10 @@ struct ContentView: View {
         // THE MODES (6.1): Regions always restarts at its selection menu, the camera
         // flying to the world home under it; leaving it, the water goes to 25%
         .onChange(of: head.mode) { old, new in modeChanged(from: old, to: new) }
+        // the drawing or the card gone with Places' menu still to pick from: the water back up to it
+        .onChange(of: DrawTool.shared.on || RegionCardState.shared.isOpen) { _, busy in
+            if !busy, map.placesMode, !map.placesPicked, water.stop == .quarter { water.go(.half) }
+        }
         .onChange(of: water.menuShown, initial: true) { _, v in head.filtersMenu = v }
         .onChange(of: map.continent) { _, _ in saveSession(after: 0.5) }
         .onChange(of: tab) { _, _ in saveSession(after: 0) }
@@ -495,6 +518,8 @@ struct ContentView: View {
         water.modeSwitchedAt = CACurrentMediaTime()
         // the sun picked (Streak) is the Countries world's: another map starts on its own caption
         map.sunPicked = false
+        // (the towns' index, for a town's page and search: read as the maps that show towns come up)
+        if new != .countries { TownIndex.shared.load() }
         // Pins' dock: a tool's controls go with the mode
         PinsDockState.shared.tool = nil
         // the wheel leaves the review, the finds waiting, and the mode changes (9.5: it never blocks the wheel)
@@ -510,14 +535,15 @@ struct ContentView: View {
         // 7.4: the Places map's towns come and go with the mode (Regions' towns level is left first, while Places is
         // still off, so its open country goes with it)
         if old == .regions { map.leaveRegionTowns() }
+        map.pinsDrained = new == .pins && old == .places
         map.placesMode = new == .places
         map.pinsMode = new == .pins
         // (Places opens on its menu, which stands at 50%: the water is there at once, a mode change moves nothing;
         // out of the capsule it stays in the capsule)
         if new == .places, water.stop == .quarter { water.jump(.half) }
         if new != .pins { PinStore.shared.selected = nil; PinStore.shared.colourAsked = false; PinRoutes.shared.close() }
-        // turning the wheel closes the tools, and with them history (13.4); the
-        // journey belongs to the map it was drawn on
+        // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
+        // drawn on
         head.toolsOpen = false
         head.quickStamp = false
         if Sideways.shared.on { Sideways.shared.leave() }
@@ -679,9 +705,18 @@ struct ContentView: View {
         let key = PlaceKey(.region, sc.unitIDs[u])
         let name = sc.unitNames[u]
         guard head.quickStamp else {
-            // the card from the water (6.7); its parents' line: the country at the first level
+            // the card from the water (6.7); its parents' line: the country at the first level, below it the region
+            // it is in, then the country ("Centre-Val de Loire, France" under Cher, as a town's card)
             let country = map.world.map { $0.places[sc.place].n } ?? ""
-            RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+            guard sc.unitParents[u] != nil else {
+                RegionCardState.shared.open(key, name: name, parents: country, place: sc.place, map: map)
+                return
+            }
+            Task { @MainActor in
+                let up = await RegionStamps.parents(of: u, in: sc).first?.1
+                guard map.regionScene === sc, map.regionPressed == u else { return }
+                RegionCardState.shared.open(key, name: name, parents: up.map { "\($0), \(country)" } ?? country, place: sc.place, map: map)
+            }
             return
         }
         let stamped = MarkStore.shared.state(key).stamped
@@ -841,7 +876,7 @@ struct ContentView: View {
             // your own place held: its own menu (its mark sits over the things and towns)
             if map.placesMode, let id = map.ownHit(at: p), let o = OwnPlaces.shared.place(id) {
                 map.ownPressed = id; map.townPressed = nil; map.thingPressed = nil
-                return ownMenu(o, place: open, map: map)
+                return ownMenu(o, place: open, map: map, water: water)
             }
             // a thing held: its own menu (its marks sit over the towns)
             if map.placesMode, let t = map.thingHit(at: p), let cc = map.placeOpenID {
@@ -855,7 +890,7 @@ struct ContentView: View {
             }
             map.townPressed = nil
             // the open country's own land: its menu; another country keeps its own menu
-            if i == open, map.placesMode { return landMenu(at: p, place: open, map: map) }
+            if i == open, map.placesMode { return landMenu(at: p, place: open, map: map, water: water) }
             if i == open { return nil }
         }
         // the region map: the region's own menu (11.5's Regions menu)
@@ -1062,10 +1097,32 @@ struct ContentView: View {
     }
 
     /// YOUR OWN PLACE'S HOLD MENU (11.5): Kind (the twelve, inline; its own unavailable, as every menu's current
-    /// row) | Share | Delete (at once, the undo drop). Rename and Move (its card's, 7.8), Open its page (a page for your
+    /// row) | Rename, Draw its shape or Redraw | Share | Delete (at once, the undo drop). Open its page (a page for your
     /// own place, 16) and Add to a list or a plan (20) wait for their parts.
-    @MainActor static func ownMenu(_ o: OwnPlaces.Place, place: Int, map: MapController) -> UIMenu {
+    @MainActor static func ownMenu(_ o: OwnPlaces.Place, place: Int, map: MapController, water: Water) -> UIMenu {
         let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
+        // ITS SHAPE: a point place drawn round ("Draw its shape"); a drawn one drawn again ("Redraw"): the draw tool from
+        // nothing, the new outline kept on Done, the old one back with Cancel or the undo drop
+        let shape = UIAction(title: o.ring == nil ? "Draw its shape" : "Redraw") { _ in after { redrawOwn(o, map: map, water: water) } }
+        // RENAME: Apple's own small sheet with the name in a field; one undo step
+        let rename = UIAction(title: "Rename") { _ in
+            after {
+                let a = UIAlertController(title: "Rename", message: nil, preferredStyle: .alert)
+                a.addTextField { f in f.text = o.name; f.clearButtonMode = .whileEditing; f.autocapitalizationType = .words }
+                a.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                a.addAction(UIAlertAction(title: "Rename", style: .default) { _ in
+                    let new = (a.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !new.isEmpty, new != o.name else { return }
+                    OwnPlaces.shared.rename(o.id, to: new)
+                    map.needsFrame = true
+                    MarkStore.shared.did("Renamed \(new)", back: { OwnPlaces.shared.rename(o.id, to: o.name); map.needsFrame = true },
+                                        forth: { OwnPlaces.shared.rename(o.id, to: new); map.needsFrame = true })
+                })
+                var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow?.rootViewController }.first
+                while let n = top?.presentedViewController { top = n }
+                top?.present(a, animated: true)
+            }
+        }
         let country = map.world.map { $0.places[place].n } ?? ""
         let kinds = OwnPlaces.kinds.map { k in
             UIAction(title: k.prefix(1).uppercased() + k.dropFirst(), attributes: k == o.kind ? .disabled : []) { _ in
@@ -1095,22 +1152,58 @@ struct ContentView: View {
         }
         return UIMenu(title: o.name, children: [
             UIMenu(title: "Kind", children: kinds),
+            UIMenu(options: .displayInline, children: [rename, shape]),
             UIMenu(options: .displayInline, children: [share]),
             UIMenu(options: .displayInline, children: [delete]),
         ])
     }
 
+    /// A PLACE OF YOUR OWN DRAWN (AGAIN): the draw tool from nothing; Done keeps the new outline (its point moves to the
+    /// outline's middle), Cancel leaves the old; one undo step
+    @MainActor static func redrawOwn(_ o: OwnPlaces.Place, map: MapController, water: Water) {
+        DispatchQueue.main.async { if water.stop != .quarter { water.go(.quarter) } }
+        DrawTool.shared.start(.shape,
+            toGeo: { s in let ll = EqualEarth.unproject(map.mapPoint(s)); return DrawTool.Geo(lat: ll.lat, lon: ll.lon) },
+            toScreen: { g in let m = EqualEarth.project(lon: g.lon, lat: g.lat); return map.screenPoint(SIMD2(Double(m.x), Double(m.y))) },
+            finish: { _, ring in
+                let before = OwnPlaces.shared.place(o.id)?.ring
+                let after = ring.map { [$0.lat, $0.lon] }
+                OwnPlaces.shared.setRing(o.id, after)
+                map.needsFrame = true
+                MarkStore.shared.did("\(o.name) redrawn", back: { OwnPlaces.shared.setRing(o.id, before); map.needsFrame = true },
+                                    forth: { OwnPlaces.shared.setRing(o.id, after); map.needsFrame = true })
+            })
+    }
+
+    /// YOUR OWN PLACE, DRAWN: the draw tool on the Places map, its first corner at `p`; the place is made when the shape
+    /// is done (unstamped, its card at once, 7.8); Cancel leaves nothing
+    @MainActor static func startOwnPlace(at p: CGPoint, place: Int, country: String, map: MapController, water: Water, stamp: Bool = false) {
+        let tool = DrawTool.shared
+        // (the water down to a quarter: the map is where the drawing is, and the bar sits where the caption does;
+        // Places' menu lets it while drawing)
+        DispatchQueue.main.async { if water.stop != .quarter { water.go(.quarter) } }
+        tool.start(.shape,
+                   toGeo: { s in let ll = EqualEarth.unproject(map.mapPoint(s)); return DrawTool.Geo(lat: ll.lat, lon: ll.lon) },
+                   toScreen: { g in let m = EqualEarth.project(lon: g.lon, lat: g.lat); return map.screenPoint(SIMD2(Double(m.x), Double(m.y))) },
+                   finish: { _, ring in
+                       guard let o = map.makeOwnPlace(at: p, stamp: stamp, ring: ring) else { return }
+                       map.needsFrame = true
+                       if !stamp { RegionCardState.shared.open(o.key, name: o.name, parents: "Your place in \(country)", place: place, map: map) }
+                   })
+        // the first corner where the finger held
+        tool.touchBegan(p); tool.touchEnded(p)
+    }
+
     /// THE OPEN COUNTRY'S EMPTY LAND HELD (11.5's empty-land menu): Add a place here (your own place made there,
     /// unstamped, its card at once, 7.8) · What's here? (the nearest three names, A11.4) · Copy coordinates
     /// ("46.2044, 6.1432")
-    @MainActor static func landMenu(at p: CGPoint, place: Int, map: MapController) -> UIMenu {
+    @MainActor static func landMenu(at p: CGPoint, place: Int, map: MapController, water: Water) -> UIMenu {
         let ll = EqualEarth.unproject(map.mapPoint(p))
         let country = map.world.map { $0.places[place].n } ?? ""
+        // (a place is a shape you draw round it, never a dropped point: the draw tool starts, its first corner where the
+        // finger held; Done or closing the shape makes the place, its card at once)
         let add = UIAction(title: "Add a place here") { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                guard let o = map.makeOwnPlace(at: p, stamp: false) else { return }
-                RegionCardState.shared.open(o.key, name: o.name, parents: "Your place in \(country)", place: place, map: map)
-            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { startOwnPlace(at: p, place: place, country: country, map: map, water: water) }
         }
         let here = UIAction(title: "What's here?") { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { WhatsHere.shared.show(at: p, map: map) }
@@ -1276,7 +1369,7 @@ struct ContentView: View {
     }
 
     /// QUICK STAMPING (Part 4.7): a tap toggles the place's stamp at once (a wished place becomes stamped in one
-    /// write); the colour changes in one frame as every colour does (the book's fill front is not
+    /// write); the colour changes in one frame as every colour does (30 Oct rule; the book's fill front is not
     /// built); stamp or lift haptic (no sound); the undo drop rises each time (one tap, one undo step); VoiceOver
     /// says what happened. The record's source is `quick`.
     @MainActor static func quickStamp(_ i: Int, map: MapController) {
@@ -1302,6 +1395,6 @@ private struct SheetWatch: View {
         Color.clear.frame(width: 0, height: 0).allowsHitTesting(false)
             // (from the start: until the water first moved the map took its top for 0, and a continent picked then was
             // framed for the wrong room and jumped into place later)
-            .onChange(of: water.form().top, initial: true) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t) } }
+            .onChange(of: water.form().top, initial: true) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t, goal: water.goalTop) } }
     }
 }

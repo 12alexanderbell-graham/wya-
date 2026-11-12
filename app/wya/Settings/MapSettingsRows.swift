@@ -119,6 +119,7 @@ enum MapSettingsRows {
             map.recount()
         }
         map.diamondsOff = b.diamonds == "nowhere"
+        map.diamondsEverywhere = b.diamonds == "everywhere"
         map.simple = b.map == "native" && b.style == "simple"
     }
 

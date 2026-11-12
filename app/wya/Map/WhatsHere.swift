@@ -2,7 +2,11 @@ import SwiftUI
 
 /// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
 /// nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over the map, its
-/// bottom 12 pt above the held point; each name is a tap to its card. The panel (frosted, as every surface) is simply
+/// bottom 12 pt above the held point; each name is a tap to its card.
+/// THE ANSWER FITS HOW FAR OUT THE MAP IS (12 Nov): only names within a finger of the held point on the screen count
+/// (44 pt, and only while that is under about 30 km of ground), and the country is always the last line. Held on a world map over Cameroon it named three villages, one of
+/// them across the border in Nigeria; now it says "Cameroon", and names towns once the map is close enough for a
+/// finger to mean a town. A name from another country than the point's carries its country. Rows are 44 pt. The panel (frosted, as every surface) is simply
 /// there, and a touch anywhere else on the map simply takes it away (A11.4's grow and roll dropped: no grow,
 /// no roll). At sea: "Open sea".
 @MainActor
@@ -22,6 +26,8 @@ final class WhatsHere {
     private(set) var present = false
     private(set) var namesIn = false
     @ObservationIgnored private var job = 0
+    /// each country's first level, read once for What's here
+    @ObservationIgnored private static var scenes: [String: RegionScene] = [:]
 
     var isOpen: Bool { present }
 
@@ -30,13 +36,37 @@ final class WhatsHere {
         let mp = map.mapPoint(p)
         let ll = EqualEarth.unproject(mp)
         let land = map.world?.place(at: SIMD2(Float(mp.x), Float(mp.y)))
-        show(at: p, lat: ll.lat, lon: ll.lon, land: land, map: map)
+        // a finger's reach on the screen, in degrees there (the point 44 pt below the held one)
+        let down = EqualEarth.unproject(map.mapPoint(CGPoint(x: p.x, y: p.y + 44)))
+        show(at: p, lat: ll.lat, lon: ll.lon, land: land, reach: abs(down.lat - ll.lat), map: map)
     }
 
-    /// `land`: the country under the point on our map (nil: the sea)
-    func show(at p: CGPoint, lat: Double, lon: Double, land: Int?, map: MapController) {
-        items = Self.nearest(lat: lat, lon: lon, land: land, map: map)
+    /// `land`: the country under the point on our map (nil: the sea); `reach`: a finger's reach on the screen (44 pt)
+    /// in degrees of latitude at the point
+    func show(at p: CGPoint, lat: Double, lon: Double, land: Int?, reach: Double, map: MapController) {
+        items = Self.nearest(lat: lat, lon: lon, land: land, reach: reach, map: map)
         job += 1
+        // THE REGION IT IS IN on the country's line ("Kigoma, Tanzania"): the first level's file is on the phone; read
+        // and looked in off the main thread, the line changed once it is known (held on Tanzania it said three villages,
+        // then the country alone, never which part of it)
+        if let land, let w = map.world, land >= 0, land < w.places.count {
+            let cc = w.places[land].id.lowercased(), country = w.places[land].n, me = job
+            let at = EqualEarth.project(lon: lon, lat: lat)
+            let kept = Self.scenes[cc]
+            Task { @MainActor [weak self] in
+                let found: (RegionScene?, String?) = await Task.detached(priority: .userInitiated) {
+                    var sc = kept
+                    if sc == nil, let first = RegionCatalog.shared.first(cc), let f = RegionCatalog.shared.file(cc, row: first.row) {
+                        sc = RegionScene(place: land, id: cc, row: first.row, file: f)
+                    }
+                    return (sc, sc.flatMap { s in s.unit(at: at).map { s.unitNames[$0] } })
+                }.value
+                if let sc = found.0 { Self.scenes[cc] = sc }
+                guard let self, self.job == me, let name = found.1, !name.isEmpty, name != country,
+                      let i = self.items.lastIndex(where: { $0.id == "land" }) else { return }
+                self.items[i] = Item(id: "land", name: "\(name), \(country)", open: nil)
+            }
+        }
         point = p
         // simply there, and simply gone (no grow, no circle)
         Feel.tap()
@@ -51,7 +81,7 @@ final class WhatsHere {
     }
 
     /// the three nearest of the towns (the index of every town) and the things of the country under the point
-    private static func nearest(lat: Double, lon: Double, land: Int?, map: MapController) -> [Item] {
+    private static func nearest(lat: Double, lon: Double, land: Int?, reach: Double, map: MapController) -> [Item] {
         guard let land, let w = map.world, land >= 0, land < w.places.count else {
             return [Item(id: "sea", name: "Open sea", open: nil)]
         }
@@ -65,10 +95,13 @@ final class WhatsHere {
             return dx * dx + dy * dy
         }
         var found: [(Double, Item)] = []
-        for h in TownIndex.shared.nearest(lat: lat, lon: lon, count: 3) {
+        // (towns and things are an answer only when a finger is under about 30 km of ground: farther out a finger
+        // covers a region or a country, and the three "nearest" are three villages somewhere under it)
+        let far = reach <= 0.28 ? reach * reach : -1
+        for h in TownIndex.shared.nearest(lat: lat, lon: lon, count: 3) where d2(h.lat, h.lon) <= far {
             let place = w.placeIndex[h.file] ?? w.placeIndex[h.file.uppercased()] ?? land
             let parents = [h.region, w.places[place].n].filter { !$0.isEmpty }.joined(separator: ", ")
-            found.append((d2(h.lat, h.lon), Item(id: h.key, name: h.name) {
+            found.append((d2(h.lat, h.lon), Item(id: h.key, name: place == land ? h.name : "\(h.name), \(w.places[place].n)") {
                 RegionCardState.shared.open(PlaceKey(.town, h.id), name: h.name, parents: parents, place: place, map: map)
             }))
         }
@@ -76,8 +109,8 @@ final class WhatsHere {
         for t in ThingStore.shared.things(cc) ?? [] {
             let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
             let d = d2(ll.lat, ll.lon)
-            // only those that could be among the three
-            guard found.count < 3 || d < found.map(\.0).max()! else { continue }
+            // only those within reach that could be among the three
+            guard d <= far, found.count < 3 || d < found.map(\.0).max()! else { continue }
             let line = t.line.isEmpty ? country : t.line.prefix(1).uppercased() + t.line.dropFirst()
             found.append((d, Item(id: "wd:" + t.id, name: t.name) {
                 RegionCardState.shared.open(t.key, name: t.name, parents: line, place: land, map: map)
@@ -85,9 +118,8 @@ final class WhatsHere {
             if found.count > 6 { found.sort { $0.0 < $1.0 }; found.removeLast(found.count - 3) }
         }
         found.sort { $0.0 < $1.0 }
-        let three = found.prefix(3).map(\.1)
-        // the towns not read yet (the index comes in the background): the country itself, its name only
-        return three.isEmpty ? [Item(id: "land", name: country, open: nil)] : Array(three)
+        // the names within reach, then the country itself (its name only), always
+        return found.prefix(3).map(\.1) + [Item(id: "land", name: country, open: nil)]
     }
 }
 
@@ -100,12 +132,12 @@ struct WhatsHereView: View {
         let open = here.present
         let widest = layout.W - 32
         let width = open ? min(widest, panelWidth + 32) : 44
-        let height = open ? CGFloat(here.items.count) * lineHeight + CGFloat(max(0, here.items.count - 1)) * 8 + 28 : 44
+        let height = open ? CGFloat(here.items.count) * lineHeight + 12 : 44
         // its bottom 12 pt above the point, kept on the screen
         let x = min(max(here.point.x, width / 2 + 16), layout.W - width / 2 - 16)
         let y = max(here.point.y - 12 - height / 2, layout.headBottom + 8 + height / 2)
         if here.present {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(here.items) { item in
                     if let o = item.open {
                         Button {
@@ -138,14 +170,14 @@ struct WhatsHereView: View {
             .foregroundStyle(Palette.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-            .contentTransition(.numericText(value: here.namesIn ? 1 : 0))
+            .contentTransition(.identity)
             .frame(height: lineHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
     }
 
-    /// one name's line: the subheadline style's own (15 pt at the default size, larger with larger text: 19.4)
-    private var lineHeight: CGFloat { max(22, UIFont.preferredFont(forTextStyle: .subheadline).lineHeight.rounded(.up) + 2) }
+    /// one name's line: 44 pt, a finger's (they were 22 with 8 between: a miss pressed the map under the panel)
+    private var lineHeight: CGFloat { max(44, UIFont.preferredFont(forTextStyle: .subheadline).lineHeight.rounded(.up) + 2) }
 
     /// the longest name's width in that style
     private var panelWidth: CGFloat {

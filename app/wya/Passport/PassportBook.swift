@@ -12,6 +12,10 @@ final class BookState {
     var p: CGFloat = 0
     /// A4.2: the cover's turn, 0 flat over the page, 90 edge-on at the spine
     var cover: Double = 0
+    /// the book is on the screen: from the tap that brings it out until it is back in the tool. (The view went by
+    /// `p > 0`, and the model's p is 0 from the moment the flight back starts, so the open book was gone in one frame
+    /// and never closed or flew back; 12 Nov)
+    var shown = false
     /// the page showing (0 is page 01)
     var page = UserDefaults.standard.integer(forKey: "passportPage")
     /// A4.13: the leaf being turned, in degrees: > 0 the current page turning away (forward), < 0 the previous page
@@ -26,6 +30,7 @@ final class BookState {
     func open(showing id: String? = nil) {
         guard !isOpen else { return }
         isOpen = true
+        shown = true
         job += 1
         let j = job
         Task {
@@ -55,7 +60,7 @@ final class BookState {
         UserDefaults.standard.set(page, forKey: "passportPage")
         if instant {
             var t = Transaction(); t.disablesAnimations = true
-            withTransaction(t) { cover = 0; turn = 0; p = 0 }
+            withTransaction(t) { cover = 0; turn = 0; p = 0; shown = false }
             return
         }
         withAnimation(.spring(response: 0.30, dampingFraction: 1)) { cover = 0; turn = 0 }
@@ -63,7 +68,7 @@ final class BookState {
             try? await Task.sleep(for: .milliseconds(120))
             guard job == j else { return }
             withAnimation(.spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: {
-                if self.job == j { Feel.land(speed: 0) }
+                if self.job == j { Feel.land(speed: 0); self.shown = false }
             }
         }
     }
@@ -83,7 +88,7 @@ struct PassportBook: View {
     @State private var drag: CGFloat?
 
     var body: some View {
-        if b.isOpen || b.p > 0.001 {
+        if b.shown {
             let L = water.layout
             let size = Self.size(L, sheetTop: water.form().top)
             let room = L.room(sheetTop: water.form().top)

@@ -162,6 +162,17 @@ final class TestDriver {
                     NSLog("wya where: mode %d search %d card %@ placeOpen %@ stop %@ page %d continent %@", head?.mode.rawValue ?? -1, head?.searching == true ? 1 : 0,
                           CardState.shared.isOpen ? "up" : "none", map?.placeOpen.map { "\($0)" } ?? "nil", water.map { "\($0.stop)" } ?? "?",
                           PlacePageState.shared.isOpen ? 1 : 0, map?.continent ?? "nil")
+                    // (and the camera: its middle in map units, its zoom, the view's size)
+                    if let m = map { NSLog("wya camera c %.4f %.4f k %.1f view %.0f x %.0f", m.c.x, m.c.y, m.k, m.view.width, m.view.height) }
+                    // (and the region map's own box on screen, in points)
+                    if let m = map, let sc = m.regionScene {
+                        let a = m.screenPoint(SIMD2(Double(sc.box.x), Double(sc.box.y))), b = m.screenPoint(SIMD2(Double(sc.box.z), Double(sc.box.w)))
+                        NSLog("wya scene box on screen x %.0f to %.0f y %.0f to %.0f", a.x, b.x, a.y, b.y)
+                        // (and its diamonds: how many regions stand alone, and each one's size on screen and diamond)
+                        let alone = sc.unitSpot.indices.filter { sc.unitSpot[$0].z.isFinite }
+                        NSLog("wya region diamonds: %d regions, %d alone, towns %d: %@", sc.unitSpot.count, alone.count, m.regionTowns ? 1 : 0,
+                              alone.prefix(12).map { String(format: "%@ %.1fpt d%.2f", sc.unitNames[$0], Double(sc.unitSpot[$0].z) * m.k, m.regionDiamondSize($0)) }.joined(separator: ", "))
+                    }
                 case "zoom":
                     if a == "in" { map?.zoomIn() } else if a == "out" { map?.zoomOut() } else { map?.goHome() }
                 case "show":
@@ -246,7 +257,19 @@ final class TestDriver {
                     }
                     // profile look <saturation> <power>: the gradient's strength, to compare (0 0 = its own)
                     if a == "look", p.count > 3 { ProfileView.look = SIMD2(Double(p[2]) ?? 0, Double(p[3]) ?? 0) }
-                    NSLog("wya profile: stats %d stamps %d badges %d ready %d", ProfileNumbers.shared.stats, ProfileNumbers.shared.stamps, ProfileNumbers.shared.badges, ProfileNumbers.shared.ready ? 1 : 0)
+                    NSLog("wya profile: stats %d stamps %d badges %d ready %d pack %d", ProfileNumbers.shared.stats, ProfileNumbers.shared.stamps, ProfileNumbers.shared.badges, ProfileNumbers.shared.ready ? 1 : 0, BadgeStore.shared.ready ? 1 : 0)
+                    // profile dump: every stat's row and every badge you have, in the log (to check the counts by hand)
+                    if a == "dump" || a == "book" {
+                        if let w = map?.world, let b = BadgeStore.shared.book(w) {
+                            let more = b.catalog.filter { $0.live == "more" }.count
+                            NSLog("wya profile book: catalog %d badges (%d counted by the tally), places in the world %d of %d", b.catalog.count, more, b.world.countries.count, w.places.count)
+                        } else { NSLog("wya profile book: none") }
+                    }
+                    if a == "dump" {
+                        for g in ProfileNumbers.shared.groups { for r in g.rows { NSLog("wya stat | %@ | %@ | %@", g.title, r.label, r.value) } }
+                        for s in ProfileNumbers.shared.sections { for r in s.rows { NSLog("wya stat | %@ | %@ | %@", s.name, r.label, r.value) } }
+                        for b in ProfileNumbers.shared.earned { NSLog("wya badge | %@ | %@ | level %d | have %d | %@", b.id, b.name, b.level, b.have, b.family) }
+                    }
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 // tabgo 0|1|2: that tab, as its button does when it is another tab (the tab change's own hook first)
                 case "tabgo":
@@ -421,6 +444,8 @@ final class TestDriver {
                         let h = m.hit(at: CGPoint(x: x, y: y))
                         NSLog("wya tap %.0f %.0f -> %@", x, y, h.flatMap { m.world?.places[$0].id } ?? "nothing")
                         m.pressed = h
+                        // tap x y go: and handed over as a confirmed tap (what a real tap does once the double-tap window passes)
+                        if p.count > 3, p[3] == "go", let h { m.onPlaceTap?(h, CGPoint(x: x, y: y)) }
                     }
                 // unlive <country id>: its Lived taken off, its details and times kept (test data clean-up)
                 case "unlive":
@@ -527,6 +552,14 @@ final class TestDriver {
                     // sideways frame 0.5: the turn held at that point (sideways frame none: let go)
                     else if a == "frame" { Sideways.shared.testTurn = p.count > 2 ? Double(p[2]) : nil }
                     else if let water, let head, let map { Sideways.shared.enter(water: water, head: head, map: map) { CardState.shared.close(map: map) } }
+                // detailsthing: Details of the first stamped thing (a mountain, a museum, a circuit), to see the form a
+                // thing gets; nothing is written unless a field is changed
+                case "detailsthing":
+                    if let water, let (k, _) = MarkStore.shared.marks.filter({ $0.key.kind == .thing && $0.value.stamped }).min(by: { $0.key.id < $1.key.id }) {
+                        let name = ThingStore.shared.thing(k.id)?.1.name ?? ThingIndex.shared.hit(k.id)?.name ?? CollectionStore.shared.item(k)?.name ?? k.id
+                        NSLog("wya detailsthing %@ %@", k.description, name)
+                        DetailsState.shared.open(k, name: name, water: water)
+                    } else { NSLog("wya detailsthing: no stamped thing") }
                 case "details":
                     if let m = map, let w = m.world, let i = CardState.shared.place, let water {
                         CardState.shared.heldTop = water.form().top
@@ -594,6 +627,14 @@ final class TestDriver {
                 // page ru: a country's page opened from its box (Part 16); page off: closed
                 case "page":
                     if a == "off" { PlacePageState.shared.close() }
+                    // page acts: the open page's first eight activities, logged (to read many countries' lists at once)
+                    else if a == "acts" {
+                        let f = PlacePageState.shared.facts
+                        NSLog("wya page acts %@ (%d): %@", PlacePageState.shared.top?.name ?? "?", f?.activities.count ?? -1,
+                              (f?.activities.prefix(8).map { $0.name + " [" + String($0.line.prefix(28)) + "]" } ?? []).joined(separator: " | "))
+                        NSLog("wya page highlights %@: %@", PlacePageState.shared.top?.name ?? "?", (f?.highlights.prefix(8).map(\.name) ?? []).joined(separator: " | "))
+                        NSLog("wya page lines %@: %@", PlacePageState.shared.top?.name ?? "?", (f?.activities.prefix(6).map(\.line) ?? []).joined(separator: " || "))
+                    }
                     else if a == "end" { PlacePageState.shared.toEnd += 1 }
                     // page city: the open page's first city pushed on top (16.7); page back: the top page closed
                     else if a == "city", let c = PlacePageState.shared.facts?.cities.first {
@@ -618,8 +659,9 @@ final class TestDriver {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
                 // ownclear: every own place removed with its stamp (test data)
+                // (ownclear drawn: only the places with a drawn outline, the draw tool's test places)
                 case "ownclear":
-                    for o in OwnPlaces.shared.all {
+                    for o in OwnPlaces.shared.all where a != "drawn" || o.ring != nil {
                         await MarkStore.shared.unstamp(o.key, name: o.name)
                         OwnPlaces.shared.remove(o.id)
                     }
@@ -703,7 +745,11 @@ final class TestDriver {
                     else if let k = card.key {
                         let st = MarkStore.shared.state(k)
                         if a == "stamp" {
-                            if st.stamped { await MarkStore.shared.unstamp(k, name: card.name) } else { await MarkStore.shared.stamp(k, name: card.name) }
+                            // (a region of the open map: with its parents, as the card's own button)
+                            if let sc = map?.regionScene, let u = sc.unitIDs.firstIndex(of: k.id) {
+                                if st.stamped { await RegionStamps.unstamp(u, in: sc) } else { await RegionStamps.stamp(u, in: sc, source: .hand) }
+                            }
+                            else if st.stamped { await MarkStore.shared.unstamp(k, name: card.name) } else { await MarkStore.shared.stamp(k, name: card.name) }
                         } else if a == "wish" {
                             if st.wished { await MarkStore.shared.unwish(k, name: card.name) } else { await MarkStore.shared.wish(k, name: card.name) }
                         }
@@ -888,6 +934,33 @@ final class TestDriver {
                     guard let m = map, p.count > 2, let x = Double(p[1]), let y = Double(p[2]) else { break }
                     m.twoFingerTap(at: CGPoint(x: x, y: y))
                 case "measure": if a == "on" { FrameStats.start() } else { FrameStats.stop(p.count > 2 ? p[2] : "scene") }
+                // draw own x y: your own place drawn on the open country, its first corner there (as Add a place here) |
+                // draw pt x y: a corner tapped | draw stroke x1 y1 x2 y2 ...: a finger dragged through the points |
+                // draw undo | draw done | draw cancel
+                case "draw":
+                    let t = DrawTool.shared
+                    let n = p.dropFirst(2).compactMap { Double($0) }.map { CGFloat($0) }
+                    if a == "own", n.count == 2, let m = map, let open = m.placeOpen {
+                        let country = m.world.map { $0.places[open].n } ?? ""
+                        if let w = water { ContentView.startOwnPlace(at: CGPoint(x: n[0], y: n[1]), place: open, country: country, map: m, water: w) }
+                    } else if a == "pt", n.count == 2 {
+                        t.touchBegan(CGPoint(x: n[0], y: n[1])); t.touchEnded(CGPoint(x: n[0], y: n[1]))
+                    } else if a == "stroke", n.count >= 4 {
+                        let pts = stride(from: 0, to: n.count - 1, by: 2).map { CGPoint(x: n[$0], y: n[$0 + 1]) }
+                        t.touchBegan(pts[0])
+                        // (the finger's path in 2 pt steps, as a real drag reports it)
+                        for (a, b) in zip(pts, pts.dropFirst()) {
+                            let k = max(1, Int(hypot(b.x - a.x, b.y - a.y) / 2))
+                            for i in 1 ... k { t.touchMoved(CGPoint(x: a.x + (b.x - a.x) * CGFloat(i) / CGFloat(k), y: a.y + (b.y - a.y) * CGFloat(i) / CGFloat(k))) }
+                        }
+                        t.touchEnded(pts[pts.count - 1])
+                    } else if a == "redraw", let m = map, let w = water, let o = OwnPlaces.shared.all.last {
+                        // draw redraw: the newest own place drawn again (as its menu's Draw its shape / Redraw)
+                        ContentView.redrawOwn(o, map: m, water: w)
+                    } else if a == "undo" { t.undo() } else if a == "done" { t.done() } else if a == "cancel" { t.cancel() }
+                    NSLog("wya draw on %d points %d marks %d area %.2f km2 length %.2f km", t.on ? 1 : 0, t.points.count, t.marks.count, t.areaKm2, t.lengthKm)
+                // sample on | off <name>: where the main thread spends its time (Design/Sampler.swift)
+                case "sample": if a == "on" { Sampler.start() } else { Sampler.stop(p.count > 2 ? p[2] : "scene") }
                 case "layout":
                     if let L = water?.layout {
                         NSLog("wya layout model %@ W %.1f H %.1f safeTop %.1f safeBottom %.1f island %@ corner %.0f", L.model, L.W, L.H, L.safeTop, L.safeBottom, NSCoder.string(for: L.island), L.screenCorner)

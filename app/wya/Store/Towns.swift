@@ -89,9 +89,24 @@ nonisolated enum UrbanFile {
                 }
                 rings.append(ring)
             }
+            // (a drawn disc is no town's shape: the files hold 1,105 of them, a ring of 48 points round a little town
+            // that had no built-up shape, 124 of them in Yemen alone. No circles on the towns map: left out, so such a
+            // town is one with no shape, as the others without one are)
+            if rings.count == 1, isDisc(rings[0]) { continue }
             out.append(Shape(key: key, rings: rings))
         }
         return out
+    }
+    /// a ring of 48 points all as far from their middle as each other (within a twenty-fifth), on the ground
+    private static func isDisc(_ r: [SIMD2<Double>]) -> Bool {
+        guard r.count == 48 else { return false }
+        var m = SIMD2<Double>(0, 0)
+        for p in r { m += p }
+        m /= Double(r.count)
+        let k = cos(m.y * .pi / 180)
+        let d = r.map { p -> Double in let v = (p - m) * SIMD2(k, 1); return (v.x * v.x + v.y * v.y).squareRoot() }
+        let mean = d.reduce(0, +) / Double(d.count)
+        return mean > 0 && d.allSatisfy { abs($0 - mean) < 0.04 * mean }
     }
 }
 

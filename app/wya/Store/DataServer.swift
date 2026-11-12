@@ -33,6 +33,33 @@ nonisolated struct DevDataClient: DataClient {
     /// a kept file that turned out unreadable goes, so the next ask downloads it again (never "Couldn't load" for ever)
     static func forget(_ path: String) { try? FileManager.default.removeItem(at: cache(path)) }
 
+    /// THE KEPT FILES BROUGHT UP TO DATE, once a launch: when the server's data was built again since the last look, every
+    /// kept file whose size is not the size the server's manifest now gives is dropped, so it comes again the next time
+    /// it is asked for. (A kept file was used for ever: a city's photo added on the server never reached a phone that had
+    /// opened that country before.) Offline, nothing changes.
+    static func refresh() async {
+        var req = URLRequest(url: base.appending(path: "manifest.json"), timeoutInterval: 20)
+        req.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        var data: Data?
+        if let (d, r) = try? await URLSession.shared.data(for: req), (r as? HTTPURLResponse)?.statusCode == 200 { data = d }
+        #if targetEnvironment(simulator)
+        if data == nil { data = fromServerFolder("manifest.json") }
+        #endif
+        guard let d = data, let m = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let built = m["built"] as? String, let files = m["files"] as? [String: [String: Any]] else { return }
+        let seen = "wya.data.built"
+        guard UserDefaults.standard.string(forKey: seen) != built else { return }
+        var dropped = 0
+        for (path, info) in files {
+            guard let bytes = (info["bytes"] as? NSNumber)?.intValue,
+                  let size = (try? FileManager.default.attributesOfItem(atPath: cache(path).path))?[.size] as? NSNumber,
+                  size.intValue != bytes else { continue }
+            forget(path); dropped += 1
+        }
+        UserDefaults.standard.set(built, forKey: seen)
+        NSLog("wya data built %@: %d kept files dropped as changed", built, dropped)
+    }
+
     /// where a file is kept once it has come (Application Support/data/v1/<path>)
     static func cache(_ path: String) -> URL {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

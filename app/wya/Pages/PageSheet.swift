@@ -82,7 +82,7 @@ struct PageSheet: View {
         Text("Sources").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
             .padding(.top, 24).padding(.bottom, 4)
         if let f = page.facts {
-            ForEach(Array(SourcesRow.lines(f, kind: key.kind, credits: credits).enumerated()), id: \.offset) { _, l in
+            ForEach(Array(SourcesRow.lines(f, kind: key.kind, credits: credits, id: key.id).enumerated()), id: \.offset) { _, l in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(l.0).font(.subheadline).foregroundStyle(Palette.ink)
                     Text(l.1).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
@@ -133,7 +133,7 @@ struct PageSheet: View {
             Text(sent ? "Waiting to send" : "Send")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(Capsule().fill(Palette.ink.opacity(reason == nil ? 0.3 : 1)))
         }

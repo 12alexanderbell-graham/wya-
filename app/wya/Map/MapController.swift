@@ -2,12 +2,15 @@ import SwiftUI
 import CoreLocation
 import simd
 
-/// What the map shows and where the camera is. The camera is a centre in map units and a scale in points per map unit;
-/// the Metal view reads it every frame. The rules it keeps: - the world's height fills the screen at home: the
-/// northernmost land (83.6°N) at the top edge, the South Pole at the bottom edge; no panning up or down at that zoom -
-/// the camera never shows past the world: not above the north edge, not under Antarctica, not zoomed out past the
-/// world's size, at any moment, a pinch held included - the map never moves on its own: only your fingers, the zoom
-/// column and a search result move it
+/// What the map shows and where the camera is. The camera is a centre in map units and a scale in points per map
+/// unit; the Metal view reads it every frame.
+///
+/// The rules it keeps
+/// - the world's height fills the screen at home: the northernmost land (83.6°N) at the top edge, the South Pole at
+/// the bottom edge (the 00:11); no panning up or down at that zoom (17 Sep)
+/// - the camera never shows past the world: not above the north edge, not under Antarctica, not zoomed out past the
+/// world's size, at any moment, a pinch held included (the 01:02, 02:09)
+/// - the map never moves on its own (26 Sep, 16 Oct): only your fingers, the zoom column and a search result move it
 @MainActor
 @Observable
 final class MapController {
@@ -88,7 +91,7 @@ final class MapController {
     /// the moon's stop: 0 Both, 1 Stamped, 2 Stamped+, 3 Wishlist+, 4 Wishlist (the + views come with counts)
     var filter = 0 { didSet { needsFrame = true; marksChanged(stamped: stamped, wished: wished, filter: oldValue) } }
 
-    // MARK: A PLACE'S COLOUR (Part 1.5): it changes in one frame
+    // MARK: A PLACE'S COLOUR (Part 1.5): it changes in one frame 
     enum Look: Equatable { case plain, lime, blue }
     func look(of i: Int, stamped s: Set<Int>, wished w: Set<Int>, filter f: Int) -> Look {
         if f <= 2 && s.contains(i) { return .lime }
@@ -109,6 +112,10 @@ final class MapController {
     @ObservationIgnored var onPlaceTap: ((Int, CGPoint) -> Void)?
     /// a confirmed tap with no place under it (the sea), after the same double-tap wait
     @ObservationIgnored var onSeaTap: (() -> Void)?
+    /// the set's places named on their own middle now (TownNames): the name is the mark
+    @ObservationIgnored var setMiddleNamed: Set<String> = []
+    /// a thing found by search is framed: its card (ContentView)
+    @ObservationIgnored var onThingFound: ((String) -> Void)?
     /// whether a confirmed tap on a town's or thing's name may open its page now (the same guards a place's tap has:
     /// not sideways, not over the upload sheet, not the tap that closed search or the passport book)
     @ObservationIgnored var namePageAllowed: (() -> Bool)?
@@ -142,8 +149,8 @@ final class MapController {
         }
     }
     // THE PRESS DARKENING (A1.1): the whole place darkens the moment the finger lands and clears the moment it lifts,
-    // as an iOS control highlights; drawn by the renderer from `pressed` / the lock: the map still moves, but pressing
-    // a place does nothing
+    // as an iOS control highlights; drawn by the renderer from `pressed`
+    /// the lock: the map still moves, but pressing a place does nothing 
     var locked = false
     /// presses on the map while locked: the padlock presses in once for each (A1.9)
     private(set) var lockedPresses = 0
@@ -154,7 +161,7 @@ final class MapController {
         #endif
         UIAccessibility.post(notification: .announcement, argument: "The map is locked")
     }
-    /// the sun picked: the words show your streak instead of the count, and the fire rises
+    /// the sun picked: the words show your streak instead of the count, and the fire rises (10 Oct)
     var sunPicked = false
     /// weeks in a row with an act (Streak, from the store)
     var streakWeeks = 0
@@ -162,7 +169,7 @@ final class MapController {
     var testPlanet: Int?
     /// the test driver holding the moon at an angle in degrees, nil to let go (simulator only)
     var testMoon: Double?
-    /// places in the world you haven't stamped: one star each in the night
+    /// places in the world you haven't stamped: one star each in the night (8 Oct)
     var placesLeft: Int {
         let sh = shares["World"]
         guard ready, let sh else { return 0 }
@@ -252,8 +259,9 @@ final class MapController {
         return under
     }
     /// HOW DARK A STAR HAS TO BE TO BE SEEN HERE: 0 over the sea, where white light shows; a little over a wished
-    /// (blue) place; more over a stamped (lime) place; most over the white land. From what is drawn at this screen
-    /// point (the detailed tiles when they are shown, else the world's shapes), with no finger's reach.
+    /// (blue) place; more over a stamped
+    /// (lime) place; most over the white land. From what is drawn at this screen point (the detailed tiles when they
+    /// are shown, else the world's shapes), with no finger's reach.
     func groundDark(at p: CGPoint) -> Double {
         guard let w = world else { return 0 }
         let m = mapPoint(p)
@@ -290,7 +298,7 @@ final class MapController {
     @ObservationIgnored weak var details: DetailMaps?
     /// the camera's level for the zoom column: at home or not
     private(set) var atHome = true
-    /// as close as it goes: the plus dims to 50% like the minus does at home
+    /// as close as it goes: the plus dims to 50% like the minus does at home (23 Oct 14:24)
     private(set) var atMax = false
     /// the world at home, nothing to reset: the reset dims to 50% (BUILD-BOOK 1.9)
     private(set) var atRest = true
@@ -346,6 +354,7 @@ final class MapController {
         guard world == nil else { return }
         // the saved Map settings set the borders view, your dispute picks and the count before the world is read
         diamondsOff = MapSettingsStore.shared.value.diamonds == "nowhere"
+        diamondsEverywhere = MapSettingsStore.shared.value.diamonds == "everywhere"
         simple = MapSettingsStore.shared.value.style == "simple"
         let loaded: (World, Relief)? = await Task.detached(priority: .userInitiated) {
             guard let w = try? World.load(), let r = try? Relief.load() else { return nil }
@@ -388,7 +397,7 @@ final class MapController {
 
     /// Map settings' Diamonds is Nowhere (read from the settings at load and at each change of the row)
     /// MAP SETTINGS' STYLE SIMPLE (Part 1.4): the sea blue 25% on cream, the land flat cream (no relief), your colours
-    /// as on Detailed; changes in one frame
+    /// as on Detailed; changes in one frame (30 Oct rule: colours never by fronts)
     @ObservationIgnored var simple = false {
         didSet { if simple != oldValue { needsFrame = true } }
     }
@@ -398,6 +407,9 @@ final class MapController {
     /// Places is the mode: countries' fills drained; a country tapped opens with its towns
     /// Pins is the mode: Apple's map is up (PinsMap.swift) and the zoom column works it
     var pinsMode = false
+    /// Pins came from Places: our map, seen for the few frames Apple's takes to come up, stays as Places drew it
+    /// (fills drained, no diamonds), not the Countries map's stamps for three frames
+    var pinsDrained = false
     var placesMode = false {
         didSet {
             guard placesMode != oldValue else { return }
@@ -441,7 +453,8 @@ final class MapController {
         let first = HistoryInfo.number(all.first!.from), last = max(HistoryInfo.number(today), HistoryInfo.number(all.last!.from))
         historyInfo = HistoryInfo(first: first, last: last, lo: HistoryInfo.number(r.0), hi: HistoryInfo.number(r.1), count: 0, km: 0)
         guard rebuildHistory() else { historyInfo = nil; return false }
-        // the whole journey framed between the head and the water at history height (31 Oct)
+        // the whole journey framed between the head and the water at history height (31 Oct 10:52, asked whether
+        // turning history on should frame the trip: "i guess")
         frameHistory()
         // (a new scope draws its line from the start again)
         historyShown = 0
@@ -552,7 +565,16 @@ final class MapController {
     /// regions are yours (from MarkStore's `r:` keys)
     private(set) var regionScene: RegionScene?
     /// the country the camera is on in Regions: the rest of the world goes into the continent's one blue round it
-    @ObservationIgnored private(set) var focusPlace: Int?
+    @ObservationIgnored private(set) var focusPlace: Int? { didSet { if focusPlace != oldValue { closeK = nil } } }
+    /// A SMALL COUNTRY (12 Nov): the world's drawing of one is rougher than the screen it fills (Monaco's is twice the
+    /// country's size and to one side of it, so the country sat small and off-centre under the zoom column; Singapore's
+    /// is narrower than Singapore, which ran under the column; Tuvalu's is one islet), and the closest zoom left Monaco
+    /// a third of the screen wide. A country whose frame is under about 100 km is framed again by its own first region
+    /// level's shapes, gathered as the world's pieces are (kept here once read), and for one smaller than the closest
+    /// zoom shows, that zoom goes to twice what its frame needs while the camera is held to it (its smallest quarter
+    /// can still be zoomed to), never past five times the usual
+    @ObservationIgnored private var trueFrames: [Int: SIMD4<Double>] = [:]
+    @ObservationIgnored private var closeK: Double?
     /// when the scene came (its borders draw in from then, the renderer)
     @ObservationIgnored private(set) var regionSince: CFTimeInterval = 0
     @ObservationIgnored var regionPressed: Int? { didSet { if regionPressed != oldValue { needsFrame = true } } }
@@ -678,14 +700,102 @@ final class MapController {
             continentFrame = nil; continentK = nil; continentY = nil
             c = clamped(c, max(k, worldKMin)); k = max(k, worldKMin)
             updateHome()
+            // (closer than the usual closest zoom, on a very small country: back out to it)
+            if k > kMax { fly(to: clamped(c, kMax), k: kMax, dur: 0.45) }
         }
         needsFrame = true
     }
     /// the country framed in the room between the head's foot + 8 and the 25% water's top − 12 (6.5), centred in it,
     /// never past its box; the camera held to the country from then (its frame and zoom are the continent's limits)
     func frameRegion(_ i: Int) {
-        guard let w = world, let f0 = w.frame(of: i) else { return }
-        frameArea(SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w)), focus: i)
+        guard let w = world, let f0 = w.frame(of: i, whole: true) else { return }
+        if let t = trueFrames[i] { frameArea(t, focus: i); return }
+        let f = SIMD4<Double>(Double(f0.x), Double(f0.y), Double(f0.z), Double(f0.w))
+        frameArea(f, focus: i)
+        // a small one: its own shapes say where it is and how big (read off the main thread, a few KB)
+        // (a middling one too, but only to find land the world's drawing has none of: the Marshall Islands opened on
+        // the three atolls the world file knows)
+        guard let asked = continentK, asked >= baseKMax * 0.02 else { return }
+        let small = asked >= baseKMax * 0.1
+        let id = w.places[i].id.lowercased()
+        // (a place with no regions: Gibraltar, Clipperton, the Cocos Islands; its own shape is the detailed map's,
+        // which is on screen once the flight has landed)
+        guard let row = RegionCatalog.shared.first(id)?.row else { frameByDetail(i, world: f, asked: asked, tries: 6); return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let file = RegionCatalog.shared.file(id, row: row) else { return }
+            var boxes: [SIMD4<Float>] = []
+            for u in file.units { for ring in u.rings where ring.count >= 3 {
+                var b = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+                for p in RegionScene.project(ring) { b = SIMD4(min(b.x, p.x), min(b.y, p.y), max(b.z, p.x), max(b.w, p.y)) }
+                boxes.append(b)
+            } }
+            guard let g = World.gather(boxes, cut: true) else { return }
+            let box = SIMD4<Double>(Double(g.x), Double(g.y), Double(g.z), Double(g.w))
+            await MainActor.run {
+                // (shapes that lie where the world's drawing does: the two boxes meet)
+                guard let self, box.x < box.z, box.x <= f.z, box.z >= f.x, box.y <= f.w, box.w >= f.y else { return }
+                guard small || box.z - box.x > 1.5 * (f.z - f.x) || box.w - box.y > 1.5 * (f.w - f.y) else { return }
+                self.trueFrames[i] = box
+                #if DEBUG
+                NSLog("wya trueframe %@ world %@ own %@ focus %d k %.0f asked %.0f", id, String(describing: f), String(describing: box), self.focusPlace ?? -1, self.continentK ?? 0, asked)
+                #endif
+                // (the same box, as near as makes no difference on the screen: the flight under way is the right one)
+                let same = abs(box.x - f.x) + abs(box.z - f.z) + abs(box.y - f.y) + abs(box.w - f.w) < 2 / asked
+                guard !same, self.focusPlace == i, self.continentK == asked, !self.touching else { return }
+                self.frameArea(box, focus: i)
+            }
+        }
+    }
+    /// A SMALL PLACE WITH NO REGIONS, FRAMED BY THE DETAILED MAP'S OWN SHAPE OF IT (12 Nov): the world's drawing of
+    /// Gibraltar is shorter than Gibraltar, so its top stood under the head and its foot under the water. Once the
+    /// first flight has landed and the detailed tiles are drawn, the place's pieces in them are gathered as the world's
+    /// are, and if their box is not the frame's, the place is framed again by it (kept, so the next time is one flight)
+    private func frameByDetail(_ i: Int, world f: SIMD4<Double>, asked: Double, tries: Int) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(tries == 6 ? 900 : 500))
+            guard let self, self.focusPlace == i, self.continentK == asked, !self.touching, self.trueFrames[i] == nil else { return }
+            guard let tiles = self.details?.tilesShown else {
+                if tries > 1 { self.frameByDetail(i, world: f, asked: asked, tries: tries - 1) }
+                return
+            }
+            var boxes: [SIMD4<Float>] = []
+            for t in tiles { for (ii, it) in t.items.enumerated() where it.place == i { boxes += t.boxes[ii].filter { $0.x <= $0.z } } }
+            // (the tiles up are not yet the close ones, or the place's own are still being read: looked at again)
+            guard let g = World.gather(boxes) else {
+                if tries > 1 { self.frameByDetail(i, world: f, asked: asked, tries: tries - 1) }
+                return
+            }
+            let box = SIMD4<Double>(Double(g.x), Double(g.y), Double(g.z), Double(g.w))
+            // (the same place: the two boxes meet, or lie within the detailed one's own size of each other; the
+            // world's drawing of the smallest places is a sliver beside where they are)
+            let near = max(box.z - box.x, box.w - box.y)
+            guard box.x < box.z, box.x - near <= f.z, box.z + near >= f.x, box.y - near <= f.w, box.w + near >= f.y else { return }
+            let same = abs(box.x - f.x) + abs(box.z - f.z) + abs(box.y - f.y) + abs(box.w - f.w) < 2 / asked
+            #if DEBUG
+            NSLog("wya detailframe %@ world %@ own %@ same %d", self.world?.places[i].id ?? "?", String(describing: f), String(describing: box), same ? 1 : 0)
+            #endif
+            guard !same else { return }
+            self.trueFrames[i] = box
+            self.frameArea(box, focus: i)
+            // (the tiles on screen may not have held all of it: once more from the new frame, then it is kept)
+            if tries > 1, let k2 = self.continentK {
+                self.trueFrames[i] = nil
+                self.frameByDetailAgain(i, box: box, asked: k2)
+            }
+        }
+    }
+    private func frameByDetailAgain(_ i: Int, box f: SIMD4<Double>, asked: Double) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(900))
+            guard let self, self.focusPlace == i, self.continentK == asked, !self.touching else { return }
+            var boxes: [SIMD4<Float>] = []
+            for t in self.details?.tilesShown ?? [] { for (ii, it) in t.items.enumerated() where it.place == i { boxes += t.boxes[ii].filter { $0.x <= $0.z } } }
+            guard let g = World.gather(boxes) else { self.trueFrames[i] = f; return }
+            let box = SIMD4<Double>(Double(g.x), Double(g.y), Double(g.z), Double(g.w))
+            self.trueFrames[i] = box
+            let same = abs(box.x - f.x) + abs(box.z - f.z) + abs(box.y - f.y) + abs(box.w - f.w) < 2 / asked
+            if !same { self.frameArea(box, focus: i) }
+        }
     }
     /// any box framed the same way (a world region's countries in Places, 7.2); with a focus, that country's the rest fades
     func frameArea(_ f: SIMD4<Double>, focus i: Int? = nil) {
@@ -693,17 +803,24 @@ final class MapController {
         drawnContinent = nil
         let W = Double(view.width), H = Double(view.height)
         // (Places with its menu up at 50%: the country is framed in the map left above the water, not half under it; 11 Nov)
-        let high = placesMode && sheetTop > 0 && sheetTop <= layout.top(.half) + 1
+        let rest = sheetGoal > 0 ? sheetGoal : sheetTop
+        let high = placesMode && rest > 0 && rest <= layout.top(.half) + 1
         let room = layout.room(sheetTop: layout.top(high ? .half : .quarter))
         let top = Double(room.lowerBound), bottom = Double(room.upperBound)
         let fw = max(0.05, f.z - f.x), fh = max(0.05, f.w - f.y)
         // centred, never shifted for the zoom column (20 Oct answer 16) and never under it: the same room kept clear
         // on both sides (the column's 44 pt and its 16 pt margin, and 4 pt more)
         let side: CGFloat = 16 + 44 + 4
-        let nk = min(kMax, max(worldKMin, min((W - 2 * Double(side)) / fw, max(80, bottom - top) / fh)))
+        let fit = max(worldKMin, min((W - 2 * Double(side)) / fw, max(80, bottom - top) / fh))
+        focusPlace = i
+        // a country smaller than the closest zoom shows: the zoom goes as far as its frame while the camera is on it
+        closeK = i != nil && fit > baseKMax ? min(fit * 2, baseKMax * 5) : nil
+        let nk = min(fit, i != nil ? baseKMax * 2.5 : baseKMax)
+        #if DEBUG
+        NSLog("wya framearea %@ fit %.0f nk %.0f room %.0f-%.0f", String(describing: f), fit, nk, top, bottom)
+        #endif
         let mid = SIMD2((f.x + f.z) / 2, (f.y + f.w) / 2)
         let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
-        focusPlace = i
         // the pan's limits: the country's box plus half a screen each way (6.5)
         let hw = W / 2 / nk, hh = H / 2 / nk
         continentFrame = SIMD4(f.x - hw, f.y - hh, f.z + hw, f.w + hh)
@@ -755,11 +872,30 @@ final class MapController {
         fly(to: clamped(mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk), nk), k: nk, dur: Self.flight)
     }
 
-    /// the region under a screen point, if the region map is up
+    /// the region under a screen point, if the region map is up: the region whose shape holds the point; a region
+    /// drawn as a diamond (too small to see) within 14 pt of it, where no bigger region's shape is under the finger
     func regionUnit(at p: CGPoint) -> Int? {
         guard let s = regionScene else { return nil }
         let m = mapPoint(p)
-        return s.unit(at: SIMD2(Float(m.x), Float(m.y)))
+        let hit = s.unit(at: SIMD2(Float(m.x), Float(m.y)))
+        if let hit, regionDiamondSize(hit) < 0.001 { return hit }
+        var best: (u: Int, d: Double)?
+        for u in s.unitSpot.indices where regionDiamondSize(u) > 0.001 {
+            let q = screenPoint(SIMD2(Double(s.unitSpot[u].x), Double(s.unitSpot[u].y)))
+            let d = hypot(Double(q.x - p.x), Double(q.y - p.y))
+            if d < 14, d < (best?.d ?? 1e9) { best = (u, d) }
+        }
+        return best?.u ?? hit
+    }
+    /// A REGION TOO SMALL TO SEE (12 Nov; the main map's own exception, 1.15: a place still under 6 points across
+    /// keeps its diamond until its shape is 6 points across): a
+    /// region standing alone in the sea is a diamond while its biggest piece is under 6 points across, shrinking into
+    /// its shape between 5 and 6 points, tied to the zoom. None on the towns level, and none with Diamonds: Nowhere.
+    func regionDiamondSize(_ u: Int) -> Double {
+        guard !diamondsOff, !regionTowns, let s = regionScene, u >= 0, u < s.unitSpot.count else { return 0 }
+        let across = Double(s.unitSpot[u].z)
+        guard across.isFinite else { return 0 }
+        return min(1, max(0, 6 - across * k))
     }
     /// which regions of the open scene are stamped and wished, from the store
     func takeRegionMarks() {
@@ -787,6 +923,11 @@ final class MapController {
     @ObservationIgnored var diamondsOff = false {
         didSet { if diamondsOff != oldValue { needsFrame = true } }
     }
+    /// Map settings' Small places: Everywhere (5; 1.15): the small places' diamonds also under Regions' list, round an
+    /// open country and on the Places map (Pins is Apple's map: not there)
+    @ObservationIgnored var diamondsEverywhere = false {
+        didSet { if diamondsEverywhere != oldValue { needsFrame = true } }
+    }
 
     // MARK: the borders view (Map settings, Part 5.6 and 5.7)
     @ObservationIgnored private var bordersJob = 0
@@ -811,8 +952,8 @@ final class MapController {
     }
 
     /// Home is centred on where you are when your location is shared with the app; when it is not, on your passport's
-    /// country (your first nationality in Profile); else 12°E. Location is never asked for here: only the last known
-    /// one, when it is already allowed.
+    /// country (your first nationality in Profile); else 12°E. Location
+    /// is never asked for here: only the last known one, when it is already allowed.
     static func homeLongitudeX(_ w: World) -> Double {
         let lm = CLLocationManager()
         if [.authorizedWhenInUse, .authorizedAlways].contains(lm.authorizationStatus), let l = lm.location {
@@ -829,7 +970,7 @@ final class MapController {
         guard let w = world else { return }
         homeX = Self.homeLongitudeX(w)
     }
-    /// your nationalities, first first, as place ids ("de", ): Profile writes them (Part 14); read here for home
+    /// your nationalities, first first, as place ids ("de", "us"): Profile writes them (Part 14); read here for home
     static let nationalitiesKey = "profileNationalities"
 
     // MARK: the small places
@@ -838,9 +979,10 @@ final class MapController {
     /// one zoom for all of them: past it they are big enough to see as themselves
     var diamondsShown: Bool { k < kMin * 6 }
     @ObservationIgnored private(set) var tinyBig: [Double] = []
-    /// THE DIAMONDS GO TOGETHER, except a place that would be lost when they go: one still under 6 points across at
-    /// that zoom keeps its diamond until its own shape is 6 points across, so there is always something to see and
-    /// touch
+    /// THE DIAMONDS GO TOGETHER, except a place that would be
+    /// lost when they go (the:, the Vatican): one
+    /// still under 6 points across at that zoom keeps its diamond until its own shape is 6 points across, so there is
+    /// always something to see and touch
     func showsDiamond(_ i: Int) -> Bool { diamondSize(i) > 0.001 }
     /// A1.19: the shared diamonds shrink about their centres into their places across 5 to 6 x kMin, tied to the
     /// zoom (0.75 of their size a quarter of the way, gone at 6 x kMin, back the same way out); a kept one shrinks
@@ -879,9 +1021,10 @@ final class MapController {
     /// the continent the map draws (the rest of the world in the flat blue): it changes at the turn of a flight from
     /// one continent to another, at the world between them (the old renderer.setContinent)
     @ObservationIgnored private(set) var drawnContinent: String?
-    /// as close as the old app: a quarter of a map unit across the screen, about 10 km; the slices carry the detail
-    /// that far
-    var kMax: Double { Double(view.width) / 0.25 }
+    /// as close as the old app: a quarter of a map unit across the screen, about 10 km; the slices carry the
+    /// detail that far
+    var kMax: Double { max(baseKMax, closeK ?? 0) }
+    private var baseKMax: Double { Double(view.width) / 0.25 }
 
     /// the centre that keeps the land on screen, at scale `k`; on a continent its view is held to the continent's frame
     /// side to side (the old MapCamera.cbox)
@@ -921,9 +1064,9 @@ final class MapController {
         return CGPoint(x: s.x, y: s.y)
     }
 
-    // MARK: fingers (from the Metal view, which owns the touches: one owner, so nothing ever jumps) The old app's rule:
-    // the camera is held inside the world on every touch, even with a pinch held; there is no rubber band past the
-    // north edge, past Antarctica or out past the world's size.
+    // MARK: fingers (from the Metal view, which owns the touches: one owner, so nothing ever jumps)
+    // The old app's rule: the camera is held inside the world on every touch, even with a pinch held; there is no
+    // rubber band past the north edge, past Antarctica or out past the world's size (the 01:02, 02:09).
 
     /// a finger is down: anything moving stops where it is
     func grab() {
@@ -1021,13 +1164,17 @@ final class MapController {
     // MARK: A1.16, the continent following the sheet
     /// the sheet's top as it is now (the water tells the map every frame it moves)
     @ObservationIgnored private(set) var sheetTop: CGFloat = 0
+    /// where the sheet is going (0: not told). A country opened in Places while the water is still rising to 50% is
+    /// framed for the room it will have, not the one it has in that frame
+    @ObservationIgnored private(set) var sheetGoal: CGFloat = 0
     /// the room's middle the camera is placed for (nil off a continent)
     @ObservationIgnored private var followMid: Double?
     /// THE SHEET MOVED (the one exception to "a sheet never moves the content above it", only on a continent's map):
     /// below 50% the continent slides down with it into the middle of the bigger room, same zoom;
     /// after a pan or pinch the camera still moves only as much as the room's middle moves
-    func sheetMoved(top: CGFloat) {
+    func sheetMoved(top: CGFloat, goal: CGFloat? = nil) {
         sheetTop = top
+        if let goal { sheetGoal = goal }
         if placesMode { needsFrame = true }
         guard continentFrame != nil, let was = followMid, flight == nil else { return }
         let r = layout.room(sheetTop: max(top, layout.top(.half)))
@@ -1057,9 +1204,9 @@ final class MapController {
         updateHome()
         needsFrame = true
     }
-    /// A search result: the place fills the open map's width, 16 points from each side, or its height if it is a tall
-    /// one, centred between the head and the sheet's top as it is now; a tiny place is shown among its neighbours, not
-    /// blown up. It darkens for a moment so the eye finds it (BUILD-BOOK 1.10).
+    /// A search result: the place fills the open map's width, 16 points from each side (23 Oct 14:17), or its
+    /// height if it is a tall one, centred between the head and the sheet's top as it is now; a tiny place is shown
+    /// among its neighbours, not blown up. It darkens for a moment so the eye finds it (BUILD-BOOK 1.10).
     func show(place i: Int, sheetTop: CGFloat? = nil) {
         guard let w = world else { return }
         let p = w.places[i]
@@ -1152,12 +1299,13 @@ final class MapController {
     /// the old CameraCurve.flightDuration: the critically damped 0.44 s spring's settling time × 0.9
     static let flight = 0.58
 
-    /// THE CONTINENT SWITCH (the old MapView.setContinent and MapCamera.onContinent, as they were): - its view is the
-    /// old contView frame, fitted to fill the room above the 50% sheet (its height, or for a tall one its width; a wide
-    /// one runs past the screen's sides), its middle in the middle of that room - the map stays put under the sheet
-    /// after that - the rest of the world and the sea go into the one flat blue as the camera goes in (the renderer) -
-    /// from one continent to another the camera goes out to the world first, the rest coming back, then into the new
-    /// one; picked again on the way, the last pick wins
+    /// THE CONTINENT SWITCH (the old MapView.setContinent and MapCamera.onContinent, as they were):
+    /// - its view is the old contView frame, fitted to fill the room above the 50% sheet (its height, or for a tall
+    ///   one its width; a wide one runs past the screen's sides), its middle in the middle of that room
+    /// - the map stays put under the sheet after that (13 Oct 15:57)
+    /// - the rest of the world and the sea go into the one flat blue as the camera goes in (the renderer)
+    /// - from one continent to another the camera goes out to the world first, the rest coming back, then into the
+    /// new one (11 Sep); picked again on the way, the last pick wins
     func show(continent k: String) {
         if k == "World" { goHome(); return }
         guard let w = world else { return }
@@ -1168,7 +1316,8 @@ final class MapController {
             return
         }
         let W = Double(view.width)
-        // the room at 50%, with the continent's own margins inside it
+        // the room at 50%, with the continent's own margins inside it (14 pt more at the top, 2 at the bottom: the
+        // framing the owner saw on 29 Oct, unchanged)
         let room = layout.room(sheetTop: layout.top(.half))
         let top = Double(room.lowerBound) + 14, bottom = Double(room.upperBound) - 2
         let roomH = max(80, bottom - top)
@@ -1185,8 +1334,9 @@ final class MapController {
             // (its frame's west edge ran through Western Australia: widened to hold Australia whole, 4 units over)
             if let b = best { f.x = min(f.x, Double(b.x) - 4); mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2) }
         }
-        // in the middle of the room, always: zoomed in as far as it takes for the continent's middle to sit in the
-        // room's middle with the screen still inside the world, so nothing past the world's edge is ever shown
+        // in the middle of the room, always: zoomed in as far as
+        // it takes for the continent's middle to sit in the room's middle with the screen still inside the world, so
+        // nothing past the world's edge is ever shown
         let H = Double(view.height), roomMid = (top + bottom) / 2
         let kTop = roomMid / max(1, mid.y - Self.north)
         let kBottom = (H - roomMid) / max(1, self.bottom - mid.y)
@@ -1358,8 +1508,9 @@ final class MapController {
         return moving
     }
     private func stepCamera(_ dt: Double) -> Bool {
-        // HOLDING PLUS OR MINUS: the zoom keeps going about the screen's middle, gently faster the longer it is held,
-        // from one doubling a second to three at 1.2 s, until the limit or the finger lifts
+        // HOLDING PLUS OR MINUS: the zoom keeps going about the screen's middle, gently faster the longer it is
+        // held, from one
+        // doubling a second to three at 1.2 s, until the limit or the finger lifts
         if holdZoom != 0 {
             flight = nil
             holdTime += dt

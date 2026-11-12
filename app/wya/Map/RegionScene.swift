@@ -32,6 +32,13 @@ nonisolated final class RegionScene: @unchecked Sendable {
     private let rings: [[[SIMD2<Float>]]]
     /// the regions' box (every part, far ones included)
     let box: SIMD4<Float>
+    /// A REGION THAT CAN BE LOST (12 Nov): one standing alone in the sea (its box touches no other region's), on a level
+    /// of at most 200 regions: the middle of its biggest piece (x, y) and how big its land is (z, map units: the width
+    /// of a circle with all its pieces' area, so an atoll's thin rim 12 points long counts as the speck it is).
+    /// Such a region is the map's diamond while it is under 6 points across (an island country's regions are specks at
+    /// the country's size: Tuvalu's nine atolls over 600 km). z is infinite for every other region: a region that
+    /// touches its neighbours is part of land that can be seen, however small it is (France's communes get none).
+    let unitSpot: [SIMD3<Float>]
     /// each region's box (all its entries), for VoiceOver's elements
     func unitBox(_ u: Int) -> SIMD4<Float>? {
         var out: SIMD4<Float>?
@@ -98,6 +105,10 @@ nonisolated final class RegionScene: @unchecked Sendable {
         }
         if parentIndex.isEmpty, let above {
             pidx = Self.parents(of: f, in: above, index: index, count: ids.count)
+            // (and the regions know them: a department's card names its region, and its stamp reaches it)
+            var aboveIDs: [String] = [], seenAbove = Set<String>()
+            for u in above.units where seenAbove.insert(u.id).inserted { aboveIDs.append(u.id) }
+            parents = pidx.map { $0 > 0 && Int($0) <= aboveIDs.count ? aboveIDs[Int($0) - 1] : nil }
             parentIndex = Dictionary(uniqueKeysWithValues: Set(pidx).filter { $0 > 0 }.map { (String($0), $0) })
         }
         if parentIndex.count > 1 {
@@ -130,6 +141,42 @@ nonisolated final class RegionScene: @unchecked Sendable {
         unitEntries = ue
         points = pts; fans = fan; runs = rn; segs = sg
         boxes = bx; rings = rs; box = all
+        var spots = [SIMD3<Float>](repeating: SIMD3(0, 0, .infinity), count: ids.count)
+        if ids.count <= 200 {
+            var ub = [SIMD4<Float>?](repeating: nil, count: ids.count)
+            var big = [(area: Float, c: SIMD2<Float>, across: Float, box: SIMD4<Float>)?](repeating: nil, count: ids.count)
+            var pieces: [(u: Int, box: SIMD4<Float>)] = []
+            var land = [Float](repeating: 0, count: ids.count)
+            for (e, u) in eu.enumerated() {
+                let b = bx[e]
+                guard b.x <= b.z else { continue }
+                ub[u] = ub[u].map { SIMD4(min($0.x, b.x), min($0.y, b.y), max($0.z, b.z), max($0.w, b.w)) } ?? b
+                for ring in rs[e] {
+                    var r = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
+                    for p in ring { r = SIMD4(min(r.x, p.x), min(r.y, p.y), max(r.z, p.x), max(r.w, p.y)) }
+                    let a = (r.z - r.x) * (r.w - r.y)
+                    // (the ring's own area, by the shoelace sum)
+                    var s: Float = 0
+                    for i in ring.indices { let p = ring[i], q = ring[(i + 1) % ring.count]; s += (p.x - r.x) * (q.y - r.y) - (q.x - r.x) * (p.y - r.y) }
+                    land[u] += abs(s) / 2
+                    if a > (big[u]?.area ?? -1) { big[u] = (a, SIMD2((r.x + r.z) / 2, (r.y + r.w) / 2), max(r.z - r.x, r.w - r.y), r) }
+                    pieces.append((u, r))
+                }
+            }
+            // (alone: its biggest piece's box meets no piece of another region. Piece by piece, not region by region:
+            // the Seychelles' outer islands are one region whose box holds every other region's islands)
+            for u in ids.indices {
+                guard ub[u] != nil, let g = big[u] else { continue }
+                let b = g.box
+                var alone = true
+                for p in pieces where p.u != u {
+                    let o = p.box
+                    if b.x <= o.z, o.x <= b.z, b.y <= o.w, o.y <= b.w { alone = false; break }
+                }
+                if alone { spots[u] = SIMD3(g.c.x, g.c.y, 2 * (land[u] / .pi).squareRoot()) }
+            }
+        }
+        unitSpot = spots
     }
 
     /// EACH REGION'S PARENT BY WHERE IT LIES (a file that names none): four points inside the region's biggest ring

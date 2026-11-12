@@ -149,34 +149,26 @@ final class UploadState {
         w.openUpload()
         job += 1
         let me = job
-        // at 25% only the caption has to go (its roll out clears in about 0.35 s); from elsewhere the water arrives first
-        grow(after: at25 ? 0.36 : 0.45, job: me)
+        // at 25% the caption is cut as the upload takes the water, so the pair comes at once (it waited 0.36 s for the
+        // caption's roll, which is no longer how the caption leaves: an empty sheet, 12 Nov strip); from elsewhere the
+        // water arrives first
+        grow(after: at25 ? 0 : 0.45, job: me)
     }
 
-    /// the pair in: icons from their own centres (right 0.03 s behind), then the words once the shapes are past 60%
+    /// the pair in: both icons and both words in one frame. (The icons have been simply there since 8 Nov, nothing
+    /// grows from a point, and words no longer roll since 12 Nov; what was left of the old sequence was one icon
+    /// alone for a frame, then two, then the words cut in.)
     private func grow(after d: Double, job me: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + d) { [self] in
+        let start = { [self] in
             guard me == job else { return }
-            withAnimation(Motion.quick) { shapes[0] = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [self] in
-                guard me == job else { return }
-                withAnimation(Motion.quick) { shapes[1] = true }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [self] in
-                guard me == job else { return }
-                withAnimation(Motion.quick) { words = true }
-                moving = false
-            }
+            shapes = [true, true]; words = true
+            moving = false
         }
+        if d <= 0 { start() } else { DispatchQueue.main.asyncAfter(deadline: .now() + d, execute: start) }
     }
-    /// the pair out: the words roll out as the icons shrink into their centres (the tapped one 0.03 s behind)
+    /// the pair out: both icons and both words in one frame
     private func shrink(lead: Int? = nil) {
-        withAnimation(.smooth(duration: 0.15)) { words = false }
-        let first = lead.map { 1 - $0 } ?? 0
-        withAnimation(Motion.quick) { shapes[first] = false }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [self] in
-            withAnimation(Motion.quick) { shapes[1 - first] = false }
-        }
+        shapes = [false, false]; words = false
     }
 
     /// A9.3: a tap on step 1's choices goes to its step 2
@@ -238,15 +230,12 @@ final class UploadState {
         moving = true
         job += 1
         let me = job
-        shrink(lead: lead)
-        // the next pair only once the old words have rolled out and its icons are in their centres
-        // (a word's roll out takes about 0.35 s to clear, whatever its curve)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
-            guard me == job else { return }
-            step = s
-            locating = false; photosBusy = nil
-            grow(after: 0, job: me)
-        }
+        // the next pair takes the old one's place in the same frame (it used to wait 0.42 s for the old words' roll
+        // and the icons' shrink, neither of which exists now: three frames of empty sheet, 12 Nov strip)
+        _ = lead
+        step = s
+        locating = false; photosBusy = nil
+        grow(after: 0, job: me)
     }
 
     /// pulled down or a tap on the map: the pair out, then the water back to where it was and the caption in (while
@@ -269,12 +258,11 @@ final class UploadState {
         if !order.isEmpty {
             if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
-            closing = false
-            guard me == job else { return }
-            w.closeUpload()
-            step = 0; note = [:]; locating = false; photosBusy = nil
-        }
+        // (in the same frame: the 0.42 s this waited for the pair's roll and shrink is an empty sheet now, 12 Nov)
+        closing = false
+        guard me == job else { return }
+        w.closeUpload()
+        step = 0; note = [:]; locating = false; photosBusy = nil
     }
 
     // MARK: the four sources
@@ -415,7 +403,8 @@ final class UploadState {
         moving = true
         findingIn = false
         shrink()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { [self] in
+        // (at once: the pair is gone in one frame now, so the caption does not wait 0.42 s over an empty sheet, 12 Nov)
+        DispatchQueue.main.async { [self] in
             guard me == job else { return }
             phase = .finding
             speakCount(me)
@@ -1367,7 +1356,7 @@ struct UploadSheet: View {
             Text(u.captionIn ? words : Caption.blank(words, "\u{2002}"))
                 .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center).lineLimit(2)
-                .contentTransition(.numericText(value: u.captionIn ? 1 : 0))
+                .contentTransition(.identity)
                 .frame(width: L.W - 2 * L.sheetInset - 2 * 72)
                 .position(x: L.W / 2, y: y)
                 .transition(.identity)
@@ -1390,7 +1379,7 @@ struct UploadSheet: View {
             .opacity(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
         // once the review is up, the go says what it does (7 Nov, the friend's review board 15: the bare stamp glyph
-        // saved the visit without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
+        // "saved the visit" without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
         // many), as the card's own Stamp capsule; the × until then. There at once, no grow (31 Oct)
         ZStack(alignment: .trailing) {
             if u.goIn {
@@ -1515,11 +1504,11 @@ struct UploadSheet: View {
                 Text(shown ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body)
                     .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
                     .lineLimit(1)
-                    .contentTransition(.numericText(value: shown ? 1 : 0))
+                    .contentTransition(.identity)
                 Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1)
-                    .contentTransition(.numericText(value: shown ? 1 : 0))
+                    .contentTransition(.identity)
             }
             Spacer(minLength: 0)
         }
@@ -1546,7 +1535,7 @@ struct UploadSheet: View {
         return HStack(spacing: 12) {
             Text(shown ? t : Caption.blank(t, "\u{2002}")).font(.subheadline)
                 .foregroundStyle(Palette.ink.opacity(off ? 0.5 : 1))
-                .contentTransition(.numericText(value: shown ? 1 : 0))
+                .contentTransition(.identity)
             Spacer(minLength: 0)
             Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 13)
                 .opacity(off ? 0.5 : 1)
@@ -1572,7 +1561,7 @@ struct UploadSheet: View {
         return VStack(spacing: 12) {
             ZStack {
                 // EACH CHOICE ITS OWN ICON (they were empty rings, read as unticked boxes; 8 Nov: drawn or reused,
-                // never SF Symbols): Photos and Pick a photo, All a stack of them, Location and Here the locate mark,
+                // never SF Symbols): Photos and Pick a photo, All four of them, Location and Here the locate mark,
                 // File the file
                 UploadChoiceIcon(key: UploadState.icons[u.step][side])
                     .frame(width: 24, height: 24)
@@ -1592,7 +1581,7 @@ struct UploadSheet: View {
                 .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
-                .contentTransition(.numericText(value: u.words ? 1 : 0))
+                .contentTransition(.identity)
         }
         .frame(width: w, height: 96)
         .contentShape(Rectangle())
@@ -1678,48 +1667,9 @@ struct RowSnap: ScrollTargetBehavior {
     }
 }
 
-/// an upload choice's icon: the app set's own where it has one (locate, file), drawn here where it has none (a photo, a
-/// stack of photos), in the set's line weight (1.6 pt at 24 pt), ink only
+/// an upload choice's icon: the set's own where it has one (locate, file), else the drawn set's (a photo: a print
+/// with its wide lower edge, six wide like the file; all photos: four of them as full squares), 22 pt, ink only
 struct UploadChoiceIcon: View {
     let key: String
-    var body: some View {
-        switch key {
-        case "photo": PhotoGlyph(stacked: false).stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-        case "photos": PhotoGlyph(stacked: true).stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-        default: Icon5(key: key, ink: Palette.ink, size: 22)
-        }
-    }
-}
-
-/// a photo: a rounded frame with a hill and a sun in it; stacked, a second frame showing behind it, up and to the right
-struct PhotoGlyph: Shape {
-    let stacked: Bool
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let w = r.width, h = r.height
-        let f = stacked ? CGRect(x: r.minX + 1, y: r.minY + h * 0.28, width: w * 0.78, height: h * 0.62)
-                        : CGRect(x: r.minX + 1, y: r.minY + h * 0.18, width: w - 2, height: h * 0.66)
-        p.addRoundedRect(in: f, cornerSize: CGSize(width: 3, height: 3), style: .continuous)
-        // the hill: from the frame's lower left up to a peak and down to its right
-        p.move(to: CGPoint(x: f.minX + 1, y: f.maxY - f.height * 0.18))
-        p.addLine(to: CGPoint(x: f.minX + f.width * 0.42, y: f.minY + f.height * 0.48))
-        p.addLine(to: CGPoint(x: f.minX + f.width * 0.62, y: f.minY + f.height * 0.68))
-        p.addLine(to: CGPoint(x: f.minX + f.width * 0.74, y: f.minY + f.height * 0.56))
-        p.addLine(to: CGPoint(x: f.maxX - 1, y: f.maxY - f.height * 0.2))
-        // the sun
-        let sr = f.width * 0.09
-        p.addEllipse(in: CGRect(x: f.maxX - f.width * 0.3 - sr, y: f.minY + f.height * 0.22 - sr, width: 2 * sr, height: 2 * sr))
-        if stacked {
-            // the frame behind: its top and right edges only, offset up and right
-            let o: CGFloat = w * 0.16
-            p.move(to: CGPoint(x: f.minX + o, y: f.minY))
-            p.addLine(to: CGPoint(x: f.minX + o, y: f.minY - o + 3))
-            p.addQuadCurve(to: CGPoint(x: f.minX + o + 3, y: f.minY - o), control: CGPoint(x: f.minX + o, y: f.minY - o))
-            p.addLine(to: CGPoint(x: f.maxX + o - 3, y: f.minY - o))
-            p.addQuadCurve(to: CGPoint(x: f.maxX + o, y: f.minY - o + 3), control: CGPoint(x: f.maxX + o, y: f.minY - o))
-            p.addLine(to: CGPoint(x: f.maxX + o, y: f.maxY - o))
-            p.addLine(to: CGPoint(x: f.maxX, y: f.maxY - o))
-        }
-        return p
-    }
+    var body: some View { Icon5(key: key, ink: Palette.ink, size: 22) }
 }

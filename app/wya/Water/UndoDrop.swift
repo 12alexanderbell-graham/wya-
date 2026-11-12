@@ -25,9 +25,9 @@ struct UndoDrop: View {
             HStack(spacing: 8) {
                 // the icon is there only while the drop is out (it just appears; nothing of it inside the water); with
                 // no undo icon drawn yet in the set, the words alone, centred (no empty slot beside them)
-                // the undo mark, drawn (8 Nov: never an SF Symbol): an arrow turning back on itself
-                UndoGlyph().stroke(Palette.ink, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
-                    .frame(width: 15, height: 15)
+                // the undo mark (never an SF Symbol): the set's share arrow turned to point back, on the 8 by 8 grid
+                // (IconsDrawn "undo"; the hand-drawn bow before it had a bent head)
+                Icon5Still(key: "undo", progress: 0, ink: Palette.ink, size: 15)
                     .opacity(up ? 1 : 0)
                     .transaction { $0.animation = nil }
                 Text(up ? words : String(repeating: "\u{2002}", count: max(1, words.count)))
@@ -38,7 +38,7 @@ struct UndoDrop: View {
                     // smaller first, then cut in the middle, the place's start and "stamped" kept
                     .minimumScaleFactor(0.75)
                     .truncationMode(.middle)
-                    .contentTransition(.numericText())
+                    .contentTransition(.identity)
                     .frame(width: min(Self.width(words), L.capsule.width - 28 - 23))
             }
             .padding(.horizontal, 14)
@@ -55,15 +55,15 @@ struct UndoDrop: View {
         }
         .buttonStyle(.plain)
         // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at
-        // edge + 4 its top stuck 14 pt out as a bump on every sheet) to 30 pt above it
+        // edge + 4 its top stuck 14 pt out as a bump on every sheet, 30 Oct 10:59) to 30 pt above it
         .position(x: L.W / 2, y: up ? edge - 30 : edge + 22)
         // (not over a place's page: the page is the screen, 8 Nov: "Canada stamped" sat on France's page)
         .opacity(atFull || water.pageUp ? 0 : 1)
         .allowsHitTesting(up && !atFull && !water.pageUp)
         .accessibilityLabel("Undo \(words)")
         .accessibilityHidden(!up)
-        // with a stamping card up the drop waits and rises as the card closes (4.2.3: the card closes keeping every
-        // change, then the drop rises), so it never sits on the card's Details | Verify?
+        // with a stamping card up the drop waits and rises as the card closes (4.2.3), so it never sits on the
+        // card's Details | Verify?
         // (a region's, town's or thing's card the same: its Details | Verify? row is where the drop rises)
         .onChange(of: marks.changes) { _, _ in if card.isOpen || regionCard.isOpen { pending = true } else { rise() } }
         .onChange(of: card.isOpen || regionCard.isOpen) { _, open in if !open, pending { pending = false; rise() } }
@@ -95,23 +95,5 @@ struct UndoDrop: View {
     private func sink() {
         hide?.cancel()
         withAnimation(Motion.chrome) { up = false }
-    }
-}
-
-/// the undo drop's mark: a bow over the top from right to left, its arrowhead at the left end pointing down and back
-struct UndoGlyph: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let w = r.width, h = r.height
-        // the bow: from the lower right up over the top to the left
-        p.move(to: CGPoint(x: r.minX + w * 0.86, y: r.minY + h * 0.86))
-        p.addCurve(to: CGPoint(x: r.minX + w * 0.16, y: r.minY + h * 0.42),
-                   control1: CGPoint(x: r.minX + w * 1.02, y: r.minY + h * 0.30),
-                   control2: CGPoint(x: r.minX + w * 0.42, y: r.minY + h * 0.08))
-        // the arrowhead at its end
-        p.move(to: CGPoint(x: r.minX + w * 0.10, y: r.minY + h * 0.12))
-        p.addLine(to: CGPoint(x: r.minX + w * 0.16, y: r.minY + h * 0.44))
-        p.addLine(to: CGPoint(x: r.minX + w * 0.46, y: r.minY + h * 0.36))
-        return p
     }
 }

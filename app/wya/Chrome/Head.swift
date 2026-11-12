@@ -60,8 +60,8 @@ final class HeadState {
     func roll(at d: Date) -> Double {
         settingsOpen ? gearRoll + d.timeIntervalSince(settingsSince) * 60 : gearRoll
     }
-    /// SETTINGS CLOSE, from wherever: the gear keeps the turn it had (an eighth of a turn looks the same, so it is kept
-    /// under 45 degrees) and goes back into the dot, unless a pull is taking it
+    /// SETTINGS CLOSE, from wherever: the gear keeps the turn it had (an eighth of
+    /// a turn looks the same, so it is kept under 45 degrees) and goes back into the dot, unless a pull is taking it
     func closeSettings(animated: Bool = true) {
         guard settingsOpen else { return }
         gearRoll = roll(at: Date()).truncatingRemainder(dividingBy: 45)
@@ -77,9 +77,9 @@ final class HeadState {
         // the hold that opened them is done: a later hold starts fresh, whatever happened to the finger
         dotHeld = false
     }
-    /// THE MAP OR THE SHEET TOUCHED: settings and the AI go back into the dot, and the touch goes on doing what it
-    /// does. Before, a screen-wide catcher took every touch while they were out, so a drag on the map or the sheet did
-    /// nothing at all.
+    /// THE MAP OR THE SHEET TOUCHED
+    /// settings and the AI go back into the dot, and the touch goes on doing what it does. Before, a screen-wide catcher
+    /// took every touch while they were out, so a drag on the map or the sheet did nothing at all.
     func putAway() {
         closeSettings()
         if pullStop > 0 || pull > 0.5 { settlePull(to: 0) }
@@ -98,7 +98,7 @@ final class HeadState {
         Hints.shared.touched()
         pullStart = pull
         // from the gear (settings open): its first part turns the gear back into the dot, following the finger, then
-        // the AI comes out of the dot
+        // the AI comes out of the dot (the 10:40)
         if settingsOpen {
             pullGearStart = gear
             pullFromGear = true
@@ -143,8 +143,8 @@ final class HeadState {
     var aiShown: CGFloat { pullFromGear ? Flow.clamp01((ai - 0.35) / 0.65) : ai }
     /// test only: holds the mode wheel mid-turn at this position, as if a finger were on it
     var testDial: CGFloat?
-    /// a sideways drag on the tools capsule turns the wheel as if it were on the dot: the drag's translation while it
-    /// lasts, and its predicted extra travel when it ends
+    /// a sideways drag on the tools capsule turns the wheel as if it were on the dot (the 15:36): the drag's
+    /// translation while it lasts, and its predicted extra travel when it ends
     var capsuleDrag: CGFloat?
     var capsuleDragFling: CGFloat = 0
 
@@ -178,7 +178,7 @@ struct IconRoll: View {
 
 /// THE HEAD (Apple's toolbar: 44 glass circles 16 from the edges, centred 22 under the safe top): search · the mode
 /// wheel · plus. Pulled from the top, the wheel's dot becomes the AI; held, it becomes the gear (TopPull). It stays put
-/// at every height of the sheet, the night included.
+/// at every height of the sheet, the night included (the 02:32).
 struct HeadView: View {
     let map: MapController
     let water: Water
@@ -204,14 +204,16 @@ struct HeadView: View {
         // the search grows out of its circle into the field, up to the plus
         let fieldW = L.W - 2 * L.side - L.circle - 8
         // the plus stretches to the left into one capsule that reaches the wheel's dot, which becomes the first tool
+        // (BUILD-BOOK 3.1a)
         let plusX = L.W - L.side - L.circle / 2
         let spacing = (plusX - L.W / 2) / 4
         ZStack(alignment: .topLeading) {
             // SEARCH: one capsule of glass for its whole life, grown from its circle into the field by the same value
-            // that opens the results under it, so the two always move together, both ways SEARCH AND ITS RESULTS ARE
-            // ONE GLASS: the results box starts as the search circle itself, in its place, and flows down out of it as
-            // it grows; closing, it flows back up into the circle and is the circle again. One glass container, so the
-            // two melt into each other and part the way water does.
+            // that opens the results under it, so the two always move together, both ways (29 Oct 01:06
+            // search closes first, then the results go away)
+            // SEARCH AND ITS RESULTS ARE ONE GLASS: the results box starts as the search circle itself, in its
+            // place, and flows down out of it as it grows; closing, it flows back up into the circle and is the circle
+            // again. One glass container, so the two melt into each other and part the way water does.
             let gap = L.headBottom + 10 - (L.headY - L.circle / 2)
             GlassEffectContainer(spacing: 14) {
                 ZStack(alignment: .topLeading) {
@@ -245,8 +247,8 @@ struct HeadView: View {
             ToolsCapsule(p: toolsP, full: 4 * spacing, spacing: spacing,
                          tool: { i, slot in toolButton(i, ink: ink, slot: slot).allowsHitTesting(tools) },
                          plus: plusButton(ink: ink))
-                // a sideways drag anywhere on the open capsule turns the modes, as on the dot; a tap is still the
-                // tool's (the drag needs 8 points)
+                // a sideways drag anywhere on the open capsule turns the modes, as on the dot (23 Oct 15:36); a
+                // tap is still the tool's (the drag needs 8 points)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
                         .onChanged { g in
@@ -273,8 +275,8 @@ struct HeadView: View {
                 .position(x: L.W / 2, y: L.headY)
                 .allowsHitTesting(!head.searching && !aiOut)
             // FOR SEARCH THE DOT GOES UP INTO THE DYNAMIC ISLAND: it rises as search starts to grow and is in the
-            // island before the field reaches it, so the two never overlap; closing, it drops back out of the island
-            // once the field has drawn back.
+            // island before the field reaches
+            // it, so the two never overlap; closing, it drops back out of the island once the field has drawn back.
             if dotInIsland {
                 Animated(p: searchP) { p in
                     IslandDrop(p: p, dot: CGPoint(x: L.W / 2, y: L.headY), island: L.island, notch: L.notch, ink: ink)
@@ -360,8 +362,9 @@ struct HeadView: View {
         .animation(Motion.quick, value: head.searching)
     }
 
-    // MARK: search / the search glyph never moves or changes; the field's / words are there from the start and are
-    // uncovered by the capsule as it grows, and covered again as it shrinks
+    // MARK: search
+    /// the search glyph never moves or changes (one glyph, never two: 29 Oct 01:06 search animation); the field's
+    /// words are there from the start and are uncovered by the capsule as it grows, and covered again as it shrinks
     private func searchCapsule(ink: Color, p: CGFloat, fieldW: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             if p > 0.001 || head.searching {
@@ -418,14 +421,16 @@ struct HeadView: View {
 
     @MainActor private static var pickJob = 0
 
-    /// the sheet stays where it is: the results sit under the field, over the map or the glass
+    /// the sheet stays where it is (14:17: never at full either): the results sit under the field, over the map or
+    /// the glass
     private func openSearch() {
         Feel.tap(); Sound.tap()
         head.toolsOpen = false
         // closed by a touch on the map less than 10 s ago: what was typed comes back (1.10)
         if CACurrentMediaTime() - head.mapClosedSearchAt > 10 || head.mapClosedMode != head.mode { head.query = "" }
         head.searching = true
-        // the keyboard comes the moment search opens; the field exists from the first frame of the opening
+        // the keyboard comes the moment search opens (no late task that could leave the field unfocusable when the
+        // keyboard drops mid-move, 23 Oct 14:17); the field exists from the first frame of the opening
         DispatchQueue.main.async { typing = true }
     }
     /// what was typed stays until search opens again, so the rows don't change while they draw back into the field
@@ -447,7 +452,7 @@ struct HeadView: View {
         if map.placesMode { map.showPlacesMap(.country(i)); head.water?.go(.half); closeSearch(); return }
         // Pins: Apple's map frames the country (our map is under it, unseen)
         if map.pinsMode { PinsMapState.shared.show(place: i, world: map.world); closeSearch(); return }
-        // COUNTRIES: the card comes up ready to stamp (7 Nov, the friend's review boards 02 and 12: picking Japan left the user
+        // COUNTRIES: the card comes up ready to stamp (7 Nov, the friend's review boards 02 and 12: picking Japan left the owner
         // on the map, tapping the country again to find Stamp). The water to 25%, the camera frames the place, and the
         // card grows out of it once the camera has landed, as from the Stamped list
         if water.stop != .quarter && water.stop != .closed { water.go(.quarter) }
@@ -475,7 +480,7 @@ struct HeadView: View {
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
-            // THE TOOLS BUTTON IS THREE DOTS (8 Nov: not a plus, which also stood for zooming in and for
+            // THE TOOLS BUTTON IS THREE DOTS (8 Nov answer A: not a plus, which also stood for zooming in and for
             // the first tool); open, or with search open, it is the cross; on a page, Share
             Group {
                 if share > 0.5 {
@@ -545,7 +550,7 @@ struct HeadView: View {
             Feel.tap(); Sound.tap()
             act()
         } label: {
-            // the icons (31 Oct): quick stamping the stamp, the passport the book, history the two ends joined, upload
+            // the icons (31 Oct 11:47): quick stamping the stamp, the passport the book, history the two ends joined, upload
             // the arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
             // (no grow, no fade)
             let key = ["stamp", "lists-books", "history", "cal-out"][i]
@@ -628,10 +633,9 @@ struct Animated<Content: View>: View, Animatable {
     var body: some View { build(p) }
 }
 
-/// THE TOOLS CAPSULE: it grows leftward out of the plus while the plus stays exactly where it is and only turns. Each
-/// tool sits in its own slot and grows from its middle as the capsule's end passes over it, the nearest first, so none
-/// is ever drawn over the × or over another. Plain glass: Apple's interactive glass swells under the finger, which
-/// pushed the plus forward and back.
+/// THE TOOLS CAPSULE (BUILD-BOOK 3.1a): it grows leftward out of the plus while the plus stays exactly where it is
+/// and only turns. Each tool sits in its own slot and grows from its middle as the capsule's end passes over it, the
+/// nearest first, so none is ever drawn over the × or over another. Plain glass: Apple's interactive glass swells under the finger, which pushed the plus forward and back.
 private struct ToolsCapsule<Tool: View, Plus: View>: View, Animatable {
     var p: CGFloat
     let full: CGFloat
@@ -663,11 +667,11 @@ private struct ToolsCapsule<Tool: View, Plus: View>: View, Animatable {
     }
 }
 
-/// THE MODE WHEEL: black, no glass, turned, never tapped. The modes sit on a wheel whose hub is under the glyph; the
-/// one at the top is the one you are on, a full black circle. While you turn it, its neighbours ride the rim left and
-/// right, smaller and lower, in their unselected shapes; the one coming to the top fills in exactly as far as it has
-/// come (no little film of its own, no holes). A tick at each mode it passes, a click when it lands; the name shows
-/// under it while you hold it. Let go and the neighbours go back into the hub.
+/// THE MODE WHEEL (the 00:11, 00:26, 01:02, 01:36, 02:09): black, no glass, turned, never tapped. The modes sit on a
+/// wheel whose hub is under the glyph; the one at the top is the one you are on, a full black circle. While you turn
+/// it, its neighbours ride the rim left and right, smaller and lower, in their unselected shapes; the one coming to the
+/// top fills in exactly as far as it has come (no little film of its own, no holes). A tick at each mode it passes,
+/// a click when it lands; the name shows under it while you hold it. Let go and the neighbours go back into the hub.
 struct ModeWheel: View {
     @Bindable var head: HeadState
     var ink: Color
@@ -702,10 +706,10 @@ struct ModeWheel: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's
-            // middle, clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as
-            // the wheel passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces
-            // when not shown.
+            // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's middle,
+            // clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as the
+            // wheel
+            // passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces when not shown.
             let i = Int(at.rounded()).clamped(0, 3)
             let name = HeadState.Mode(rawValue: i)!.name
             VStack(spacing: 0) {
@@ -731,8 +735,8 @@ struct ModeWheel: View {
                 .onChanged { g in turn(g.translation.width) }
                 .onEnded { g in letGo(g.predictedEndTranslation.width - g.translation.width) }
         )
-        // HOLD THE DOT FOR SETTINGS: still for a moment, it starts turning into the gear; moving (turning the wheel) or
-        // letting go before it is the gear puts it back
+        // HOLD THE DOT FOR SETTINGS (29 Oct 01:13, 01:18): still for a moment, it starts turning into the gear
+        // moving (turning the wheel) or letting go before it is the gear puts it back
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { g in
@@ -797,8 +801,8 @@ struct ModeWheel: View {
         if head.dotHeld { head.dotHeld = false }
     }
 
-    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule) With settings open
-    /// the wheel still turns and changes the mode; the gear stays on top.
+    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule)
+    /// With settings open the wheel still turns and changes the mode; the gear stays on top.
     private func turn(_ dx: CGFloat) {
         // over a page the dot is the page's close, not the wheel
         if PlacePageState.shared.isOpen && !dragging { return }
@@ -837,9 +841,10 @@ struct ModeWheel: View {
     }
 }
 
-/// THE FIRST TOOL IS THE DOT, BECOME A TOOL: as the capsule reaches it, the black dot draws in to the tools' own size
-/// and hollows into the same ring the other three are, one shape changing (a solid circle is a ring as thick as its
-/// radius); on, it is filled the way the others are when on. Closing is the same in reverse, ending as the dot exactly.
+/// THE FIRST TOOL IS THE DOT, BECOME A TOOL: as the capsule reaches it, the black dot draws in to the tools' own
+/// size and hollows into
+/// the same ring the other three are, one shape changing (a solid circle is a ring as thick as its radius); on, it is
+/// filled the way the others are when on. Closing is the same in reverse, ending as the dot exactly.
 private struct FirstTool: View, Animatable {
     /// how far the tools capsule is out (ToolsCapsule's p)
     var p: CGFloat
@@ -934,8 +939,8 @@ struct ResultSlot {
     }
 }
 
-/// The search results: the places whose name, formal name, other names or the names people type match. The box is the
-/// field's own width, under it.
+/// The search results: the places whose name, formal name, other names or the names people type match. The box is
+/// the field's own width, under it (the 02:09).
 struct SearchResults: View {
     let map: MapController
     @Bindable var head: HeadState
@@ -953,12 +958,12 @@ struct SearchResults: View {
     var body: some View {
         let typed = !head.query.trimmingCharacters(in: .whitespaces).isEmpty
         let hits = typed ? Self.matches(map: map, query: head.query) : Self.suggestions(map: map)
-        // a typo with no match: the nearest place, as a row of its own
+        // a typo with no match: the nearest place, as a row of its own (29 Oct 01:06: not over two lines)
         // the index first; with nothing there, Apple Intelligence's pick among the nearest names, once it has answered
         let near = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
         let guess = near ?? (hits.isEmpty && typed && smart?.q == head.query ? smart?.i : nil)
-        // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so "Fra"
-        // to "Frnace" keeps the France row and only its note rolls to
+        // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so
+        // "Fra" to "Frnace" keeps the France row and only its note rolls to "Did you mean?"
         // with Map settings open, the field searches the settings (Part 3.4, 5.11)
         let settingHits = head.settingsOpen ? SettingsSearch.hits(head.query, map: map) : []
         // on a region map the field finds the country's regions at every level (6.5)
@@ -1232,8 +1237,9 @@ struct SearchResults: View {
         .buttonStyle(.plain)
     }
 
-    /// one row: the flag, the name, and what it is in the one low-opacity black (BUILD-BOOK 1.10), in the borders view:
-    /// on the ground a breakaway held on its own is a country; a guess says so in that place instead
+    /// one row: the flag (round, the round set), the name, and what it is in the one low-opacity black (BUILD-BOOK
+    /// 1.10), in the borders view: on the ground a breakaway held on its own is a country (29 Oct 01:06
+    /// a place with no name on the de facto map is called a country); a guess says so in that place instead
     private func row(_ i: Int, note: String?) -> some View {
         let pl = map.world?.places[i]
         return Button {
@@ -1249,7 +1255,7 @@ struct SearchResults: View {
                 // here; its kind when that does not fit
                 ResultWords(name: pl?.n ?? "", notes: [note ?? map.world.flatMap { Self.otherName($0, i, head.query) } ?? "",
                                                        note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? ""])
-                    .contentTransition(.numericText())
+                    .contentTransition(.identity)
                     .animation(Motion.quick, value: note)
             }
             .padding(.horizontal, 16)
@@ -1443,7 +1449,7 @@ struct SearchResults: View {
         .buttonStyle(.plain)
     }
 
-    /// THE SMART PART OF PLACES' SEARCH (a type of place found by a word): the sets a
+    /// THE SMART PART OF PLACES' SEARCH: the sets a
     /// word typed names, by the set's own name or what people call it ("unesco" finds World Heritage, "cities" the
     /// towns, "f1" and "grand prix" Formula 1)
     static let setWords: [String: [String]] = [
@@ -1506,6 +1512,7 @@ struct SearchResults: View {
         Feel.tap()
         head.searching = false
         PlacePageState.shared.closeAll()
+        CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
         guard let h else { return }
         if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: 4_000, name: h.name) }
         else { map.showThing(file: h.file, id: h.id) }

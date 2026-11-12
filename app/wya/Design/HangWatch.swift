@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import UIKit
 
 /// TEST ONLY, simulator builds only: when the main thread has not come round for 3 seconds, its stack is written to
 /// the console (a signal sent to it, whose handler prints where it is), so a hang seen in a sweep says where it sits.
@@ -14,6 +15,11 @@ enum HangWatch {
     @MainActor static func start() {
         #if targetEnvironment(simulator) && DEBUG
         main = pthread_self()
+        // (and when the app leaves the front: a process that stops whole, with no HANG line, was put away by the system)
+        for (n, w) in [(UIApplication.willResignActiveNotification, "inactive"), (UIApplication.didEnterBackgroundNotification, "background"),
+                       (UIApplication.didBecomeActiveNotification, "active")] {
+            NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { _ in NSLog("wya app %@", w) }
+        }
         signal(SIGUSR2) { _ in
             var frames = [UnsafeMutableRawPointer?](repeating: nil, count: 80)
             let n = backtrace(&frames, 80)

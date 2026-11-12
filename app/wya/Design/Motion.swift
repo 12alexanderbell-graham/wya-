@@ -9,6 +9,8 @@ import SwiftUI
 /// - camera: flights, the fill front, the border redraw (1 − e^(−wt)(1 + wt), w = 2π / 0.44, time scaled to the flight)
 /// - blend: the continent's away blend, the one allowed fade (bez(0.3, 0, 0.3, 1), 0.5 s)
 /// The sheet's water has its own critically damped spring (Part 2.3, Water.swift).
+/// THE TEXT ROLL (12 Nov) is for counters only: the caption (its name, number and total), the Profile's numbers, a count
+/// that steps. Words (a row, a button's word, a name in a list, a message) change at once: `.contentTransition(.identity)`.
 @MainActor
 enum Motion {
     static var reduce: Bool { UIAccessibility.isReduceMotionEnabled }

@@ -20,10 +20,13 @@ final class PlacePageState {
         var cities: [Inside] = []
         /// Highlights (16.4.6): the country's World Heritage sites for now (the server's heritage list)
         var highlights: [Highlight] = []
-        /// Activities (16.4.7): Wikivoyage's "do" listings (a country's from all its cities, a town's its own)
+        /// Activities (16.4.7): Wikivoyage's "see" and "do" listings, a town's sights first (a country's from all its cities
+        /// in turn, a town's its own)
         var activities: [Activity] = []
-        /// a thing's photo (Wikimedia Commons), shown under the marking block
+        /// the page's photo (Wikimedia Commons), shown under the marking block
         var photo: String?
+        /// the prose is a Wikivoyage article's opening (else Wikidata's description), for Sources
+        var proseWikivoyage = false
     }
     struct Activity: Hashable { let name: String; let line: String }
     struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
@@ -61,7 +64,12 @@ final class PlacePageState {
                     if parts.count > 1 { parts.removeFirst() }
                     else if let land = Locale(identifier: "en_GB").localizedString(forRegionCode: country.uppercased()) { parts = [land] }
                 }
-                return lead + parts.joined(separator: ", ")
+                // ("Town in Île-de-France" under Paris, 2.1 million: a place of 100,000 people and more is a city, as
+                // the menu's own word for them; the towns' index says how many, once it is read)
+                var word = lead
+                if lead == "Town in ", (TownIndex.shared.townPeople()[country.lowercased() + "|"
+                        + name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)] ?? 0) >= 100_000 { word = "City in " }
+                return word + parts.joined(separator: ", ")
             }
             // (a thing's own line from its data starts lower case: "ancient Roman amphitheatre, ...")
             return what.prefix(1).uppercased() + what.dropFirst()
@@ -198,40 +206,30 @@ extension PlacePageState.OnePage {
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
         var out = PlacePageState.Facts()
-        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620) }
+        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true }
         else if let desc = f["desc"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
+        // its photo (Wikidata's image of the country), at the top as every page's (12 Nov 14:10)
+        if let img = (f["image"] as? [String])?.first ?? f["image"] as? String { out.photo = img }
         func s(_ k: String) -> String? {
             switch f[k] {
             case let v as String: return v
-            case let v as [String]: return v.prefix(3).joined(separator: ", ")
+            // (each once: Germany's capital came as "Berlin, Berlin", the city and the state)
+            case let v as [String]: var seen = Set<String>(); return v.filter { seen.insert($0).inserted }.prefix(3).joined(separator: ", ")
             case let v as NSNumber: return v.stringValue
             default: return nil
             }
         }
         if let v = s("capital") { out.rows.append(("Capital", v)) }
         if let v = f["population"] as? NSNumber { out.rows.append(("People", PlacePageState.big(v.doubleValue))) }
-        if let v = f["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(v.doubleValue) + " km²")) }
-        if let v = s("timezone") {
-            // an IANA zone ("Europe/Rome") as its offset now, as the others are written ("UTC+01:00")
-            let zones = v.components(separatedBy: ", ").map { z -> String in
-                guard z.contains("/"), let tz = TimeZone(identifier: z) else { return z }
-                let sec = tz.secondsFromGMT(), h = abs(sec) / 3600, m = abs(sec) % 3600 / 60
-                return String(format: "UTC%@%02d:%02d", sec < 0 ? "-" : "+", h, m)
-            }
-            // (a zone's own name next to its offset said it twice: "Japan Standard Time, UTC+09:00, UTC+09:00"; the
-            // offsets alone, each once, when there are any)
-            var seen = Set<String>()
-            let utc = zones.filter { $0.hasPrefix("UTC") }
-            let shown = (utc.isEmpty ? zones : utc).filter { seen.insert($0).inserted }
-            out.rows.append((shown.count == 1 ? "Time zone" : "Time zones", shown.joined(separator: ", ")))
-        }
+        if let v = PlacePageState.area(f["area"], cc: cc) { out.rows.append(("Area", v + " km²")) }
+        if let z = PlacePageState.zones(f["timezone"], cc: cc) { out.rows.append(z) }
         if let c = f["currency"] as? [[String: Any]], let first = c.first {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
             out.rows.append(("Currency", [n, (first["sym"] as? String).map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")))
         }
         if let v = s("officialLanguage") { out.rows.append(("Languages", v)) }
         if let v = s("drivingSide") { out.rows.append(("Driving side", v.capitalized)) }
-        if let v = s("plug") { out.rows.append(("Plugs", v)) }
+        if let v = PlacePageState.plugs(f["plug"]) { out.rows.append(("Plugs", v)) }
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
         if let e = f["emergency"] as? [String], let first = e.first { out.rows.append(("Emergency", first)) }
         if let v = s("highestPoint") { out.rows.append(("Highest point", v)) }
@@ -278,7 +276,18 @@ extension PlacePageState.OnePage {
         if let ids = j["heritage"] as? [String], !ids.isEmpty {
             if PlacePageState.heritage == nil, case .ok(let hd) = await Servers.data.file("heritage.json"),
                let all = try? JSONSerialization.jsonObject(with: hd) as? [String: [String: Any]] { PlacePageState.heritage = all }
-            out.highlights = ids.compactMap { q in
+            // (the best known first, by the country's things' own order, as its activities are ranked: France's
+            // opened on a fort listed in 2023, the newest first)
+            var known: [String: Int] = [:]
+            if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
+               let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
+                for (i, r) in rows.enumerated() { if let q = r.first as? String, known[q] == nil { known[q] = i } }
+            }
+            let ranked = ids.enumerated().sorted { a, b in
+                let x = known[a.element] ?? Int.max, y = known[b.element] ?? Int.max
+                return x != y ? x < y : a.offset < b.offset
+            }.map(\.element)
+            out.highlights = ranked.compactMap { q in
                 guard let h = PlacePageState.heritage?[q], let n = h["n"] as? String else { return nil }
                 let year = h["year"] as? String
                 return PlacePageState.Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
@@ -309,11 +318,19 @@ extension PlacePageState.OnePage {
     /// A TOWN'S FACTS (16.4.5: People, Height, Local time, Climate) from the server's cities (D9 as it is), by its
     /// GeoNames id
     fileprivate func loadTown(_ cc: String, id: String) async {
-        guard let gid = Int(id.split(separator: "/").last ?? ""),
-              case .ok(let d) = await Servers.data.file("cities/\(cc).json"),
+        // (a town with no GeoNames id is keyed by its name, "gb/London": found by it, the most peopled of that name;
+        // London's and New York's pages had no facts at all)
+        let last = String(id.split(separator: "/", maxSplits: 1).last ?? "")
+        guard case .ok(let d) = await Servers.data.file("cities/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]],
-              let t = all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }), key.id == id else { return }
+              let t = Int(last).flatMap({ gid in all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }) })
+                ?? all.filter({ $0["gid"] == nil && $0["n"] as? String == last })
+                      .max(by: { (($0["p"] as? NSNumber)?.intValue ?? 0) < (($1["p"] as? NSNumber)?.intValue ?? 0) }),
+              key.id == id else { return }
         var out = PlacePageState.Facts()
+        // (a capital says so first: Paris's page never said it is France's)
+        if CollectionStore.shared.collection(CollectionStore.capitals)?.items.contains(where: { $0.key == key }) == true,
+           let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) { out.rows.append(("Capital of", land)) }
         if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let e = t["ele"] as? NSNumber { out.rows.append(("Height", "\(e.intValue) m")) }
         if let z = t["tz"] as? String, let tz = TimeZone(identifier: z) {
@@ -324,6 +341,13 @@ extension PlacePageState.OnePage {
             out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
         }
         if let n = t["n"] as? String { out.activities = await PlacePageState.activities(cc, town: n) }
+        // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
+        // article's), as a country's page has them (12 Nov 14:10: every page the same)
+        if let img = (t["img"] as? [String])?.first ?? t["img"] as? String { out.photo = img }
+        if let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
+           let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue) {
+            out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true
+        }
         guard key.id == id else { return }
         facts = out
     }
@@ -335,6 +359,13 @@ extension PlacePageState.OnePage {
               let r = all[code] as? [String: Any], self.code == code else { return }
         var out = PlacePageState.Facts()
         if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
+        // its photo (Wikidata's) and, where Wikivoyage has an article for it, that article's opening words in place of the
+        // one-line description (12 Nov 14:10: every page the same)
+        if let img = (r["img"] as? [String])?.first { out.photo = img }
+        if let n = r["n"] as? String, let ll = r["ll"] as? [NSNumber], ll.count == 2,
+           let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: 150) {
+            out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true
+        }
         if let p = r["pop"] as? NSNumber { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
@@ -344,31 +375,102 @@ extension PlacePageState.OnePage {
 }
 
 extension PlacePageState {
-    /// Wikivoyage's "do" listings (a town's own, see and do; a country's do from every city it has), as rows
+    /// A PLACE'S OPENING WORDS: its own Wikivoyage article, found in the country's index by its title (the place's name,
+    /// or its name with a bracket after it, "Albert (France)") and lying within `within` km of it (25 for a town, more for
+    /// a region, whose point is its middle); the nearest if several. Nil when it has none, or the article has no intro.
+    static func guideIntro(_ cc: String, name: String, lat: Double, lon: Double, within: Double = 25) async -> String? {
+        func km(_ a: Double, _ b: Double) -> Double {
+            let p = Double.pi / 180
+            let x = (b - lon) * p * cos((a + lat) / 2 * p), y = (a - lat) * p
+            return (x * x + y * y).squareRoot() * 6371
+        }
+        // (the United Kingdom's articles are filed by its four nations: London is in gb-eng)
+        let files = cc == "gb" ? ["gb", "gb-eng", "gb-sct", "gb-wls", "gb-nir"] : [cc]
+        var best: (file: String, key: String, km: Double)?
+        for file in files {
+            guard case .ok(let d) = await Servers.data.file("placeindex/\(file).json"),
+                  let rows = try? JSONSerialization.jsonObject(with: d) as? [[Any]] else { continue }
+            for r in rows where r.count >= 6 {
+                guard let title = r[0] as? String, title == name || title.hasPrefix(name + " ("),
+                      let a = (r[3] as? NSNumber)?.doubleValue, let b = (r[4] as? NSNumber)?.doubleValue, let key = r[5] as? String else { continue }
+                let k = km(a, b)
+                if k < within, k < (best?.km ?? .infinity) { best = (file, key, k) }
+            }
+        }
+        guard let file = best?.file, let key = best?.key, case .ok(let pd) = await Servers.data.file("place/\(file)/\(key).json"),
+              let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any],
+              let intro = (j["g"] as? [String: Any])?["intro"] as? String, !intro.isEmpty else { return nil }
+        return intro
+    }
+
+    /// THE ACTIVITIES (16.4.7), Wikivoyage's "see" and "do" listings as rows, the best known first. One rule for every
+    /// town and every country (12 Nov: France's list opened with a scooter hire, New York's with a discount pass):
+    /// - a big city's guide is split into districts ("Rome/Colosseo"): they are the city's own listings;
+    /// - how well known a listing is comes from the country's things (ThingStore's file: fame 3 World Heritage or in 40+
+    ///   Wikipedias, then 2, 1, 0), found by the listing's Wikidata id; a listing the guide links to Wikidata or Wikipedia
+    ///   without being one of the things comes next; one with no link at all (a tour firm, a pass) last;
+    /// - at each fame, sights before things to do; within a city, the things' own order (the most famous first);
+    /// - a country's: one from each city in turn at each rank, the guide's main cities first. A guide that is not one
+    ///   place (its listings lie more than 400 km apart: a region, an itinerary, a topic) comes after the towns and
+    ///   does not put its title on its rows.
     static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
-        var out: [Activity] = []
-        var seen = Set<String>()
-        let cities = town.map { [$0] } ?? (first.filter { all[$0] != nil } + all.keys.sorted().filter { !first.contains($0) })
-        var each: [[Activity]] = []
-        for c in cities {
-            var mine: [Activity] = []
-            for l in all[c] ?? [] {
-                let k = l["k"] as? String ?? ""
-                guard k == "do" || (town != nil && k == "see"), let n = l["n"] as? String, seen.insert(n).inserted else { continue }
-                let desc = (l["d"] as? String).map { plain($0) } ?? ""
-                let line = town == nil ? (desc.isEmpty ? c : "\(c) · \(desc)") : desc
-                mine.append(Activity(name: plain(n), line: line))
+        // the country's things: Wikidata id -> (fame, place in the file)
+        var fame: [String: (fame: Int, at: Int)] = [:]
+        if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
+           let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
+            for (i, r) in rows.enumerated() where r.count > 5 {
+                if let q = r[0] as? String, let f = (r[5] as? NSNumber)?.intValue, fame[q] == nil { fame[q] = (f, i) }
             }
-            if !mine.isEmpty { each.append(mine) }
         }
-        // a country's: one from each city in turn (the first rows were all one city's: Japan's all Hiroshima)
-        guard town == nil else { return each.flatMap { $0 } }
-        var i = 0
-        while each.contains(where: { i < $0.count }) {
-            for list in each where i < list.count { out.append(list[i]) }
-            i += 1
+        let city = { (k: String) in k.split(separator: "/", maxSplits: 1).first.map(String.init) ?? k }
+        // each city's listings: its own article's first, then its districts' in their order
+        var byCity: [String: [[String: Any]]] = [:]
+        for k in all.keys.sorted(by: { ($0.contains("/") ? 1 : 0, $0) < ($1.contains("/") ? 1 : 0, $1) }) {
+            byCity[city(k), default: []] += all[k] ?? []
+        }
+        // one place, or a guide to many (its listings more than 400 km apart)
+        let wide = { (ls: [[String: Any]]) -> Bool in
+            let pts = ls.compactMap { ($0["ll"] as? [NSNumber]).flatMap { $0.count == 2 ? ($0[0].doubleValue, $0[1].doubleValue) : nil } }
+            guard pts.count > 1, let la0 = pts.map(\.0).min(), let la1 = pts.map(\.0).max(),
+                  let lo0 = pts.map(\.1).min(), let lo1 = pts.map(\.1).max() else { return false }
+            let ns = (la1 - la0) * 111, ew = (lo1 - lo0) * 111 * cos((la0 + la1) / 2 * .pi / 180)
+            return max(ns, ew) > 400
+        }
+        let rest = byCity.keys.sorted().filter { !first.contains($0) }
+        let wideOnes = town == nil ? Set(rest.filter { wide(byCity[$0] ?? []) }) : []
+        let cities = town.map { [$0] } ?? (first.filter { byCity[$0] != nil } + rest.filter { !wideOnes.contains($0) } + rest.filter { wideOnes.contains($0) })
+        var seen = Set<String>()
+        // ranks[r][c]: city c's rows of rank r with their place in the things' file
+        var ranks = [[[(at: Int, row: Activity)]]](repeating: [[(at: Int, row: Activity)]](repeating: [], count: cities.count), count: 10)
+        for (ci, c) in cities.enumerated() {
+            for l in byCity[c] ?? [] {
+                guard let k = l["k"] as? String, k == "see" || k == "do", let n = l["n"] as? String else { continue }
+                let name = plain(n)
+                let q = l["wd"] as? String
+                guard !name.isEmpty, !seen.contains(name.lowercased()), q.map({ !seen.contains($0) }) ?? true else { continue }
+                seen.insert(name.lowercased())
+                if let q { seen.insert(q) }
+                let known = q.flatMap { fame[$0] }
+                let r: Int
+                if let known { r = (known.fame >= 3 ? 0 : known.fame == 2 ? 2 : 4) + (k == "see" ? 0 : 1) }
+                else if q != nil || l["wp"] != nil { r = k == "see" ? 6 : 7 }
+                else { r = k == "see" ? 8 : 9 }
+                let desc = (l["d"] as? String).map { plain($0) } ?? ""
+                let line = brief(town != nil || wideOnes.contains(c) ? desc : (desc.isEmpty ? c : "\(c) · \(desc)"), 112)
+                ranks[r][ci].append((known?.at ?? Int.max, Activity(name: name, line: line)))
+            }
+        }
+        var out: [Activity] = []
+        for byCityRows in ranks {
+            let lists = byCityRows.map { $0.enumerated().sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }.map(\.element.row) }
+            // a town's: the rank whole; a country's: one from each city in turn (the first rows were all one city's)
+            var i = 0
+            while lists.contains(where: { i < $0.count }) {
+                for list in lists where i < list.count { out.append(list[i]) }
+                i += 1
+            }
         }
         return out
     }
@@ -393,10 +495,10 @@ extension PlacePageState {
     /// the source's HTML entities as the characters they stand for
     static func plain(_ s: String) -> String {
         var t = s
-        for (e, c) in [("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
+        // ("&amp;" first: the source writes some marks twice over, "&amp;ndash;", and Australia's page read)
+        for (e, c) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
                        ("&mdash;", "\u{2014}"), ("&ndash;", "\u{2013}"), ("&hellip;", "\u{2026}"), ("&rsquo;", "\u{2019}"),
-                       ("&lsquo;", "\u{2018}"), ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"), ("&eacute;", "é"),
-                       ("&amp;", "&")] {
+                       ("&lsquo;", "\u{2018}"), ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"), ("&eacute;", "é")] {
             t = t.replacingOccurrences(of: e, with: c)
         }
         // numbered ones ("&#8212;", "&#x2014;")
@@ -406,6 +508,20 @@ extension PlacePageState {
                       let v = UInt32(t[num], radix: t[hx].isEmpty ? 10 : 16), let u = Unicode.Scalar(v) else { continue }
                 t.replaceSubrange(r, with: String(Character(u)))
             }
+        }
+        // editors' notes left in the source ("<!-- ... -->") are not text: taken out, and one left open runs to the end
+        if t.contains("<!--") {
+            t = t.replacingOccurrences(of: "(?s)<!--.*?-->", with: "", options: .regularExpression)
+            t = t.replacingOccurrences(of: "(?s)<!--.*$", with: "", options: .regularExpression)
+            t = t.trimmingCharacters(in: .whitespaces)
+        }
+        // what the source's dropped marks leave behind: an empty bracket ("Germany (German: ) is"), a picture's tail
+        // ("|310x310px]]"), a bracket opening on a comma, a space before a comma
+        if t.contains(" )") || t.contains("( ") || t.contains(" ,") || t.contains("px]]") {
+            t = t.replacingOccurrences(of: "\\s*\\((?:\\p{Lu}[\\p{L} ]{1,24}:)?[\\s,;]*\\)", with: "", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\s*\\|?\\d+(?:x\\d+)?px\\]\\]", with: "", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\(\\s*,\\s*", with: "(", options: .regularExpression)
+            t = t.replacingOccurrences(of: "(\\w) ,", with: "$1,", options: .regularExpression)
         }
         return t
     }
@@ -417,10 +533,95 @@ extension PlacePageState {
         if let r = head.range(of: ". ", options: .backwards) { return String(head[..<r.lowerBound]) + "." }
         return head
     }
+    /// A ROW'S LINE CUT TO WHAT TWO LINES HOLD, AT A SENTENCE OR A WORD (the row cut it itself, in the middle of a
+    /// word: "Staff assist if yo…"): whole sentences while they fit; a first sentence too long is cut at its last
+    /// whole word, with the mark of more
+    static func brief(_ s: String, _ n: Int) -> String {
+        guard s.count > n else { return s }
+        let head = String(s.prefix(n))
+        if let r = head.range(of: ". ", options: .backwards), head.distance(from: head.startIndex, to: r.lowerBound) >= n / 3 {
+            return String(head[..<r.lowerBound]) + "."
+        }
+        guard let sp = head.lastIndex(of: " ") else { return head }
+        return String(head[..<sp]).trimmingCharacters(in: CharacterSet(charactersIn: " ,;:\u{2013}\u{2014}-(")) + "\u{2026}"
+    }
     static func big(_ v: Double) -> String {
         if v >= 1_000_000_000 { return String(format: "%.1f billion", v / 1e9) }
         if v >= 1_000_000 { return String(format: "%.1f million", v / 1e6) }
         return Int(v).formatted()
+    }
+    /// A PLACE'S AREA as the page writes it. The server's figure is Wikidata's: where it gives several (Bosnia: 10,
+    /// 51,187 and 51,209.2; the page read "10 km²") the largest is the place's. Two are another thing's and are
+    /// given here: France's 643,801 is the Republic with its overseas regions, which are places of their own in the
+    /// app (metropolitan France: 543,940, the land register's figure); Macau's 115.3 counts its sea (its land: 33.3 in
+    /// 2024, the government's yearbook). Under 10 km² one decimal ("2.1", "0.5"; the Vatican read "0 km²").
+    static func area(_ v: Any?, cc: String) -> String? {
+        let own: [String: Double] = ["fr": 543_940, "mo": 33.3]
+        let all = (v as? [NSNumber])?.map(\.doubleValue) ?? (v as? NSNumber).map { [$0.doubleValue] } ?? []
+        guard let a = own[cc] ?? all.max(), a > 0 else { return nil }
+        return a < 10 ? String(format: "%.1f", a) : big(a)
+    }
+    /// THE TIME ZONES ROW: offsets only ("UTC+01:00"), each once, in order; more than three as a span. A place's
+    /// zones are the time zone database's own for it (zone.tab, bundled as place-zones.json: 247
+    /// places, 417 zones; public domain), each as its clock stands now, so the row is right through summer time and
+    /// when a country changes its clocks. The server's list is Wikidata's and was wrong where it mattered most: Russia
+    /// read "UTC+02:00", Australia "UTC+10:00", the United States, India and Chile nothing, Bosnia its winter and
+    /// summer offsets as two zones. It answers only for a place
+    /// the database does not list (Kosovo, the parts of the United Kingdom): where that place's own zones are named
+    /// by id, theirs; else the offsets written.
+    private static let placeZones: [String: [String]] = {
+        guard let u = Bundle.main.url(forResource: "place-zones", withExtension: "json"), let d = try? Data(contentsOf: u),
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: [String]] else { return [:] }
+        return j
+    }()
+    static func zones(_ raw: Any?, cc: String) -> (String, String)? {
+        func text(_ m: Int) -> String { String(format: "UTC%@%02d:%02d", m < 0 ? "-" : "+", abs(m) / 60, abs(m) % 60) }
+        func minutes(_ s: String) -> Int? {
+            guard s.hasPrefix("UTC") else { return nil }
+            let rest = s.dropFirst(3)
+            guard let sign = rest.first else { return 0 }
+            let n = rest.dropFirst().split(separator: ":").compactMap { Int($0) }
+            guard let h = n.first else { return nil }
+            let m = h * 60 + (n.count > 1 ? n[1] : 0)
+            return sign == "-" || sign == "\u{2212}" ? -m : m
+        }
+        let every = (raw as? [String]) ?? (raw as? String).map { [$0] } ?? []
+        let known = (placeZones[cc] ?? []).compactMap { TimeZone(identifier: $0) }
+        let own = known.isEmpty ? every.filter { $0.contains("/") }.compactMap { TimeZone(identifier: $0) } : known
+        let named = Set(own.map { $0.secondsFromGMT() / 60 })
+        let m = (named.isEmpty ? Set(every.compactMap(minutes)) : named).sorted()
+        guard let first = m.first, let last = m.last else {
+            // (words only, for a place the database does not list: the words)
+            return every.isEmpty ? nil : (every.count == 1 ? "Time zone" : "Time zones", every.prefix(3).joined(separator: ", "))
+        }
+        if m.count == 1 { return ("Time zone", text(first)) }
+        return ("Time zones", m.count <= 3 ? m.map(text).joined(separator: ", ") : "\(text(first)) to \(text(last))")
+    }
+    /// THE PLUGS BY THEIR LETTERS ("Type C, E, F"), as travellers and adapters name them. The server's words are
+    /// Wikidata's labels, a mix of trade names and standards ( on Monaco's page). The British family's label alone
+    /// is the old round-pin D (Monaco,
+    /// Senegal, Madagascar, Chad: C, D, E ... in the published lists); beside a British standard of its own it adds
+    /// nothing.
+    static func plugs(_ v: Any?) -> String? {
+        let names = (v as? [String]) ?? (v as? String).map { [$0] } ?? []
+        let british = names.contains("BS 1363") || names.contains("BS 546")
+        var letters = Set<String>()
+        for n in names {
+            switch n {
+            case "NEMA 1-15": letters.insert("A")
+            case "NEMA 5-15": letters.insert("B")
+            case "Europlug": letters.insert("C")
+            case "BS 546": letters.insert("D")
+            case "Schuko": letters.insert("F")
+            case "BS 1363": letters.insert("G")
+            case "AS/NZS 3112": letters.insert("I")
+            case "SN 441011": letters.insert("J")
+            case "IEC 60906-1": letters.insert("N")
+            case "AC power plugs and sockets: British and related types": if !british { letters.insert("D") }
+            default: if n.hasPrefix("Type "), n.count == 6, let l = n.last { letters.insert(String(l)) }
+            }
+        }
+        return letters.isEmpty ? nil : "Type " + letters.sorted().joined(separator: ", ")
     }
 }
 
@@ -669,7 +870,8 @@ private struct PageLayer: View {
                     } else { Palette.cream }
                 }
                 .frame(width: w, height: w * 10 / 16)
-                .clipped()
+                // (the page's photo corner, as a thing's page: these were cut square)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 Button {
                     Feel.tap()
                     Task {
@@ -948,9 +1150,9 @@ struct SourcesRow: View {
     }
 
     /// the page's sources as (what, who and the licence) pairs, in the page's order
-    static func lines(_ facts: PlacePageState.Facts, kind: PlaceKey.Kind, credits: [String: String]) -> [(String, String)] {
+    static func lines(_ facts: PlacePageState.Facts, kind: PlaceKey.Kind, credits: [String: String], id: String = "") -> [(String, String)] {
         var out: [(String, String)] = []
-        if kind == .country, !facts.prose.isEmpty { out.append(("Text", "Wikivoyage, CC BY-SA")) }
+        if facts.proseWikivoyage, !facts.prose.isEmpty { out.append(("Text", "Wikivoyage, CC BY-SA")) }
         else if !facts.prose.isEmpty { out.append(("Text", kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
         if let f = facts.photo { out.append(("Photo", (credits[f] ?? f) + ", Wikimedia Commons")) }
         if !facts.rows.isEmpty { out.append(("Facts", kind == .town ? "GeoNames, CC BY 4.0" : kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
@@ -959,6 +1161,10 @@ struct SourcesRow: View {
             out.append(("Photo of \(h.name)", (credits[f] ?? f) + ", Wikimedia Commons"))
         }
         if !facts.activities.isEmpty { out.append(("Activities", "Wikivoyage, CC BY-SA")) }
+        // (where the page has its regions: the places whose regions, or outline, are geoBoundaries' (gbOpen, CC BY 4.0))
+        let cc = id.lowercased()
+        if kind == .country, ["sm", "li", "ad", "to", "tv", "fm", "gm"].contains(cc) { out.append(("Regions", "geoBoundaries, CC BY 4.0")) }
+        if kind == .country, cc == "va" { out.append(("Outline", "geoBoundaries, CC BY 4.0")) }
         for a in facts.advice { out.append(("Advice", "The \(a.who) government")) }
         return out
     }
@@ -1028,8 +1234,8 @@ enum PageGlass {
     /// the head's circles (search, the plus and its tools): navigation, clear on the map and over a page
     @MainActor static var head: SwiftUI.Glass { clearControls ? .clear : surface }
     /// the water and what rises out of it, search's results box, the map's word capsules: the system's own frosted
-    /// glass everywhere (7 Nov 16:49: Apple's frosted levels), so it follows iOS 27's Liquid Glass slider
-    /// and its legibility. (The passport's pages stay clear, 30 Oct.)
+    /// glass everywhere, so it follows iOS 27's Liquid Glass slider
+    /// and its legibility. (The passport's pages stay clear:.)
     @MainActor static var surface: SwiftUI.Glass { .regular }
 }
 
@@ -1062,7 +1268,10 @@ private struct ActivitiesList: View {
                         Text(a.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                // (one gap between rows whatever their lines: a row of one line was centred in 52 pt, so the row
+                // after a two-line one sat 10 pt nearer than the others)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if rows.count > shown {
                 Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)

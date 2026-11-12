@@ -67,7 +67,9 @@ struct VerifySheet: View {
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - top)
         // below full only whole rows show (the last one was cut in half at 50%, 8 Nov)
-        let cut: CGFloat? = water.stop == .full ? nil : top + h + 1
+        // (8 pt of give: the last row's bottom is within a point of the cut at rest, so it waited for the water's spring
+        // to settle its last points and came two frames after the others; its words sit in its middle, never cut)
+        let cut: CGFloat? = water.stop == .full ? nil : top + h + 9
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 if form.page > 0.5 || !CardState.shared.isOpen {
@@ -122,7 +124,7 @@ struct VerifySheet: View {
             Text(id == "here" ? (s.hereWord ?? name) : name)
                 .font(.body)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: s.hereWord)
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                 .contentShape(Rectangle())

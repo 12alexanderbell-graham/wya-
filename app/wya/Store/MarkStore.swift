@@ -198,6 +198,13 @@ final class MarkStore {
         apply(r, words: "\(label(key, name)) proof", origin: nil, who: .you)
     }
 
+    /// every stamped record's facts, for the badges and the stats
+    func badgeRows() async -> [TravelStore.BadgeRow] {
+        guard let store else { return [] }
+        let acc = account
+        return (try? await store.badgeRows(account: acc)) ?? []
+    }
+
     /// the Stamped list's second line: latest year and verified, by key ("c:fr")
     func listInfo() async -> [String: (year: Int?, verified: Bool)] {
         guard let store else { return [:] }

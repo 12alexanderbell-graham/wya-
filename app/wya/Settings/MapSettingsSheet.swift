@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// MAP SETTINGS IN THE WATER (Part 5.3, 5.4): the rows of MapSettingsRows in the water while the gear is out, with no
-/// title, no grabber and no words under any row; Borders, Disputes and Advanced pushed Apple's way with the app's back arrow.
+/// title, no grabber and no words under any row; Borders, Disputes and Advanced pushed Apple's way with the back arrow.
 ///
-/// As built: black and white only; the current choice is a black band the water's width with white
+/// The rules as built (30 Oct): black and white only; the current choice is a black band the water's width with white
 /// words, and it just appears (no front, no circle); values change by Apple's text roll; a row's words are there only
 /// while the whole row is inside the list, so the list's edges never cut a word (they roll out before it).
 struct MapSettingsSheet: View {
@@ -42,7 +42,7 @@ extension EnvironmentValues {
 /// a line's placeholder for the text roll (en spaces), as the caption does it
 private func blank(_ s: String) -> String { String(repeating: "\u{2002}", count: max(1, s.count)) }
 
-/// ONE ROW: its name on the left, its value on the right (50% black), the app's chevron after a page's value
+/// ONE ROW: its name on the left, its value on the right (50% black), the chevron after a page's value
 private struct RowWords: View {
     let name: String
     let value: String
@@ -77,16 +77,21 @@ private struct RowWords: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            if chevron { Icon5(key: "forward", ink: Palette.ink, size: 15).opacity(shown ? 1 : 0) }
+            // (with the row's words, in the same frame: it faded in after them and stood on for two frames after the
+            // rows had gone, over the planets, 12 Nov strips)
+            if chevron {
+                Icon5(key: "forward", ink: Palette.ink, size: 15).opacity(shown ? 1 : 0)
+                    .transaction { $0.disablesAnimations = true; $0.animation = nil }
+            }
         }
         .font(.body)
-        .contentTransition(.numericText())
+        .contentTransition(.identity)
         .padding(.horizontal, 16)
         .frame(height: height)
         .frame(maxWidth: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        // the current choice: the black band, the water's width; it just appears
-        // (in its own transaction: it faded in with the words' roll)
+        // the current choice: the black band, the water's width; it just appears (30 Oct 02:25)
+        // (in its own transaction: it faded in with the words' roll, 8 Nov)
         .background { (band && shown ? Palette.ink : Color.clear).transaction { $0.disablesAnimations = true; $0.animation = nil } }
         .contentShape(Rectangle())
         // words only while the whole row is inside the list: they roll out before an edge could cut them
@@ -249,7 +254,7 @@ private struct SettingsList: View {
         if choices.count == 2, open != row.id {
             // two choices: one tap switches; the value rolls; the map changes behind (notch + click: a two-state switch)
             let next = choices.first { $0.id != row.get(s) }?.id ?? choices[0].id
-            // haptics only: no sound is added here
+            // haptics only: no sound is added anywhere unless the owner asks (30 Oct 02:57)
             Feel.notch()
             Task { await MapSettingsRows.set(row.id, next, map: map) }
         } else {
@@ -302,7 +307,7 @@ enum BordersNames {
     }
 }
 
-/// A PAGE (Borders, Disputes, Advanced), pushed Apple's way inside the water, the app's back arrow on its top row
+/// A PAGE (Borders, Disputes, Advanced), pushed Apple's way inside the water, the back arrow on its top row
 private struct SettingsPage: View {
     let page: String
     let map: MapController

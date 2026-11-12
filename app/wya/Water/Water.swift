@@ -1,12 +1,16 @@
 import SwiftUI
 
 /// THE WATER: the tab capsule and the sheet are one body of glass; the sheet pours up out of the capsule and drains
-/// back into it. So there is no surface simulation any more, nothing that keeps moving on its own and nothing that can
-/// build up: the glass is one shape worked out from two numbers (the droplet model of the old app's GlassForm):
-/// `level`, where the body's top edge is, and `drop`, how far a droplet reaches out of that edge towards your finger.
-/// The body follows the finger on a soft spring with no bounce; whatever it lags behind is the droplet, so a quick pull
-/// leads with a round drop and the body fills in behind it, and the moment you stop the body catches up and the drop
-/// goes back into it. At full it is the page: the screen's own edges and corners, no droplet, no movement.
+/// back into it.
+///
+/// The 02:32: So there is no surface simulation any more, nothing
+/// that keeps moving on its own and nothing that can build up: the glass is one shape worked out from two numbers
+/// (the droplet model of the old app's GlassForm): `level`, where the body's top edge is, and `drop`, how far a
+/// droplet reaches out of that edge towards your finger. The body follows the finger on a soft spring with no
+/// bounce; whatever it lags behind is the droplet, so a quick pull leads with a round drop and the body fills in
+/// behind it, and the moment you stop the body catches up and the drop goes back into it.
+///
+/// At full it is the page: the screen's own edges and corners, no droplet, no movement (the 02:32).
 @MainActor
 @Observable
 final class Water {
@@ -42,15 +46,14 @@ final class Water {
     @ObservationIgnored private var settingsJob = 0
     @ObservationIgnored private var settingsClosing = false
     func openSettings() {
-        // opened again while closing: the close is called off and the words come back
+        // opened again while closing: the close is called off; the rows are still there (they stay until the water
+        // lands), and the water turns back up
         if settings, settingsClosing {
             settingsJob += 1; settingsClosing = false
+            onLand = nil
             settingsFrom = stop
-            let me = settingsJob
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-                guard let self, self.settings, me == self.settingsJob else { return }
-                withAnimation(Motion.quick) { self.settingsWords = true }
-            }
+            settingsWords = true
+            if stop == .closed || stop == .quarter { go(.half) }
             return
         }
         guard !settings else { return }
@@ -58,32 +61,40 @@ final class Water {
         settingsFrom = details && stop == .half ? .quarter : stop
         // over the menu (6.3): from the menu stop down to 50% while the rows leave; closing brings the menu back
         if regions { leaveMenuRows() }
+        // THE ROWS COME AND GO WITH THE WATER (12 Nov: words no longer roll, so nothing has to leave letter by letter
+        // first; the caption is cut as settings take the water and the solar system is simply not there (8 Nov), so
+        // the third of a second the rows used to wait was an empty sheet). The rows are in the water from the first
+        // frame and rise with it. Over Regions' list they still wait for its rows to leave.
+        let atOnce = !regions
         settings = true
         if stop == .closed || stop == .quarter || regions { go(.half) }
         settingsJob += 1
+        if atOnce { settingsWords = true; return }
         let me = settingsJob
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             guard let self, self.settings, me == self.settingsJob else { return }
-            withAnimation(Motion.quick) { self.settingsWords = true }
+            self.settingsWords = true
         }
     }
-    /// MAP SETTINGS CLOSE (A5.2): the rows' words roll out first; then the water goes back to the stop it was at (or
-    /// stays where a pull's release took it) and the Cosmos and the caption come back by their own rules
+    /// MAP SETTINGS CLOSE (A5.2): the water goes back to the stop it was at with the rows still in it, and they give
+    /// the water back to the caption as it lands (a sheet's content changes when the sheet is where it belongs); where
+    /// the water stays (it was at 50% or higher, or a pull's release took it), the rows go at once and the Cosmos and
+    /// the caption come back by their own rules
     func closeSettings() {
         guard settings, !settingsClosing else { return }
         settingsClosing = true
         settingsJob += 1
         let me = settingsJob
-        withAnimation(.smooth(duration: 0.15)) { settingsWords = false }
         let back = settingsFrom
         settingsFrom = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+        let done = { [weak self] in
             guard let self, me == self.settingsJob else { return }
+            self.settingsWords = false
             self.settingsClosing = false
             self.settings = false
-            if self.regions { self.go(.half); return }
-            if let back, self.stop == .half, back != .half, self.grab == nil { self.go(back) }
         }
+        if regions { done(); go(.half); return }
+        if let back, stop == .half, back != .half, grab == nil { onLand = done; go(back) } else { done() }
     }
     /// REGIONS' SELECTION MENU is the water's content (6.3): the water is at full, and a drag on it scrolls the list and
     /// never moves it.
@@ -106,8 +117,9 @@ final class Water {
     var menuShown: Bool { regions && !settings && !details && !upload && !pageUp }
     /// the head, for the menu's search (set once by the screen)
     @ObservationIgnored weak var head: HeadState?
-    /// the menu is the whole screen, as the old native app's Regions list was: the list comes out of the tab bar to the
-    /// whole screen, clear glass with the world under it; never a height between half and full
+    /// the menu is the whole screen, as the old native app's Regions list was (clear glass with the world under
+    /// it); never a height between half and full (30 Oct 22:35:
+    ///)
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
     func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }
@@ -162,24 +174,19 @@ final class Water {
     func openDetails() {
         if details, detailsClosing {
             detailsJob += 1; detailsClosing = false
+            onLand = nil
             detailsFrom = stop
-            let me = detailsJob
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-                guard let self, self.details, me == self.detailsJob else { return }
-                withAnimation(Motion.quick) { self.detailsWords = true }
-            }
+            detailsWords = true
+            if stop == .closed || stop == .quarter { go(.half) }
             return
         }
         guard !details else { return }
         detailsFrom = stop
+        // (as settings: the rows are in the water from the first frame)
         details = true
         if stop == .closed || stop == .quarter { go(.half) }
         detailsJob += 1
-        let me = detailsJob
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            guard let self, self.details, me == self.detailsJob else { return }
-            withAnimation(Motion.quick) { self.detailsWords = true }
-        }
+        detailsWords = true
     }
     /// `rolled`: the sheet's words have already rolled out (back to the Stamped list, A4.21), so no wait for them
     func closeDetails(rolled: Bool = false) {
@@ -187,15 +194,20 @@ final class Water {
         detailsClosing = true
         detailsJob += 1
         let me = detailsJob
-        withAnimation(.smooth(duration: 0.15)) { detailsWords = false }
         let back = detailsFrom
         detailsFrom = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + (rolled ? 0 : 0.18)) { [weak self] in
+        let done = { [weak self] in
             guard let self, me == self.detailsJob else { return }
+            self.detailsWords = false
             self.detailsClosing = false
             self.details = false
-            // back to where it was, unless a pull's release already took it somewhere below 50%
-            if let back, self.stop != back, self.stop.rawValue >= Stop.half.rawValue, self.grab == nil, !self.settings { self.go(back) }
+        }
+        // back to where it was with its rows still in it (they go as the water lands, as settings' do), unless a
+        // pull's release already took it somewhere below 50%; back to the Stamped list, at once (A4.21)
+        if !rolled, let back, stop != back, stop.rawValue >= Stop.half.rawValue, grab == nil, !settings { onLand = done; go(back) }
+        else {
+            done()
+            if rolled, let back, stop != back, stop.rawValue >= Stop.half.rawValue, grab == nil, !settings { go(back) }
         }
     }
 
@@ -290,14 +302,14 @@ final class Water {
         let A = L.capsule
         let Q = L.top(.quarter), Hf = L.top(.half)
         // out of the capsule: the top edge rises first, and the sides and the bottom widen to the sheet's in the
-        // second part of the way (the old sheetBase)
+        // second part of the way (the old sheetBase: it grows out, then widens to cover the whole side)
         let q = Flow.clamp01((A.minY - lv) / max(1, A.minY - Q))
         let wide = Flow.smooth(0.3, 1, q)
         // past half it becomes the page: its edges go out to the screen's
         let pg = Flow.clamp01((Hf - lv) / max(1, Hf))
         let pageEase = pg * pg * (3 - 2 * pg)
-        // at full the glass has no edge anywhere on the screen: on the way there its sides, its bottom and its top go
-        // on out past the screen's own edges, so no rim or corner is ever seen
+        // at full the glass has no edge anywhere on the screen: on the way there
+        // its sides, its bottom and its top go on out past the screen's own edges, so no rim or corner is ever seen
         let past = Self.pastEdge * pageEase
         let inset = L.sheetInset * (1 - pageEase) - past
         let left = Flow.lerp(A.minX, inset, wide)
@@ -315,6 +327,8 @@ final class Water {
 
     // MARK: touch
     @ObservationIgnored private var body = Spring1(Layout.placeholder.top(.quarter), response: 0.42, damping: 1)
+    /// where the water's top is going (its top now, once it has landed): what is framed above it is framed for this
+    var goalTop: CGFloat { body.target }
     @ObservationIgnored private var dropSpring = Spring1(0, response: 0.3, damping: 1)
 
     @ObservationIgnored private var grab: (level: CGFloat, y: CGFloat, from: Stop)?
@@ -362,8 +376,9 @@ final class Water {
         // where the top edge would be if it were glued to the finger
         var t = g.level + (p.y - g.y)
         let lo = L.top(.full), hi = L.top(.closed)
-        // past full it does not go at all: no give and no spring back at the top
+        // past full it does not go at all: no give and no spring back at the top 
         if t < lo { t = lo }
+        // NO WATER PHYSICS: the sheet is
         // a plain sheet under the finger, one to one, with hard ends: no give past a stop, no harder band above 50%,
         // no ticks, no droplet, no lag behind the finger
         // the upload sheet has no 50% while choosing (9.3), and at history height the line needs the map (13.4):
@@ -372,8 +387,8 @@ final class Water {
         if historyUp, !stampedList, !details { t = max(t, restTop(.quarter)) }
         // the Route row (Pins) is the caption's line at 25%: nothing above it to show (its 50% was empty glass)
         if PinRoutes.shared.open { t = max(t, L.top(.quarter)) }
-        // over the plain Countries map the water goes no higher than 50% (no full-screen solar system); full is for
-        // what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
+        // no full-screen solar system any more (8 Nov 20:09): over the plain Countries map the water goes no higher
+        // than 50%; full is for what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
         if !fullAllowed { t = max(t, L.top(.half)) }
         // a country's region map with nothing open: its levels line at 25% is all there is (50% was empty glass)
         if !halfAllowed { t = max(t, L.top(.quarter)) }
@@ -446,10 +461,9 @@ final class Water {
     /// the page never bounces against the screen's edges.
     /// THE WATER'S FIRST-TIME HINT (A3.15): its top rises 24 pt and settles back, 0.8 s, the one time it moves by
     /// itself; a finger takes it from wherever it is
-    /// whether the water may be pulled to full: not over the plain Countries map
+    /// whether the water may be pulled to full: not over the plain Countries map (the full-screen solar system went)
     var fullAllowed: Bool {
-        // (nor over Places' map: its set's rows hold at 50%: nothing of Places is a full
-        // screen)
+        // (nor over Places' map: its set's rows hold at 50%)
         // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
         // or note, and a route's colour, go to full, for the keyboard and the picker)
         if stampedList || settings || details || upload || pageSheet || regions { return true }
@@ -472,7 +486,7 @@ final class Water {
     @ObservationIgnored var placesMenuUp: () -> Bool = { false }
 
     func hint() {
-        // (no more: the water never moves by itself)
+        // (no more: the water never moves by itself; its physics went, 8 Nov 20:12)
     }
 
     /// the water at a stop at once, no movement (a mode's own content swapped in, not moved)
@@ -553,8 +567,13 @@ final class Water {
     @ObservationIgnored private var pubLevel: CGFloat = Layout.placeholder.top(.quarter)
     @ObservationIgnored private var pubDrop: CGFloat = 0
 
+    /// what happens as the water lands where it was sent (within 6 pt of it, no finger on it): settings' and Details'
+    /// rows give the water back
+    @ObservationIgnored private var onLand: (() -> Void)?
+
     private func step(_ dt: CGFloat) -> Bool {
         body.step(dt)
+        if let f = onLand, grab == nil, abs(body.value - body.target) < 6 { onLand = nil; f() }
         // the droplet is what the body lags behind the finger, upward only, and at most 90 points
         // (no droplet any more: the sheet is under the finger)
         let lead: CGFloat = 0

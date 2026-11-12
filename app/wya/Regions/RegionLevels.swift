@@ -70,18 +70,22 @@ struct RegionLevels: View {
                     }
                 }
                 .frame(width: width)
+                // (the words' places change with the words, in the same frame: see `roll`)
+                .transaction(value: visible) { $0.animation = nil; $0.disablesAnimations = true }
             }
         }
         .foregroundStyle(Palette.ink)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
-    /// a word by the text roll: there, or a blank of its length (never faded, never scaled)
+    /// a word: there, or a blank of its length (never faded, never scaled). It changes in one frame, its place with
+    /// it: while the change was still animated the words cut in at once but the line took a quarter of a second to
+    /// re-space from the blanks' widths, so for a frame "communes" and "towns" stood as one word (12 Nov strip)
     private func roll(_ s: String) -> some View {
         Text(visible ? s : Caption.blank(s, "\u{2002}"))
-            .contentTransition(.numericText(value: visible ? 1 : 0))
-            .animation(Motion.quick, value: visible)
-            .animation(Motion.quick, value: s)
+            .contentTransition(.identity)
+            .transaction(value: visible) { $0.animation = nil; $0.disablesAnimations = true }
+            .transaction(value: s) { $0.animation = nil; $0.disablesAnimations = true }
     }
 }
 

@@ -12,6 +12,7 @@ struct wyaApp: App {
         }
         Snap.start()
         Task { @MainActor in Hitches.start(); HangWatch.start() }
+        Task.detached(priority: .utility) { await DevDataClient.refresh() }
     }
 
     @Environment(\.scenePhase) private var phase

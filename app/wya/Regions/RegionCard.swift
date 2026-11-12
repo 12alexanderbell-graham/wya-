@@ -30,7 +30,7 @@ final class RegionCardState {
         map.kept = place
         p = 0
         Feel.tap()
-        // THE WATER HIGHER THAN 25% (Places' menu at 50%; a pressed sea had nothing to act on): the
+        // THE WATER HIGHER THAN 25% (Places' menu at 50%; 11 Nov: a pressed sea): the
         // card stands on the 25% water, so the water goes down first and the card comes out of it once it is there
         // (0.3 s later; coming at once, its buttons showed through the glass on the way down)
         var wait = 0.0
@@ -45,7 +45,8 @@ final class RegionCardState {
     func close(map: MapController, instant: Bool = false) {
         guard key != nil else { return }
         // (a set's place stays darkened while its card is up, as a region does; it is let go as the card goes)
-        if map.markCollection != nil, map.thingPressed != nil { map.thingPressed = nil; map.needsFrame = true }
+        // (and a thing found by search on the towns' map)
+        if map.markCollection != nil || key?.kind == .thing, map.thingPressed != nil { map.thingPressed = nil; map.needsFrame = true }
         if instant {
             closing = false
             closedAt = CACurrentMediaTime()
@@ -150,7 +151,7 @@ struct RegionCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(.clear, in: .capsule)
@@ -201,7 +202,7 @@ struct RegionCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(Palette.ink)
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
@@ -231,7 +232,7 @@ struct RegionCard: View {
                 // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
-                .contentTransition(.numericText())
+                .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
                 .glassEffect(s.wished ? .clear.tint(Palette.blue) : .clear, in: .capsule)

@@ -124,6 +124,39 @@ actor TravelStore {
         return out
     }
 
+    /// WHAT THE BADGES AND STATS COUNT FROM: every stamped record's own facts (when it was stamped and the month given
+    /// for it, its details' first day and stars, whether it has words, came from a wish or through a territory, is
+    /// verified; a region's, town's or thing's country and level)
+    struct BadgeRow: Sendable {
+        let key: String
+        let at: Date
+        let when: String
+        let from: String
+        let stars: Int
+        let lived: Bool
+        let noted: Bool
+        let via: Bool
+        let came: Bool
+        let verified: Bool
+        let name: String
+        let cc: String
+        let level: Int
+    }
+    func badgeRows(account: String) throws -> [BadgeRow] {
+        let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        return rs.map { r in
+            let d = StampDetails(json: r.details)
+            var verified = false
+            if let v = r.verification, let o = try? JSONSerialization.jsonObject(with: v) as? [String: Any] {
+                verified = (o["state"] as? String) == "verified"
+            }
+            let words = r.note.trimmingCharacters(in: .whitespacesAndNewlines) + (d.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return BadgeRow(key: r.key, at: r.at, when: r.when ?? "", from: d.from ?? "", stars: d.stars ?? 0, lived: r.lived,
+                            noted: !words.isEmpty, via: r.via != nil, came: r.came != nil, verified: verified, name: r.name,
+                            cc: r.cc, level: r.level)
+        }
+    }
+
     /// THE CALENDAR'S ROWS (Part 9.9): every visit record, and the stays kept in stamps' details (Lived here)
     func calendarRows(account: String) throws -> [CalendarIndex.Row] {
         let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))

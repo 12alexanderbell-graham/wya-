@@ -203,6 +203,10 @@ struct StampedList: View {
         // over their empty margins, and a scroll stops on a row boundary
         let n = max(1, Int((h - 8) / 56))
         let vh = CGFloat(n) * 56 + 8
+        // (worked out once a pass: the body runs every frame the water moves, and the rows were built from every mark
+        // and sorted six times in each)
+        let rows = self.rows
+        let listed = self.listed(rows)
         List {
             ForEach(listed) { r in
                 row(r)
@@ -276,7 +280,7 @@ struct StampedList: View {
         .allowsHitTesting(water.stampedList)
         .onAppear {
             startTop = form.top; openedAt = Date()
-            Self.testDetails = { id in if let r = rows.first(where: { $0.id == id }) { details(r) } }
+            Self.testDetails = { id in if let r = self.rows.first(where: { $0.id == id }) { details(r) } }
         }
         // the rows come once the water is 80% of the way up (from wherever it was when the list opened)
         .onChange(of: water.stampedList && form.top <= L.top(.full) + 0.2 * max(0, (startTop ?? form.top) - L.top(.full))
@@ -291,7 +295,7 @@ struct StampedList: View {
         // shrinks, then the rows below move up (List's own removal would fade it)
         .onChange(of: rows.map(\.id)) { old, new in
             let gone = last.filter { !new.contains($0.id) }
-            last = rows
+            last = self.rows
             guard arrived else { return }
             let added = new.filter { !old.contains($0) }
             // the space opens first (List's insertion fades a row in: it must be blank then), then the row arrives
@@ -307,13 +311,13 @@ struct StampedList: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + Self.each) { kept.removeAll { $0.id == r.id } }
             }
         }
-        .onAppear { last = rows }
+        .onAppear { last = self.rows }
     }
 
     /// the rows as shown: the store's, plus any still leaving
     /// (`last` too: on the first frame after the store drops a row, before onChange has put it in `kept`, it is still
     /// there, so List never removes it and puts it back)
-    private var listed: [Row] {
+    private func listed(_ rows: [Row]) -> [Row] {
         var ids = Set(rows.map(\.id))
         var out = rows
         for r in last + kept where !ids.contains(r.id) { out.append(r); ids.insert(r.id) }
@@ -322,12 +326,13 @@ struct StampedList: View {
         return out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// A4.19: top down, 0.025 s apart, the first 15 animated and the rest simply there; never before the solar
-    /// system has gone down out of the water (Motion.chrome, 0.38 s from the list opening): one out, then the other in
+    /// A4.19: top down, 0.025 s apart, the first 15 animated and the rest simply there. (It used to wait 0.38 s for
+    /// the solar system to go down out of the water; since 8 Nov the system is simply not there while a list is the
+    /// water's content, so the wait was the sheet rising with no rows in it: none now, 12 Nov.)
     private func arrive() {
         arrived = true
         if Self.backFromDetails { Self.backFromDetails = false; rise(); return }
-        let wait = max(0, 0.38 - Date().timeIntervalSince(openedAt))
+        let wait = 0.0
         for (i, r) in rows.enumerated() {
             if i < Self.animated { show(r.id, after: wait + Self.gap * Double(i)) }
             else { flagOut.insert(r.id); wordsOut.insert(r.id) }
@@ -375,10 +380,10 @@ struct StampedList: View {
                 // gets a little smaller first)
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.7)
-                    .contentTransition(.numericText(value: w ? 1 : 0))
+                    .contentTransition(.identity)
                 Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1).minimumScaleFactor(0.75)
-                    .contentTransition(.numericText(value: w ? 1 : 0))
+                    .contentTransition(.identity)
             }
             Spacer(minLength: 0)
         }

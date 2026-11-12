@@ -22,9 +22,9 @@ enum Snap {
     /// a grab is still being written (main thread only)
     nonisolated(unsafe) static var writing = false
     /// another copy of the app has taken the test files over; a moment when the file can't be read (iCloud busy with
-    /// it) is not that: grabs stopped for good on such a moment, which looked like the app freezing
-    /// (no longer read here on the main thread, where a read the synced folder held stopped the whole app; the test
-    /// driver reads it with the commands, off the main thread, and leaves what it found here)
+    /// it) is not that: grabs stopped for good on such a moment, which looked like the app freezing (29 Oct 03:15)
+    /// (8 Nov: no longer read here on the main thread, where a read the synced folder held stopped the whole app; the
+    /// test driver reads it with the commands, off the main thread, and leaves what it found here)
     nonisolated(unsafe) static var ownerSeen: String?
     static var isOwner: Bool { ownerSeen.map { $0 == me } ?? true }
 
@@ -41,12 +41,13 @@ enum Snap {
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { timer in
             MainActor.assumeIsolated {
                 guard isOwner else { return }
-                // ONLY WHILE I'M TESTING: a grab only in the 20 s after a test command, never while the app is just
-                // being used
+                // ONLY WHILE I'M TESTING (29 Oct, found by the hitch counter: each grab held the screen 50 to 70 ms,
+                // four times a second, so the simulator stuttered all the time for whoever used it): a grab only in
+                // the 20 s after a test command, never while the app is just being used
                 guard CACurrentMediaTime() < activeUntil else { return }
                 // never while frames are being measured (each grab is itself a late frame: the first Step 1c tables
                 // counted the grabs, about 10 of the late frames in each 120)
-                guard !FrameStats.on, !writing else { return }
+                guard !FrameStats.on, !Sampler.on, !writing else { return }
                 let ms = Int(Date().timeIntervalSince(t0) * 1000)
                 let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
                     .flatMap(\.windows).filter { !$0.isHidden && $0.alpha > 0 }
@@ -70,9 +71,9 @@ enum Snap {
         #endif
     }
 
-    /// FRAME BY FRAME: every screen refresh for `ms` milliseconds, written as b000.jpg, b001.jpg … with the time of
-    /// each in burst.txt, so an animation can be stepped through as it really ran (each grab costs time, so the frames
-    /// come as fast as the simulator allows)
+    /// FRAME BY FRAME: every screen refresh for `ms`
+    /// milliseconds, written as b000.jpg, b001.jpg … with the time of each in burst.txt, so an animation can be
+    /// stepped through as it really ran (each grab costs time, so the frames come as fast as the simulator allows)
     @MainActor static func burst(ms: Int) {
         #if targetEnvironment(simulator) && DEBUG
         let t0 = CACurrentMediaTime()
