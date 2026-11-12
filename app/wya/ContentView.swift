@@ -516,8 +516,8 @@ struct ContentView: View {
         // out of the capsule it stays in the capsule)
         if new == .places, water.stop == .quarter { water.jump(.half) }
         if new != .pins { PinStore.shared.selected = nil; PinStore.shared.colourAsked = false; PinRoutes.shared.close() }
-        // turning the wheel closes the tools, and with them history (13.4); the journey belongs to the map it was
-        // drawn on
+        // turning the wheel closes the tools, and with them history (13.4); the
+        // journey belongs to the map it was drawn on
         head.toolsOpen = false
         head.quickStamp = false
         if Sideways.shared.on { Sideways.shared.leave() }

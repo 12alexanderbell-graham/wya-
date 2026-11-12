@@ -56,7 +56,8 @@ struct CosmosView: View {
     }
 
     struct Planet { let k: String; let n: String; let size: CGFloat; let tex: String; let turn: Double; let au: Double; let yr: Double; let wide: Double }
-    ///, closest to furthest from the sun
+    /// the planets and their continents: Mars South America, Venus Africa, Neptune Oceania, Uranus Antarctica, Jupiter
+    /// Asia, Mercury Europe, Saturn North America; listed closest to furthest from the sun
     static let planets: [Planet] = [
         Planet(k: "Europe", n: "Mercury", size: 0.62, tex: "planet-mercury", turn: 62, au: 0.39, yr: 0.2408, wide: 0.383),
         Planet(k: "Africa", n: "Venus", size: 0.90, tex: "planet-venus", turn: 86, au: 0.72, yr: 0.6152, wide: 0.949),

@@ -106,9 +106,8 @@ final class Water {
     var menuShown: Bool { regions && !settings && !details && !upload && !pageUp }
     /// the head, for the menu's search (set once by the screen)
     @ObservationIgnored weak var head: HeadState?
-    /// the menu is the whole screen, as the old native app's Regions list was (clear glass with the world under
-    /// it); never a height between half and full (30 Oct 22:35:
-    ///)
+    /// the menu is the whole screen, as the old native app's Regions list was: the list comes out of the tab bar to the
+    /// whole screen, clear glass with the world under it; never a height between half and full
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
     func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }

@@ -44,8 +44,7 @@ struct PlacesShelf: View {
     }
 }
 
-/// THE SHELF (7.5): the maps Places looks at, each drawn as its own shape in ink
-/// straight on the
+/// THE SHELF (7.5): the maps Places looks at, each drawn as its own shape in ink straight on the
 /// water (a country's outline, a continent's, the world's for Everywhere, a collection's stops as points), its name under
 /// it; no box, no tile, no list. One sideways row per kind: your maps (Everywhere, the countries you have places in,
 /// the collections you have places in), the continents, then every collection. The map you are on is the darker shape

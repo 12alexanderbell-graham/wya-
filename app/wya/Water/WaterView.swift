@@ -475,8 +475,8 @@ struct SheetContent: View {
 
 /// THE FULL VIEW IS CLEAR GLASS WITH STARS: no field, no mist, nothing spreading from the sun; the water stays the
 /// clear glass it is everywhere else, the map under it, the tabs on the same glass. Only the stars, one for each place
-/// you have left. Each star is the sun's plasma and only that (11:39): white tongues of light round a soft bright
-/// middle,
+/// you have left. Each star is the sun's plasma and only that:
+/// white tongues of light round a soft bright middle,
 /// no disc, no rim, at full strength; small. White light can't be seen on the white land, so each star's light is
 /// darkened as much as the ground under it needs: white over the sea, darker over land. They come with the water's top
 /// edge, never all at once and never from a point in the middle: past half, as the edge goes up over a star, that star
