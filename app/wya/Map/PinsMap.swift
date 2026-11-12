@@ -1709,6 +1709,7 @@ struct PinsList: View {
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                    .minimumScaleFactor(0.85).allowsTightening(true)
                 Text(PinRoutes.shared.notes[r.id] ?? r.words).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)

@@ -604,6 +604,8 @@ struct RouteColourSheet: View {
             VStack(spacing: 4) {
                 Text(title)
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
+                    // (a route's two places a little smaller rather than cut through a word)
+                    .minimumScaleFactor(0.75).allowsTightening(true)
                 Text(words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
