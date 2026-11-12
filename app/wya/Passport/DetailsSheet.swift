@@ -98,6 +98,8 @@ final class DetailsState {
 struct DetailsSheet: View {
     let water: Water
     let form: Water.Form
+    /// the map, for the regions a town stamped from here stamps with it
+    var map: MapController?
     @State private var s = DetailsState.shared
     @State private var marks = MarkStore.shared
     @FocusState private var typing: String?
@@ -551,6 +553,7 @@ struct DetailsSheet: View {
                 .font(.body).foregroundStyle(Palette.ink)
                 .focused($typing, equals: "place").id("place")
                 .submitLabel(.done)
+                .onAppear { if s.key?.kind == .country { TownIndex.shared.load() } }
                 .onSubmit { addPlace() }
                 }
                 // Add only once there is something to add (a name and its kind); no greyed-out button
@@ -581,6 +584,23 @@ struct DetailsSheet: View {
         arrive(id)
         placeName = ""
         kind = nil
+        if k == "city", let c = s.key, c.kind == .country { stampTown(went.n, cc: c.id) }
+    }
+    /// A TOWN WRITTEN INTO A COUNTRY'S PLACES is a town you went to: stamped too, with its regions (as the town's own
+    /// Stamp does), one shake taking it back; a name the towns don't know, or a town already stamped, is just the row
+    private func stampTown(_ n: String, cc: String) {
+        let ix = TownIndex.shared
+        ix.load()
+        let place = map?.world?.placeIndex[cc]
+        Task {
+            for _ in 0 ..< 40 where !ix.ready { try? await Task.sleep(for: .milliseconds(100)) }
+            guard let h = ix.named(n, in: cc) else { return }
+            let key = PlaceKey(.town, h.id)
+            guard !MarkStore.shared.state(key).stamped else { return }
+            Feel.stamp()
+            await TownStamps.stamp(key, name: h.name, cc: cc, source: .hand, place: place,
+                                   at: EqualEarth.project(lon: h.lon, lat: h.lat))
+        }
     }
 
     // MARK: A4.14 / A4.15 a row comes and goes
@@ -621,7 +641,8 @@ struct DetailsSheet: View {
             var x = s.d.places ?? []; x.remove(at: j); s.d.places = x.isEmpty ? nil : x; placeIDs.remove(at: j)
         }
     }
-    /// the test driver's hands on the rows (simulator checks): lived, addtime, removelived N, addplace <kind> <name>, removeplace N
+    /// the test driver's hands on the rows (simulator checks): lived, addtime, removelived N, addplace <kind> <name>, removeplace N|last,
+    /// places (logs the place rows)
     @MainActor static var test: (([String]) -> Void)?
     private func driver(_ p: [String]) {
         switch p.first {
@@ -631,7 +652,8 @@ struct DetailsSheet: View {
         case "addtime": addLived()
         case "removelived": removeLived(Int(p.count > 1 ? p[1] : "0") ?? 0)
         case "addplace": kind = p.count > 1 ? p[1] : "city"; placeName = p.dropFirst(2).joined(separator: " "); addPlace()
-        case "removeplace": removePlace(Int(p.count > 1 ? p[1] : "0") ?? 0)
+        case "removeplace": removePlace(p.count > 1 && p[1] == "last" ? (s.d.places?.count ?? 1) - 1 : Int(p.count > 1 ? p[1] : "0") ?? 0)
+        case "places": NSLog("wya details places: %@", (s.d.places ?? []).map { "\($0.n) (\($0.k))" }.joined(separator: ", "))
         default: break
         }
     }

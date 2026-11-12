@@ -104,6 +104,20 @@ final class TownIndex {
         if let i = byID?[id] { return rows[i].hit }
         return rows.first { $0.hit.id == id }?.hit
     }
+    /// ONE COUNTRY'S TOWN BY ITS NAME as it was typed (case and accents aside; its own name, then its other names), the
+    /// most peopled of that name there, or nil: how a town written into a country's Details is found
+    func named(_ name: String, in cc: String) -> Hit? {
+        let q = name.trimmingCharacters(in: .whitespaces).townFolded
+        guard ready, !q.isEmpty else { return nil }
+        let c = cc.lowercased()
+        if let r = rows.first(where: { $0.folded == q && $0.hit.file.lowercased() == c }) { return r.hit }
+        guard alt.count == rows.count else { return nil }
+        let bar = "|" + q + "|"
+        for (i, a) in alt.enumerated() where !a.isEmpty && rows[i].hit.file.lowercased() == c && (a + "|").contains(bar) {
+            return rows[i].hit
+        }
+        return nil
+    }
     /// each town's row by its id, made once at the first look-up (the Stamped list asks for many)
     @ObservationIgnored private var byID: [String: Int]?
 
