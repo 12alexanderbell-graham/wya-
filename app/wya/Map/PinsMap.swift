@@ -340,8 +340,23 @@ final class PinsMapState {
     func zoom(by f: Double) {
         guard let v = view else { return }
         let cam = v.camera.copy() as! MKMapCamera
-        cam.centerCoordinateDistance = max(Self.closest, min(Self.farthest, cam.centerCoordinateDistance / f))
+        let was = cam.centerCoordinateDistance
+        cam.centerCoordinateDistance = max(Self.closest, min(Self.farthest, was / f))
+        held(cam, v, cam.centerCoordinateDistance > 0 ? was / cam.centerCoordinateDistance : 1)
         v.setCamera(cam, animated: true)
+    }
+    /// the camera's middle moved so the middle of what you see (between the head and the water) stays where it is
+    /// on the screen while the zoom changes by `f` (as our own map's + and −)
+    private func held(_ cam: MKMapCamera, _ v: MKMapView, _ f: Double) {
+        guard let m = map, f.isFinite, f > 0, abs(f - 1) > 1e-6 else { return }
+        let y = m.roomMiddle
+        guard y > 0, y < v.bounds.height else { return }
+        let p = MKMapPoint(v.convert(CGPoint(x: v.bounds.midX, y: y), toCoordinateFrom: v))
+        let c = MKMapPoint(cam.centerCoordinate)
+        let n = MKMapPoint(x: p.x + (c.x - p.x) / f, y: p.y + (c.y - p.y) / f)
+        let ll = n.coordinate
+        guard CLLocationCoordinate2DIsValid(ll), abs(ll.latitude) < 85 else { return }
+        cam.centerCoordinate = ll
     }
     /// one frame of a held + or − (no animation of its own: the hold moves it frame by frame); false once at a limit
     func zoomStep(_ f: Double) -> Bool {
@@ -349,6 +364,7 @@ final class PinsMapState {
         let cam = v.camera.copy() as! MKMapCamera
         let was = cam.centerCoordinateDistance
         cam.centerCoordinateDistance = max(Self.closest, min(Self.farthest, was / f))
+        held(cam, v, cam.centerCoordinateDistance > 0 ? was / cam.centerCoordinateDistance : 1)
         v.setCamera(cam, animated: false)
         limits()
         return abs(v.camera.centerCoordinateDistance - was) > 0.5

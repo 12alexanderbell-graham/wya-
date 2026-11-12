@@ -1236,13 +1236,26 @@ final class MapController {
     /// held plus (1) or minus (-1), 0 when not held; and how long it has been held
     @ObservationIgnored var holdZoom: Int = 0 { didSet { if holdZoom != oldValue { holdTime = 0; needsFrame = true } } }
     @ObservationIgnored private var holdTime: Double = 0
+    /// THE MIDDLE OF WHAT YOU SEE of the map, between the head and the water as it stands: + and − zoom toward it, so
+    /// what is in the room stays in the room (zoomed about the screen's middle, under the water at 50%, it slid up out
+    /// of sight)
+    var roomMiddle: CGFloat {
+        let r = layout.room(sheetTop: sheetTop > 0 ? sheetTop : layout.top(.quarter))
+        return (r.lowerBound + r.upperBound) / 2
+    }
     func zoomIn() {
         if onApple { PinsMapState.shared.zoom(by: 1.6); return }
-        let t = min(kMax, k * 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
+        zoomTap(min(kMax, k * 1.6))
     }
     func zoomOut() {
         if onApple { PinsMapState.shared.zoom(by: 1 / 1.6); return }
-        let t = max(kMin, k / 1.6); fly(to: clamped(c, t), k: t, dur: 0.45)
+        zoomTap(max(kMin, k / 1.6))
+    }
+    /// a tap's zoom to `t`, the room's middle kept where it is on the screen
+    private func zoomTap(_ t: Double) {
+        let off = Double(roomMiddle) - Double(view.height) / 2
+        let held = c + SIMD2(0, off / k)
+        fly(to: clamped(held - SIMD2(0, off / t), t), k: t, dur: 0.45)
     }
     /// the continent picked from its planet, nil for the world: the caption names it and counts it
     var continent: String?
@@ -1661,7 +1674,7 @@ final class MapController {
             let rate = (1 + 2 * Flow.smooth(0, 1.2, CGFloat(holdTime))) * log(2.0)
             let before = k
             zoom(by: exp(Double(holdZoom) * Double(rate) * min(dt, 1.0 / 30)),
-                 about: CGPoint(x: view.width / 2, y: view.height / 2))
+                 about: CGPoint(x: view.width / 2, y: roomMiddle))
             if k == before { holdZoom = 0; restVersion &+= 1 }
             return true
         }

@@ -122,6 +122,7 @@ struct RegionCard: View {
                         Text(card.parents).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
+                .mapHalo(map.onApple)
                 .multilineTextAlignment(.center)
                 .frame(width: w + 32)
                 .fixedSize(horizontal: false, vertical: true)

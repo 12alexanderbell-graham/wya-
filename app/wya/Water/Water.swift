@@ -477,6 +477,8 @@ final class Water {
     /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
     var halfAllowed: Bool {
         if profile { return false }
+        // (Upload's two choices are all there is while you choose: the water stays at 25%, never an empty 50% or full)
+        if upload, UploadState.shared.phase == .choosing { return false }
         return !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet
           && !regions && !historyUp)
     }

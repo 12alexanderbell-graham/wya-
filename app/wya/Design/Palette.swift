@@ -53,3 +53,17 @@ enum Typeface {
         .custom("Tellus-Regular", size: size, relativeTo: style)
     }
 }
+
+/// A NAME OVER APPLE'S MAP: the map's cream halo round the letters (as the towns' names have), so a card's name reads
+/// over Apple's own labels; over our own calm map, nothing
+struct MapHalo: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: on ? Palette.cream : .clear, radius: 2.5)
+            .shadow(color: on ? Palette.cream : .clear, radius: 1.2)
+    }
+}
+extension View {
+    func mapHalo(_ on: Bool) -> some View { modifier(MapHalo(on: on)) }
+}

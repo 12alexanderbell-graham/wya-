@@ -291,6 +291,7 @@ struct StampCard: View {
             // line put the stamp's slot and its landing 12 pt off (8 Nov)
             .lineLimit(1)
             .minimumScaleFactor(0.55)
+            .mapHalo(map.onApple)
             // just the name: no glass box round it (30 Oct 10:34)
             .frame(minHeight: 44)
             .frame(maxWidth: width + 32)
