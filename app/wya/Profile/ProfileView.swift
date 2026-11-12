@@ -34,6 +34,9 @@ struct ProfileView: View {
                         .font(Typeface.nature(34, relativeTo: .largeTitle))
                         .foregroundStyle(Palette.ink)
                         .lineLimit(2)
+                        // (a long name a little smaller rather than cut short)
+                        .minimumScaleFactor(0.7)
+                        .allowsTightening(true)
                         .padding(.top, Self.gap)
                 }
                 if !store.handleShown.isEmpty {

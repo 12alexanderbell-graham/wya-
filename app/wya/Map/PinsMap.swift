@@ -390,7 +390,8 @@ final class PinsMapState {
         if !was, historyOn, let v = view { beforeHistory = v.camera.copy() as? MKMapCamera }
         // HISTORY ALONE (when history is shown, all else is clear): routes and drawings step off the map
         // while it is on, and come back when it goes
-        if was != historyOn { redrawRoutes(); PinDrawings.shared.changed?() }
+        // (turned off with the journey drawing itself back: they come back once it has gone, never over it)
+        if was != historyOn, retracting == nil { redrawRoutes(); PinDrawings.shared.changed?() }
         // turned on: the journey played, stop to stop, then framed whole; given again (on while on): framed at once
         if historyOn, !was, view != nil, journey != nil, !UIAccessibility.isReduceMotionEnabled { play() } else if historyOn { frameJourney() }
         updateCaps()
@@ -505,6 +506,8 @@ final class PinsMapState {
             retracting = nil
             retractLink?.invalidate()
             retractLink = nil
+            // the routes and drawings back, now the journey has gone (History alone)
+            if !historyOn { redrawRoutes(); PinDrawings.shared.changed?() }
         }
     }
 

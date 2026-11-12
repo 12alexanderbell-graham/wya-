@@ -584,7 +584,8 @@ struct ContentView: View {
             closeCard(instant: true)
             map.regionsMenu = false
             map.closeRegions(instant: true)
-            water.closeMenu(to: .quarter, instant: true)
+            // (to Places: its menu, which stands at 50%; from the regions' list at full it was left at 25%, empty)
+            water.closeMenu(to: new == .places ? .half : .quarter, instant: true)
         }
         // a hold menu's Its places: that map, once the mode is Places
         if new == .places, let pick = Self.directPlaces {
