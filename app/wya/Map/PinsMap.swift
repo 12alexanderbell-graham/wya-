@@ -823,6 +823,7 @@ struct PinsMapView: UIViewRepresentable {
         v.insetsLayoutMarginsFromSafeArea = false
         v.register(PinAnnotationView.self, forAnnotationViewWithReuseIdentifier: PinAnnotationView.id)
         v.setRegion(PinsMapState.region(from: map), animated: false)
+        v.insertOverlay(PinsDeepen.world, at: 0, level: .aboveRoads)
         if let w = map.world {
             Pin.countryNames = Dictionary(w.places.map { ($0.id, $0.n) }, uniquingKeysWith: { a, _ in a })
             Pin.appleNames = Dictionary(w.places.map { p in
@@ -902,6 +903,10 @@ struct PinsMapView: UIViewRepresentable {
             case "apple-hybrid": v.preferredConfiguration = MKHybridMapConfiguration(elevationStyle: .flat)
             default: v.preferredConfiguration = MKStandardMapConfiguration(elevationStyle: .flat)
             }
+            // the deepening is for Apple's drawn map only; a photo of the earth keeps its own colours
+            let on = v.overlays.contains { $0 === PinsDeepen.world }
+            if look.contains("satellite") || look.contains("hybrid") { if on { v.removeOverlay(PinsDeepen.world) } }
+            else if !on { v.insertOverlay(PinsDeepen.world, at: 0, level: .aboveRoads) }
         }
         // (the map you picked: only what it holds; All pins: every pin)
         let maps = PinMaps.shared
@@ -1374,6 +1379,12 @@ struct PinsMapView: UIViewRepresentable {
 
         /// the journey's line (history on): black at its start to blue at its end
         func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {
+            if o === PinsDeepen.world {
+                let r = MKPolygonRenderer(polygon: PinsDeepen.world)
+                r.fillColor = UIColor(white: PinsDeepen.white, alpha: 1)
+                r.blendMode = .multiply
+                return r
+            }
             // A DRAWING: its colour (black unless given one), 3 pt as a route; a shape filled with it at 25%
             if let l = o as? PinDrawingLine {
                 let r = MKPolylineRenderer(polyline: l)
@@ -2331,4 +2342,17 @@ struct PinMapPicture: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+/// APPLE'S MAP, DEEPER (12 Nov 21:27: its green and blue were far too light): the whole earth under the roads' labels
+/// multiplied by a light grey, so land and sea come out a step deeper and the labels, pins and routes stay as they are
+enum PinsDeepen {
+    /// how much of each colour is kept (1 is Apple's own)
+    static let white: CGFloat = 0.84
+    static let world: MKPolygon = {
+        let r = MKMapRect.world
+        var pts = [MKMapPoint(x: r.minX, y: r.minY), MKMapPoint(x: r.maxX, y: r.minY),
+                   MKMapPoint(x: r.maxX, y: r.maxY), MKMapPoint(x: r.minX, y: r.maxY)]
+        return MKPolygon(points: &pts, count: pts.count)
+    }()
 }
