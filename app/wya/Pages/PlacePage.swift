@@ -198,6 +198,15 @@ extension PlacePageState.OnePage {
             out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
         }
         facts = out
+        // ITS TEXT: the guide's own listing of it, where a Wikivoyage guide lists it (by its Wikidata id, else its
+        // name), so a castle's page says what the castle is
+        let id = key.id, name = self.name, wd = t.id
+        Task { @MainActor in
+            guard let d = await PlacePageState.listingText(cc, wd: wd, name: name),
+                  self.key.id == id, self.facts?.prose.isEmpty == true else { return }
+            self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
+            self.facts?.proseWikivoyage = true
+        }
     }
     private func seedOnly() {
         var out = PlacePageState.Facts()
@@ -628,6 +637,23 @@ extension PlacePageState {
         return t
     }
 
+    /// a thing's own words from the country's guide listings: the listing with its Wikidata id, else the first with its
+    /// name (any case and accents); only a description of some length (a line of directions is not one)
+    static func listingText(_ cc: String, wd: String?, name: String) async -> String? {
+        guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
+        var byName: String?
+        for k in all.keys.sorted() {
+            for l in all[k] ?? [] {
+                guard let t = l["d"] as? String, t.count > 60 else { continue }
+                if let wd, (l["wd"] as? String) == wd { return t }
+                if byName == nil, let n = l["n"] as? String,
+                   n.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame { byName = t }
+            }
+        }
+        return byName
+    }
+
     /// A PAGE'S PHOTO: the first of the place's pictures that is a photo of it as you would see it there; never the
     /// place seen from space (satellite, Landsat, MODIS, Sentinel, the Blue Marble), a map (locator, location, relief,
     /// topographic) or a drawing (any .svg). None left: the page has no photo.
@@ -653,6 +679,15 @@ extension PlacePageState {
             from = r.upperBound
         }
         return nil
+    }
+
+    /// a text that stops mid-sentence (a listing kept to its first few hundred characters: "... and firebombings.
+    /// The") back to its last whole sentence; one with no whole sentence stays as it is
+    static func whole(_ s: String) -> String {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard let last = t.last, !".!?\"\u{201D})".contains(last),
+              let r = t.range(of: ". ", options: .backwards) else { return t }
+        return String(t[..<r.lowerBound]) + "."
     }
 
     /// up to n characters, cut at a whole sentence (16.4: prose)
