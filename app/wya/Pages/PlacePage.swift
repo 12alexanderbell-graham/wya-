@@ -178,7 +178,7 @@ extension PlacePageState.OnePage {
             return
         }
         var out = PlacePageState.Facts()
-        if !t.photo.isEmpty { out.photo = t.photo }
+        if !t.photo.isEmpty { out.photo = PlacePageState.photo(t.photo) }
         // (its own line is already under its name; no prose repeating it)
         out.rows.append(("Kind", t.kindName.capitalized))
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
@@ -201,7 +201,7 @@ extension PlacePageState.OnePage {
     }
     private func seedOnly() {
         var out = PlacePageState.Facts()
-        out.photo = photo
+        out.photo = photo.flatMap { PlacePageState.photo($0) }
         facts = out
     }
     fileprivate func loadCountry(_ cc: String) async {
@@ -211,10 +211,10 @@ extension PlacePageState.OnePage {
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
         var out = PlacePageState.Facts()
-        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true }
+        if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: name), 620); out.proseWikivoyage = true }
         else if let desc = f["desc"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
         // its photo (Wikidata's image of the country), at the top as every page's (12 Nov 14:10)
-        if let img = (f["image"] as? [String])?.first ?? f["image"] as? String { out.photo = img }
+        out.photo = PlacePageState.photo(f["image"])
         func s(_ k: String) -> String? {
             switch f[k] {
             case let v as String: return v
@@ -350,7 +350,7 @@ extension PlacePageState.OnePage {
         if let n = t["n"] as? String { out.activities = await PlacePageState.activities(cc, town: n) }
         // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
         // article's), as a country's page has them (12 Nov 14:10: every page the same)
-        if let img = (t["img"] as? [String])?.first ?? t["img"] as? String { out.photo = img }
+        out.photo = PlacePageState.photo(t["img"])
         if let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
@@ -368,7 +368,7 @@ extension PlacePageState.OnePage {
         if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
         // its photo (Wikidata's) and, where Wikivoyage has an article for it, that article's opening words in place of the
         // one-line description (12 Nov 14:10: every page the same)
-        if let img = (r["img"] as? [String])?.first { out.photo = img }
+        out.photo = PlacePageState.photo(r["img"])
         if let n = r["n"] as? String, let ll = r["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: 150) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
@@ -581,6 +581,44 @@ extension PlacePageState {
         if t.contains("{{") {
             t = t.replacingOccurrences(of: "\\{\\{[^}]*\\}+\\s*", with: "", options: .regularExpression)
         }
+        // A LINK OUT ("[http://www.cocoskeelingislands.com.au Cocos (Keeling) Islands]"): its words, never its address
+        if t.contains("[http") {
+            t = t.replacingOccurrences(of: "\\[https?://\\S+\\s+([^\\]]+)\\]", with: "$1", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\[https?://\\S+\\]", with: "", options: .regularExpression)
+        }
+        // THE SOURCE'S NOTES TO ITS READERS ("\"AL\" redirects here. For the Brazilian state ..., see Alagoas; ...";
+        // "This article is about the 23 special wards ... For information on Tokyo as a prefecture, ..., see Tokyo
+        // Metropolis."): never the text. "Redirects here" and "this article is about" are notes wherever they stand in
+        // the opening, and what leads into them goes with them; a "For ..., see ..." only at the start. A "see" with
+        // no full stop ("see Benin City Benin is a country") ends where the text starts with its own name.
+        let lead = String(t.prefix(450))
+        if let r = lead.range(of: "\"?[^\".]{1,14}\"? redirects here\\.|This (?:article|page) is about", options: .regularExpression) {
+            t.removeSubrange(t.startIndex ..< r.lowerBound)
+        }
+        for _ in 0 ..< 4 {
+            t = t.trimmingCharacters(in: .whitespaces)
+            if let r = t.range(of: "^\"?[^\".]{1,14}\"? redirects here\\.\\s*", options: .regularExpression)
+                ?? t.range(of: "^This (?:article|page) is about[^.]*\\.\\s*", options: .regularExpression) {
+                t.removeSubrange(r); continue
+            }
+            // (a full stop after a lone capital, "the U.S. state", ends no sentence)
+            if let r = t.range(of: "^For (?:the|a|an|other|information|more|details)\\b(?:[^.]|(?<=\\b[A-Z])\\.)*?\\bsee\\b(?:[^.]|(?<=\\b[A-Z])\\.)*(?<!\\b[A-Z])\\.\\s*",
+                                options: .regularExpression) {
+                if let name, let see = t.range(of: " see "), let st = Self.articleStart(t, name), st > see.lowerBound, st < r.upperBound {
+                    t.removeSubrange(t.startIndex ..< st)
+                } else {
+                    t.removeSubrange(r)
+                }
+                continue
+            }
+            break
+        }
+        // a bracket opening on nothing ("Hong Kong ( Hēunggóng", "Kyzylorda ( ; also"), or closing on a space
+        if t.contains("( ") || t.contains(" )") {
+            t = t.replacingOccurrences(of: "\\(\\s*[;,]?\\s+", with: "(", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\s+\\)", with: ")", options: .regularExpression)
+            t = t.replacingOccurrences(of: "\\s*\\(\\)", with: "", options: .regularExpression)
+        }
         // a picture's or link's closing marks left with nothing before them ("]] Île-de-France is ..."), and a link's
         // opening ones with nothing after: never words
         if t.contains("]]") || t.contains("[[") {
@@ -588,6 +626,18 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
         }
         return t
+    }
+
+    /// A PAGE'S PHOTO: the first of the place's pictures that is a photo of it as you would see it there; never the
+    /// place seen from space (satellite, Landsat, MODIS, Sentinel, the Blue Marble), a map (locator, location, relief,
+    /// topographic) or a drawing (any .svg). None left: the page has no photo.
+    static func photo(_ any: Any?) -> String? {
+        let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
+        return all.first { n in
+            !n.lowercased().hasSuffix(".svg") &&
+            n.range(of: "satellite|\\bnasa\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b",
+                    options: [.regularExpression, .caseInsensitive]) == nil
+        }
     }
 
     /// where a text starts with its own name and then says what it is ("Debrecen is", "São Paulo, or", "Ségou (")
@@ -805,15 +855,20 @@ private struct PageLayer: View {
         ScrollViewReader { reader in
         ScrollView {
             VStack(spacing: 32) {
-                top(key, L: L)
-                marking(key)
-                // a thing's photo (Commons; credited in Sources), the content's width, 4:3, corners 22
-                if let f = page.facts, let ph = f.photo, let u = Self.commons(ph, width: 1200) {
+                // THE PHOTO AT THE TOP (13 Nov 22:30): the screen's whole width, from its top edge under the head, no
+                // box and no corners of its own (the page's are its corners); then the flag and the name under it
+                let hero = page.facts?.photo.flatMap { Self.commons($0, width: 1400) }
+                if let u = hero {
+                    // (wider than the page's margins by drawing past them: the margins of everything under it stay)
                     Color.clear
-                        .aspectRatio(4 / 3, contentMode: .fit)
+                        .frame(height: (L.W * 0.75).rounded())
                         .overlay { PagePhoto(url: u) }
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .clipped()
+                        .padding(.horizontal, -16)
+                        .accessibilityHidden(true)
                 }
+                top(key, L: L, under: hero != nil)
+                marking(key)
                 if let f = page.facts, !f.prose.isEmpty {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -894,7 +949,8 @@ private struct PageLayer: View {
 
     /// THE TOP (16.4.1): a country's flag (4:3, 64 pt tall) centred 24 pt under the head's foot, its name under it; any
     /// other place its country's flag small and its line of what it is. Pulling it down closes the page (A16.1)
-    private func top(_ key: PlaceKey, L: Layout) -> some View {
+    /// `under`: the photo is above it, so it sits under the photo, not under the head
+    private func top(_ key: PlaceKey, L: Layout, under: Bool = false) -> some View {
         VStack(spacing: 12) {
             if key.kind == .country, let f = Flags.wide(page.country) {
                 f.resizable().aspectRatio(4 / 3, contentMode: .fit).frame(height: 64)
@@ -923,7 +979,7 @@ private struct PageLayer: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, L.headBottom + 24)
+        .padding(.top, under ? -8 : L.headBottom + 24)
         .contentShape(Rectangle())
         // (in the screen's space: the header moves and shrinks with the drag, so measured in its own space the page
         // followed at two thirds of the finger and shook, 8 Nov; a cancelled drag springs the page back)
