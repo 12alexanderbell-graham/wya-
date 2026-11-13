@@ -549,10 +549,10 @@ struct HeadView: View {
             Feel.tap(); Sound.tap()
             act()
         } label: {
-            // the icons (31 Oct 11:47): quick stamping the stamp, the passport the book, history the two ends joined, upload
+            // the icons (31 Oct 11:47; 13 Nov: quick stamping the bolt, quick and not a stamp): quick stamping the bolt, the passport the book, history the two ends joined, upload
             // the arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
             // (no grow, no fade)
-            let key = ["stamp", "lists-books", "history", "cal-out"][i]
+            let key = ["quick", "lists-books", "history", "cal-out"][i]
             ZStack {
                 Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
                 Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
@@ -868,13 +868,13 @@ private struct FirstTool: View, Animatable {
         if p > Self.start {
             ZStack {
                 Circle().fill(ink).frame(width: dot, height: dot).opacity(Double(max(1 - t, lit)))
-                Icon5(key: "stamp", ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
+                Icon5(key: "quick", ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
                     .opacity(Double(t))
             }
         } else if lit > 0.5 {
             // quick stamping left on with the tools away: its stamp stays on the dot in white, so a tap on the map is
             // seen to stamp (7 Nov review, board 17: nothing showed it was on)
-            Icon5(key: "stamp", ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
+            Icon5(key: "quick", ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
         }
     }
 }
