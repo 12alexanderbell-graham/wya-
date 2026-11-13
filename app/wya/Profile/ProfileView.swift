@@ -73,8 +73,8 @@ struct ProfileView: View {
             .frame(width: L.W, alignment: .top)
             .offset(y: top)
             // (under your stats at full the column goes, so the black picture is no smudge through the glass)
-            .opacity(edit.sheet == .stats && water.stop == .full ? 0 : 1)
-            .animation(Motion.quick, value: edit.sheet == .stats && water.stop == .full)
+            .opacity((edit.sheet == .stats || edit.sheet == .badges) && water.stop == .full ? 0 : 1)
+            .animation(Motion.quick, value: (edit.sheet == .stats || edit.sheet == .badges) && water.stop == .full)
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         .onChange(of: edit.field) { _, f in typing = f }
@@ -265,8 +265,8 @@ struct ProfileWater: View {
                         .frame(width: column)
                         .position(x: L.W / 2 + CGFloat(i - 1) * column, y: form.top + 76)
                         .accessibilityLabel("\(values[i]) \(names[i])")
-                        // (the stats and stamps numbers are read as their buttons, below)
-                        .accessibilityHidden(i <= 1)
+                        // (the three numbers are read as their buttons, below)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -288,6 +288,16 @@ struct ProfileWater: View {
                     .accessibilityLabel("\(numbers.stats) stats")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { edit.open(.stats, water: water) }
+                // YOUR BADGES: the right number opens them (the water at full)
+                Color.clear
+                    .frame(width: column, height: max(44, size + 12))
+                    .contentShape(Rectangle())
+                    .onTapGesture { Feel.tap(); edit.open(.badges, water: water) }
+                    .position(x: L.W / 2 + column, y: form.top + 76)
+                    .accessibilityElement()
+                    .accessibilityLabel("\(numbers.badges) badge levels")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { edit.open(.badges, water: water) }
                 Color.clear
                     .frame(width: column, height: max(44, size + 12))
                     .contentShape(Rectangle())
@@ -308,12 +318,13 @@ struct ProfileWater: View {
                     case .picture: ProfilePictureSheet(water: water, width: w)
                     case .ground: ProfileGroundSheet(width: w)
                     case .stats: ProfileStatsList(width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop)))
+                    case .badges: ProfileBadgesList(width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop)))
                     case .nationalities:
                         NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - (form.top + 16)))
                     }
                 }
                 // (at full, clear of the clock and the island)
-                .offset(x: L.sheetInset + 16, y: s == .stats ? max(form.top + 16, L.safeTop) : form.top + (s == .nationalities ? 16 : 24))
+                .offset(x: L.sheetInset + 16, y: s == .stats || s == .badges ? max(form.top + 16, L.safeTop) : form.top + (s == .nationalities ? 16 : 24))
             }
         }
         // (the water pulled down from 50%: the sheet is put away with it)

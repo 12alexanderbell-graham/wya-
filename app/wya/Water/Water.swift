@@ -103,6 +103,8 @@ final class Water {
     var regions = false
     /// THE PROFILE TAB is the screen: the water holds its three numbers and rests at 25% or in the capsule, no higher
     var profile = false
+    /// THE LISTS TAB is the screen: the water at full, clear glass over the map; a drag scrolls its rows, never moves it
+    var lists = false
     /// when the tab last changed: what a tab swaps in and out of the water is simply there (no roll)
     @ObservationIgnored var tabSwitchedAt: CFTimeInterval = 0
     var tabSwitching: Bool { CACurrentMediaTime() - tabSwitchedAt < 0.4 }
@@ -122,7 +124,7 @@ final class Water {
     ///)
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
-    func restTop(_ s: Stop) -> CGFloat { menuShown ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }
+    func restTop(_ s: Stop) -> CGFloat { menuShown || lists ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }
     /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
     var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
@@ -352,8 +354,8 @@ final class Water {
     @ObservationIgnored var currentMode: (() -> Int)?
 
     func begin(at p: CGPoint) {
-        // the menu stop: a drag scrolls the list, the water stays (6.3)
-        if menuShown { return }
+        // the menu stop: a drag scrolls the list, the water stays (6.3); the Lists tab the same
+        if menuShown || lists { return }
         // caught before a waiting move into the capsule started: it is still where it was
         if pendingGo != nil {
             pendingGo = nil
@@ -467,7 +469,7 @@ final class Water {
         // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
         // or note, and a route's colour, go to full, for the keyboard and the picker)
         // (on the Profile: only while your nationalities' search is typed in, clear of the keyboard)
-        if profile { return ProfileEdit.shared.searching || ProfileEdit.shared.sheet == .stats }
+        if profile { return ProfileEdit.shared.searching || ProfileEdit.shared.sheet == .stats || ProfileEdit.shared.sheet == .badges }
         if stampedList || settings || details || upload || pageSheet || regions { return true }
         switch head?.mode ?? .countries {
         case .countries, .places: return false

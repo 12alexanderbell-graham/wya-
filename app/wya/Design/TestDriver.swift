@@ -273,6 +273,25 @@ final class TestDriver {
                     if a == "flagshapes" { ReviewSheet.flagShapes(world: map?.world) }
                 // profile name|handle|code|bio <words> | clear: the Profile's words, as its editor will set them (a test's
                 // own words are taken away again with clear)
+                // lists open <id>|new|close|kind <n>|name <words>|drop: the Lists tab's state, as its taps set it
+                // (drop: the open list taken away, test residue)
+                case "lists":
+                    let ls = ListsState.shared
+                    switch a {
+                    case "open": ls.open = p.count > 2 ? (p[2] == "last" ? ListsStore.shared.book.lists.last?.id : p[2]) : nil
+                    case "new": ls.newList()
+                    case "close": ls.close()
+                    case "kind": ls.kind = Int(p.count > 2 ? p[2] : "0") ?? 0
+                    case "name":
+                        let n = p.dropFirst(2).joined(separator: " ")
+                        ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].name = n } }
+                        ls.naming = false
+                    case "drop":
+                        if let id = ls.open, id != "wish" { ListsStore.shared.change { $0.lists.removeAll { $0.id == id } } }
+                        ls.open = nil; ls.naming = false
+                    default: break
+                    }
+                    NSLog("wya lists: %d lists, open %@", ListsStore.shared.book.lists.count, ls.open ?? "-")
                 case "profile":
                     let words = p.dropFirst(2).joined(separator: " ")
                     ProfileStore.shared.set { me in
@@ -295,6 +314,7 @@ final class TestDriver {
                         else if p.count > 2, p[2] == "nations" { edit.open(.nationalities, water: w) }
                         else if p.count > 2, p[2] == "ground" { edit.open(.ground, water: w) }
                         else if p.count > 2, p[2] == "stats" { edit.open(.stats, water: w) }
+                        else if p.count > 2, p[2] == "badges" { edit.open(.badges, water: w) }
                         else { edit.end(water: w) }
                     }
                     if a == "colour", p.count > 4 {
@@ -320,6 +340,8 @@ final class TestDriver {
                             ProfileStore.shared.set { $0.ground = g }
                         } else { ProfileStore.shared.set { $0.ground = nil } }
                     }
+                    // profile badge <id> | off: one badge shown alone in your badges
+                    if a == "badge" { edit.badge = p.count > 2 && p[2] != "off" ? p[2] : nil }
                     if a == "natsearch" { edit.query = p.dropFirst(2).joined(separator: " ") }
                     if a == "nats", let m = map {
                         if p.count > 2 { edit.setNationalities(p[2] == "none" ? [] : Array(p.dropFirst(2)), map: m) }

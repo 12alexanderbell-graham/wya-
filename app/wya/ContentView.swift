@@ -96,7 +96,7 @@ struct ContentView: View {
                     .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
 
                 // (the Profile's top is empty: no head on it)
-                if !Perf.shared.off.contains("head"), tab != 2 {
+                if !Perf.shared.off.contains("head"), tab == 0 {
                     HeadView(map: map, water: water, head: head)
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
                 }
@@ -473,12 +473,19 @@ struct ContentView: View {
         // on the Map the water is where the map left it
         .onChange(of: tab, initial: true) { was, t in
             water.tabSwitchedAt = CACurrentMediaTime()
-            if t == 2, !water.profile {
-                mapStop = water.stop
-                water.profile = true
-                water.jump(.quarter)
-            } else if t != 2, water.profile {
+            // (the map's own stop kept when the Map tab is left, given back when it comes again)
+            if was == 0, t != 0 { mapStop = water.stop }
+            if t == 2 {
+                water.lists = false
+                if !water.profile { water.profile = true; water.jump(.quarter) }
+            } else if t == 1 {
+                // THE LISTS TAB: the water at full, clear glass over the map
                 water.profile = false
+                if !water.lists { water.lists = true; water.jump(.full) }
+            } else if water.profile || water.lists {
+                water.profile = false
+                water.lists = false
+                ListsState.shared.close()
                 water.jump(mapStop == .full ? .quarter : mapStop)
             }
         }

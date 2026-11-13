@@ -53,6 +53,11 @@ struct WaterView: View {
                 })
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
                     .mask(shape)
+            } else if water.lists {
+                // (the Lists tab's own water: its top row and your lists, in place of everything the map's water holds)
+                ListsWater(water: water, map: map, form: f)
+                    .frame(width: L.W, height: L.H, alignment: .topLeading)
+                    .mask(shape)
             } else if !Perf.shared.off.contains("sheet") {
                 SheetContent(water: water, map: map, form: f)
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
@@ -62,7 +67,7 @@ struct WaterView: View {
 
             // the OpenStreetMap credit, on the map just above the water (outside the water's own outline)
             // (not over Apple's map in Pins: Apple's own credit is on it)
-            if !map.pinsMode, !water.profile { StartCredit(water: water, form: f) }
+            if !map.pinsMode, !water.profile, !water.lists { StartCredit(water: water, form: f) }
 
             // the tabs sit on the water itself (one glass, the 02:45); at full the night leaves the capsule's place clear
             // so they are still on that same glass
@@ -85,7 +90,7 @@ struct WaterView: View {
                     dragging = false
                     water.end(velocity: g.velocity.height)
                 },
-            including: water.menuShown ? .subviews : .all
+            including: water.menuShown || water.lists ? .subviews : .all
         )
         // a drag cancelled with no end (a hold menu on the caption or a tab took the touch): the water lets go there
         .onChange(of: dragLive) { _, live in

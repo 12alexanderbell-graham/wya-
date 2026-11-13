@@ -10,7 +10,7 @@ import PhotosUI
 final class ProfileEdit {
     static let shared = ProfileEdit()
     enum Field: Hashable { case name, handle, bio }
-    enum Sheet { case picture, nationalities, ground, stats }
+    enum Sheet { case picture, nationalities, ground, stats, badges }
     /// the line being typed in
     var field: Field?
     /// what the water holds instead of the three numbers
@@ -19,13 +19,15 @@ final class ProfileEdit {
     var searching = false
     /// what is typed in the nationalities' search
     var query = ""
+    /// the badge shown alone in your badges (nil: all of them)
+    var badge: String?
 
     func open(_ s: Sheet, water: Water) {
         field = nil
         searching = false
         sheet = s
         // (your stats are a long list: the water at full)
-        let to: Water.Stop = s == .stats ? .full : .half
+        let to: Water.Stop = s == .stats || s == .badges ? .full : .half
         water.go(to)
         // (the water could not rise: no sheet left hidden under 25%)
         if water.stop != to { sheet = nil }
@@ -36,6 +38,7 @@ final class ProfileEdit {
         sheet = nil
         searching = false
         query = ""
+        badge = nil
         if move { water.go(.quarter) }
     }
     /// a tap off whatever is being edited: typing ends (kept), a sheet goes
@@ -180,6 +183,111 @@ struct ProfileStatsList: View {
                 + Text(" of " + v[r.upperBound...]).font(.body.monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
         }
         return Text(v).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
+    }
+}
+
+/// A BADGE'S DISC: a full circle in its level's colour, no icon and no number on it. Lime, blue, silver (the palette's
+/// grey), gold (its yellow), diamond (white under clear glass, the shine)
+struct BadgeDisc: View {
+    let level: Int
+    let size: CGFloat
+    static func colour(_ l: Int) -> Color { [Palette.lime, Palette.lime, Palette.blue, Palette.grey, Palette.yellow, Palette.white][min(max(l, 0), 5)] }
+    var body: some View {
+        Circle().fill(Self.colour(level))
+            .overlay { if level >= 5 { Circle().fill(.clear).glassEffect(.clear, in: .circle) } }
+            .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
+            .frame(width: size, height: size)
+    }
+}
+
+/// YOUR BADGES (the badge levels' number; the water at full): three across, highest levels first, each its disc and
+/// its name; a tap shows it alone (its level, what you have, what the next level needs, what it counts), the back
+/// arrow returns to all of them
+struct ProfileBadgesList: View {
+    let width: CGFloat
+    let room: CGFloat
+    @State private var numbers = ProfileNumbers.shared
+    @State private var edit = ProfileEdit.shared
+    private var open: String? {
+        get { edit.badge }
+        nonmutating set { edit.badge = newValue }
+    }
+
+    private var all: [Badge] {
+        numbers.earned.sorted { $0.level != $1.level ? $0.level > $1.level : $0.name < $1.name }
+    }
+    static func value(_ b: Badge, _ n: Int) -> String {
+        switch b.unit {
+        case .percent: return "\(n)%"
+        case .km: return "\(n.formatted()) km"
+        case .metres: return "\(n.formatted()) m"
+        case .tenthDegrees: return String(format: "%.1f°", Double(n) / 10)
+        case .count: return n.formatted()
+        }
+    }
+
+    var body: some View {
+        if let id = open, let b = all.first(where: { $0.id == id }) { one(b) } else { grid }
+    }
+
+    private var grid: some View {
+        let cols = 3, gap: CGFloat = 12
+        let cell = (width - CGFloat(cols - 1) * gap) / CGFloat(cols)
+        return ScrollView {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap, alignment: .top), count: cols), spacing: 20) {
+                ForEach(all) { b in
+                    VStack(spacing: 8) {
+                        BadgeDisc(level: b.level, size: min(72, cell - 16))
+                        Text(b.name).font(.footnote).foregroundStyle(Palette.ink)
+                            .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+                    }
+                    .frame(width: cell)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Feel.tap(); open = b.id }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(b.name), \(Badges.levelName[min(b.level, 5)])")
+                    .accessibilityAddTraits(.isButton)
+                }
+            }
+            .padding(.top, 8).padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+        .frame(width: width, height: room)
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 8)
+                Color.black
+            }
+        }
+    }
+
+    private func one(_ b: Badge) -> some View {
+        let next = b.steps.first { $0 > b.have }
+        return VStack(spacing: 0) {
+            HStack {
+                Button { Feel.tap(); open = nil } label: {
+                    Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                Spacer()
+            }
+            BadgeDisc(level: b.level, size: 132)
+                .padding(.top, 8)
+            Text(b.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center).padding(.top, 16)
+            Text(Badges.levelName[min(b.level, 5)]).font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
+            // what you have, and the next level's number at 50%
+            (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
+             + Text(next.map { " of " + Self.value(b, $0) } ?? "").font(.system(size: 22, weight: .semibold, design: .rounded))
+                .foregroundStyle(Palette.ink.opacity(0.5)))
+                .monospacedDigit()
+                .padding(.top, 20)
+            Text(b.what).font(.body).foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center).padding(.top, 16)
+            Spacer(minLength: 0)
+        }
+        .frame(width: width, height: room, alignment: .top)
     }
 }
 
