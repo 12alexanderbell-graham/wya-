@@ -21,6 +21,8 @@ final class ProfileStore {
         var colour: ColourPick?
         /// THE BACKGROUND'S FOUR COLOURS, picked on the colour picker; nil is the app's own living gradient
         var ground: [ColourPick]?
+        /// when the handle was changed (seconds since 1970): twice in any 14 days (W06 #42)
+        var handleChanges: [Double]? = nil
     }
     private(set) var me = Me()
     /// the uploaded photo, read once
@@ -43,6 +45,22 @@ final class ProfileStore {
         if me.picture == "photo", let p = Self.photoURL { photo = UIImage(contentsOfFile: p.path) }
     }
     static let nameMax = 30, handleMax = 20, bioMax = 120
+
+    // THE HANDLE'S WINDOW (W06 #42: "editable as often as you like within a time window, twice every 14 days"; the
+    // first handle is your name and is not a change)
+    static let handleWindow: TimeInterval = 14 * 24 * 3600
+    /// the day the handle can be changed again, or nil when it can be now
+    var handleFreeFrom: Date? {
+        let now = Date().timeIntervalSince1970
+        let recent = (me.handleChanges ?? []).filter { now - $0 < Self.handleWindow }.sorted()
+        guard recent.count >= 2 else { return nil }
+        return Date(timeIntervalSince1970: recent[recent.count - 2] + Self.handleWindow)
+    }
+    /// a handle typing ended: a change from what it was counts, once
+    func handleEdited(from old: String) {
+        guard me.handle != old, !old.isEmpty || !me.handle.isEmpty else { return }
+        set { $0.handleChanges = (($0.handleChanges ?? []) + [Date().timeIntervalSince1970]).suffix(4).map { $0 } }
+    }
     /// a change; `keep: false` shows it without writing it (a drag on the colour picker), the next kept change writes
     func set(_ change: (inout Me) -> Void, keep: Bool = true) {
         var m = me

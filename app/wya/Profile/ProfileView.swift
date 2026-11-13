@@ -137,9 +137,19 @@ struct ProfileView: View {
                     .fixedSize()
                 }
             } else {
-                Text(store.handleShown)
+                // (twice in 14 days: a tap while it is shut says from when, in the handle's place, for 2 s)
+                Text(edit.handleLockedNote ? store.handleFreeFrom.map { "Again from " + $0.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "en_GB"))) } ?? store.handleShown : store.handleShown)
                     .lineLimit(1)
-                    .onTapGesture { Feel.tap(); edit.field = .handle }
+                    .contentTransition(.opacity)
+                    .onTapGesture {
+                        if store.handleFreeFrom != nil {
+                            Feel.refuse()
+                            withAnimation(Motion.quick) { edit.handleLockedNote = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { withAnimation(Motion.quick) { edit.handleLockedNote = false } }
+                            return
+                        }
+                        Feel.tap(); edit.field = .handle
+                    }
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Edits your handle")
             }

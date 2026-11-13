@@ -346,6 +346,8 @@ final class TestDriver {
                     // made-up photo through the upload's own crop); profile nats <id> <id>... | none (logs them)
                     let edit = ProfileEdit.shared
                     if a == "edit" { edit.field = p.count > 2 ? ["name": .name, "handle": .handle, "bio": .bio][p[2]] : nil }
+                    // profile handletap: a tap on the handle (its window shut: the line says from when)
+                    if a == "handletap" { if ProfileStore.shared.handleFreeFrom != nil { edit.handleLockedNote = true } else { edit.field = .handle } }
                     if a == "sheet", let w = water {
                         if p.count > 2, p[2] == "picture" { edit.open(.picture, water: w) }
                         else if p.count > 2, p[2] == "nations" { edit.open(.nationalities, water: w) }

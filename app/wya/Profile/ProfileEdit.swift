@@ -12,7 +12,16 @@ final class ProfileEdit {
     enum Field: Hashable { case name, handle, bio }
     enum Sheet { case picture, nationalities, ground, stats, badges }
     /// the line being typed in
-    var field: Field?
+    var field: Field? {
+        didSet {
+            // the handle's typing begun and ended: what it was, and whether it changed (its window, W06)
+            if field == .handle, oldValue != .handle { handleBefore = ProfileStore.shared.me.handle }
+            if oldValue == .handle, field != .handle { ProfileStore.shared.handleEdited(from: handleBefore) }
+        }
+    }
+    @ObservationIgnored private var handleBefore = ""
+    /// the handle tapped while its window is shut: the line says when it opens, for a moment
+    var handleLockedNote = false
     /// what the water holds instead of the three numbers
     private(set) var sheet: Sheet?
     /// the nationalities' search is being typed in (the water goes to full, clear of the keyboard)
