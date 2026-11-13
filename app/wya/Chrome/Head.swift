@@ -50,6 +50,8 @@ final class HeadState {
     var settingsOpen = false
     /// how far the dot is the gear (0 the dot, 1 the gear); animated, or set by the finger when a pull starts from it
     var gear: CGFloat = 0
+    /// the first-time hint of turning the dot: how far the wheel is shown turned toward the next mode (0 at rest)
+    var turnHint: CGFloat = 0
     /// the gear's own turn while it rests (degrees), and when settings last opened (it rolls on from there)
     var gearRoll: Double = 0
     var settingsSince = Date()
@@ -703,7 +705,7 @@ struct ModeWheel: View {
 
     var body: some View {
         ZStack {
-            WheelFace(at: at, reveal: reveal, ink: ink, cover: toolsP, hideTop: hideDot)
+            WheelFace(at: at + head.turnHint, reveal: max(reveal, min(1, head.turnHint * 3)), ink: ink, cover: toolsP, hideTop: hideDot)
                 .allowsHitTesting(false)
             FirstTool(p: toolsP, lit: lit, ink: ink)
                 .allowsHitTesting(false)
@@ -815,6 +817,7 @@ struct ModeWheel: View {
         if PlacePageState.shared.isOpen && !dragging { return }
         if !dragging {
             endHold()
+            Hints.shared.usedTurn()
             withAnimation(Motion.quick) { dragging = true; reveal = 1 }
             startAt = at
             // turning from the first tool: the tools go back into the plus, the dot is the wheel again

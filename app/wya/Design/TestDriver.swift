@@ -716,7 +716,7 @@ final class TestDriver {
                 case "lock": if a == "press" { Feel.refuse(); map?.lockedPress() } else { map?.locked = a == "on" }
                 // hints: forget that the gestures were used and play the first-time hints (A3.15)
                 case "hints":
-                    for k in ["hint.water", "hint.pull", "hint.hold"] { UserDefaults.standard.removeObject(forKey: k) }
+                    for k in ["hint.water", "hint.pull", "hint.hold", "hint.turn"] { UserDefaults.standard.removeObject(forKey: k) }
                     if let water, let head { Hints.shared.start(water: water, head: head) }
                 // sideways on | off: the sideways mark, and out of full screen (1.11)
                 case "sideways":

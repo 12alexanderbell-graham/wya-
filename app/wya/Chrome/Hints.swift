@@ -10,7 +10,7 @@ import SwiftUI
 final class Hints {
     static let shared = Hints()
     private let d = UserDefaults.standard
-    private enum Part: String { case water, pull, hold }
+    private enum Part: String { case water, pull, hold, turn }
     /// each play's number, never reused (a stale step from an earlier play never matches); `playing` says one is on
     private var job = 0
     private var playing = false
@@ -23,6 +23,7 @@ final class Hints {
     func usedWater() { used(.water) }
     func usedPull() { used(.pull); shortPulls = [] }
     func usedHold() { used(.hold) }
+    func usedTurn() { used(.turn) }
     private func used(_ p: Part) { d.set(Date().timeIntervalSince1970, forKey: "hint.\(p.rawValue)") }
     private func due(_ p: Part) -> Bool {
         let t = d.double(forKey: "hint.\(p.rawValue)")
@@ -58,7 +59,7 @@ final class Hints {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [self] in
             guard Date().timeIntervalSince(lastTouch) >= 1.19 else { return }
             // (the water's part is gone: the water never moves by itself any more, and it played a lone haptic)
-            play(only: [.pull, .hold].filter(due))
+            play(only: [.pull, .hold, .turn].filter(due))
         }
     }
 
@@ -79,6 +80,14 @@ final class Hints {
                     withAnimation(.smooth(duration: 0.4)) { h.pull = 18 } completion: { [self] in
                         guard me == job else { return }
                         withAnimation(.smooth(duration: 0.4)) { h.pull = 0 }
+                    }
+                case .turn:
+                    // the wheel turned a third of the way to the next mode, its neighbours showing, there and back
+                    // (from Pins, toward Places)
+                    let way: CGFloat = h.mode == .pins ? -0.35 : 0.35
+                    withAnimation(.smooth(duration: 0.45)) { h.turnHint = way } completion: { [self] in
+                        guard me == job else { return }
+                        withAnimation(.smooth(duration: 0.45)) { h.turnHint = 0 }
                     }
                 case .hold:
                     // a quarter of the gear shown round the dot, there and back; no settings
@@ -102,5 +111,6 @@ final class Hints {
         guard let h = head else { return }
         if h.pullStop == 0, h.pull > 0.5, h.pull < 19 { withAnimation(Motion.settle) { h.pull = 0 } }
         if !h.settingsOpen, !h.dotHeld, h.gear > 0, h.gear < 0.3 { withAnimation(Motion.settle) { h.gear = 0 } }
+        if h.turnHint != 0 { withAnimation(Motion.settle) { h.turnHint = 0 } }
     }
 }
