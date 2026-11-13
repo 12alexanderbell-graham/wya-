@@ -10,7 +10,7 @@ import SwiftUI
 final class Hints {
     static let shared = Hints()
     private let d = UserDefaults.standard
-    private enum Part: String { case water, pull, hold, turn }
+    private enum Part: String { case water, pull, hold, turn, moon }
     /// each play's number, never reused (a stale step from an earlier play never matches); `playing` says one is on
     private var job = 0
     private var playing = false
@@ -24,6 +24,10 @@ final class Hints {
     func usedPull() { used(.pull); shortPulls = [] }
     func usedHold() { used(.hold) }
     func usedTurn() { used(.turn) }
+    func usedMoon() { used(.moon) }
+    /// THE MOON'S HINT is the Cosmos' own (it plays where the moon is, at 50%): whether it is due, and nothing has
+    /// been touched for 1.2 s
+    var moonDue: Bool { due(.moon) && Date().timeIntervalSince(lastTouch) >= 1.19 }
     private func used(_ p: Part) { d.set(Date().timeIntervalSince1970, forKey: "hint.\(p.rawValue)") }
     private func due(_ p: Part) -> Bool {
         let t = d.double(forKey: "hint.\(p.rawValue)")
@@ -74,7 +78,7 @@ final class Hints {
             DispatchQueue.main.asyncAfter(deadline: .now() + at) { [self] in
                 guard me == job else { return }
                 switch p {
-                case .water: w.hint()
+                case .water, .moon: w.hint()
                 case .pull:
                     // as an 18 pt pull (the lime 34.8 pt, the dot 17.4 pt), there and back
                     withAnimation(.smooth(duration: 0.4)) { h.pull = 18 } completion: { [self] in

@@ -245,7 +245,26 @@ struct CosmosView: View {
             // 7 to 18 in 120); in a drawing group they are drawn together in one Metal pass
             .drawingGroup(opaque: false)
         }
+        // THE MOON'S FIRST-TIME HINT (P01 §22): the first time the system is seen at rest, the moon goes a little way
+        // round its planet and back, once, so it reads as something that moves; never words
+        .task(id: form.top <= water.layout.top(.half) + 1 && !water.held) {
+            guard form.top <= water.layout.top(.half) + 1, !water.held, Launch.shared.done else { return }
+            try? await Task.sleep(for: .milliseconds(1300))
+            guard !Task.isCancelled, Hints.shared.moonDue, !moonHeld else { return }
+            Hints.shared.usedMoon()
+            let base = moonAngle
+            let t0 = Date()
+            // 0.5 rad out and back over 1.2 s, eased both ends, frame by frame (the trail follows it as a drag)
+            while !Task.isCancelled, !moonHeld {
+                let t = Date().timeIntervalSince(t0) / 1.2
+                if t >= 1 { break }
+                moonAngle = base + 0.5 * sin(.pi * t) * sin(.pi * t)
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            if !moonHeld { moonAngle = base }
+        }
         .onChange(of: moonHeld) { _, on in
+            if on { Hints.shared.usedMoon() }
             heldTween.go(on ? 1 : 0, dur: on ? 0.32 : 0.4, delay: on ? 0 : 0.25)
             // while you hold it the caption's name is the stop's (a label by the planet sat on the sun)
             withAnimation(Motion.quick) { map.moonHeld = on }
