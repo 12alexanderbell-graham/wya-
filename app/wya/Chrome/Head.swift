@@ -1274,6 +1274,8 @@ struct SearchResults: View {
                     if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
                 .frame(width: 22, height: 22)
+                // (a hairline edge, so a flag with white in it keeps its shape on the white box)
+                .overlay { if pl != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) } }
                 // found by another of its names ("united": Mexico as United Mexican States): that name says why it is
                 // here; its kind when that does not fit
                 ResultWords(name: pl?.n ?? "", notes: [note ?? map.world.flatMap { Self.otherName($0, i, head.query) } ?? "",
@@ -1319,6 +1321,7 @@ struct SearchResults: View {
             if let f = id.flatMap({ Flags.square($0.lowercased()) }) { f.resizable().interpolation(.high) } else { Color.clear }
         }
         .frame(width: 22, height: 22)
+        .overlay { if id.flatMap({ Flags.square($0.lowercased()) }) != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) } }
     }
     private func regionRow(_ h: RegionSearch.Hit?) -> some View {
         Button { regionAct(h) } label: {
