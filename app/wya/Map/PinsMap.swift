@@ -115,6 +115,30 @@ final class PinStore {
         save()
         undoableDrop(p.id)
         Task { await name(p.id, country: country?.name, known: known) }
+        if MapSettingsStore.shared.value.pinMarksPlace, let cc = country?.id.lowercased() { markNear(c, cc: cc) }
+    }
+    /// A PIN NEAR A PLACE MARKS IT (Map settings, Off by default): a pin dropped within 200 m of a thing of the
+    /// country (a museum, a lake's point, a station) stamps that thing, the nearest one, as "a pin near a place"; the
+    /// pin itself is never stamped. One undo step of its own.
+    private func markNear(_ c: CLLocationCoordinate2D, cc: String) {
+        let things = ThingStore.shared
+        things.load(cc)
+        Task {
+            for _ in 0 ..< 50 where things.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let k = cos(c.latitude * .pi / 180)
+            var best: (Double, ThingStore.Thing)?
+            for t in things.things(cc) ?? [] {
+                let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+                var dx = ll.lon - c.longitude
+                if dx > 180 { dx -= 360 } else if dx < -180 { dx += 360 }
+                // metres, near enough for 200 m
+                let d = ((dx * k) * (dx * k) + (ll.lat - c.latitude) * (ll.lat - c.latitude)).squareRoot() * 111_195
+                if d <= 200, d < best?.0 ?? .infinity { best = (d, t) }
+            }
+            guard let t = best?.1, !MarkStore.shared.state(t.key).stamped else { return }
+            Feel.stamp()
+            await MarkStore.shared.stamp(t.key, name: t.name, cc: cc, source: .pinNear)
+        }
     }
     /// DROP A PIN HERE (11.5's town or thing menu): a pin at a place's point, named after it; not chosen, and nothing
     /// else changes until Pins is opened; the undo drop takes it back
