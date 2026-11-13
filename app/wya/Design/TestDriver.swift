@@ -279,9 +279,20 @@ final class TestDriver {
                     let ls = ListsState.shared
                     switch a {
                     case "open": ls.open = p.count > 2 ? (p[2] == "last" ? ListsStore.shared.book.lists.last?.id
-                                                          : p[2] == "lastplan" ? ListsStore.shared.book.plans.last?.id : p[2]) : nil
+                                                          : p[2] == "lastplan" ? ListsStore.shared.book.plans.last?.id
+                                                          : p[2] == "lasttier" ? ListsStore.shared.book.tiers.last?.id : p[2]) : nil
                     case "new": ls.newList()
                     case "newplan": ls.kind = 1; ls.newPlan()
+                    case "newtier": ls.kind = 2; ls.newTier()
+                    case "tieradd":
+                        // lists tieradd <name> [row]: a thing added to the open tier list, onto row n when given
+                        if p.count > 2 {
+                            ListsStore.shared.change { b in
+                                guard let i = b.tiers.firstIndex(where: { $0.id == ls.open }) else { return }
+                                b.tiers[i].add([p[2]])
+                                if p.count > 3, let r = Int(p[3]) { _ = b.tiers[i].move(p[2], to: .row(r)) }
+                            }
+                        }
                     case "add":
                         // lists add <day> <words>: a plan's day gets a thing to do ("09:40 Land" with its time)
                         if p.count > 3, let d = Int(p[2]) {
@@ -307,10 +318,13 @@ final class TestDriver {
                         ListsStore.shared.change { b in
                             if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].name = n }
                             if let i = b.plans.firstIndex(where: { $0.id == ls.open }) { b.plans[i].name = n }
+                            if let i = b.tiers.firstIndex(where: { $0.id == ls.open }) { b.tiers[i].name = n }
                         }
                         ls.naming = false
                     case "drop":
-                        if let id = ls.open, id != "wish" { ListsStore.shared.change { $0.lists.removeAll { $0.id == id }; $0.plans.removeAll { $0.id == id } } }
+                        if let id = ls.open, id != "wish" {
+                            ListsStore.shared.change { $0.lists.removeAll { $0.id == id }; $0.plans.removeAll { $0.id == id }; $0.tiers.removeAll { $0.id == id } }
+                        }
                         ls.open = nil; ls.naming = false
                     default: break
                     }

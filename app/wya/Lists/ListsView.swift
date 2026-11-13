@@ -38,8 +38,19 @@ final class ListsState {
         open = pl.id
         naming = true
     }
+    /// a new tier list: S to D, nothing ranked yet, its name typed at once
+    func newTier() {
+        let t = TierList.blank()
+        ListsStore.shared.change { $0.tiers.append(t) }
+        open = t.id
+        naming = true
+    }
     /// leaving a list: one left with no name and nothing in it is not kept
     func close() {
+        if let id = open, let t = ListsStore.shared.book.tiers.first(where: { $0.id == id }),
+           t.name.trimmingCharacters(in: .whitespaces).isEmpty, t.has.isEmpty {
+            ListsStore.shared.change { $0.tiers.removeAll { $0.id == id } }
+        }
         if let id = open, let pl = ListsStore.shared.book.plans.first(where: { $0.id == id }),
            pl.name.trimmingCharacters(in: .whitespaces).isEmpty, pl.count == 0, pl.start.isEmpty {
             ListsStore.shared.change { $0.plans.removeAll { $0.id == id } }
@@ -138,13 +149,13 @@ struct ListsWater: View {
                     }
                 }
                 Spacer(minLength: 8)
-                // the plus: a new list or a new plan (tier lists' and books' making comes with their pages)
-                circle("plus", dim: s.kind > 1) {
-                    guard s.kind <= 1 else { Feel.refuse(); return }
+                // the plus: a new list, plan or tier list (books' making comes with their page)
+                circle("plus", dim: s.kind > 2) {
+                    guard s.kind <= 2 else { Feel.refuse(); return }
                     Feel.tap()
-                    withAnimation(Motion.quick) { if s.kind == 0 { s.newList() } else { s.newPlan() } }
+                    withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
                 }
-                .accessibilityLabel(s.kind == 1 ? "New plan" : "New list")
+                .accessibilityLabel(["New list", "New plan", "New tier list", "New book"][s.kind])
             }
         }
         .frame(width: w, height: 44)
@@ -218,7 +229,10 @@ struct ListsWater: View {
                     }
                 case 2:
                     ForEach(store.book.tiers.filter { !$0.arch && !$0.hid && (q.isEmpty || $0.name.lowercased().contains(q)) }) { t in
-                        row(nil, t.name, t.count == 0 ? "" : "\(t.count) ranked") { Feel.refuse() }
+                        row(nil, t.name.isEmpty ? "New tier list" : t.name, t.count == 0 ? "" : "\(t.count) ranked", dim: t.name.isEmpty) {
+                            Feel.tap()
+                            withAnimation(Motion.quick) { s.open = t.id }
+                        }
                     }
                 default:
                     ForEach(store.book.books.filter { q.isEmpty || $0.name.lowercased().contains(q) }) { b in
@@ -263,6 +277,8 @@ struct ListsWater: View {
     @ViewBuilder private func listPage(_ id: String, w: CGFloat) -> some View {
         if let pl = store.book.plans.first(where: { $0.id == id }) {
             planPage(pl, w: w)
+        } else if let t = store.book.tiers.first(where: { $0.id == id }) {
+            TierPage(t: t, w: w, naming: $naming)
         } else if id == "wish" {
             page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w)
         } else if let l = store.book.lists.first(where: { $0.id == id }) {
@@ -501,5 +517,115 @@ struct PlanAddRow: View {
                 text = ""
             }
             .frame(minHeight: 44)
+    }
+}
+
+
+/// A TIER LIST: its name, then its tiers edge to edge (square ends, the tier's letter on its own full colour), then the
+/// things not ranked yet, and a field to add more. A thing is dragged onto a tier or back under; its hold menu takes it
+/// out of the tier list.
+struct TierPage: View {
+    let t: TierList
+    let w: CGFloat
+    var naming: FocusState<Bool>.Binding
+    @State private var s = ListsState.shared
+    @State private var adding = ""
+
+    private func change(_ f: (inout TierList) -> Void) {
+        ListsStore.shared.change { b in if let i = b.tiers.firstIndex(where: { $0.id == t.id }) { f(&b.tiers[i]) } }
+    }
+    private static func colour(_ n: String) -> Color {
+        let v = Palette.named[n] ?? SIMD3(0.5, 0.5, 0.5)
+        return Color(red: v.x, green: v.y, blue: v.z)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if s.naming || t.name.isEmpty {
+                    TextField("", text: Binding(get: { t.name }, set: { v in change { $0.name = String(v.prefix(60)) } }),
+                              prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .focused(naming)
+                    .submitLabel(.done)
+                    .onSubmit { s.naming = false }
+                    .onAppear { naming.wrappedValue = true }
+                    .frame(minHeight: 44)
+                } else {
+                    Text(t.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .frame(minHeight: 44)
+                        .onTapGesture { Feel.tap(); s.naming = true }
+                }
+                VStack(spacing: 2) {
+                    ForEach(Array(t.rows.enumerated()), id: \.offset) { i, r in
+                        HStack(alignment: .top, spacing: 0) {
+                            Text(r.t).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                                .frame(width: 52, height: 52)
+                                .background(Self.colour(t.colour(i)))
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 6) { ForEach(r.items, id: \.self) { chip($0) } }
+                                    .padding(.horizontal, 6).frame(minHeight: 52)
+                            }
+                            .scrollIndicators(.hidden)
+                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                        }
+                        .dropDestination(for: String.self) { names, _ in
+                            guard let n = names.first else { return false }
+                            Feel.tap()
+                            withAnimation(Motion.quick) { change { _ = $0.move(n, to: .row(i)) } }
+                            return true
+                        }
+                    }
+                }
+                // (edge to edge of the water)
+                .padding(.horizontal, -16)
+                .padding(.top, 8)
+                // the things not ranked yet
+                FlowRow(items: t.pool) { chip($0) }
+                    .frame(minHeight: 52, alignment: .topLeading)
+                    .padding(.top, 16)
+                    .contentShape(Rectangle())
+                    .dropDestination(for: String.self) { names, _ in
+                        guard let n = names.first else { return false }
+                        withAnimation(Motion.quick) { change { _ = $0.move(n, to: .pool) } }
+                        return true
+                    }
+                TextField("", text: $adding, prompt: Text("Add").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(.body).foregroundStyle(Palette.ink)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        let n = adding.trimmingCharacters(in: .whitespaces)
+                        guard !n.isEmpty else { return }
+                        Feel.tap()
+                        change { $0.add([n]) }
+                        adding = ""
+                    }
+                    .frame(minHeight: 44)
+            }
+            .frame(width: w, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+        // (the tiers run past the page's margins to the water's edges)
+        .scrollClipDisabled()
+    }
+
+    private func chip(_ n: String) -> some View {
+        Text(n).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1)
+            .padding(.horizontal, 10).frame(height: 36)
+            .background(Palette.cream, in: .rect(cornerRadius: 6))
+            .draggable(n)
+            .contextMenu {
+                Button("Take out", role: .destructive) { Feel.lift(); withAnimation(Motion.quick) { change { _ = $0.move(n, to: nil) } } }
+            }
+    }
+}
+
+/// things laid out in rows that wrap, left to right
+struct FlowRow<Content: View>: View {
+    let items: [String]
+    let content: (String) -> Content
+    var body: some View {
+        FlowLayout(spacing: 6) { ForEach(items, id: \.self) { content($0) } }
     }
 }
