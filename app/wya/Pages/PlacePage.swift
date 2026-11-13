@@ -717,6 +717,8 @@ private struct PageLayer: View {
     /// where the long lists start in the page (the head's search takes the page there), and the scroll's place
     @State private var listsY: CGFloat?
     @State private var spot = ScrollPosition(edge: .top)
+    /// words have gone up under the head (the top edge's blur is on)
+    @State private var under = false
 
     var body: some View { pageBody }
 
@@ -825,6 +827,20 @@ private struct PageLayer: View {
             if want != water.mini { withAnimation(Motion.chrome) { water.mini = want } }
         }
         .onDisappear { if top, water.mini != 0 { withAnimation(Motion.chrome) { water.mini = 0 } } }
+        // THE TOP EDGE (Apple's scroll edge under a bar; the system's never reaches this page, laid out over the whole
+        // screen): once words go up under the head they blur and fade into it, never read through its glass
+        .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y + $0.contentInsets.top > 4 }) { _, u in
+            if u != under { withAnimation(Motion.quick) { under = u } }
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.6),
+                                             .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+                .frame(height: L.safeTop + 84)
+                .opacity(under ? 1 : 0)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         }
         .background(Palette.white)
     }
