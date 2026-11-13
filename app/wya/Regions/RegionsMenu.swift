@@ -235,6 +235,8 @@ final class RegionsMenuModel {
     }
     /// small letters as an English word is ("34 wilayas"), but a country's own word keeps its own ("9 Bundesländer")
     static func word(_ w: String) -> String { w.unicodeScalars.allSatisfy(\.isASCII) ? w.lowercased() : w }
+    /// the same word standing alone as a label (the region map's level line): its first letter capitalised
+    static func label(_ w: String) -> String { let s = word(w); return s.prefix(1).uppercased() + s.dropFirst() }
 
     /// your number per country at its first level: the region stamps (`r:` keys) counted against each country's
     /// bundled units; with no region stamps nothing is read. Each file's region ids are read once, off the main thread,

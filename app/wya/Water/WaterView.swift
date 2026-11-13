@@ -416,9 +416,10 @@ struct SheetContent: View {
     /// THE REGION MAP'S LINE (6.6, the old app's band row): the country's name and its levels, in the caption's place
     private func regionLevels(width: CGFloat) -> AnyView? {
         guard let sc = map.regionScene, let w = map.world, sc.place < w.places.count else { return nil }
-        var levels = RegionCatalog.shared.used(sc.id).map { RegionLevels.Level(row: $0.row, word: RegionsMenuModel.word($0.level.many)) }
+        // (as labels, capitalised like every other label: Regions, Departments, Towns)
+        var levels = RegionCatalog.shared.used(sc.id).map { RegionLevels.Level(row: $0.row, word: RegionsMenuModel.label($0.level.many)) }
         // the last word: towns (6.6), for a country with towns in the data
-        levels.append(RegionLevels.Level(row: Self.townsRow, word: "towns"))
+        levels.append(RegionLevels.Level(row: Self.townsRow, word: "Towns"))
         // while another level loads, the one asked for is already the bold one
         let current = map.regionTowns ? Self.townsRow : map.regionRow > 0 && map.regionNotReady == nil ? map.regionRow : sc.row
         return AnyView(RegionLevels(name: w.places[sc.place].n, levels: levels, current: current, notReady: map.regionNotReady,
