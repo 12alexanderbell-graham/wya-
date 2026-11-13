@@ -187,11 +187,8 @@ struct StampCard: View {
             let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
             let detailsUp = details.isOpen || verify.isOpen
             // THE CARD GOES BACK: once the bottom pair has
-            // gone, the name, Stamp | Wishlist and the book go down as one under the water as it rises over them, at
-            // their own size; at full they have gone under it
-            let colTop = g.mid.y - (168 + g.bookH) / 2
-            let back: CGFloat = card.heldTop == nil ? 1
-                : max(0, min(1, (waterTop - 12 - colTop) / max(1, bookBottom - colTop)))
+            // gone, the name, Stamp | Wishlist and the book stay at their own size and the water rises over them; at
+            // full they have gone under it
             let id = w.places[i].id
             let key = PlaceKey.country(id)
             let state = marks.state(key)
@@ -274,10 +271,11 @@ struct StampCard: View {
                         .allowsHitTesting(false)
                 }
             }
-            // the card goes down under the rising water at its own size, never shrinking (F50, F60)
-            .offset(y: (1 - back) * max(0, L.H - colTop))
+            // (the card stays where it is at its own size, never shrinking: the rising water goes over it, its top,
+            // the name and Stamped | Wishlist, still showing above the water at 50%; F50, F60)
             .modifier(ArcPlace(t: p, from: card.at, ctrl: ctrl, to: c))
-            .allowsHitTesting(p > 0.98 && back > 0.1)
+            // (touchable while any of it shows above the water)
+            .allowsHitTesting(p > 0.98 && waterTop - 12 > g.mid.y - (168 + g.bookH) / 2)
         }
     }
 

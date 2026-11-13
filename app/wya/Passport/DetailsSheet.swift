@@ -765,7 +765,7 @@ struct DetailsSheet: View {
                     .accessibilityAddTraits(chosen == id ? .isSelected : [])
             }
         }
-        .padding(.leading, -12)
+        // (no pull to the left: with every choice a visible capsule, the capsules' edge lines up with the names above)
     }
 
     /// Times: an exact number from 1; drag on the number or its − / + circles (36 pt drawn, 44 pt touch, solid black,

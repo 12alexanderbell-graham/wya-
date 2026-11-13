@@ -996,10 +996,15 @@ struct SearchResults: View {
         let _ = countriesSearch ? TownIndex.shared.load() : ()
         let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
         // (two sights at most, the known ones, after the countries; a sight found means no "Did you mean?" country)
-        let sights = sightSearch ? thingHits.filter { $0.fame >= 3 }.prefix(2).map { ResultKey.thing($0.key) } : []
+        // (sights only: landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region
+        // named as typed before them, "paris" the city first, the rest after)
+        let sights = sightSearch ? thingHits.filter { $0.fame >= 3 && (2...6).contains($0.kind) }.prefix(2).map { ResultKey.thing($0.key) } : []
+        let typedFold = head.query.townFolded
+        let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
+        let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) }
         let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty ? baseKeys
-            : Array((hits.prefix(max(3, 8 - anyRegionHits.count - sights.count)).map { ResultKey.place($0) } + sights
-                     + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
+            : Array((hits.prefix(max(3, 8 - anyRegionHits.count - sights.count)).map { ResultKey.place($0) }
+                     + namedRegions.map { .anyRegion($0.key) } + sights + otherRegions.map { .anyRegion($0.key) }).prefix(8))
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
