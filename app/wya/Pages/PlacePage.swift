@@ -353,7 +353,7 @@ extension PlacePageState.OnePage {
         if let img = (t["img"] as? [String])?.first ?? t["img"] as? String { out.photo = img }
         if let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue) {
-            out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true
+            out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
         guard key.id == id else { return }
         facts = out
@@ -371,7 +371,7 @@ extension PlacePageState.OnePage {
         if let img = (r["img"] as? [String])?.first { out.photo = img }
         if let n = r["n"] as? String, let ll = r["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: 150) {
-            out.prose = PlacePageState.cut(PlacePageState.plain(intro), 620); out.proseWikivoyage = true
+            out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
         if let p = r["pop"] as? NSNumber { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
@@ -521,13 +521,21 @@ extension PlacePageState {
         ("Théatre", "Théâtre"),
     ]
 
-    static func plain(_ s: String) -> String {
+    /// `name`: the place the text is about, so a picture's caption left in front of it can be told from its first words
+    static func plain(_ s: String, name: String? = nil) -> String {
         var t = s
         // ("&amp;" first: the source writes some marks twice over, "&amp;ndash;", and Australia's page read)
         for (e, c) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
                        ("&mdash;", "\u{2014}"), ("&ndash;", "\u{2013}"), ("&hellip;", "\u{2026}"), ("&rsquo;", "\u{2019}"),
                        ("&lsquo;", "\u{2018}"), ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"), ("&eacute;", "é")] {
             t = t.replacingOccurrences(of: e, with: c)
+        }
+        // every other named mark HTML has ("Faun&iacute;tica", "N&uuml;rnberg"; "&lrm;" is nothing seen)
+        if t.contains("&"), let re = try? NSRegularExpression(pattern: "&([A-Za-z][A-Za-z0-9]{1,7});") {
+            for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
+                guard let r = Range(m.range, in: t), let n = Range(m.range(at: 1), in: t), let c = HTMLEntities.character(String(t[n])) else { continue }
+                t.replaceSubrange(r, with: c)
+            }
         }
         // numbered ones ("&#8212;", "&#x2014;")
         if t.contains("&#"), let re = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);") {
@@ -536,6 +544,11 @@ extension PlacePageState {
                       let v = UInt32(t[num], radix: t[hx].isEmpty ? 10 : 16), let u = Unicode.Scalar(v) else { continue }
                 t.replaceSubrange(r, with: String(Character(u)))
             }
+        }
+        // a page's own marks that a decoded "&lt;big&gt;" turns back into ("Dzongkha: <big>…</big>"): never words
+        if t.contains("<") {
+            t = t.replacingOccurrences(of: "</?(?:big|small|span|b|i|u|em|strong|sup|sub|br|div|p|font|abbr)\\b[^>]*>", with: "",
+                                       options: [.regularExpression, .caseInsensitive])
         }
         // editors' notes left in the source ("<!-- ... -->") are not text: taken out, and one left open runs to the end
         if t.contains("<!--") {
@@ -551,14 +564,22 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "\\(\\s*,\\s*", with: "(", options: .regularExpression)
             t = t.replacingOccurrences(of: "(\\w) ,", with: "$1,", options: .regularExpression)
         }
-        // a picture's head left at the very start ("thumb|400px|São Paulo - Downtown and Paulista region. São Paulo,
-        // or Sampa ..."): its options and its caption are not the text; the caption goes only when it is one short
-        // sentence, so a caption with no end never takes the first real sentence with it
-        if let r = t.range(of: "^\\s*(?:(?:thumb|thumbnail|frame|frameless|border|left|right|center|none|upright(?:=[0-9.]+)?|[0-9]+(?:x[0-9]+)?px)\\|)+",
-                           options: .regularExpression) {
+        // A PICTURE'S MARKS LEFT IN THE TEXT. At the start ("thumb|400px|The Great Church of Debrecen in winter
+        // Debrecen is ..."): its options go, and its caption goes up to where the text starts with its own name
+        // ("Debrecen is", "São Paulo, or"); with no such start the caption stays, so it never takes a real sentence with
+        // it. Anywhere else ("... Central New York. 250px|thumb|View of the Salmon River"): from its options to the end of
+        // its caption's sentence. A template ("{{pagebanner|{ }}}") is never words.
+        let o = "(?:thumb|thumbnail|frame|frameless|border|left|right|center|none|upright(?:=[0-9.]+)?|[0-9]+(?:x[0-9]+)?px)"
+        if let r = t.range(of: "^\\s*(?:\(o)\\|)*\(o)(?:\\||\\s)", options: .regularExpression) {
             t.removeSubrange(r)
-            if let end = t.range(of: ". "), t.distance(from: t.startIndex, to: end.lowerBound) <= 140 { t.removeSubrange(t.startIndex ..< end.upperBound) }
+            if let name, let start = Self.articleStart(t, name) { t.removeSubrange(t.startIndex ..< start) }
             t = t.trimmingCharacters(in: .whitespaces)
+        }
+        if t.contains("|") {
+            t = t.replacingOccurrences(of: "\\s*(?:\(o)\\|)+\(o)?[^.|]*(?:\\.|$)", with: "", options: .regularExpression)
+        }
+        if t.contains("{{") {
+            t = t.replacingOccurrences(of: "\\{\\{[^}]*\\}+\\s*", with: "", options: .regularExpression)
         }
         // a picture's or link's closing marks left with nothing before them ("]] Île-de-France is ..."), and a link's
         // opening ones with nothing after: never words
@@ -567,6 +588,21 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
         }
         return t
+    }
+
+    /// where a text starts with its own name and then says what it is ("Debrecen is", "São Paulo, or", "Ségou (")
+    /// in its first 220 characters, any case and accents; nil when it never does
+    static func articleStart(_ t: String, _ name: String) -> String.Index? {
+        let head = t.prefix(220)
+        var from = head.startIndex
+        while let r = head.range(of: name, options: [.caseInsensitive, .diacriticInsensitive], range: from ..< head.endIndex) {
+            let after = head[r.upperBound...]
+            if [" is", " was", " are", " has", " lies", " sits", " (", ","].contains(where: { after.hasPrefix($0) }) {
+                return r.lowerBound
+            }
+            from = r.upperBound
+        }
+        return nil
     }
 
     /// up to n characters, cut at a whole sentence (16.4: prose)
