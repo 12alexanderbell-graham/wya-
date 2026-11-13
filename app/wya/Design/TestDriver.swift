@@ -379,6 +379,14 @@ final class TestDriver {
                             ProfileStore.shared.set { $0.ground = g }
                         } else { ProfileStore.shared.set { $0.ground = nil } }
                     }
+                    // profile groundcount <2-4>: the background's colours cut or added to that many; profile strength <0-1>
+                    if a == "groundcount", p.count > 2, let n = Int(p[2]) {
+                        var g = ProfileStore.shared.me.ground ?? ColourPick.field
+                        while g.count > max(2, n) { g.removeLast() }
+                        while g.count < min(4, n) { g.append(g[0]) }
+                        ProfileStore.shared.set { $0.ground = g }
+                    }
+                    if a == "strength", p.count > 2 { ProfileStore.shared.set { $0.groundStrength = Double(p[2]) } }
                     // profile badge <id> | off: one badge shown alone in your badges
                     if a == "badge" { edit.badge = p.count > 2 && p[2] != "off" ? p[2] : nil }
                     if a == "natsearch" { edit.query = p.dropFirst(2).joined(separator: " ") }

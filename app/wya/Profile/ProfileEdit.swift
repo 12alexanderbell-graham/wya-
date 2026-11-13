@@ -100,9 +100,10 @@ extension ColourPick {
     @MainActor static let field: [ColourPick] = ["teal", "lime", "blue", "cream"].map { from(srgb: Palette.named[$0] ?? .one) }
 }
 
-/// THE BACKGROUND SHEET (water at 50%): the living gradient's four colours as four circles, the one being changed in
-/// the picker's own white ring; under them the colour picker, the page behind following the finger (its suggested
-/// colour your picture's)
+/// THE BACKGROUND SHEET (water at 50%): the living gradient's colours, two to four, as circles, the one being changed
+/// in the picker's own white ring, a plus for another while there are fewer than four, a hold on one to remove it while
+/// there are more than two; under them the colour picker and the strength, the page behind following the finger
+/// (its suggested colour your picture's)
 struct ProfileGroundSheet: View {
     let width: CGFloat
     @State private var store = ProfileStore.shared
@@ -114,7 +115,7 @@ struct ProfileGroundSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                ForEach(0 ..< 4, id: \.self) { k in
+                ForEach(0 ..< four.count, id: \.self) { k in
                     Button {
                         Feel.tap()
                         at = k
@@ -125,9 +126,31 @@ struct ProfileGroundSheet: View {
                             .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(k == at ? 0.5 : 0.15), lineWidth: 0.5))
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if four.count > 2 {
+                            Button("Remove", role: .destructive) { remove(k) }
+                        }
+                    }
                     .accessibilityLabel("Background colour \(k + 1)")
                     .accessibilityValue(ColourNames.name(four[k]))
                     .accessibilityAddTraits(k == at ? .isSelected : [])
+                    .accessibilityAction(named: "Remove") { if four.count > 2 { remove(k) } }
+                }
+                // another colour (four at most): the one being changed again, to be moved on the picker
+                if four.count < 4 {
+                    Button {
+                        Feel.tap()
+                        var g = four
+                        g.append(pick)
+                        store.set { $0.ground = g }
+                        at = g.count - 1
+                    } label: {
+                        Icon5(key: "plus", ink: Palette.ink, size: 20)
+                            .frame(width: 44, height: 44)
+                            .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Add a colour")
                 }
                 Spacer(minLength: 0)
             }
@@ -135,13 +158,29 @@ struct ProfileGroundSheet: View {
                 pick = c
                 set(c, keep: false)
             }), suggested: store.me.picture == nil ? store.me.colour : nil, width: width) { c in set(c, keep: true) }
+            // THE STRENGTH, calm to strong, the page behind following the finger; kept when it lifts
+            Slider(value: Binding(get: { store.me.groundStrength ?? 0.5 }, set: { v in store.set({ $0.groundStrength = v }, keep: false) }),
+                   in: 0 ... 1) { Text("Strength") } onEditingChanged: { on in
+                if !on { store.set({ $0.groundStrength = store.me.groundStrength ?? 0.5 }, keep: true) }
+            }
+            .tint(Palette.ink)
+            .accessibilityValue("\(Int(((store.me.groundStrength ?? 0.5) * 100).rounded())) percent")
         }
         .frame(width: width, alignment: .leading)
     }
     private func set(_ c: ColourPick, keep: Bool) {
         var g = four
-        g[at] = c
+        g[min(at, g.count - 1)] = c
         store.set({ $0.ground = g }, keep: keep)
+    }
+    private func remove(_ k: Int) {
+        guard four.count > 2 else { return }
+        Feel.lift()
+        var g = four
+        g.remove(at: k)
+        store.set { $0.ground = g }
+        at = min(at, g.count - 1)
+        pick = g[at]
     }
 }
 

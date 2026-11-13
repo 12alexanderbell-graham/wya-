@@ -21,6 +21,9 @@ final class ProfileStore {
         var colour: ColourPick?
         /// THE BACKGROUND'S FOUR COLOURS, picked on the colour picker; nil is the app's own living gradient
         var ground: [ColourPick]?
+        /// THE BACKGROUND'S STRENGTH, 0 calm to 1 strong (nil: the middle, the picture's gradient of the first app);
+        /// previewed live on the page as the slider moves
+        var groundStrength: Double? = nil
         /// when the handle was changed (seconds since 1970): twice in any 14 days (W06 #42)
         var handleChanges: [Double]? = nil
     }

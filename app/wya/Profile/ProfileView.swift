@@ -27,7 +27,11 @@ struct ProfileView: View {
         let mid = (L.safeTop + L.top(.quarter)) / 2
         let top = (mid - Self.column / 2).rounded()
         ZStack(alignment: .topLeading) {
-            LivingField(custom: me.ground?.map(\.srgb), saturation: Self.look.x, power: Self.look.y)
+            // (two to four colours of your own; the field draws four, so two are each twice and three the first again;
+            // the strength from calm to strong, the middle the first app's picture gradient)
+            let s = me.groundStrength ?? 0.5
+            LivingField(custom: me.ground.map { g in (0 ..< 4).map { g[$0 % max(1, g.count)].srgb } },
+                        saturation: Self.look.x * (0.7 + 0.6 * s), power: Self.look.y * (0.62 + 0.76 * s))
                 .frame(width: L.W, height: L.H)
             // the ground: a tap on it keeps what is typed and puts a sheet away; with nothing open, it brings the
             // background's colours (the map under the page takes nothing)
