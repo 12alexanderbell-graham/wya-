@@ -105,6 +105,9 @@ final class PlacePageState {
     /// a reason the page's sheet opens on, at Report a mistake (a hold menu's Report a wrong place)
     var reportAsked: String?
     var isOpen: Bool { !pages.isEmpty }
+    /// ONE SEARCH PER SCREEN: the head's field, open over a page, narrows the page's long lists (Activities, what is in
+    /// it) to what it holds; empty when search is shut
+    var filter = ""
     /// a page that stays: false from the moment the last one starts closing (its close animation still running)
     var standing: Bool { pages.contains { !$0.closing } }
 
@@ -1059,31 +1062,28 @@ private struct InsideList: View {
     let country: String
     let countryName: String
     let map: MapController
-    @State private var query = ""
     @State private var shown = 5
     /// each row's frame on screen (the page it pushes grows out of it); a plain box, so scrolling redraws nothing
     @State private var frames = Frames()
     final class Frames { var at: [PlaceKey: CGRect] = [:] }
 
     var body: some View {
-        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        // (searched by the head's field, one search per screen: typing shows every row that matches)
+        let q = PlacePageState.shared.filter.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         let rows = q.isEmpty ? all : all.filter { $0.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).contains(q) }
+        let limit = q.isEmpty ? shown : rows.count
+        // (a list with nothing that matches goes while searching)
+        if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            HStack(spacing: 8) {
-                Icon5(key: "search", ink: Palette.ink, size: 22)
-                TextField("Search \(title.lowercased())", text: $query).font(.body)
-                    .autocorrectionDisabled().textInputAutocapitalization(.never)
-            }
-            .padding(.horizontal, 14).frame(height: 44)
-            .glassEffect(PageGlass.on, in: .capsule)
-            ForEach(rows.prefix(shown), id: \.self) { r in row(r) }
-            if rows.count > shown {
+            ForEach(rows.prefix(limit), id: \.self) { r in row(r) }
+            if rows.count > limit {
                 Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+        }
         }
     }
 
@@ -1254,24 +1254,19 @@ enum PageGlass {
 /// row its name and one line (Wikivoyage's words, credited in Sources)
 private struct ActivitiesList: View {
     let all: [PlacePageState.Activity]
-    @State private var query = ""
     @State private var shown = 5
 
     var body: some View {
-        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        // (searched by the head's field, one search per screen)
+        let q = PlacePageState.shared.filter.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         let rows = q.isEmpty ? all : all.filter {
             ($0.name + " " + $0.line).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).contains(q)
         }
+        let limit = q.isEmpty ? shown : rows.count
+        if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text("Activities").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            HStack(spacing: 8) {
-                Icon5(key: "search", ink: Palette.ink, size: 22)
-                TextField("Search activities", text: $query).font(.body)
-                    .autocorrectionDisabled().textInputAutocapitalization(.never)
-            }
-            .padding(.horizontal, 14).frame(height: 44)
-            .glassEffect(PageGlass.on, in: .capsule)
-            ForEach(rows.prefix(shown), id: \.self) { a in
+            ForEach(rows.prefix(limit), id: \.self) { a in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                     if !a.line.isEmpty {
@@ -1283,12 +1278,13 @@ private struct ActivitiesList: View {
                 .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if rows.count > shown {
+            if rows.count > limit {
                 Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+        }
         }
     }
 }

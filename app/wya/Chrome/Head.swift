@@ -218,7 +218,9 @@ struct HeadView: View {
             GlassEffectContainer(spacing: 14) {
                 ZStack(alignment: .topLeading) {
                     Animated(p: searchP) { p in
-                        if p > 0.001 {
+                        // (on a place's page the field searches the page's own lists, which narrow as you type: no box
+                        // over them, one search per screen)
+                        if p > 0.001, !PlacePageState.shared.isOpen || head.settingsOpen {
                             SearchResults(map: map, head: head, pick: pick, reveal: p,
                                           width: L.circle + (fieldW - L.circle) * p, fullWidth: fieldW, gap: gap)
                                 .offset(y: -gap * (1 - p))
@@ -297,7 +299,13 @@ struct HeadView: View {
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         .onChange(of: tools) { _, v in withAnimation(Motion.chrome) { toolsP = v ? 1 : 0 } }
+        // (over a place's page what is typed narrows the page's own lists; search shut, they are whole again)
+        .onChange(of: head.query) { _, q in
+            let f = head.searching && PlacePageState.shared.isOpen && !head.settingsOpen ? q : ""
+            if PlacePageState.shared.filter != f { PlacePageState.shared.filter = f }
+        }
         .onChange(of: head.searching) { _, v in
+            if !v, !PlacePageState.shared.filter.isEmpty { PlacePageState.shared.filter = "" }
             if v {
                 // the AI goes back into the dot; MAP SETTINGS STAY OPEN (search searches them, Part 3.4): the gear first
                 // turns back into the dot (the hold's morph reversed), and only then does the dot rise into the island
