@@ -551,6 +551,15 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "\\(\\s*,\\s*", with: "(", options: .regularExpression)
             t = t.replacingOccurrences(of: "(\\w) ,", with: "$1,", options: .regularExpression)
         }
+        // a picture's head left at the very start ("thumb|400px|São Paulo - Downtown and Paulista region. São Paulo,
+        // or Sampa ..."): its options and its caption are not the text; the caption goes only when it is one short
+        // sentence, so a caption with no end never takes the first real sentence with it
+        if let r = t.range(of: "^\\s*(?:(?:thumb|thumbnail|frame|frameless|border|left|right|center|none|upright(?:=[0-9.]+)?|[0-9]+(?:x[0-9]+)?px)\\|)+",
+                           options: .regularExpression) {
+            t.removeSubrange(r)
+            if let end = t.range(of: ". "), t.distance(from: t.startIndex, to: end.lowerBound) <= 140 { t.removeSubrange(t.startIndex ..< end.upperBound) }
+            t = t.trimmingCharacters(in: .whitespaces)
+        }
         // a picture's or link's closing marks left with nothing before them ("]] Île-de-France is ..."), and a link's
         // opening ones with nothing after: never words
         if t.contains("]]") || t.contains("[[") {
