@@ -891,19 +891,28 @@ private struct PageLayer: View {
         ScrollViewReader { reader in
         ScrollView {
             VStack(spacing: 32) {
-                // THE PHOTO AT THE TOP (13 Nov 22:30): the screen's whole width, from its top edge under the head, no
-                // box and no corners of its own (the page's are its corners); then the flag and the name under it
+                // THE PHOTO AT THE TOP (13 Nov 22:30, 23:04): the screen's whole width, from its top edge under the head,
+                // no box; its lower part dissolves into the page's gradient (a gradient edge, never a cut), and the name
+                // stands on that dissolve with the buttons straight under it. No flag over a photo.
                 let hero = page.facts?.photo.flatMap { Self.commons($0, width: 1400) }
                 if let u = hero {
                     // (wider than the page's margins by drawing past them: the margins of everything under it stay)
                     Color.clear
-                        .frame(height: (L.W * 0.75).rounded())
+                        .frame(height: Self.heroH(L))
                         .overlay { PagePhoto(url: u) }
                         .clipped()
+                        .mask {
+                            LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.5),
+                                                   .init(color: .black.opacity(0.55), location: 0.75), .init(color: .clear, location: 1)],
+                                           startPoint: .top, endPoint: .bottom)
+                        }
+                        // the name on the photo's dissolve, inside its height (the buttons follow the photo at once)
+                        .overlay(alignment: .bottom) { top(key, L: L, under: true).padding(.horizontal, 16).padding(.bottom, 8) }
                         .padding(.horizontal, -16)
-                        .accessibilityHidden(true)
+                        .padding(.bottom, -12)
+                } else {
+                    top(key, L: L)
                 }
-                top(key, L: L, under: hero != nil)
                 marking(key)
                 if let f = page.facts, !f.prose.isEmpty {
                     Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
@@ -931,7 +940,8 @@ private struct PageLayer: View {
             .padding(.horizontal, 16)
             .coordinateSpace(.named("page"))
             // the ground scrolls with the page (one layer behind the whole scroll, 16.3)
-            .background(alignment: .top) { groundView(L: L) }
+            // (under a photo the gradient starts where the photo starts to dissolve, so its colour is what it dissolves into)
+            .background(alignment: .top) { groundView(L: L, from: page.facts?.photo.flatMap { Self.commons($0, width: 1400) } != nil ? Self.heroH(L) * 0.5 : 0) }
         }
         .scrollIndicators(.hidden)
         .scrollPosition($spot)
@@ -988,7 +998,9 @@ private struct PageLayer: View {
     /// `under`: the photo is above it, so it sits under the photo, not under the head
     private func top(_ key: PlaceKey, L: Layout, under: Bool = false) -> some View {
         VStack(spacing: 12) {
-            if key.kind == .country, let f = Flags.wide(page.country) {
+            if under {
+                // (a photo above: no flag)
+            } else if key.kind == .country, let f = Flags.wide(page.country) {
                 f.resizable().aspectRatio(4 / 3, contentMode: .fit).frame(height: 64)
             } else if let f = Flags.square(page.country) {
                 f.resizable().frame(width: 29, height: 29)
@@ -1015,7 +1027,7 @@ private struct PageLayer: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, under ? -8 : L.headBottom + 24)
+        .padding(.top, under ? 0 : L.headBottom + 24)
         .contentShape(Rectangle())
         // (in the screen's space: the header moves and shrinks with the drag, so measured in its own space the page
         // followed at two thirds of the finger and shook, 8 Nov; a cancelled drag springs the page back)
@@ -1218,7 +1230,11 @@ private struct PageLayer: View {
 
     /// THE GROUND (16.3): the flag's colours, each the nearest of the palette's, strong at the top and gentle further
     /// down, one layer behind the whole top
-    private func groundView(L: Layout) -> some View {
+    /// the top photo's height: three quarters of the screen's width
+    static func heroH(_ L: Layout) -> CGFloat { (L.W * 0.75).rounded() }
+
+    /// `from`: how far down the page the gradient's strongest colour starts (under a photo, where it dissolves)
+    private func groundView(L: Layout, from: CGFloat = 0) -> some View {
         let c = ground.isEmpty ? [Palette.cream] : ground
         let top = c[0].opacity(0.85)
         // the ground goes on above the page's top in its strongest colour, so pulling the page down past its top shows
@@ -1233,7 +1249,7 @@ private struct PageLayer: View {
             ], startPoint: .top, endPoint: .bottom)
             .frame(height: L.H * 0.75)
         }
-        .offset(y: -L.H)
+        .offset(y: -L.H + from)
         .allowsHitTesting(false)
     }
 
