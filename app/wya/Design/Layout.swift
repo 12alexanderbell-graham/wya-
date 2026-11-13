@@ -26,6 +26,12 @@ nonisolated struct Layout: Equatable, Sendable {
     // MARK: the tab capsule (Apple's: 274 x 62, 21 above the screen's bottom edge, centred)
     var capsule: CGRect { CGRect(x: W / 2 - 137, y: H - 21 - 62, width: 274, height: 62) }
     var capsuleCorner: CGFloat { 31 }
+    /// the capsule drawn in (0 whole, 1 a circle of its own height round its middle tab's place)
+    func capsule(mini m: CGFloat) -> CGRect {
+        guard m > 0 else { return capsule }
+        let c = capsule, w = c.width + (c.height - c.width) * m
+        return CGRect(x: c.midX - w / 2, y: c.minY, width: w, height: c.height)
+    }
 
     // MARK: the sheet
     var sheetInset: CGFloat { 8 }

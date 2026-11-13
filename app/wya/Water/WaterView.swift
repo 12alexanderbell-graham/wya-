@@ -121,6 +121,8 @@ struct WaterView: View {
         return ZStack(alignment: .topLeading) {
             ForEach(0 ..< 3, id: \.self) { i in
                 Button {
+                    // (drawn in: a tap opens the capsule again, nothing else)
+                    if water.mini > 0.5 { Feel.tap(); withAnimation(Motion.chrome) { water.mini = 0 }; return }
                     if i == tab && i == 0 {
                         // the Map tab again resets, in one tap (2.3): the water to 25% and the map home, and what a
                         // reset closes (search, the tools, settings)
@@ -157,7 +159,10 @@ struct WaterView: View {
                 }
                 .accessibilityLabel(names[i])
                 .accessibilityAddTraits(i == tab ? .isSelected : [])
-                .position(x: L.W / 2 + CGFloat(i - 1) * spacing, y: L.capsule.midY)
+                // (drawn in, the tab you are on goes to the circle's middle and the others go)
+                .opacity(i == tab ? 1 : Double(1 - water.mini))
+                .allowsHitTesting(i == tab || water.mini < 0.5)
+                .position(x: L.W / 2 + CGFloat(i - 1) * spacing * (i == tab ? 1 - water.mini : 1), y: L.capsule.midY)
             }
         }
     }

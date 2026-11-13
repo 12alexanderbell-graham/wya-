@@ -238,6 +238,9 @@ final class Water {
     var stampedList = false
     /// a place's page is up and its own sheet is in the water (16.6)
     var pageSheet = false
+    /// THE TABS MINIMISED (F141): a page scrolled down, the tab capsule draws in to a circle round the tab you are on,
+    /// so it no longer sits over the page's rows; scrolled back up, or tapped, it is the whole capsule again. 0 to 1
+    var mini: CGFloat = 0
     @ObservationIgnored var listFrom: Stop?
     func openList() {
         guard !stampedList else { return }
@@ -301,7 +304,7 @@ final class Water {
     func form(level l: CGFloat? = nil) -> Form {
         let L = layout
         let lv = l ?? level
-        let A = L.capsule
+        let A = L.capsule(mini: mini)
         let Q = L.top(.quarter), Hf = L.top(.half)
         // out of the capsule: the top edge rises first, and the sides and the bottom widen to the sheet's in the
         // second part of the way (the old sheetBase: it grows out, then widens to cover the whole side)

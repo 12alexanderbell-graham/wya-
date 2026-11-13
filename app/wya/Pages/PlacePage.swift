@@ -772,6 +772,14 @@ private struct PageLayer: View {
                 .allowsHitTesting(false)
         }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
+        // THE TABS DRAW IN as the page goes down (past its top), and open again as it comes back up (F141; Apple's
+        // minimising tab bar)
+        .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y + $0.contentInsets.top }) { old, new in
+            guard top else { return }
+            let want: CGFloat = new > 60 && new > old + 2 ? 1 : (new < old - 6 || new <= 60) ? 0 : water.mini
+            if want != water.mini { withAnimation(Motion.chrome) { water.mini = want } }
+        }
+        .onDisappear { if top, water.mini != 0 { withAnimation(Motion.chrome) { water.mini = 0 } } }
         }
         .background(Palette.white)
     }
