@@ -205,6 +205,8 @@ extension PlacePageState.OnePage {
         facts = out
     }
     fileprivate func loadCountry(_ cc: String) async {
+        // (the things' index: the checked spelling of an activity's name, F147)
+        ThingIndex.shared.load()
         guard case .ok(let d) = await Servers.data.file("country/\(cc).json"),
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
@@ -452,8 +454,8 @@ extension PlacePageState {
         for (ci, c) in cities.enumerated() {
             for l in byCity[c] ?? [] {
                 guard let k = l["k"] as? String, k == "see" || k == "do", let n = l["n"] as? String else { continue }
-                let name = plain(n)
                 let q = l["wd"] as? String
+                let name = Self.corrected(plain(n), wd: q)
                 guard !name.isEmpty, !seen.contains(name.lowercased()), q.map({ !seen.contains($0) }) ?? true else { continue }
                 seen.insert(name.lowercased())
                 if let q { seen.insert(q) }
@@ -498,6 +500,27 @@ extension PlacePageState {
     }
 
     /// the source's HTML entities as the characters they stand for
+    /// THE SOURCE'S SPELLING CORRECTED, never simplified (F147, his data rule): Wikivoyage writes "Théatre" where the
+    /// name is Théâtre. A name with a Wikidata id takes the label our things carry for it when the two differ only in
+    /// accents and case (Wikidata's is the checked spelling); others go through the table of corrections made by hand
+    static func corrected(_ name: String, wd: String?) -> String {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        if let wd, let label = ThingIndex.shared.hit(wd)?.name, label != name, fold(label) == fold(name) { return label }
+        var t = name
+        for (wrong, right) in fixes where t.contains(wrong) { t = t.replacingOccurrences(of: wrong, with: right) }
+        // a name the source began in small letters ("théâtre La Coupole") begins with its capital, as a name does;
+        // never an article's elision ("l'Arc de Triomphe" is how the French write it)
+        if let c = t.first, c.isLowercase, !t.hasPrefix("l'"), !t.hasPrefix("l\u{2019}"), !t.hasPrefix("d'") {
+            t = c.uppercased() + t.dropFirst()
+        }
+        return t
+    }
+    /// our corrections over the source's text, word for word (added as they are found)
+    static let fixes: [(String, String)] = [
+        // (only whole spellings that are wrong wherever they appear: "Chateau Marmont" is that hotel's own name)
+        ("Théatre", "Théâtre"),
+    ]
+
     static func plain(_ s: String) -> String {
         var t = s
         // ("&amp;" first: the source writes some marks twice over, "&amp;ndash;", and Australia's page read)
@@ -691,6 +714,9 @@ private struct PageLayer: View {
     let top: Bool
     @State private var ground: [Color] = []
     @GestureState private var headerLive = false
+    /// where the long lists start in the page (the head's search takes the page there), and the scroll's place
+    @State private var listsY: CGFloat?
+    @State private var spot = ScrollPosition(edge: .top)
 
     var body: some View { pageBody }
 
@@ -746,8 +772,18 @@ private struct PageLayer: View {
                 }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
                 if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, L: L).id("highlights") }
-                if let f = page.facts, !f.activities.isEmpty { ActivitiesList(all: f.activities) }
-                if let f = page.facts, !f.regions.isEmpty { insideList("Regions", f.regions) }
+                // ("lists": where the head's search takes the page, the first of its long lists)
+                // (where the first long list starts: the head's search brings its title under the field)
+                if let f = page.facts, !f.activities.isEmpty {
+                    ActivitiesList(all: f.activities)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("page")).minY }) { listsY = $0 }
+                }
+                if let f = page.facts, !f.regions.isEmpty {
+                    insideList("Regions", f.regions)
+                        .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("page")).minY }) { y in
+                            if f.activities.isEmpty { listsY = y }
+                        }
+                }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
                 // (Suggestions stays away until it has something in it: a title over nothing was useless words, 12 Nov)
                 if MarkStore.shared.state(key).stamped { record(key) }
@@ -755,10 +791,12 @@ private struct PageLayer: View {
                 Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
+            .coordinateSpace(.named("page"))
             // the ground scrolls with the page (one layer behind the whole scroll, 16.3)
             .background(alignment: .top) { groundView(L: L) }
         }
         .scrollIndicators(.hidden)
+        .scrollPosition($spot)
         // the one blur under the head, only once words scroll under it (16.3)
         .scrollEdgeEffectStyle(.soft, for: .top)
         // and at the bottom, under the tabs' capsule, so a row there fades instead of being cut by it
@@ -772,6 +810,13 @@ private struct PageLayer: View {
                 .allowsHitTesting(false)
         }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
+        // what is typed in the head's field narrows the long lists: the page goes to them as the first letter comes
+        // (they were under the photo and the prose, out of sight, while they changed)
+        .onChange(of: PlacePageState.shared.filter.isEmpty) { _, empty in
+            guard top, !empty, let y = listsY else { return }
+            // (the list's title 130 pt down, under the head's field)
+            withAnimation(Motion.chrome) { spot.scrollTo(y: max(0, y - 130)) }
+        }
         // THE TABS DRAW IN as the page goes down (past its top), and open again as it comes back up (F141; Apple's
         // minimising tab bar)
         .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y + $0.contentInsets.top }) { old, new in
