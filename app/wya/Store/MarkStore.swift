@@ -107,6 +107,10 @@ final class MarkStore {
                who: Who = .you, origin: CGPoint? = nil, day: String? = nil) async {
         guard let store else { return }
         let acc = account
+        // a territory stamps its country with it (Territories: "Stamp the country too", the default)
+        var cc = cc
+        if key.kind == .country, cc.isEmpty, MapSettingsStore.shared.value.territories != "separate",
+           let s = Territories.sovereign[key.id.lowercased()] { cc = s }
         guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { return }
         apply(r, words: "\(both(r, key, name)) stamped", origin: origin, who: who)
     }

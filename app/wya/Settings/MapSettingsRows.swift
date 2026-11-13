@@ -83,7 +83,7 @@ enum MapSettingsRows {
 
     /// ROWS THE APP DOES NOT FOLLOW YET (12 Nov audit: saved, never read): in their "not yet" look, refusing a tap, as
     /// All settings (A.1.5: never a control that silently does nothing). A row leaves this list when its part is built.
-    static let notYet: Set<String> = ["projection", "quickAlways", "territories", "start", "pinMarksPlace", "tracking"]
+    static let notYet: Set<String> = ["projection", "quickAlways", "start", "pinMarksPlace", "tracking"]
 
     /// Style's choices follow the Map row (Apple's looks only once the Map row is followed)
     static func choices(_ row: SettingRow, _ s: MapSettings) -> [SettingRow.Choice] {

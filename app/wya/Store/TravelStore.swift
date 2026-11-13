@@ -257,7 +257,8 @@ actor TravelStore {
                 res.changed[key] = (before, state(r, visits: have.count + 1))
             }
         }
-        if key.kind != .country, !cc.isEmpty {
+        // (a territory's country too: its key is a country's, its `cc` its sovereign's, never its own)
+        if !cc.isEmpty, !(key.kind == .country && cc.lowercased() == key.id.lowercased()) {
             let c = PlaceKey.country(cc.lowercased())
             if try record(account, c)?.stamped != true {
                 try stampOne(c, account: account, source: source, at: at, name: "", cc: cc, level: 0, via: key.description, into: &res)
@@ -308,10 +309,11 @@ actor TravelStore {
         // ITS COUNTRY WITH IT (7 Nov, the friend's review board 14: Western Australia unstamped, Australia still counted
         // as a visit): a country stamped only through its places (via) goes too when no other place of it is still
         // stamped and it has no visits of its own, in the same undo step; a country you stamped yourself stays
-        if key.kind != .country, !cc.isEmpty, let c = try record(account, .country(cc)), c.stamped, c.via != nil {
+        if !cc.isEmpty, !(key.kind == .country && cc == key.id.lowercased()), let c = try record(account, .country(cc)), c.stamped, c.via != nil {
             // (the country codes compared without case: places are saved with their file's code as it came)
             let others = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
-            let held = others.contains { !$0.key.hasPrefix("c:") && $0.key != k && $0.cc.lowercased() == cc }
+            // (another territory of it holds it too: Greenland and the Faroes both hold Denmark)
+            let held = others.contains { $0.key != "c:" + cc && $0.key != k && $0.cc.lowercased() == cc }
             let ck = PlaceKey.country(cc)
             let cv = try visitCount(account, ck)
             // (a country with visits of its own, dates you gave it, is yours: it stays)
