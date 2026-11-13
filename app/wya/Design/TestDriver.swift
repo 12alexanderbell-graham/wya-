@@ -278,16 +278,39 @@ final class TestDriver {
                 case "lists":
                     let ls = ListsState.shared
                     switch a {
-                    case "open": ls.open = p.count > 2 ? (p[2] == "last" ? ListsStore.shared.book.lists.last?.id : p[2]) : nil
+                    case "open": ls.open = p.count > 2 ? (p[2] == "last" ? ListsStore.shared.book.lists.last?.id
+                                                          : p[2] == "lastplan" ? ListsStore.shared.book.plans.last?.id : p[2]) : nil
                     case "new": ls.newList()
+                    case "newplan": ls.kind = 1; ls.newPlan()
+                    case "add":
+                        // lists add <day> <words>: a plan's day gets a thing to do ("09:40 Land" with its time)
+                        if p.count > 3, let d = Int(p[2]) {
+                            let words = p.dropFirst(3).joined(separator: " ")
+                            ListsStore.shared.change { b in
+                                guard let i = b.plans.firstIndex(where: { $0.id == ls.open }), b.plans[i].days.indices.contains(d) else { return }
+                                b.plans[i].days[d].items.append(PlanItem(at: nil, what: words, place: ""))
+                            }
+                        }
+                    case "dates":
+                        // lists dates <first> <last> (2026-12-01): the open plan's days
+                        if p.count > 3 {
+                            var e = false
+                            ListsStore.shared.change { b in
+                                guard let i = b.plans.firstIndex(where: { $0.id == ls.open }) else { return }
+                                b.plans[i].pickFirst(p[2], endFirst: &e); _ = b.plans[i].pickLast(p[3], endFirst: &e, force: true)
+                            }
+                        }
                     case "close": ls.close()
                     case "kind": ls.kind = Int(p.count > 2 ? p[2] : "0") ?? 0
                     case "name":
                         let n = p.dropFirst(2).joined(separator: " ")
-                        ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].name = n } }
+                        ListsStore.shared.change { b in
+                            if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].name = n }
+                            if let i = b.plans.firstIndex(where: { $0.id == ls.open }) { b.plans[i].name = n }
+                        }
                         ls.naming = false
                     case "drop":
-                        if let id = ls.open, id != "wish" { ListsStore.shared.change { $0.lists.removeAll { $0.id == id } } }
+                        if let id = ls.open, id != "wish" { ListsStore.shared.change { $0.lists.removeAll { $0.id == id }; $0.plans.removeAll { $0.id == id } } }
                         ls.open = nil; ls.naming = false
                     default: break
                     }

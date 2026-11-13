@@ -31,8 +31,19 @@ final class ListsState {
         open = l.id
         naming = true
     }
+    /// a new plan: "someday" (no days yet set), its name typed at once
+    func newPlan() {
+        let pl = Plan(name: "", start: "", days: [PlanDay()])
+        ListsStore.shared.change { $0.plans.append(pl) }
+        open = pl.id
+        naming = true
+    }
     /// leaving a list: one left with no name and nothing in it is not kept
     func close() {
+        if let id = open, let pl = ListsStore.shared.book.plans.first(where: { $0.id == id }),
+           pl.name.trimmingCharacters(in: .whitespaces).isEmpty, pl.count == 0, pl.start.isEmpty {
+            ListsStore.shared.change { $0.plans.removeAll { $0.id == id } }
+        }
         if let id = open, id != "wish",
            let l = ListsStore.shared.book.lists.first(where: { $0.id == id }),
            l.name.trimmingCharacters(in: .whitespaces).isEmpty, l.items.isEmpty {
@@ -127,13 +138,13 @@ struct ListsWater: View {
                     }
                 }
                 Spacer(minLength: 8)
-                // the plus: a new list (the other kinds' making comes with their pages)
-                circle("plus", dim: s.kind != 0) {
-                    guard s.kind == 0 else { Feel.refuse(); return }
+                // the plus: a new list or a new plan (tier lists' and books' making comes with their pages)
+                circle("plus", dim: s.kind > 1) {
+                    guard s.kind <= 1 else { Feel.refuse(); return }
                     Feel.tap()
-                    withAnimation(Motion.quick) { s.newList() }
+                    withAnimation(Motion.quick) { if s.kind == 0 { s.newList() } else { s.newPlan() } }
                 }
-                .accessibilityLabel("New list")
+                .accessibilityLabel(s.kind == 1 ? "New plan" : "New list")
             }
         }
         .frame(width: w, height: 44)
@@ -200,7 +211,10 @@ struct ListsWater: View {
                     }
                 case 1:
                     ForEach(store.book.plans.filter { !$0.arch && !$0.hid && (q.isEmpty || $0.name.lowercased().contains(q)) }) { p in
-                        row(nil, p.name, p.count == 0 ? "" : "\(p.count) \(p.count == 1 ? "stop" : "stops")") { Feel.refuse() }
+                        row(nil, p.name.isEmpty ? "New plan" : p.name, Self.when(p), dim: p.name.isEmpty) {
+                            Feel.tap()
+                            withAnimation(Motion.quick) { s.open = p.id }
+                        }
                     }
                 case 2:
                     ForEach(store.book.tiers.filter { !$0.arch && !$0.hid && (q.isEmpty || $0.name.lowercased().contains(q)) }) { t in
@@ -247,7 +261,9 @@ struct ListsWater: View {
     // MARK: one list
 
     @ViewBuilder private func listPage(_ id: String, w: CGFloat) -> some View {
-        if id == "wish" {
+        if let pl = store.book.plans.first(where: { $0.id == id }) {
+            planPage(pl, w: w)
+        } else if id == "wish" {
             page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w)
         } else if let l = store.book.lists.first(where: { $0.id == id }) {
             page(title: l.name, editable: true, things: things(l), note: l.note, w: w)
@@ -322,6 +338,102 @@ struct ListsWater: View {
         }
         .scrollIndicators(.hidden)
     }
+
+    // MARK: one plan
+
+    /// a plan's dates as you'd say them: "9 Oct 2026 to 12 Oct 2026", or "Someday"
+    static func when(_ p: Plan) -> String {
+        p.start.isEmpty ? "Someday" : WhenWords.exact(from: p.start, to: p.end) ?? ""
+    }
+    private func changePlan(_ id: String, _ f: (inout Plan) -> Void) {
+        ListsStore.shared.change { b in if let i = b.plans.firstIndex(where: { $0.id == id }) { f(&b.plans[i]) } }
+    }
+    /// a day's name: its date ("Fri 9 Oct"), or its number while the plan has no dates
+    private func dayName(_ p: Plan, _ i: Int) -> String {
+        guard !p.start.isEmpty, let d = PlanDates.date(PlanDates.key(p.start, i)) else { return "Day \(i + 1)" }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "EEE d MMM"
+        return f.string(from: d)
+    }
+
+    private func planPage(_ p: Plan, w: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if s.naming || p.name.isEmpty {
+                    TextField("", text: Binding(get: { p.name }, set: { v in changePlan(p.id) { $0.name = String(v.prefix(60)) } }),
+                              prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .focused($naming)
+                    .submitLabel(.done)
+                    .onSubmit { s.naming = false }
+                    .onAppear { naming = true }
+                    .onChange(of: naming) { _, f in if !f { s.naming = false } }
+                    .frame(minHeight: 44)
+                } else {
+                    Text(p.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .frame(minHeight: 44)
+                        .onTapGesture { Feel.tap(); s.naming = true }
+                }
+                // its first and last day (none yet: someday)
+                HStack(spacing: 12) {
+                    dateBox(p.start, label: "First day") { v in var e = false; changePlan(p.id) { $0.pickFirst(v, endFirst: &e) } }
+                    dateBox(p.end, label: "Last day") { v in var e = false; changePlan(p.id) { _ = $0.pickLast(v, endFirst: &e, force: true) } }
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 52)
+                ForEach(Array(p.days.enumerated()), id: \.offset) { i, d in
+                    // (a time column only on a day with a time in it)
+                    let timed = d.items.contains { $0.at != nil }
+                    Text(dayName(p, i)).font(.headline).foregroundStyle(Palette.ink)
+                        .padding(.top, 20).padding(.bottom, 4)
+                    ForEach(d.items) { it in
+                        HStack(spacing: 12) {
+                            if timed {
+                                Text(it.at ?? "").font(.body.monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
+                                    .frame(width: 52, alignment: .leading)
+                            }
+                            Text(it.what).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                            Spacer(minLength: 0)
+                            Button {
+                                Feel.lift()
+                                withAnimation(Motion.quick) { changePlan(p.id) { $0.days[i].items.removeAll { $0.id == it.id } } }
+                            } label: {
+                                Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
+                                    .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Take out")
+                        }
+                        .frame(minHeight: 44)
+                    }
+                    PlanAddRow(day: i) { at, what in
+                        changePlan(p.id) { $0.days[i].items.append(PlanItem(at: at, what: what, place: "")); $0.sortDay(i) }
+                    }
+                }
+            }
+            .frame(width: w, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    /// a day picked on Apple's own calendar, its words the day ("9 Oct 2026"), or the label at 50% when not set
+    private func dateBox(_ v: String, label: String, set: @escaping (String) -> Void) -> some View {
+        let shown = v.isEmpty ? Date() : PlanDates.date(v) ?? Date()
+        return ZStack {
+            Text(v.isEmpty ? label : WhenWords.day(v)).font(.body)
+                .foregroundStyle(v.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
+                .padding(.horizontal, 16).frame(height: 44)
+                .glassEffect(PageGlass.control, in: .capsule)
+            // (Apple's picker over the words, invisible: a tap opens its calendar)
+            DatePicker("", selection: Binding(get: { shown }, set: { d in Feel.tap(); set(PlanDates.key(local: d)) }), displayedComponents: .date)
+                .labelsHidden()
+                .opacity(0.011)
+                .accessibilityLabel(label)
+        }
+        .fixedSize()
+    }
+
 }
 
 extension ListsState {
@@ -362,5 +474,32 @@ extension ListsState {
             }))
         }
         return UIMenu(title: "Add to list", children: children)
+    }
+}
+
+/// A DAY'S ADD ROW: what you'll do (and, written first, its time: "09:40 Land in Tokyo"), kept on Return
+struct PlanAddRow: View {
+    let day: Int
+    let add: (String?, String) -> Void
+    @State private var text = ""
+    var body: some View {
+        TextField("", text: $text, prompt: Text("Add").foregroundStyle(Palette.ink.opacity(0.5)))
+            .font(.body).foregroundStyle(Palette.ink)
+            .submitLabel(.done)
+            .onSubmit {
+                let t = text.trimmingCharacters(in: .whitespaces)
+                guard !t.isEmpty else { return }
+                // a time at its start ("09:40 ...", "9:40 ...") is the time
+                var at: String?, what = t
+                if let r = t.range(of: #"^\d{1,2}[:.]\d{2}\s+"#, options: .regularExpression) {
+                    let raw = t[r].trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ".", with: ":")
+                    at = raw.count == 4 ? "0" + raw : raw
+                    what = String(t[r.upperBound...])
+                }
+                Feel.tap()
+                add(at, what)
+                text = ""
+            }
+            .frame(minHeight: 44)
     }
 }
