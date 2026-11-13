@@ -71,6 +71,16 @@ struct WaterView: View {
 
             // the tabs sit on the water itself (one glass, the 02:45); at full the night leaves the capsule's place clear
             // so they are still on that same glass
+            // ON LISTS the water is the whole screen, so the tabs get the capsule's own glass under them (on the Map
+            // and the Profile the water itself draws in to that capsule, or holds them at its foot): one tab bar shape
+            if water.lists {
+                let c = L.capsule(mini: water.mini)
+                Color.clear
+                    .frame(width: c.width, height: c.height)
+                    .glassEffect(.regular, in: .capsule)
+                    .position(x: c.midX, y: c.midY)
+                    .allowsHitTesting(false)
+            }
             if !Perf.shared.off.contains("tabs") { tabs(L) }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
