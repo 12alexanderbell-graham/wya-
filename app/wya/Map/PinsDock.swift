@@ -42,10 +42,10 @@ struct PinsDock: View {
     @State private var dock = PinsDockState.shared
     @State private var routes = PinRoutes.shared
 
-    /// the row's middle from the dock's top: the caption's own middle on every other map
-    static func rowY(_ top: CGFloat) -> CGFloat { top + 72 }
+    /// the row's middle from the dock's top: under the map's name, which sits on every map's name line
+    static func rowY(_ top: CGFloat) -> CGFloat { top + 77 }
     /// where what is under the dock starts (Saved's rows)
-    static func bottom(_ top: CGFloat) -> CGFloat { top + 112 }
+    static func bottom(_ top: CGFloat) -> CGFloat { top + 117 }
 
     var body: some View {
         let L = water.layout
@@ -67,28 +67,40 @@ struct PinsDock: View {
         ], words: drawing ? DrawBar.caption(DrawTool.shared) : words)
         .position(x: L.W / 2, y: Self.rowY(top))
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        // THE MAP'S NAME over the tools, on every map's name line: the map of yours shown, or All pins (no count:
+        // what it holds is on the map); inside a map's list at 50%, the back circle at its left goes back to your maps
+        .overlay(alignment: .topLeading) {
+            let maps = PinMaps.shared
+            ZStack {
+                Text(maps.map(maps.shown)?.name ?? "All pins")
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(width: L.W - 2 * L.sheetInset - 120)
+                    .position(x: L.W / 2, y: Self.rowY(top) - 46)
+                    .allowsHitTesting(false)
+                if maps.inside, water.stop != .quarter {
+                    Button { Feel.tap(); maps.inside = false } label: {
+                        Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Your maps")
+                    .position(x: L.sheetInset + 8 + 22, y: Self.rowY(top) - 46)
+                }
+            }
+            .frame(width: L.W, height: L.H)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        }
     }
 
-    /// under the circles: what the route wants next, the route made, else what you have
+    /// under the circles: only what a route came to (its distance and time), or that it is being found, or that
+    /// there is none by road; never a count and never how to use a tool
     private var words: String {
-        if routes.open {
-            // (read first, so the words change when the route is kept: the route made is not itself observed)
-            let kept = routes.routes
-            if routes.noRoute { return "No route by road" }
-            if routes.waiting == .from { return "Tap where it starts" }
-            if routes.waiting == .to {
-                // where it starts, so the first tap is seen to have counted
-                if let f = routes.end(routes.from) { return "From \(f.title), tap where it ends" }
-                return "Tap where it ends"
-            }
-            if let id = routes.currentID, let r = kept.first(where: { $0.id == id }) { return r.words }
-            return "Finding the way"
-        }
-        var parts: [String] = []
-        let p = store.pins.count, r = routes.routes.count, d = PinDrawings.shared.all.count
-        parts.append(p == 1 ? "1 pin" : "\(p) pins")
-        if r > 0 { parts.append(r == 1 ? "1 route" : "\(r) routes") }
-        if d > 0 { parts.append(d == 1 ? "1 drawing" : "\(d) drawings") }
-        return parts.joined(separator: " · ")
+        guard routes.open else { return "" }
+        // (read first, so the words change when the route is kept: the route made is not itself observed)
+        let kept = routes.routes
+        if routes.noRoute { return "No route by road" }
+        if routes.waiting == .from || routes.waiting == .to { return "" }
+        if let id = routes.currentID, let r = kept.first(where: { $0.id == id }) { return r.words }
+        return "Finding the way"
     }
 }

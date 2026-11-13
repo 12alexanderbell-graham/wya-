@@ -422,6 +422,16 @@ final class TestDriver {
                 case "block": Thread.sleep(forTimeInterval: (Double(a) ?? 4000) / 1000)
                 // searchpick <id>: that place's search result picked (Head's pick)
                 // pins drop x y (a hold there) | pins select <n> | pins none: Pins' map without a finger
+                // pinmap new <name> | show all|<n> | inside on|off | delete <n>: your maps in Pins (PinMaps)
+                case "pinmap":
+                    let maps = PinMaps.shared
+                    switch a {
+                    case "new": maps.make(p.dropFirst(2).joined(separator: " "))
+                    case "show": maps.shown = p.count > 2 && p[2] != "all" ? Int(p[2]).flatMap { $0 < maps.all.count ? maps.all[$0].id : nil } : nil
+                    case "inside": maps.inside = p.count > 2 && p[2] == "on"
+                    case "delete": if p.count > 2, let n = Int(p[2]), n < maps.all.count { maps.remove(maps.all[n].id) }
+                    default: break
+                    }
                 case "pins":
                     if a == "drop", p.count > 3, let x = Double(p[2]), let y = Double(p[3]), let v = PinsMapState.shared.view {
                         let c = v.convert(CGPoint(x: x, y: y), toCoordinateFrom: v)
