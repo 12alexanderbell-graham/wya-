@@ -418,7 +418,8 @@ struct ContentView: View {
             // the flags of the places you have stamped or wished, drawn ahead for the rows that show them (D14)
             if let w = map.world { Flags.prewarm(map.stamped.union(map.wished).map { w.places[$0].id.lowercased() }) }
             // the system ended the app in the background: everything back as it was, under the loading screen
-            if DeepLink.waiting == nil { restoreSession() }
+            // (a test's launch with -wyaCold opens as a cold launch does, whatever session iOS kept)
+            if DeepLink.waiting == nil { restoreSession(cold: ProcessInfo.processInfo.arguments.contains("-wyaCold")) }
             // a link that opened the app: its flight runs under the loading screen, which lifts once it has landed
             if let url = DeepLink.waiting {
                 DeepLink.waiting = nil
@@ -429,7 +430,11 @@ struct ContentView: View {
             #if DEBUG
             NSLog("wya launch: map ready, lifting at %.3f s", CACurrentMediaTime() - Launch.startTime)
             #endif
-            withAnimation(.easeInOut(duration: 0.5)) { launch.reveal = 1 } completion: {
+            // (with the Cosmos showing, the sphere goes to the Earth on the chrome's spring while the page goes, and the
+            // screen is gone once the sphere has landed; without, the whole screen fades away as before)
+            let landing = launch.earth != nil
+            launch.lands = landing
+            let settled = {
                 launch.done = true
                 launch.settled = true
                 // the start credit once all is at rest (A1.20)
@@ -437,6 +442,10 @@ struct ContentView: View {
                 // the first-time hints, once nothing has been touched for 1.2 s (A3.15)
                 Hints.shared.start(water: water, head: head)
             }
+            withAnimation(.easeInOut(duration: landing ? 0.38 : 0.5)) { launch.reveal = 1 } completion: {
+                if !landing { settled() }
+            }
+            if landing { withAnimation(Motion.chrome) { launch.landing = 1 } completion: { settled() } }
         }
         // MAP SETTINGS ARE THE WATER (Part 5.2): the gear out opens them in the water; the gear back closes them; a pull
         // that leaves the water below 50% closes them (A5.2)
@@ -842,6 +851,8 @@ struct ContentView: View {
             // its planet frames it
             let start = MapSettingsStore.shared.value.start
             if start != "world", map.world?.contViews[start] != nil { map.show(continent: start) }
+            // (a test's launch with -wyaHalf: the water at 50%, as a session left there opens)
+            if ProcessInfo.processInfo.arguments.contains("-wyaHalf"), water.stop != .half { water.jump(.half) }
             return
         }
         tab = s.tab
@@ -852,7 +863,8 @@ struct ContentView: View {
         head.mode = HeadState.Mode(rawValue: s.mode) ?? .countries
         map.locked = s.lock
         if let c = s.cont { map.show(continent: c) } else { map.restore(c: SIMD2(s.x, s.y), k: s.k) }
-        if let st = SheetStop(rawValue: s.stop), st != water.stop { water.go(st) }
+        // (under the loading screen at once, so the screen lifts onto the water as it was left, its Cosmos with it)
+        if let st = SheetStop(rawValue: s.stop), st != water.stop { if Launch.shared.done { water.go(st) } else { water.jump(st) } }
 
         #if DEBUG
         NSLog("wya session restored: tab %d mode %d continent %@ k %.2f stop %d lock %d", s.tab, s.mode, s.cont ?? "none", s.k, s.stop, s.lock ? 1 : 0)

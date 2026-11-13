@@ -15,6 +15,14 @@ final class Launch {
     var done = false
     /// touches are taken once the chrome is at rest
     var settled = false
+    /// THE EARTH IN THE COSMOS, on screen (global points), while the loading screen is up and the system shows (the
+    /// water at 50%); the logo's sphere lands on it as the screen lifts. nil: the system is hidden, the screen just lifts
+    var earth: CGRect?
+    /// how far the logo's sphere has gone to the Earth (0 in the middle of the page, 1 on the Earth)
+    var landing: CGFloat = 0
+    /// the screen began to lift with the Earth showing, so the sphere goes to it (decided once, as it starts to lift:
+    /// the Earth coming into view after that changes nothing)
+    var lands = false
     /// when the logo's film started moving (the page's light turns from then, with it)
     var turnStart: CFTimeInterval?
     /// seconds the light takes to go once round
@@ -37,21 +45,32 @@ struct LoadingScreen: View {
             let planet = Launch.planet(W)
             let mark = planet * 1024 / 700
             let c = CGPoint(x: W / 2, y: H / 2)
+            // THE EXIT: with the Cosmos showing, the page and its light go while the sphere goes on to the Earth's place
+            // at the Earth's size and becomes it; without, the whole screen lifts in one piece as before
+            let earth = launch.lands ? launch.earth : nil
+            let t = launch.landing
+            let to = earth.map { CGPoint(x: $0.midX, y: $0.midY) } ?? c
+            let at = CGPoint(x: c.x + (to.x - c.x) * t, y: c.y + (to.y - c.y) * t)
+            let size = 1 + ((earth.map { $0.width / planet } ?? 1) - 1) * t
             ZStack {
-                Palette.cream
-                // the logo's light over the whole page (the old first page's helloSpot, round the logo alone)
-                LogoGlassSurface(phase: GlassRender.rest, spot: Self.spot(c, planet: planet, size: g.size),
-                                 still: Motion.reduce, turn: Launch.turn, turnStart: launch.turnStart)
+                ZStack {
+                    Palette.cream
+                    // the logo's light over the whole page (the old first page's helloSpot, round the logo alone)
+                    LogoGlassSurface(phase: GlassRender.rest, spot: Self.spot(c, planet: planet, size: g.size),
+                                     still: Motion.reduce, turn: Launch.turn, turnStart: launch.turnStart)
+                }
+                .opacity(earth == nil ? 1 : 1 - reveal)
                 // the logo at rest until its film is up, then the film turning on the video hardware (LogoTurn.swift)
                 ZStack {
                     if launch.turnStart == nil { LogoMark(phase: GlassRender.rest) }
                     LogoTurnView { launch.turnStart = GlassRender.filmStart ?? CACurrentMediaTime() }
                 }
                 .frame(width: mark, height: mark)
-                .position(c)
+                .scaleEffect(size)
+                .position(at)
             }
             .frame(width: W, height: H)
-            .opacity(1 - reveal)
+            .opacity(earth == nil ? 1 - reveal : 1)
         }
         .ignoresSafeArea()
         .accessibilityElement()

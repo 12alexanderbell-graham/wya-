@@ -300,6 +300,8 @@ struct CosmosView: View {
         let len = max(1e-6, (dx * dx + dy * dy).squareRoot())
         let light = SIMD3<Float>(Float(dx / len * sin(alpha)), Float(dy / len * sin(alpha)), Float(cos(alpha)))
         PlanetBody(tex: pl.tex, size: it.size, spin: Float(it.face * 2 * .pi), light: light, ring: pl.n == "Saturn", lights: pl.n == "Earth")
+            // (the Earth waits under the launch's sphere until the sphere has landed on it and become it)
+            .opacity(pl.n == "Earth" && Launch.shared.lands && !Launch.shared.done ? 0 : 1)
             // the tap and the hold on a clear disc over the planet (the planet and 6 pt round it), given before it is
             // placed: a shape given after .position is a circle in the whole system's frame and missed planets away from
             // the middle. The planet itself takes no touch (its frame is 2.3 times it, for Saturn's ring), and is not
@@ -308,6 +310,12 @@ struct CosmosView: View {
             .overlay {
                 Color.clear
                     .frame(width: it.size + 12, height: it.size + 12)
+                    // the Earth's place told to the launch while its screen is up and the system shows (the logo's
+                    // sphere lands on it)
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { r in
+                        guard pl.n == "Earth", !Launch.shared.done else { return }
+                        Launch.shared.earth = form.top <= water.layout.top(.half) + 40 ? r.insetBy(dx: 6, dy: 6) : nil
+                    }
                     .contentShape(Circle())
                     .contentShape(.contextMenuPreview, Circle())
                     .onTapGesture { select(it.i) }
