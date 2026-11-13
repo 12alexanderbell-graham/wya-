@@ -283,6 +283,23 @@ struct ListsWater: View {
                             .frame(width: 28, height: 28)
                             Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                             Spacer(minLength: 0)
+                            // out of the list (yours only: the wishlist is the map's own, changed on the map)
+                            if editable {
+                                Button {
+                                    Feel.lift()
+                                    withAnimation(Motion.quick) {
+                                        ListsStore.shared.change { b in
+                                            if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].items.removeAll { $0.id == t.id } }
+                                        }
+                                    }
+                                } label: {
+                                    Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
+                                        .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
+                                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Take out")
+                            }
                         }
                         // a note: not shown until its row is opened
                         if s.noted == t.id, !t.note.isEmpty {
@@ -304,5 +321,46 @@ struct ListsWater: View {
             .padding(.bottom, 16)
         }
         .scrollIndicators(.hidden)
+    }
+}
+
+extension ListsState {
+    /// ADD TO LIST (the hold menus of a country, a town and a thing): your lists that don't hold the place yet; then
+    /// New list, which makes one holding the place and opens it in the Lists tab with its name being typed; then "Take
+    /// out of" each list that holds it (no ticks: a tick is only for approving)
+    static func menu(name: String, cc: String?) -> UIMenu {
+        let item = ListItem(n: name, cc: cc?.lowercased())
+        let lists = ListsStore.shared.book.lists.filter { !$0.wish && !$0.arch && !$0.name.isEmpty }
+        let holding = lists.filter { l in l.items.contains { $0.same(item) } }
+        var children: [UIMenuElement] = lists.filter { l in !holding.contains { $0.id == l.id } }.map { l in
+            UIAction(title: l.name) { _ in
+                Feel.tap()
+                ListsStore.shared.change { b in
+                    guard let i = b.lists.firstIndex(where: { $0.id == l.id }) else { return }
+                    b.lists[i].items.append(ListItem(n: name, cc: cc?.lowercased()))
+                }
+            }
+        }
+        children.append(UIAction(title: "New list") { _ in
+            Feel.tap()
+            var l = MyList(name: "")
+            l.items = [item]
+            ListsStore.shared.change { $0.lists.append(l) }
+            let s = ListsState.shared
+            s.kind = 0; s.open = l.id; s.naming = true
+            NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
+        })
+        if !holding.isEmpty {
+            children.append(UIMenu(options: .displayInline, children: holding.map { l in
+                UIAction(title: "Take out of \(l.name)", attributes: .destructive) { _ in
+                    Feel.lift()
+                    ListsStore.shared.change { b in
+                        guard let i = b.lists.firstIndex(where: { $0.id == l.id }) else { return }
+                        b.lists[i].items.removeAll { $0.same(item) }
+                    }
+                }
+            }))
+        }
+        return UIMenu(title: "Add to list", children: children)
     }
 }

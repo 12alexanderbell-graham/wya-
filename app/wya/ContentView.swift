@@ -1026,7 +1026,7 @@ struct ContentView: View {
             UIMenu(options: .displayInline, children: [stamp, wish, lived]),
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [page, regionMap, places]),
-            UIMenu(options: .displayInline, children: [passport, share]),
+            UIMenu(options: .displayInline, children: [passport, ListsState.menu(name: pl.n, cc: pl.id), share]),
         ]
         // A DISPUTED PIECE (Crimea, the Kashmir pieces) or a disputed place (Taiwan, Kosovo): Whose borders here? opens Map settings at 50% on the Disputes
         // page at that piece's row; the map does not fly
@@ -1118,7 +1118,7 @@ struct ContentView: View {
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [page, directions, pin]),
-            UIMenu(options: .displayInline, children: [share, report]),
+            UIMenu(options: .displayInline, children: [ListsState.menu(name: town.name, cc: cc), share, report]),
         ])
     }
 
@@ -1307,7 +1307,7 @@ struct ContentView: View {
             UIMenu(options: .displayInline, children: [stamp, wish]),
             UIMenu(options: .displayInline, children: [details, verify]),
             UIMenu(options: .displayInline, children: [page, directions, pin]),
-            UIMenu(options: .displayInline, children: [share, report]),
+            UIMenu(options: .displayInline, children: [ListsState.menu(name: t.name, cc: cc), share, report]),
         ])
     }
 
