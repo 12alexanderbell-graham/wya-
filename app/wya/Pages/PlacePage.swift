@@ -314,6 +314,8 @@ extension PlacePageState.OnePage {
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
         out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
+        // a country whose own picture is a map (most are): its first sight's photo at the top instead
+        if out.photo == nil { out.photo = out.highlights.lazy.compactMap { PlacePageState.photo($0.photo) }.first }
         // (a page opened since this one began loading keeps its own facts)
         guard key.id.lowercased() == cc else { return }
         facts = out
@@ -901,11 +903,8 @@ private struct PageLayer: View {
                         .frame(height: Self.heroH(L))
                         .overlay { PagePhoto(url: u) }
                         .clipped()
-                        .mask {
-                            LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.5),
-                                                   .init(color: .black.opacity(0.55), location: 0.75), .init(color: .clear, location: 1)],
-                                           startPoint: .top, endPoint: .bottom)
-                        }
+                        // its lower third dissolves into the page along a soft, uneven line, never a straight one (P05 §2)
+                        .mask { PhotoDissolve(seed: page.name) }
                         // the name on the photo's dissolve, inside its height (the buttons follow the photo at once)
                         .overlay(alignment: .bottom) { top(key, L: L, under: true).padding(.horizontal, 16).padding(.bottom, 8) }
                         .padding(.horizontal, -16)
@@ -1531,6 +1530,37 @@ struct PagePhoto: View {
                 Self.kept.setObject(ready, forKey: url as NSURL)
                 image = ready
             }
+        }
+    }
+}
+
+/// A PHOTO'S DISSOLVE INTO ITS PAGE (P05 §2): solid down to its last third, then an uneven edge (a slow wave, the same
+/// for a place every time) blurred wide, so the photo melts into the gradient under it with no straight line anywhere
+struct PhotoDissolve: View {
+    let seed: String
+    var body: some View {
+        GeometryReader { g in
+            let w = g.size.width, h = g.size.height
+            // (the wave's phase and size from the place's name: each page its own edge, the same each time it opens)
+            let n = Double(seed.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF })
+            let ph = n.truncatingRemainder(dividingBy: 6.283), amp = h * (0.05 + (n.truncatingRemainder(dividingBy: 7)) / 7 * 0.04)
+            Path { p in
+                let base = h * 0.74
+                // (drawn past the top and sides, so the blur softens only the lower edge)
+                let out = h * 0.3
+                p.move(to: CGPoint(x: -out, y: -out))
+                p.addLine(to: CGPoint(x: w + out, y: -out))
+                p.addLine(to: CGPoint(x: w + out, y: base))
+                for i in stride(from: 40, through: 0, by: -1) {
+                    let x = -out + (w + 2 * out) * CGFloat(i) / 40
+                    let t = Double(i) / 40 * 6.283
+                    let y = base + amp * CGFloat(sin(t * 1.3 + ph) * 0.6 + sin(t * 2.7 + ph * 1.7) * 0.4)
+                    p.addLine(to: CGPoint(x: x, y: y))
+                }
+                p.closeSubpath()
+            }
+            .fill(.black)
+            .blur(radius: h * 0.09)
         }
     }
 }
