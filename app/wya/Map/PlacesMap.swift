@@ -481,7 +481,8 @@ extension MapController {
         }
         placesCollection = id
         loadSetShapes(id)
-        guard placeOpen == nil, placesArea == nil, let c = CollectionStore.shared.collection(id), c.items.count <= 60, c.shapes == nil,
+        // (every set frames its places, a big one too: one spread over the world shows the world)
+        guard placeOpen == nil, placesArea == nil, CollectionStore.shared.collection(id) != nil,
               let f = box(of: .collection(id)) else { return }
         if f.z - f.x > (world?.width ?? 1000) * 0.45 { goHome() }
         else { frameArea(SIMD4(Double(f.x), Double(f.y), Double(f.z), Double(f.w))) }
