@@ -891,10 +891,12 @@ private struct FirstTool: View, Animatable {
 }
 
 /// The wheel's face at one position (animatable, so the fills follow the turn frame by frame).
-private struct WheelFace: View, Animatable {
+struct WheelFace: View, Animatable {
     var at: CGFloat
     var reveal: CGFloat
     var ink: Color
+    /// the glyphs on the wheel, first to last (the Map's four modes; the Lists tab's four kinds)
+    var keys: [String] = HeadState.Mode.allCases.map(\.key)
     /// the first tool is drawn in the top glyph's place (it starts and ends as exactly that dot)
     var cover: CGFloat = 0
     /// the AI or gear morph is drawn in the top glyph's place
@@ -910,8 +912,8 @@ private struct WheelFace: View, Animatable {
 
     var body: some View {
         ZStack {
-            ForEach(HeadState.Mode.allCases, id: \.rawValue) { m in
-                let d = Double(CGFloat(m.rawValue) - at)
+            ForEach(0 ..< keys.count, id: \.self) { m in
+                let d = Double(CGFloat(m) - at)
                 let rad = d * spacing * .pi / 180
                 let away = CGFloat(min(abs(d), 2))
                 // full size at the top, two thirds one step away, gone two away (it shrinks, never fades)
@@ -920,7 +922,7 @@ private struct WheelFace: View, Animatable {
                 let fill = max(0, 1 - away)
                 // only the one at the top shows when the wheel is at rest
                 let shown = (cover > FirstTool.start || hideTop) && abs(d) < 0.5 ? 0 : max(fill > 0.5 ? 1 : 0, reveal)
-                Icon5Still(key: m.key, progress: fill, ink: ink, size: 30)
+                Icon5Still(key: keys[m], progress: fill, ink: ink, size: 30)
                     .scaleEffect(max(0.001, size * shown))
                     .offset(x: radius * CGFloat(sin(rad)) * shown, y: radius * (1 - CGFloat(cos(rad))) * shown)
             }
@@ -1145,7 +1147,8 @@ struct SearchResults: View {
                     // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
                     .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
                     .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-                    .glassEffect(PageGlass.surface, in: .rect(cornerRadius: min(22, h / 2, w / 2)))
+                    // (frosted with a white tint over the map: its land and labels never read through the rows)
+                    .glassEffect(PageGlass.surface.tint(Palette.white.opacity(0.8)), in: .rect(cornerRadius: min(22, h / 2, w / 2)))
                 }
             }
         }
