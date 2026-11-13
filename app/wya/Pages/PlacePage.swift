@@ -851,9 +851,11 @@ private struct PageLayer: View {
         // (the system's edge never reached it here: the page is laid out over the whole screen) the page's own white
         // coming up under the capsule, so rows fade into it and are never cut by its edge
         .overlay(alignment: .bottom) {
-            LinearGradient(stops: [.init(color: Palette.white.opacity(0), location: 0), .init(color: Palette.white.opacity(0.85), location: 0.45),
-                                   .init(color: Palette.white, location: 1)], startPoint: .top, endPoint: .bottom)
-                .frame(height: L.H - L.capsule.minY + 28)
+            // (solid white by the capsule's top, so no line of words reads through or round its glass)
+            LinearGradient(stops: [.init(color: Palette.white.opacity(0), location: 0), .init(color: Palette.white.opacity(0.92), location: 0.42),
+                                   .init(color: Palette.white, location: 0.55), .init(color: Palette.white, location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: L.H - L.capsule.minY + 64)
                 .allowsHitTesting(false)
         }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
