@@ -928,6 +928,59 @@ final class UploadState {
         calendarChanged()
     }
 
+    // THE CALENDAR (Part 9, his calendar of 5 Sep): the same finds a day at a time, full screen
+    var calendarOpen = false
+    /// the finds as days: each found day its place (the first find listed on a day it shares), crossed out where its
+    /// place or that trip was dropped at the review
+    func calendarEdit() -> CalendarEdit? {
+        guard phase == .review, round == nil, let w = map?.world else { return nil }
+        let droppedIDs = Set(dropped.map { w.places[$0].id })
+        var days: [LocalDay: String] = [:]
+        var crossed: Set<LocalDay> = []
+        for f in finds where !f.home {
+            let off = droppedTrips[f.place] ?? []
+            for (k, v) in f.visits.enumerated() {
+                var d = v.from
+                while d <= v.to {
+                    if days[d] == nil {
+                        days[d] = f.place
+                        if droppedIDs.contains(f.place) || off.contains(k) { crossed.insert(d) }
+                    }
+                    d = d.plus(1)
+                }
+            }
+        }
+        return days.isEmpty ? nil : CalendarEdit(days: days, crossed: crossed)
+    }
+    func openCalendar() {
+        guard phase == .review, !busy, round == nil else { return }
+        Feel.tap()
+        calendarOpen = true
+    }
+    /// ADD N on the calendar: each place kept with the days left to it (runs of days its trips), the places with none
+    /// dropped, then stamped as the review's go stamps
+    func addFromCalendar(_ kept: [String: [LocalDay]]) {
+        guard phase == .review, !busy, let m = map, let w = m.world else { return }
+        finds = finds.map { f in
+            guard let ds = kept[f.place], !ds.isEmpty else { return f }
+            var visits: [Finds.Visit] = []
+            for d in ds {
+                if var v = visits.last, v.to.plus(1) == d { v.to = d; v.count += 1; visits[visits.count - 1] = v }
+                else { visits.append(Finds.Visit(from: d, to: d, count: 1)) }
+            }
+            var g = f; g.visits = visits
+            return g
+        }
+        droppedTrips = [:]
+        for i in order {
+            if kept[w.places[i].id]?.isEmpty == false { dropped.remove(i); m.found.insert(i) } else { dropped.insert(i); m.found.remove(i) }
+        }
+        count = order.count - dropped.count
+        calendarOpen = false
+        save()
+        go()
+    }
+
     /// SHOW ON THE MAP (the row's hold menu): the water comes down to 25% (the rows roll out as it passes 50%) and the
     /// camera frames the place, which darkens for a moment
     func show(_ i: Int) {
@@ -1344,6 +1397,11 @@ struct UploadSheet: View {
         }
         .accessibilityAction(named: "Back") { u.back() }
         .accessibilityAction(named: "Add more") { u.addMore() }
+        .fullScreenCover(isPresented: $u.calendarOpen) {
+            if let e = u.calendarEdit() {
+                UploadCalendar(edit: e, close: { u.calendarOpen = false }, add: { u.addFromCalendar($0) })
+            }
+        }
     }
 
     /// FINDING'S ROW (9.4): the caption in its own place reading World / n / found (or A9.8's words in the number's
@@ -1379,6 +1437,20 @@ struct UploadSheet: View {
         WorkingMark(size: 20, running: u.markIn)
             .opacity(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
+        // the review's other view: the same finds a day at a time, the capsule mirroring Stamp all's at the right
+        if u.goIn, u.round == nil {
+            Text("Calendar")
+                .font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
+                .glassEffect(.clear, in: .capsule)
+                .contentShape(Capsule())
+                .onTapGesture { u.openCalendar() }
+                .frame(width: 120, height: 44, alignment: .leading)
+                .position(x: L.sheetInset + 14 + 60, y: y)
+                .transition(.identity)
+                .accessibilityAddTraits(.isButton)
+        }
         // once the review is up, the go says what it does (7 Nov, the friend's review board 15: the bare stamp glyph
         // "saved the visit" without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
         // many), as the card's own Stamp capsule; the × until then. There at once, no grow (31 Oct)

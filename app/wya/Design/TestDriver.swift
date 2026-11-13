@@ -668,6 +668,25 @@ final class TestDriver {
                 case "listdetails": StampedList.testDetails?(a)
                 // upload open | close | choose 0|1 | back: the upload sheet (9.3) as the Upload tool, a tap off, a tap on a
                 // choice and the swipe right would
+                // calday toggle <day> | fill <from day> <to day> | undo | redo | reset: the open calendar's day tapped,
+                // a flag held on <from> and dragged over the days to <to>, or its circles
+                case "calday":
+                    guard let e = CalendarEdit.current else { break }
+                    switch a {
+                    case "toggle": if p.count > 2, let d = LocalDay(p[2]) { e.toggle(d) }
+                    case "fill":
+                        if p.count > 3, let d0 = LocalDay(p[2]), let d1 = LocalDay(p[3]), let place = e.days[d0] {
+                            e.beginFill(place)
+                            var d = d0
+                            while d <= d1 { e.fill(d); d = d.plus(1) }
+                            e.endFill()
+                        }
+                    case "undo": e.undo()
+                    case "redo": e.redo()
+                    case "reset": e.reset()
+                    case "add": UploadState.shared.addFromCalendar(e.kept)
+                    default: break
+                    }
                 case "upload":
                     switch a {
                     case "open": if let water, let map { UploadState.shared.open(water: water, map: map) }
@@ -680,6 +699,8 @@ final class TestDriver {
                     case "file": if p.count > 2 { UploadState.shared.imported([URL(fileURLWithPath: Snap.dir + "/" + p[2])]) }
                     case "cancel": UploadState.shared.cancel()
                     case "go": UploadState.shared.go()
+                    // upload calendar on|off: the review's calendar
+                    case "calendar": if p.count > 2, p[2] == "off" { UploadState.shared.calendarOpen = false } else { UploadState.shared.openCalendar() }
                     case "drop": if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == (p.count > 2 ? p[2] : "") }) { _ = UploadState.shared.tap(i) }
                     // upload dates <id> | trip <id> <k> | show <id>: the review row's hold menu and a trip's ×
                     case "dates": if p.count > 2 { UploadState.shared.toggleDates(p[2]) }
