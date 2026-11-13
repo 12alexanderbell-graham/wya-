@@ -58,8 +58,8 @@ struct VerifySheet: View {
     @State private var locator = Locator()
 
     static let ways: [(id: String, name: String)] = [
-        ("here", "Where you are"), ("history", "Your location history"), ("library", "A photo from your library"),
-        ("camera", "A photo now"), ("documents", "Travel documents"), ("other", "Send to us")]
+        ("here", "Location"), ("history", "History"), ("library", "Photo"),
+        ("camera", "Camera"), ("documents", "Ticket"), ("other", "Review")]
 
     var body: some View {
         let L = water.layout

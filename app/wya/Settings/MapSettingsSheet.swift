@@ -153,6 +153,21 @@ private struct SettingsList: View {
                         if i > 0, rows[i - 1].group != row.group { Color.clear.frame(height: 24) }
                         rowView(row, s).id(row.id)
                     }
+                    // RESET TO DEFAULT, last (Apple's way: a tap asks once, in its own menu, with the red word);
+                    // in its not-yet look while nothing differs from the defaults
+                    Color.clear.frame(height: 24)
+                    let plain = MapSettingsRows.isDefault(s)
+                    Menu {
+                        Button("Reset map settings", role: .destructive) {
+                            Feel.tap()
+                            Task { await MapSettingsRows.resetAll(map: map) }
+                        }
+                    } label: {
+                        RowWords(name: "Reset to default", value: "", dim: plain)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(plain)
+                    .id("reset")
                 }
                 // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
                 .background(WaterHandoff())

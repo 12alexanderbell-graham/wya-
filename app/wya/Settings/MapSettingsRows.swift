@@ -44,7 +44,7 @@ enum MapSettingsRows {
         .init(id: "diamonds", name: "Small places", group: 0,
               choices: c([("main", "Main map"), ("everywhere", "Everywhere"), ("nowhere", "Nowhere")]), page: nil, defaultValue: "main",
               shows: { _ in true }, get: { $0.diamonds }, set: { s, v in s.diamonds = v }),
-        .init(id: "townDots", name: "Town dots", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
+        .init(id: "townDots", name: "Towns", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
               shows: { _ in true }, get: { flag($0.townDots) }, set: { s, v in s.townDots = v == "on" }),
         // no Labels row: no names drawn on the map (the label system was removed 30 Oct 22:13)
         // group 2: borders
@@ -53,7 +53,7 @@ enum MapSettingsRows {
         .init(id: "disputes", name: "Disputes", group: 1, choices: nil, page: "disputes", defaultValue: nil,
               shows: { _ in true }, get: { "\($0.disputes.count)" }, set: { _, _ in }),
         .init(id: "noPosition", name: "No stated position", group: 1,
-              choices: c([("deFacto", "De facto"), ("deJure", "De jure")]), page: nil, defaultValue: "deFacto",
+              choices: c([("deFacto", "De facto"), ("deJure", "United Nations")]), page: nil, defaultValue: "deFacto",
               shows: { _ in true }, get: { $0.noPosition }, set: { s, v in s.noPosition = v }),
         // group 3: stamping and counting
         .init(id: "quickAlways", name: "Quick stamping", group: 2, choices: c([("off", "Off"), ("on", "Always on")]), page: nil, defaultValue: "off",
@@ -105,6 +105,26 @@ enum MapSettingsRows {
         store.change { row.set(&$0, value) }
         await follow(before, store.value, map: map)
         return true
+    }
+
+    /// EVERY MAP SETTING BACK TO ITS DEFAULT (the list's last row): each row with a default, the borders to de facto,
+    /// every dispute given back to the view, the per-mode maps to the main one; the moon's stop and recent searches
+    /// are not settings and stay
+    static func defaults(from s: MapSettings) -> MapSettings {
+        var t = s
+        let d = MapSettings()
+        for row in all where !notYet.contains(row.id) { if let v = row.defaultValue { row.set(&t, v) } }
+        t.style = d.style; t.borders = s.borders == nil ? nil : "deFacto"; t.disputes = [:]; t.placesMap = d.placesMap; t.pinsMap = d.pinsMap
+        return t
+    }
+    static func isDefault(_ s: MapSettings) -> Bool { defaults(from: s) == s }
+    static func resetAll(map: MapController) async {
+        let store = MapSettingsStore.shared
+        let before = store.value
+        let after = defaults(from: before)
+        guard after != before else { return }
+        store.change { $0 = after }
+        await follow(before, after, map: map)
     }
 
     /// one dispute given to a side by hand ("none" for nobody; nil gives it back to the view)

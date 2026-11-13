@@ -187,8 +187,8 @@ struct StampCard: View {
             let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
             let detailsUp = details.isOpen || verify.isOpen
             // THE CARD GOES BACK: once the bottom pair has
-            // gone, the name, Stamp | Wishlist and the book shrink as one about their top centre, Apple's way with the
-            // screen behind a sheet, so the book's bottom stays 12 pt above the water every frame; at full it has gone
+            // gone, the name, Stamp | Wishlist and the book go down as one under the water as it rises over them, at
+            // their own size; at full they have gone under it
             let colTop = g.mid.y - (168 + g.bookH) / 2
             let back: CGFloat = card.heldTop == nil ? 1
                 : max(0, min(1, (waterTop - 12 - colTop) / max(1, bookBottom - colTop)))
@@ -274,7 +274,8 @@ struct StampCard: View {
                         .allowsHitTesting(false)
                 }
             }
-            .scaleEffect(max(0.001, back), anchor: .top)
+            // the card goes down under the rising water at its own size, never shrinking (F50, F60)
+            .offset(y: (1 - back) * max(0, L.H - colTop))
             .modifier(ArcPlace(t: p, from: card.at, ctrl: ctrl, to: c))
             .allowsHitTesting(p > 0.98 && back > 0.1)
         }

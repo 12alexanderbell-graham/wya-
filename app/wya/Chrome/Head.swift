@@ -981,8 +981,10 @@ struct SearchResults: View {
         let spotSearch = placesSearch || (map.pinsMode && !head.settingsOpen)
         let _ = spotSearch ? TownIndex.shared.load() : ()
         let townHits = spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
-        let _ = spotSearch ? ThingIndex.shared.load() : ()
-        let thingHits = spotSearch && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
+        let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
+        let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
+        let thingHits = (spotSearch || sightSearch) && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
         // (the sets' own places: the parks, peaks, lakes and the rest of Places' menu, the set looked at first)
         let _ = map.pinsMode ? CollectionStore.shared.load() : ()
         let itemHits = spotSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
@@ -993,8 +995,11 @@ struct SearchResults: View {
         // (the towns' index too: it tells the regions' search how many people live in each)
         let _ = countriesSearch ? TownIndex.shared.load() : ()
         let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
-        let mapKeys: [ResultKey] = anyRegionHits.isEmpty ? baseKeys
-            : Array((hits.prefix(max(4, 8 - anyRegionHits.count)).map { ResultKey.place($0) } + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
+        // (two sights at most, the known ones, after the countries; a sight found means no "Did you mean?" country)
+        let sights = sightSearch ? thingHits.filter { $0.fame >= 3 }.prefix(2).map { ResultKey.thing($0.key) } : []
+        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty ? baseKeys
+            : Array((hits.prefix(max(3, 8 - anyRegionHits.count - sights.count)).map { ResultKey.place($0) } + sights
+                     + anyRegionHits.map { .anyRegion($0.key) }).prefix(8))
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
@@ -1514,6 +1519,7 @@ struct SearchResults: View {
         CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
         guard let h else { return }
         if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: 4_000, name: h.name) }
+        else if !map.placesMode { ContentView.openThing(file: h.file, id: h.id, head: head, map: map) }
         else { map.showThing(file: h.file, id: h.id) }
     }
     private func thingRow(_ h: ThingIndex.Hit?) -> some View {

@@ -755,6 +755,8 @@ struct DetailsSheet: View {
                     .padding(.horizontal, 12)
                     .frame(height: 36)
                     .background { Capsule().fill(chosen == id ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
+                    // the others are clear glass capsules, so every choice reads as a control (F46, F54)
+                    .glassEffect(chosen == id || blank ? .identity : .clear, in: .capsule)
                     .padding(.vertical, 4)
                     .edgeRow()
                     .contentShape(Rectangle())
