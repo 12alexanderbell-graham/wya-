@@ -123,6 +123,15 @@ final class CardState {
             guard place == i else { return }
             Feel.tap()
             withAnimation(.spring(response: 0.42 * Self.slow, dampingFraction: 1)) { p = 1 }
+            // THE FIRST-TIME HINT (P01 §22): left open and untouched, the card starts back toward where it goes when
+            // a tap outside closes it, and comes back, once; never words
+            try? await Task.sleep(for: .milliseconds(2500))
+            guard place == i, !closing, p > 0.99, Hints.shared.cardDue else { return }
+            Hints.shared.playedCard()
+            withAnimation(.smooth(duration: 0.35)) { p = 0.9 } completion: { [self] in
+                guard place == i, !closing else { return }
+                withAnimation(.smooth(duration: 0.35)) { p = 1 }
+            }
         }
     }
 
@@ -130,6 +139,8 @@ final class CardState {
     /// `instant`: gone in this frame, no fold (a mode change swaps the content and moves nothing, 8 Nov)
     func close(map: MapController, instant: Bool = false) {
         guard place != nil else { return }
+        // (closed once by you: its hint has nothing to show)
+        if !instant { Hints.shared.usedCardClose() }
         if instant {
             closing = false
             closedAt = CACurrentMediaTime()

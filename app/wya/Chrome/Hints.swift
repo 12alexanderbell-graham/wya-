@@ -10,7 +10,7 @@ import SwiftUI
 final class Hints {
     static let shared = Hints()
     private let d = UserDefaults.standard
-    private enum Part: String { case water, pull, hold, turn, moon }
+    private enum Part: String { case water, pull, hold, turn, moon, card }
     /// each play's number, never reused (a stale step from an earlier play never matches); `playing` says one is on
     private var job = 0
     private var playing = false
@@ -25,6 +25,11 @@ final class Hints {
     func usedHold() { used(.hold) }
     func usedTurn() { used(.turn) }
     func usedMoon() { used(.moon) }
+    /// the card closed by a tap outside it: you know it
+    func usedCardClose() { used(.card) }
+    /// THE CARD'S HINT (a tap outside closes it): the card's own, once it has stood open untouched
+    var cardDue: Bool { due(.card) && Date().timeIntervalSince(lastTouch) >= 2.4 }
+    func playedCard() { used(.card) }
     /// THE MOON'S HINT is the Cosmos' own (it plays where the moon is, at 50%): whether it is due, and nothing has
     /// been touched for 1.2 s
     var moonDue: Bool { due(.moon) && Date().timeIntervalSince(lastTouch) >= 1.19 }
@@ -78,7 +83,7 @@ final class Hints {
             DispatchQueue.main.asyncAfter(deadline: .now() + at) { [self] in
                 guard me == job else { return }
                 switch p {
-                case .water, .moon: w.hint()
+                case .water, .moon, .card: w.hint()
                 case .pull:
                     // as an 18 pt pull (the lime 34.8 pt, the dot 17.4 pt), there and back
                     withAnimation(.smooth(duration: 0.4)) { h.pull = 18 } completion: { [self] in
