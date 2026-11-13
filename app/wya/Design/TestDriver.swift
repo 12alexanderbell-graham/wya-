@@ -20,6 +20,8 @@ final class TestDriver {
     var contentFrame: CGRect = .zero
     /// the session put back as after the system ended the app (19.2): `session restore`
     var restoreSession: (() -> Void)?
+    /// a cold launch's start (as if iOS kept no session): `session cold`
+    var coldStart: (() -> Void)?
 
     /// a hold menu's row, found by its words in the menu and its groups, chosen
     private static func choose(_ title: String, in menu: UIMenu) {
@@ -618,7 +620,7 @@ final class TestDriver {
                     }
                 // drows <addtime | removelived N | addplace <kind> <name> | removeplace N>: Details' rows (A4.14 / A4.15)
                 case "drows": DetailsSheet.test?(Array(p.dropFirst()))
-                case "session": restoreSession?()
+                case "session": if a == "cold" { coldStart?() } else { restoreSession?() }
                 case "waterhint": water?.hint()
                 // lock on | off | press: the zoom column's lock, and a press on the locked map (A1.9)
                 case "lock": if a == "press" { Feel.refuse(); map?.lockedPress() } else { map?.locked = a == "on" }

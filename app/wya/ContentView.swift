@@ -213,6 +213,7 @@ struct ContentView: View {
             TestDriver.shared.start(map: map, water: water, head: head)
             #if DEBUG
             TestDriver.shared.restoreSession = { restoreSession() }
+            TestDriver.shared.coldStart = { restoreSession(cold: true) }
             #endif
             // the Map's actions, by stable id (Part 20.12): the AI, Siri, links and hold menus call these
             Actions.shared.registerMap(map: map, water: water, head: head)
@@ -812,8 +813,14 @@ struct ContentView: View {
             if let d = try? JSONEncoder().encode(s), let t = String(data: d, encoding: .utf8) { session = t }
         }
     }
-    private func restoreSession() {
-        guard !session.isEmpty, let s = try? JSONDecoder().decode(Session.self, from: Data(session.utf8)) else { return }
+    private func restoreSession(cold: Bool = false) {
+        guard !cold, !session.isEmpty, let s = try? JSONDecoder().decode(Session.self, from: Data(session.utf8)) else {
+            // A COLD LAUNCH (no session kept by iOS) OPENS AT THE START SETTING: the world, or a continent framed as
+            // its planet frames it
+            let start = MapSettingsStore.shared.value.start
+            if start != "world", map.world?.contViews[start] != nil { map.show(continent: start) }
+            return
+        }
         tab = s.tab
         // Regions with a country open: the mode opens that country at its level straight (6.1.1), not the list
         if s.mode == HeadState.Mode.regions.rawValue, let rp = s.rp, let i = map.world?.placeIndex[rp] {
