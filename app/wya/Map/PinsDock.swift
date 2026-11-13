@@ -45,7 +45,7 @@ struct PinsDock: View {
     /// the row's middle from the dock's top: under the map's name, which sits on every map's name line
     static func rowY(_ top: CGFloat) -> CGFloat { top + 77 }
     /// where what is under the dock starts (Saved's rows)
-    static func bottom(_ top: CGFloat) -> CGFloat { top + 117 }
+    static func bottom(_ top: CGFloat) -> CGFloat { top + 95 }
 
     var body: some View {
         let L = water.layout
