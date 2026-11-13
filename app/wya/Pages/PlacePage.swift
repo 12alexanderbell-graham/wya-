@@ -193,7 +193,8 @@ extension PlacePageState.OnePage {
         }
         let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
         if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
-            out.rows.append(("Where", [town.name, land].filter { !$0.isEmpty && $0 != town.name }.joined(separator: ", ")))
+            // (the town, then its country unless they are one: "Himeji, Japan", "Monaco")
+            out.rows.append(("Where", land.isEmpty || land == town.name ? town.name : town.name + ", " + land))
         } else {
             out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
         }
