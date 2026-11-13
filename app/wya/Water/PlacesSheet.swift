@@ -79,35 +79,15 @@ struct PlacesMenu: View {
         let id: String
         let title: String
         let on: Bool
-        /// a set's own mark (drawn in the icons' grid), nil for a set's kinds
-        var icon: String? = nil
-        /// how many of the set are yours (shown from one)
-        var count = 0
         let act: () -> Void
-    }
-    /// A SET'S MARK by what it holds: cities, landmarks, World Heritage, national parks, peaks, ranges, lakes,
-    /// islands, seas; any other set (a season of races, a tour) the flag
-    static func icon(_ id: String, title: String) -> String {
-        if id == CollectionStore.towns { return "set-cities" }
-        let t = title.lowercased()
-        let marks: [(String, String)] = [("heritage", "set-heritage"), ("park", "set-parks"), ("range", "set-ranges"),
-                                         ("peak", "set-peaks"), ("mountain", "set-peaks"), ("lake", "set-lakes"),
-                                         ("island", "set-islands"), ("sea", "set-seas"), ("ocean", "set-seas"),
-                                         ("landmark", "set-landmarks"), ("cit", "set-cities"), ("capital", "set-cities")]
-        return marks.first { t.contains($0.0) }?.1 ?? "set-collection"
     }
     private var list: [Row] {
         let store = CollectionStore.shared
         guard map.placesPicked else {
             // (a set with kinds keeps the water at 50% for them; one with none has nothing more to pick here, so the
             // water goes down to 25% and the map of its places has the screen)
-            // (each set with its mark and how many of it are yours, so the menu reads as what you collect)
-            _ = MarkStore.shared.changes; _ = map.townsVersion
             return store.menu.map { id in
-                let title = store.title(id)
-                let mine = id == CollectionStore.towns ? map.stampedTowns(on: .everywhere)
-                    : store.collection(id).map { $0.items.filter { MarkStore.shared.state($0.key).stamped }.count } ?? 0
-                return Row(id: "set:" + id, title: title, on: false, icon: Self.icon(id, title: title), count: mine) {
+                Row(id: "set:" + id, title: store.title(id), on: false) {
                     map.showPlacesSet(id)
                     if store.types(id).isEmpty { water.go(.quarter) }
                 }
@@ -130,11 +110,9 @@ struct PlacesMenu: View {
                 if lines[i].count < cols, let last = lines[i].first {
                     // (an odd one out, the ninth of nine: a button as wide as the others, in the middle, not one
                     // stretched across the whole water)
-                    // (at least as wide as the others, wider if its name and count need it: never cut short)
                     Color.clear.frame(height: PlacesSheet.rowH).overlay {
                         GeometryReader { g in
-                            row(last, least: (g.size.width - Self.gap) / 2).fixedSize(horizontal: true, vertical: false)
-                                .frame(maxWidth: .infinity)
+                            row(last).frame(width: (g.size.width - Self.gap) / 2).frame(maxWidth: .infinity)
                         }
                     }
                 } else {
@@ -145,28 +123,18 @@ struct PlacesMenu: View {
         .dynamicTypeSize(...DynamicTypeSize.xLarge)
     }
 
-    /// `least`: the odd one out's least width (it grows to fit its name and count)
-    private func row(_ r: Row, least: CGFloat? = nil) -> some View {
+    private func row(_ r: Row) -> some View {
         Button {
             Feel.tick()
             r.act()
         } label: {
-            // (a set: its mark, its name, and yours of it in grey at the end, from one; a set's kind: its name in
-            // the middle, as before)
-            HStack(spacing: 8) {
-                if let icon = r.icon { Icon5(key: icon, ink: Palette.ink, size: 17).accessibilityHidden(true) }
-                Text(r.title)
-                    .font(.body)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                if r.icon != nil { Spacer(minLength: 4) }
-                if r.count > 0 {
-                    Text("\(r.count)").font(.body).monospacedDigit().foregroundStyle(Palette.ink.opacity(0.5))
-                }
-            }
-                .padding(.horizontal, r.icon == nil ? 8 : 14)
-                .frame(minWidth: least, maxWidth: least == nil ? .infinity : nil)
+            Text(r.title)
+                .font(.body)
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity)
                 .frame(height: PlacesSheet.rowH)
                 // (a button is its own glass capsule, as the head's circles and the water's tools: never a see-through
                 // ground: frosted, so the map under the water does not show through, 12 Nov; the one picked in lime glass)
@@ -176,6 +144,5 @@ struct PlacesMenu: View {
         .buttonStyle(.plain)
         .transition(.identity)
         .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
-        .accessibilityValue(r.count > 0 ? "\(r.count) yours" : "")
     }
 }
