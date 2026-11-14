@@ -2068,65 +2068,39 @@ struct PinSheet: View {
                     ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; store.colour(p.id, c) }),
                                  suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c) }
                   } else {
-                    section("Name") {
-                        TextField("", text: Binding(get: { p.name }, set: { v in
-                            if v.count > 60 { Feel.refuse() }
-                            store.rename(p.id, v)
-                        }), prompt: Text("Add a name").foregroundStyle(Palette.ink.opacity(0.5)))
-                        .font(.body).foregroundStyle(Palette.ink)
-                        .focused($typing)
-                        .submitLabel(.done)
-                        .frame(minHeight: 44)
-                    }
-                    // ITS CATEGORY (3 Oct): one of the twelve kinds, picked from a menu as a place of your own picks its
-                    // kind (the one it has is unavailable, as every menu's current row)
-                    section("Category") {
+                    // THE PIN'S SHEET (23 Oct, 3 Oct): what it does as glass circles in one even row (its colour, a
+                    // photo, share, delete in red); under it its name, its kind, its photo and its note, each only
+                    // the thing itself, no labels and no explaining
+                    actions(p, width: L.W - 2 * L.sheetInset - 32)
+                    TextField("", text: Binding(get: { p.name }, set: { v in
+                        if v.count > 60 { Feel.refuse() }
+                        store.rename(p.id, v)
+                    }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .focused($typing)
+                    .submitLabel(.done)
+                    .frame(minHeight: 44)
+                    kinds(p)
+                    if let img = PinStore.image(p) {
                         Menu {
-                            ForEach(OwnPlaces.kinds, id: \.self) { k in
-                                Button(k.capitalizedFirst) { Feel.tap(); store.kind(p.id, k) }.disabled(k == p.kind)
-                            }
-                            if p.kind != nil {
-                                Divider()
-                                Button("None") { Feel.tap(); store.kind(p.id, nil) }
-                            }
+                            Button("Choose another") { Feel.tap(); choosingPhoto = true }
+                            Button("Remove", role: .destructive) { Feel.lift(); store.photo(p.id, nil) }
                         } label: {
-                            Text(p.kind?.capitalizedFirst ?? "Add a category").font(.body)
-                                .foregroundStyle(Palette.ink.opacity(p.kind == nil ? 0.5 : 1))
-                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            Color.clear.frame(maxWidth: .infinity).frame(height: 200)
+                                .overlay { Image(uiImage: img).resizable().scaledToFill() }
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .contentShape(Rectangle())
                         }
+                        .accessibilityLabel("Photo")
                     }
-                    section("Colour") {
-                        Button {
-                            Feel.tap()
-                            pick = p.pick ?? Self.nearBlack
-                            picking = true
-                            // (the picker alone fits 50%: from 25% the water comes to 50%, from full it stays)
-                            if water.stop == .quarter || water.stop == .closed { water.go(.half) }
-                        } label: {
-                            HStack {
-                                // the colour's own name ("deep red"), as the picker names it
-                                Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.body).foregroundStyle(Palette.ink)
-                                Spacer(minLength: 8)
-                                Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
-                            }
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    // NOTHING CUT AT REST: below full the sheet holds what fits whole (Name, Colour, Note);
-                    // Coordinates and Delete pin are at full, where it scrolls (as the picker, which needs full)
-                    section("Note") {
-                        TextField("", text: Binding(get: { p.note ?? "" }, set: { v in
-                            if v.count > 600 { Feel.refuse() }
-                            store.note(p.id, v)
-                        }), prompt: Text("Add a note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
-                        .font(.body).foregroundStyle(Palette.ink)
-                        .lineLimit(whole ? 1 ... 12 : 1 ... 2)
-                        .focused($typing)
-                        .frame(minHeight: 44)
-                    }
+                    TextField("", text: Binding(get: { p.note ?? "" }, set: { v in
+                        if v.count > 600 { Feel.refuse() }
+                        store.note(p.id, v)
+                    }), prompt: Text("Note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+                    .font(.body).foregroundStyle(Palette.ink)
+                    .lineLimit(whole ? 1 ... 12 : 1 ... 3)
+                    .focused($typing)
+                    .frame(minHeight: 44)
                     fullRows(p, cut: whole ? nil : fade - 8)
                   }
                     Color.clear.frame(height: L.H - fade + 24)
@@ -2180,58 +2154,79 @@ struct PinSheet: View {
     /// row, in red words (as Apple's own Remove; at once, the undo drop brings it back)
     /// (`cut`: below full, a row is there once it is whole above the soft edge over the tabs, never cut by it)
     @ViewBuilder private func fullRows(_ p: Pin, cut: CGFloat?) -> some View {
-        // ITS PHOTO (3 Oct): one picture; a tap on it offers another or none
-        section("Photo") {
-            if let img = PinStore.image(p) {
-                Menu {
-                    Button("Choose another") { Feel.tap(); choosingPhoto = true }
-                    Button("Remove", role: .destructive) { Feel.lift(); store.photo(p.id, nil) }
+        // where it is, copied with a tap
+        Button {
+            Feel.tap()
+            UIPasteboard.general.string = String(format: "%.5f, %.5f", p.lat, p.lon)
+        } label: {
+            Text(Self.coordinates(p)).font(.subheadline.monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Copies the coordinates")
+        .whole(cut)
+    }
+
+    /// the pin's four circles, sharing the row evenly: its colour (the circle is the colour), a photo, share, delete
+    private func actions(_ p: Pin, width: CGFloat) -> some View {
+        let part = width / 4
+        return GlassEffectContainer(spacing: 14) {
+            HStack(spacing: 0) {
+                Button {
+                    Feel.tap()
+                    pick = p.pick ?? Self.nearBlack
+                    picking = true
+                    if water.stop == .quarter || water.stop == .closed { water.go(.half) }
                 } label: {
-                    Color.clear.frame(maxWidth: .infinity).frame(height: 180)
-                        .overlay { Image(uiImage: img).resizable().scaledToFill() }
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .padding(.vertical, 8)
-                        .contentShape(Rectangle())
+                    Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 24, height: 24)
+                        .frame(width: 44, height: 44).contentShape(Circle())
                 }
-                .accessibilityLabel("Photo")
-            } else {
-                Button { Feel.tap(); choosingPhoto = true } label: {
-                    Text("Add a photo").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).glassEffect(PageGlass.head, in: .circle)
+                .accessibilityLabel("Colour, \(p.pick.map { ColourNames.name($0) } ?? "black")")
+                .frame(width: part)
+                circle("photo", "Photo", Palette.ink) { choosingPhoto = true }.frame(width: part)
+                circle("share", "Share", Palette.ink) { PinStore.share(p) }.frame(width: part)
+                circle("bin", "Delete pin", Palette.red) { Feel.lift(); store.remove(p.id); water.go(.quarter) }.frame(width: part)
             }
         }
-        .whole(cut)
-        section("Coordinates") {
-            Button {
-                Feel.tap()
-                UIPasteboard.general.string = String(format: "%.5f, %.5f", p.lat, p.lon)
-            } label: {
-                Text(Self.coordinates(p)).font(.body.monospacedDigit()).foregroundStyle(Palette.ink)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
+        .frame(width: width)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private func circle(_ icon: String, _ label: String, _ ink: Color, _ act: @escaping () -> Void) -> some View {
+        Button { Feel.tap(); act() } label: {
+            Icon5(key: icon, ink: ink, size: 20).frame(width: 44, height: 44).contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(PageGlass.head, in: .circle)
+        .accessibilityLabel(label)
+    }
+
+    /// its kind, one of the twelve (7.3), in a row to slide through; the one chosen filled black, chosen again it
+    /// goes back to none
+    private func kinds(_ p: Pin) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(OwnPlaces.kinds, id: \.self) { k in
+                    let on = p.kind == k
+                    Button { Feel.tap(); store.kind(p.id, on ? nil : k) } label: {
+                        Text(k.capitalizedFirst).font(.subheadline.weight(.semibold))
+                            .foregroundStyle(on ? Palette.white : Palette.ink)
+                            .padding(.horizontal, 14).frame(height: 36)
+                            .background { if on { Capsule().fill(Palette.ink) } }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(on ? .identity : PageGlass.head, in: .capsule)
+                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityHint("Copies the coordinates")
+            .padding(.horizontal, 16)
         }
-        .whole(cut)
-        // Share, a row of its own (it was a circle under the head's plus, whose arrow read as undo)
-        Button { Feel.tap(); PinStore.share(p) } label: {
-            Text("Share").font(.body).foregroundStyle(Palette.ink)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .whole(cut)
-        Button { Feel.lift(); store.remove(p.id); water.go(.quarter) } label: {
-            Text("Delete pin").font(.body).foregroundStyle(Palette.red)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .whole(cut)
+        .scrollIndicators(.hidden)
+        .padding(.horizontal, -16)
+        .animation(Motion.quick, value: p.kind)
     }
 
     private func section<C: View>(_ name: String, @ViewBuilder _ c: () -> C) -> some View {
