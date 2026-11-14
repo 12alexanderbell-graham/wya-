@@ -255,7 +255,8 @@ final class Water {
     var mini: CGFloat = 0
     @ObservationIgnored var listFrom: Stop?
     func openList() {
-        guard !stampedList else { return }
+        // (never over Pins' own list: the two were drawn on top of each other, 14 Nov)
+        guard !stampedList, head?.mode != .pins else { return }
         listFrom = stop
         stampedList = true
         if stop != .full { go(.full) }

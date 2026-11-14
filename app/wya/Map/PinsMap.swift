@@ -1929,7 +1929,7 @@ struct PinsList: View {
         // its countries, the one with most pins first; past three, how many more
         let counts = Dictionary(pins.compactMap(\.countryName).map { ($0, 1) }, uniquingKeysWith: +)
         let names = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
-        let places = names.isEmpty ? (pins.isEmpty ? "No pins yet" : "")
+        let places = names.isEmpty ? ""
             : names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")
         // YOUR MAPS as Google Earth's projects and Apple Maps' guides: the map itself small (where its pins are, on
         // Apple's map), its name, its countries; the one shown has a tick, nothing else changes
