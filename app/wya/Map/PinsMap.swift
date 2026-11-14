@@ -1730,7 +1730,7 @@ struct PinsList: View {
     @State private var name = ""
     @FocusState private var typing: Bool
 
-    static let rowH: CGFloat = 56
+    static let rowH: CGFloat = 72
 
     var body: some View {
         let L = water.layout
@@ -1814,34 +1814,35 @@ struct PinsList: View {
         let maps = PinMaps.shared
         let on = maps.shown == m?.id
         let pins = store.pins.filter { m == nil || $0.map == m?.id }
-        let ink = on ? Color.white : Palette.ink
         // its countries, the one with most pins first; past three, how many more
         let counts = Dictionary(pins.compactMap(\.countryName).map { ($0, 1) }, uniquingKeysWith: +)
         let names = counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
-        let places = names.isEmpty ? (pins.isEmpty ? ["No pins yet"] : [])
-            : [names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")]
-        return HStack(spacing: 12) {
-            PinMapPicture(points: pins.map { SIMD2($0.lon, $0.lat) }, ink: ink)
-                .frame(width: 28, height: 28)
-            VStack(alignment: .leading, spacing: 1) {
+        let places = names.isEmpty ? (pins.isEmpty ? "No pins yet" : "")
+            : names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")
+        // YOUR MAPS as Google Earth's projects and Apple Maps' guides: the map itself small (where its pins are, on
+        // Apple's map), its name, its countries; the one shown has a tick, nothing else changes
+        return HStack(spacing: 14) {
+            PinMapThumb(pins: pins.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
+                .frame(width: 56, height: 56)
+                .clipShape(.rect(cornerRadius: 12, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
                 if naming == m?.id, let m {
                     TextField("", text: $name)
-                        .font(.body).foregroundStyle(ink).focused($typing)
+                        .font(.body.weight(.semibold)).foregroundStyle(Palette.ink).focused($typing)
                         .submitLabel(.done)
                         .onSubmit { maps.rename(m.id, to: name); naming = nil }
                 } else {
-                    Text(m?.name ?? "All pins").font(.body).foregroundStyle(ink).lineLimit(1)
+                    Text(m?.name ?? "All pins").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                 }
                 if !places.isEmpty {
-                    Text(places.joined(separator: ", ")).font(.footnote).foregroundStyle(ink.opacity(0.5)).lineLimit(1)
+                    Text(places).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
+            if on { Icon5(key: "tick", ink: Palette.ink, size: 17).frame(width: 28, height: 28).transition(.blurReplace) }
         }
-        .frame(minHeight: 56)
-        .padding(.horizontal, 16)
-        .background { Rectangle().fill(on ? Palette.ink : .clear) }
-        .padding(.horizontal, -16)
+        .animation(Motion.quick, value: on)
+        .frame(minHeight: Self.rowH)
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
@@ -1862,12 +1863,14 @@ struct PinsList: View {
     }
     /// NEW MAP: made at once and shown, its name typed in place on its own row
     private var newMapRow: some View {
-        HStack(spacing: 12) {
-            Icon5(key: "plus", ink: Palette.ink, size: 17).frame(width: 28, height: 28)
-            Text("New map").font(.body).foregroundStyle(Palette.ink)
+        HStack(spacing: 14) {
+            Icon5(key: "plus", ink: Palette.ink, size: 20)
+                .frame(width: 56, height: 56)
+                .glassEffect(PageGlass.head, in: .rect(cornerRadius: 12, style: .continuous))
+            Text("New map").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
             Spacer(minLength: 0)
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: Self.rowH)
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
@@ -2355,4 +2358,60 @@ enum PinsDeepen {
                    MKMapPoint(x: r.maxX, y: r.maxY), MKMapPoint(x: r.minX, y: r.maxY)]
         return MKPolygon(points: &pts, count: pts.count)
     }()
+}
+
+
+/// A MAP OF YOURS DRAWN SMALL: Apple's map (its standard look, no labels) round where its pins are, each pin a small
+/// black dot; no pins, the whole world. Made once per set of pins and kept.
+struct PinMapThumb: View {
+    let pins: [CLLocationCoordinate2D]
+    @State private var image: UIImage?
+    private static let kept = NSCache<NSString, UIImage>()
+
+    private var key: String {
+        pins.map { String(format: "%.3f,%.3f", $0.latitude, $0.longitude) }.joined(separator: ";")
+    }
+
+    var body: some View {
+        ZStack {
+            if let i = image ?? Self.kept.object(forKey: key as NSString) {
+                Image(uiImage: i).resizable().scaledToFill()
+            } else {
+                Palette.cream
+            }
+        }
+        .task(id: key) { await make() }
+    }
+
+    private func region() -> MKCoordinateRegion {
+        guard !pins.isEmpty else { return MKCoordinateRegion(center: .init(latitude: 20, longitude: 10), span: .init(latitudeDelta: 140, longitudeDelta: 300)) }
+        let la = pins.map(\.latitude), lo = pins.map(\.longitude)
+        let c = CLLocationCoordinate2D(latitude: (la.min()! + la.max()!) / 2, longitude: (lo.min()! + lo.max()!) / 2)
+        let s = MKCoordinateSpan(latitudeDelta: min(150, max(0.05, (la.max()! - la.min()!) * 1.6)),
+                                 longitudeDelta: min(340, max(0.05, (lo.max()! - lo.min()!) * 1.6)))
+        return MKCoordinateRegion(center: c, span: s)
+    }
+
+    private func make() async {
+        let k = key as NSString
+        if Self.kept.object(forKey: k) != nil { return }
+        let o = MKMapSnapshotter.Options()
+        o.region = region()
+        o.size = CGSize(width: 112, height: 112)
+        o.scale = 3
+        o.preferredConfiguration = MKStandardMapConfiguration(emphasisStyle: .muted)
+        o.pointOfInterestFilter = .excludingAll
+        guard let shot = try? await MKMapSnapshotter(options: o).start() else { return }
+        let r = UIGraphicsImageRenderer(size: o.size)
+        let out = r.image { _ in
+            shot.image.draw(at: .zero)
+            UIColor(Palette.ink).setFill()
+            for p in pins {
+                let q = shot.point(for: p)
+                UIBezierPath(ovalIn: CGRect(x: q.x - 3, y: q.y - 3, width: 6, height: 6)).fill()
+            }
+        }
+        Self.kept.setObject(out, forKey: k)
+        image = out
+    }
 }
