@@ -1,5 +1,6 @@
 import SwiftUI
 import simd
+import MapKit
 
 /// A PLACE'S PAGE (Part 16), first build: a country's page from the data server's country facts (D9 as it is on the
 /// server: `country/<cc>.json`), any other place with what the app carries (16.2 "No page yet": the top, the marking
@@ -113,6 +114,9 @@ final class PlacePageState {
 
     /// the first page, grown from what opened it on the map, the card or the list (A16.1)
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
+        // (a page still sinking away is gone already for the new one: a town picked a moment after a page was closed
+        // opened nothing, 14 Nov)
+        if !pages.isEmpty, pages.allSatisfy(\.closing) { pages.removeAll() }
         guard pages.isEmpty else { return }
         push(key, name: name, what: what, country: country, code: code, from: origin)
     }
@@ -349,19 +353,21 @@ extension PlacePageState.OnePage {
         // (a town with no GeoNames id is keyed by its name, "gb/London": found by it, the most peopled of that name;
         // London's and New York's pages had no facts at all)
         let last = String(id.split(separator: "/", maxSplits: 1).last ?? "")
-        guard case .ok(let d) = await Servers.data.file("cities/\(cc).json"),
-              let all = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]],
-              let t = Int(last).flatMap({ gid in all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }) })
+        var all: [[String: Any]] = []
+        if case .ok(let d) = await Servers.data.file("cities/\(cc).json") { all = (try? JSONSerialization.jsonObject(with: d) as? [[String: Any]]) ?? [] }
+        guard let t = Int(last).flatMap({ gid in all.first(where: { ($0["gid"] as? NSNumber)?.intValue == gid }) })
                 ?? all.filter({ $0["gid"] == nil && $0["n"] as? String == last })
                       .max(by: { (($0["p"] as? NSNumber)?.intValue ?? 0) < (($1["p"] as? NSNumber)?.intValue ?? 0) }),
-              key.id == id else { return }
+              key.id == id else { await loadSmallTown(cc, id: id, near: all); return }
         var out = PlacePageState.Facts()
         // (a capital says so first: Paris's page never said it is France's)
         if CollectionStore.shared.collection(CollectionStore.capitals)?.items.contains(where: { $0.key == key }) == true,
            let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) { out.rows.append(("Capital of", land)) }
         if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let e = t["ele"] as? NSNumber { out.rows.append(("Height", "\(e.intValue) m")) }
-        if let z = t["tz"] as? String, let tz = TimeZone(identifier: z) {
+        var zone = (t["tz"] as? String).flatMap(TimeZone.init(identifier:))
+        if zone == nil, let ll = t["ll"] as? [NSNumber], ll.count == 2 { zone = await Self.zone(lat: ll[0].doubleValue, lon: ll[1].doubleValue) }
+        if let tz = zone {
             let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
             out.rows.append(("Local time", f.string(from: Date())))
         }
@@ -377,6 +383,45 @@ extension PlacePageState.OnePage {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
         guard key.id == id else { return }
+        facts = out
+    }
+
+    /// A POINT'S CLOCK from Apple's maps, where the data has none (14 Nov: the cities of 20 countries, the United States,
+    /// the United Kingdom and South Korea among them, carry no time zone, so their pages had no local time); nil offline
+    static func zone(lat: Double, lon: Double) async -> TimeZone? {
+        guard let r = MKReverseGeocodingRequest(location: CLLocation(latitude: lat, longitude: lon)) else { return nil }
+        return await withCheckedContinuation { (c: CheckedContinuation<TimeZone?, Never>) in
+            r.getMapItems { items, _ in c.resume(returning: items?.first?.timeZone) }
+        }
+    }
+
+    /// A TOWN THE CITIES' FILE DOES NOT HAVE (14 Nov: Lucerne Valley's page was its name and two buttons over an empty
+    /// screen): what the towns' index knows of it (its people; its region is already under its name), and its guide's opening words where
+    /// Wikivoyage has an article near it
+    /// (its local time from the nearest town the cities' file has, which shares its clock)
+    fileprivate func loadSmallTown(_ cc: String, id: String, near all: [[String: Any]]) async {
+        guard let t = TownIndex.shared.hit(id), key.id == id else { return }
+        var out = PlacePageState.Facts()
+        if t.people > 0 { out.rows.append(("People", PlacePageState.big(Double(t.people)))) }
+        let k = cos(t.lat * .pi / 180)
+        let near = all.min { a, b in
+            func d(_ x: [String: Any]) -> Double {
+                guard let ll = x["ll"] as? [NSNumber], ll.count == 2 else { return .infinity }
+                let dy = ll[0].doubleValue - t.lat, dx = (ll[1].doubleValue - t.lon) * k
+                return dy * dy + dx * dx
+            }
+            return d(a) < d(b)
+        }
+        var zone = (near?["tz"] as? String).flatMap(TimeZone.init(identifier:))
+        if zone == nil { zone = await Self.zone(lat: t.lat, lon: t.lon) }
+        if let tz = zone {
+            let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
+            out.rows.append(("Local time", f.string(from: Date())))
+        }
+        if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon) {
+            out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: t.name), 620); out.proseWikivoyage = true
+        }
+        guard key.id == id, !out.rows.isEmpty || !out.prose.isEmpty else { return }
         facts = out
     }
 
