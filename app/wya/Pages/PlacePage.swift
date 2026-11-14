@@ -696,7 +696,7 @@ extension PlacePageState {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
             !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|\\bnasa\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b",
+            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b",
                     options: [.regularExpression, .caseInsensitive]) == nil
         }
     }

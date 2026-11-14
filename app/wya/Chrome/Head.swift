@@ -1004,7 +1004,10 @@ struct SearchResults: View {
         // countries cannot be taken to Paris or the Eiffel Tower)
         let spotSearch = placesSearch || (map.pinsMode && !head.settingsOpen)
         let _ = spotSearch ? TownIndex.shared.load() : ()
-        let townHits = spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID) : []
+        // (on the Countries map: the big towns of that name, for the search's town rows; 14 Nov)
+        let onCountries = !spotSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
+        let townHits = spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID)
+            : onCountries && typed ? TownIndex.shared.hits(head.query, open: nil, limit: 6).filter { $0.people >= 50_000 } : []
         // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
         let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
@@ -1026,9 +1029,29 @@ struct SearchResults: View {
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
         let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) }
-        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty ? baseKeys
-            : Array((hits.prefix(max(3, 8 - anyRegionHits.count - sights.count)).map { ResultKey.place($0) }
-                     + namedRegions.map { .anyRegion($0.key) } + sights + otherRegions.map { .anyRegion($0.key) }).prefix(8))
+        // (14 Nov: a traveller types a city: big towns, 50,000 people and more, found by their own or other names
+        // ("lucerne" is Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country
+        // that only looks like it)
+        let bigTowns = countriesSearch && typed ? Array(townHits.prefix(2)) : []
+        let w0 = map.world
+        let countryStarts = hits.filter { i in w0.map { $0.places[i].n.townFolded.hasPrefix(typedFold) || $0.aliases[typedFold] != nil } ?? false }
+        let countryOthers = hits.filter { !countryStarts.contains($0) }
+        let exactRegions = namedRegions.filter { $0.name.townFolded == typedFold }
+        let namedRest = namedRegions.filter { $0.name.townFolded != typedFold }
+        // (a town leads only by its own name, typed whole or a big town's start; one found by another name, Luzern for
+        // "lucerne", comes after the sights: Bari's other name "Bali" never put it before Bali. A town that is also a
+        // region of that name in its country, Paris, is shown once, as the region)
+        let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
+        let exactTowns = bigTowns.filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || ($0.people >= 200_000 && $0.name.townFolded.hasPrefix(typedFold))) }
+        // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
+        let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
+            ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
+        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty ? baseKeys
+            : Array((countryStarts.prefix(3).map { ResultKey.place($0) } + exactTowns.map { ResultKey.town($0.key) }
+                     + exactRegions.map { .anyRegion($0.key) } + namedRest.map { .anyRegion($0.key) } + sights
+                     + otherTowns.map { ResultKey.town($0.key) }
+                     + countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count)).map { ResultKey.place($0) }
+                     + otherRegions.map { .anyRegion($0.key) }).prefix(8))
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
@@ -1332,7 +1355,8 @@ struct SearchResults: View {
             if let f = id.flatMap({ Flags.square($0.lowercased()) }) { f.resizable().interpolation(.high) } else { Color.clear }
         }
         .frame(width: 22, height: 22)
-        .overlay { if id.flatMap({ Flags.square($0.lowercased()) }) != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) } }
+        .overlay { if id.flatMap({ Flags.square($0.lowercased()) }) != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.22), lineWidth: 0.75) } }
+        // (14 Nov: at 12% Japan's white flag on the white row read as a bare red dot)
     }
     private func regionRow(_ h: RegionSearch.Hit?) -> some View {
         Button { regionAct(h) } label: {
@@ -1437,6 +1461,7 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         guard let h else { return }
         if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: h.people >= 1_000_000 ? 60_000 : 25_000, name: h.name) }
+        else if !map.placesMode { ContentView.openTown(file: h.file, id: h.id, head: head, map: map) }
         else { map.showTown(file: h.file, id: h.id) }
     }
     /// A PLACE FOUND IN PINS: Apple's map goes to it, the spot in the middle of the map's room (where Add pin drops a

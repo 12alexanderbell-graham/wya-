@@ -615,6 +615,12 @@ struct ContentView: View {
             water.go(.quarter)
             map.showThing(file: t.file, id: t.id)
         }
+        // a town picked in the Countries map's search: shown in Places too (14 Nov)
+        if new == .places, let t = Self.directTown {
+            Self.directTown = nil
+            water.go(.quarter)
+            map.showTown(file: t.file, id: t.id)
+        }
     }
     /// A6.7 A COUNTRY PICKED FROM THE LIST: the list goes down with the water to 25% while the camera flies into the
     /// country and its regions draw in
@@ -794,6 +800,14 @@ struct ContentView: View {
 
     /// A SIGHT FROM THE COUNTRIES MAP'S SEARCH: Places, with the sight shown, straight from the mode change
     @MainActor static var directThing: (file: String, id: String)?
+    @MainActor static var directTown: (file: String, id: String)?
+    @MainActor static func openTown(file: String, id: String, head: HeadState, map: MapController) {
+        if head.mode == .places { map.showTown(file: file, id: id); return }
+        directTown = (file, id)
+        head.quickStamp = false
+        head.mode = .places
+        Feel.notch()
+    }
     @MainActor static func openThing(file: String, id: String, head: HeadState, map: MapController) {
         if head.mode == .places { map.showThing(file: file, id: id); return }
         directThing = (file, id)

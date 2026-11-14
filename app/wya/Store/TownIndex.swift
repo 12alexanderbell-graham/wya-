@@ -206,31 +206,38 @@ final class TownIndex {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, !q.isEmpty else { return [] }
         if let l = last, l.q == q, l.open == open { return l.hits }
+        // (14 Nov: a town whose name is exactly what was typed, in its own name or one of its other names, comes first:
+        // "lucerne" is Lucerne (Luzern) before Lucerne Valley; the other names are looked at every time, not only when
+        // the own names left room)
+        var exact: [Hit] = []
         var home: [Hit] = [], away: [Hit] = [], homeIn: [Hit] = [], awayIn: [Hit] = []
         for r in rows {
             let mine = r.hit.file == open
-            if r.folded.hasPrefix(q) {
+            if r.folded == q {
+                if exact.count < limit { exact.append(r.hit) }
+            } else if r.folded.hasPrefix(q) {
                 if mine { home.append(r.hit) } else if away.count < limit { away.append(r.hit) }
             } else if q.count >= 3, r.folded.contains(q) {
                 if mine { if homeIn.count < limit { homeIn.append(r.hit) } } else if awayIn.count < limit { awayIn.append(r.hit) }
             }
             // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
-            if home.count >= limit || (open == nil && away.count >= limit) { break }
+            if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { break }
         }
-        var h = Array((home + homeIn + away + awayIn).prefix(limit))
-        // other names (Tiflis for Tbilisi), biggest first, the open country's first
-        if h.count < limit, q.count >= 2, alt.count == rows.count {
+        var exactAlt: [Hit] = [], homeAlt: [Hit] = [], awayAlt: [Hit] = []
+        if q.count >= 2, alt.count == rows.count {
             let bar = "|" + q
-            var homeAlt: [Hit] = [], awayAlt: [Hit] = []
-            let have = Set(h.map(\.id))
             for (i, a) in alt.enumerated() where !a.isEmpty && a.contains(bar) {
                 let hit = rows[i].hit
-                guard !have.contains(hit.id) else { continue }
-                if hit.file == open { homeAlt.append(hit) } else { awayAlt.append(hit) }
-                if homeAlt.count + awayAlt.count >= limit { break }
+                if (a + "|").contains(bar + "|") {
+                    if exactAlt.count < limit { exactAlt.append(hit) }
+                } else if hit.file == open { if homeAlt.count < limit { homeAlt.append(hit) } } else if awayAlt.count < limit { awayAlt.append(hit) }
+                if exactAlt.count >= limit { break }
             }
-            h = Array((h + homeAlt + awayAlt).prefix(limit))
         }
+        // exact names, biggest first (the rows are in order of size)
+        let exactAll = (exact + exactAlt).sorted { $0.people > $1.people }
+        var seen = Set<String>()
+        let h = Array((exactAll + home + homeIn + away + awayIn + homeAlt + awayAlt).filter { seen.insert($0.id).inserted }.prefix(limit))
         last = (q, open, h)
         return h
     }
