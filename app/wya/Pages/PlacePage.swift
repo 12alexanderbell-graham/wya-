@@ -846,6 +846,12 @@ private struct PageLayer: View {
     let page: PlacePageState.OnePage
     let top: Bool
     @State private var ground: [Color] = []
+    /// the same colours as numbers, for the living field behind the page
+    @State private var groundRGB: [SIMD3<Double>] = []
+    /// how far the page is pulled down past its top (the photo grows into it)
+    @State private var pull: CGFloat = 0
+    /// how far the page's end is below the screen's bottom (the white under the capsule gives way to the ground there)
+    @State private var endBelow: CGFloat = .infinity
     @GestureState private var headerLive = false
     /// where the long lists start in the page (the head's search takes the page there), and the scroll's place
     @State private var listsY: CGFloat?
@@ -883,8 +889,8 @@ private struct PageLayer: View {
                 .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous).offset(x: r.minX, y: r.minY).size(r.size))
                 .opacity(min(1, Double(p) / 0.3))
                 .allowsHitTesting(top && page.p > 0.98)
-                .onAppear { ground = Self.colours(page.country) }
-                .onChange(of: page.country) { _, c in ground = Self.colours(c) }
+                .onAppear { groundRGB = Self.rgb(page.country); ground = groundRGB.map(Self.color) }
+                .onChange(of: page.country) { _, c in groundRGB = Self.rgb(c); ground = groundRGB.map(Self.color) }
         }
     }
 
@@ -900,15 +906,25 @@ private struct PageLayer: View {
                 if let u = hero {
                     // (wider than the page's margins by drawing past them: the margins of everything under it stay)
                     Color.clear
-                        .frame(height: Self.heroH(L))
-                        .overlay { PagePhoto(url: u) }
+                        .frame(height: Self.heroH(L) + pull)
+                        .overlay(alignment: .bottom) {
+                            PagePhoto(url: u) { img in
+                                // a town's or a thing's gradient is its photo's colour; a country's stays its flag's
+                                guard key.kind != .country, let cg = img.cgImage else { return }
+                                let c = Self.rgb(cg, photo: true)
+                                if !c.isEmpty { groundRGB = c; withAnimation(Motion.quick) { ground = c.map(Self.color) } }
+                            }
+                        }
                         .clipped()
                         // its lower third dissolves into the page along a soft, uneven line, never a straight one (P05 §2)
-                        .mask { PhotoDissolve(seed: page.name) }
+                        // pulled down past the top, the photo grows up into the gap (never the ground above it);
+                        // the dissolve keeps its own height at the bottom
+                        .mask { VStack(spacing: 0) { Rectangle().frame(height: pull); PhotoDissolve(seed: page.name) } }
                         // the name on the photo's dissolve, inside its height (the buttons follow the photo at once)
                         .overlay(alignment: .bottom) { top(key, L: L, under: true).padding(.horizontal, 16).padding(.bottom, 8) }
                         .padding(.horizontal, -16)
                         .padding(.bottom, -12)
+                        .padding(.top, -pull)
                 } else {
                     top(key, L: L)
                 }
@@ -941,6 +957,9 @@ private struct PageLayer: View {
             // the ground scrolls with the page (one layer behind the whole scroll, 16.3)
             // (under a photo the gradient starts where the photo starts to dissolve, so its colour is what it dissolves into)
             .background(alignment: .top) { groundView(L: L, from: page.facts?.photo.flatMap { Self.commons($0, width: 1400) } != nil ? Self.heroH(L) * 0.5 : 0) }
+            // and the same ground again at the page's end, going on below it, so pulling past the end shows it too,
+            // never plain white: top and bottom alike
+            .background(alignment: .bottom) { endGround(L: L) }
         }
         .scrollIndicators(.hidden)
         .scrollPosition($spot)
@@ -956,6 +975,7 @@ private struct PageLayer: View {
                                    .init(color: Palette.white, location: 0.55), .init(color: Palette.white, location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .frame(height: L.H - L.capsule.minY + 64)
+                .opacity(Double(min(1, max(0, (endBelow - 40) / 220))))
                 .allowsHitTesting(false)
         }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
@@ -976,6 +996,13 @@ private struct PageLayer: View {
         .onDisappear { if top, water.mini != 0 { withAnimation(Motion.chrome) { water.mini = 0 } } }
         // THE TOP EDGE (Apple's scroll edge under a bar; the system's never reaches this page, laid out over the whole
         // screen): once words go up under the head they blur and fade into it, never read through its glass
+        .onScrollGeometryChange(for: CGFloat.self, of: { max(0, -($0.contentOffset.y + $0.contentInsets.top)) }) { _, v in
+            if v != pull { pull = v }
+        }
+        .onScrollGeometryChange(for: CGFloat.self, of: { $0.contentSize.height + $0.contentInsets.bottom - $0.contentOffset.y - $0.containerSize.height }) { _, v in
+            let r = v.rounded()
+            if r != endBelow { endBelow = r }
+        }
         .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y + $0.contentInsets.top > 4 }) { _, u in
             if u != under { withAnimation(Motion.quick) { under = u } }
         }
@@ -1234,30 +1261,59 @@ private struct PageLayer: View {
 
     /// `from`: how far down the page the gradient's strongest colour starts (under a photo, where it dissolves)
     private func groundView(L: Layout, from: CGFloat = 0) -> some View {
-        let c = ground.isEmpty ? [Palette.cream] : ground
-        let top = c[0].opacity(0.85)
-        // the ground goes on above the page's top in its strongest colour, so pulling the page down past its top shows
-        // more of the same ground, never white
-        return VStack(spacing: 0) {
-            Rectangle().fill(top).frame(height: L.H)
-            LinearGradient(stops: [
-                .init(color: top, location: 0),
-                .init(color: (c.count > 1 ? c[1] : c[0]).opacity(0.45), location: 0.35),
-                .init(color: (c.count > 2 ? c[2] : c[0]).opacity(0.12), location: 0.7),
-                .init(color: Palette.white.opacity(0), location: 1),
-            ], startPoint: .top, endPoint: .bottom)
-            .frame(height: L.H * 0.75)
-        }
-        .offset(y: -L.H + from)
-        .allowsHitTesting(false)
+        // THE GROUND is the app's living gradient (the shader, never a plain linear ramp), in the flag's or the
+        // photo's own colours. It goes on above the page's top at full strength, so pulling the page down shows more
+        // of it, never white, and it settles into the page's white further down along the field's own soft edge.
+        let c = groundRGB.isEmpty ? [Palette.named["cream"] ?? SIMD3(0.98, 0.96, 0.94)] : groundRGB
+        let four = (0 ..< 4).map { c[$0 % c.count] }
+        return LivingField(custom: four, saturation: 1.16, power: 2.0)
+            .frame(height: L.H + L.H * 0.95)
+            .mask {
+                VStack(spacing: 0) {
+                    Rectangle().frame(height: L.H + L.H * 0.25)
+                    // (the mask's edge is the only ramp: the colours are the shader's own)
+                    Rectangle().fill(.linearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom))
+                        .frame(height: L.H * 0.7)
+                }
+            }
+            .opacity(0.85)
+            .offset(y: -L.H + from)
+            .allowsHitTesting(false)
+    }
+
+    /// the ground at the page's end: the same living field, coming in over the last part of the page and going on a
+    /// screen below its end
+    private func endGround(L: Layout) -> some View {
+        let c = groundRGB.isEmpty ? [Palette.named["cream"] ?? SIMD3(0.98, 0.96, 0.94)] : groundRGB
+        let four = (0 ..< 4).map { c[(c.count - 1 - $0 % c.count + c.count) % c.count] }
+        return LivingField(custom: four, saturation: 1.16, power: 2.0)
+            .frame(height: L.H * 1.6)
+            .mask {
+                VStack(spacing: 0) {
+                    Rectangle().fill(.linearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom))
+                        .frame(height: L.H * 0.6)
+                    Rectangle().frame(height: L.H)
+                }
+            }
+            .opacity(0.85)
+            .offset(y: L.H)
+            .allowsHitTesting(false)
     }
 
     /// a flag's colours: drawn small, each pixel the nearest of the twelve, the commonest first (white and ink left
     /// out where others exist, so the ground is the flag's own colour)
-    static func colours(_ id: String) -> [Color] {
+    static func colours(_ id: String) -> [Color] { rgb(id).map(color) }
+    static func rgb(_ id: String) -> [SIMD3<Double>] {
+        guard let ui = Flags.wideImage(id), let cg = ui.cgImage else { return [] }
+        return rgb(cg)
+    }
+    static func color(_ v: SIMD3<Double>) -> Color { Color(red: v.x, green: v.y, blue: v.z) }
+    static func colours(_ cg: CGImage, photo: Bool = false) -> [Color] { rgb(cg, photo: photo).map(color) }
+    /// a picture's colours the same way: a flag's, or (a town's or a thing's page, P05 §2) its photo's
+    /// `photo`: a photo's greys and beiges (stone, concrete, haze) are not its colour either
+    static func rgb(_ cg: CGImage, photo: Bool = false) -> [SIMD3<Double>] {
         let entries = Array(Palette.named)
         let names: [(Color, SIMD3<Double>)] = entries.map { (Color(red: $0.value.x, green: $0.value.y, blue: $0.value.z), $0.value) }
-        guard let ui = Flags.wideImage(id), let cg = ui.cgImage else { return [] }
         let w = 16, h = 12
         var px = [UInt8](repeating: 0, count: w * h * 4)
         guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -1271,10 +1327,10 @@ private struct PageLayer: View {
             count[best] += 1
         }
         let order = count.indices.filter { count[$0] > 0 }.sorted { count[$0] > count[$1] }
-        let plain: Set<String> = ["white", "ink", "cream"]
+        let plain: Set<String> = photo ? ["white", "ink", "cream", "grey", "beige-dark"] : ["white", "ink", "cream"]
         let coloured = order.filter { !plain.contains(entries[$0].key) }
         let use = coloured.isEmpty ? order : coloured
-        return use.prefix(3).map { names[$0].0 }
+        return use.prefix(3).map { names[$0].1 }
     }
 }
 
@@ -1516,6 +1572,8 @@ private struct ActivitiesList: View {
 /// again while it reloads (AsyncImage keeps nothing)
 struct PagePhoto: View {
     let url: URL
+    /// told the picture once it is there (the page takes its colours from it)
+    var onImage: ((UIImage) -> Void)? = nil
     @State private var image: UIImage?
     private static let kept: NSCache<NSURL, UIImage> = { let c = NSCache<NSURL, UIImage>(); c.countLimit = 120; return c }()
 
@@ -1523,6 +1581,7 @@ struct PagePhoto: View {
         // a kept photo is drawn at once, before any task runs
         if let i = image ?? Self.kept.object(forKey: url as NSURL) {
             Image(uiImage: i).resizable().scaledToFill()
+                .onAppear { onImage?(i) }
         } else {
             Palette.cream.task(id: url) {
                 guard let (d, _) = try? await URLSession.shared.data(from: url), let i = UIImage(data: d) else { return }
