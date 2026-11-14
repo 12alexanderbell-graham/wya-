@@ -27,6 +27,8 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var spots: [RouteSpot]? = nil
     /// the colour you gave it (the picker's own value); nil: black (8.3)
     var pick: ColourPick? = nil
+    /// a straight line between its ends (how a route starts, 14 Nov); nil: Apple's way by road or on foot
+    var straight: Bool? = nil
     /// its way as directions gave it, with the ends and travel asked for (its name and colour are not part of it)
     struct Way: Equatable { var from: UUID; var to: UUID; var walk: Bool?; var spots: [RouteSpot]?; var points: [[Double]]; var distance: Double; var time: Double }
     var way: Way {
@@ -36,7 +38,13 @@ struct PinRoute: Codable, Identifiable, Hashable {
     /// its line's colour on the map
     var ink: UIColor { pick.map { UIColor($0.color) } ?? UIColor(Palette.ink) }
 
-    var words: String { Self.words(distance: distance, time: time) }
+    var words: String { straight == true ? Self.words(distance: distance) : Self.words(distance: distance, time: time) }
+    /// a straight line's words: only how far
+    static func words(distance: Double) -> String {
+        let km = Measurement(value: distance, unit: UnitLength.meters).converted(to: .kilometers)
+        return km.formatted(.measurement(width: .abbreviated, usage: .road,
+                                         numberFormatStyle: .number.precision(.fractionLength(km.value < 10 ? 1 : 0))))
+    }
     static func words(distance: Double, time: Double) -> String {
         let km = Measurement(value: distance, unit: UnitLength.meters).converted(to: .kilometers)
         let d = km.value < 10 ? km.formatted(.measurement(width: .abbreviated, usage: .road, numberFormatStyle: .number.precision(.fractionLength(1))))
@@ -306,6 +314,8 @@ final class PinRoutes {
         asking += 1
         let me = asking
         noRoute = false
+        // A ROUTE STARTS STRAIGHT (14 Nov): a line from one end to the other; its menu turns it to roads or paths
+        if current == nil { keepStraight(f, t, from: fid, to: tid); return }
         let req = Self.request(f, t, walk: false)
         req.requestsAlternateRoutes = true
         Task {
@@ -331,6 +341,31 @@ final class PinRoutes {
             PinsMapState.shared.redrawRoutes()
             PinsMapState.shared.frame(route: current)
         }
+    }
+
+    /// a straight route between two ends: kept at once (one undo takes it back), drawn in from its start
+    private func keepStraight(_ a: Place, _ b: Place, from f: UUID, to t: UUID) {
+        let d = CLLocation(latitude: a.lat, longitude: a.lon).distance(from: CLLocation(latitude: b.lat, longitude: b.lon))
+        let spots = [f, t].compactMap { id in temp[id] ?? routes.lazy.compactMap { r in r.spots?.first { $0.id == id } }.first }
+        var new = PinRoute(from: f, to: t, points: [[a.lat, a.lon], [b.lat, b.lon]], distance: d, time: 0)
+        new.straight = true
+        new.map = PinMaps.shared.shown
+        new.spots = spots.isEmpty ? nil : spots
+        current = new.id
+        routes.append(new)
+        save()
+        let id = new.id
+        let box = UndoBox<(PinRoute, Int)>()
+        MarkStore.shared.did("Route added", back: { [weak self] in
+            guard let self, let k = self.routes.firstIndex(where: { $0.id == id }) else { return }
+            box.value = (self.routes[k], k)
+            self.remove(id, undoable: false)
+        }, forth: { [weak self] in
+            guard let self, let (r, k) = box.value, !self.routes.contains(where: { $0.id == id }) else { return }
+            self.routes.insert(r, at: min(k, self.routes.count)); self.save(); self.undone(id)
+        })
+        PinsMapState.shared.redrawRoutes()
+        PinsMapState.shared.frame(route: current)
     }
 
     /// the route made or changed by the row: one undo takes it back
@@ -482,6 +517,15 @@ final class PinRoutes {
         // from the newest way asked for (a Walk right after a Reverse walks the reversed route), else as it is now
         var r = asked[id]?.1 ?? routes[k]
         if reverse { swap(&r.from, &r.to) }
+        // a straight route reversed stays straight: its line turned round, no question to Apple
+        if routes[k].straight == true, walk == nil {
+            let was = routes[k].way
+            routes[k].from = r.from; routes[k].to = r.to; routes[k].points.reverse()
+            save()
+            PinsMapState.shared.redrawRoutes()
+            if !quiet { changed(id, was: was) }
+            return
+        }
         if let walk { r.walk = walk ? true : nil }
         guard let f = end(r.from, r), let t = end(r.to, r) else { return }
         askedCount += 1
@@ -502,8 +546,9 @@ final class PinRoutes {
             let was = routes[j].way
             var way = r.way
             way.points = Self.points(best.polyline); way.distance = best.distance; way.time = best.expectedTravelTime
-            // only its way changes (a colour picked meanwhile stays)
+            // only its way changes (a colour picked meanwhile stays); it goes by road or path from now on
             routes[j].way = way
+            routes[j].straight = nil
             // the row making this route follows it (Apple's other ways were for the old ends)
             if current == id, open { from = way.from; to = way.to; others = [] }
             save()
@@ -514,6 +559,20 @@ final class PinRoutes {
         }
     }
 
+    /// a route by road or path back to a straight line between its ends (one undo)
+    func straighten(_ id: UUID) {
+        guard let k = routes.firstIndex(where: { $0.id == id }), let f = end(routes[k].from, routes[k]), let t = end(routes[k].to, routes[k]) else { return }
+        let was = routes[k].way
+        routes[k].points = [[f.lat, f.lon], [t.lat, t.lon]]
+        routes[k].distance = CLLocation(latitude: f.lat, longitude: f.lon).distance(from: CLLocation(latitude: t.lat, longitude: t.lon))
+        routes[k].time = 0
+        routes[k].walk = nil
+        routes[k].straight = true
+        save()
+        PinsMapState.shared.redrawRoutes()
+        changed(id, was: was)
+    }
+
     /// THE ROUTE'S HOLD MENU (11.5), in the book's groups: Reverse · Walk · Drive · Colour | Directions in Apple Maps · Share |
     /// Delete. The way it goes now is shown but can't be chosen (never a tick). Not yet: Transit (Apple's directions
     /// give no transit lines to draw), lists and plans (with their parts).
@@ -521,10 +580,11 @@ final class PinRoutes {
         guard let r = routes.first(where: { $0.id == id }), let f = end(r.from, r), let t = end(r.to, r) else { return nil }
         // each runs once the menu has gone (as every hold menu's rows)
         let after = { (g: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: g) }
-        let walking = r.walk == true
+        let walking = r.walk == true, straight = r.straight == true
         let reverse = UIAction(title: "Reverse") { [weak self] _ in after { self?.reask(id, reverse: true) } }
-        let walk = UIAction(title: "Walk", attributes: walking ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
-        let drive = UIAction(title: "Drive", attributes: walking ? [] : .disabled) { [weak self] _ in after { self?.reask(id, walk: false) } }
+        let line = UIAction(title: "Straight", attributes: straight ? .disabled : []) { [weak self] _ in after { self?.straighten(id) } }
+        let walk = UIAction(title: "Walk", attributes: walking && !straight ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: true) } }
+        let drive = UIAction(title: "Drive", attributes: !walking && !straight ? .disabled : []) { [weak self] _ in after { self?.reask(id, walk: false) } }
         // Colour: the picker in the water at 50%, as a pin's, the line taking each colour as the finger moves (8.3)
         let colour = UIAction(title: "Colour") { [weak self] _ in
             after {
@@ -539,7 +599,7 @@ final class PinRoutes {
         let share = UIAction(title: "Share") { [weak self] _ in after { self?.share(id) } }
         let delete = UIAction(title: "Delete", attributes: .destructive) { [weak self] _ in after { Feel.lift(); self?.remove(id) } }
         return UIMenu(title: "\(f.title) to \(t.title)", children: [
-            UIMenu(options: .displayInline, children: [reverse, walk, drive, colour]),
+            UIMenu(options: .displayInline, children: [reverse, line, walk, drive, colour]),
             UIMenu(options: .displayInline, children: [directions, share]),
             UIMenu(options: .displayInline, children: [delete]),
         ])

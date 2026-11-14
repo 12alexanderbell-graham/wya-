@@ -625,6 +625,9 @@ final class PinsMapState {
     }
     // ROUTES (8.3): the kept routes' lines and labels on Apple's map, and while the Route row is open Apple's other ways
     @ObservationIgnored private var routeOverlays: [MKOverlay] = []
+    /// the routes already drawn once: one not among them is new, and draws itself in from its start to its end
+    @ObservationIgnored private var routesSeen: Set<UUID>?
+    @ObservationIgnored var growing: Set<UUID> = []
     @ObservationIgnored private var routeLabels: [RouteLabel] = []
     /// THE CAMERA ON THE MAP PICKED: all its pins, routes and drawings in sight above the water (nothing in it: left
     /// where it is)
@@ -678,9 +681,11 @@ final class PinsMapState {
             let c = route.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
             let l = PinRouteLine(coordinates: c, count: c.count)
             l.routeID = route.id
+            if let seen = routesSeen, !seen.contains(route.id) { growing.insert(route.id) }
             lines.append(l)
             labels.append(RouteLabel(id: route.id, at: c[c.count / 2], words: route.words))
         }
+        routesSeen = (routesSeen ?? []).union(r.routes.map(\.id))
         // the new ones on before the old ones go (never a blink)
         v.addOverlays(lines, level: .aboveRoads)
         v.addAnnotations(labels)
@@ -1428,6 +1433,8 @@ struct PinsMapView: UIViewRepresentable {
                 r.lineWidth = l.other ? 2 : 3
                 r.lineCap = .round
                 r.lineJoin = .round
+                // A ROUTE JUST MADE travels from its start to its end (12 Nov 17:02), once
+                if let id = l.routeID, PinsMapState.shared.growing.remove(id) != nil { RouteGrow.run(r) }
                 return r
             }
             guard let p = o as? MKPolyline else { return MKOverlayRenderer(overlay: o) }
@@ -2428,5 +2435,39 @@ struct PinMapThumb: View {
         }
         Self.kept.setObject(out, forKey: k)
         image = out
+    }
+}
+
+
+/// a new route drawn in along its way, start to end, in under a second (ease out); the line itself, nothing added
+@MainActor
+final class RouteGrow: NSObject {
+    private let renderer: MKPolylineRenderer
+    private var link: CADisplayLink?
+    private var t0: CFTimeInterval = 0
+    private static var running: [RouteGrow] = []
+    private static let seconds = 0.9
+
+    private init(_ r: MKPolylineRenderer) { renderer = r }
+
+    static func run(_ r: MKPolylineRenderer) {
+        let g = RouteGrow(r)
+        r.strokeEnd = 0
+        g.t0 = CACurrentMediaTime()
+        let l = CADisplayLink(target: g, selector: #selector(step))
+        l.add(to: .main, forMode: .common)
+        g.link = l
+        running.append(g)
+    }
+
+    @objc private func step() {
+        let t = min(1, (CACurrentMediaTime() - t0) / Self.seconds)
+        let e = 1 - pow(1 - t, 3)
+        renderer.strokeEnd = CGFloat(e)
+        renderer.setNeedsDisplay()
+        if t >= 1 {
+            link?.invalidate(); link = nil
+            Self.running.removeAll { $0 === self }
+        }
     }
 }
