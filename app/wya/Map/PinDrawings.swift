@@ -177,9 +177,9 @@ final class PinDrawings {
     }
 
     /// DRAW IN PINS: the tool on Apple's map; a stroke that comes back to its start closes a shape, Done keeps a line
-    func start(on v: MKMapView, water: Water) {
+    func start(on v: MKMapView, water: Water, quick: Bool = false) {
         DispatchQueue.main.async { if water.stop != .quarter { water.go(.quarter) } }
-        DrawTool.shared.start(.any,
+        DrawTool.shared.start(quick ? .line : .any,
             toGeo: { [weak v] p in
                 guard let v else { return nil }
                 let c = v.convert(p, toCoordinateFrom: v)
@@ -189,7 +189,7 @@ final class PinDrawings {
                 guard let v else { return nil }
                 return v.convert(CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon), toPointTo: v)
             },
-            finish: { [weak self] kind, points in self?.add(kind, points) })
+            finish: { [weak self] kind, points in self?.add(kind, points) }, oneStroke: quick)
     }
 }
 

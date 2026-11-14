@@ -30,14 +30,17 @@ final class DrawTool {
     @ObservationIgnored private(set) var toScreen: ((Geo) -> CGPoint?)?
     @ObservationIgnored private var finish: ((Kind, [Geo]) -> Void)?
     @ObservationIgnored private var cancelled: (() -> Void)?
+    /// one stroke and done: the finger lifting keeps it (Pins' quick route)
+    @ObservationIgnored private var oneStroke = false
 
     static let closeDistance: CGFloat = 24
     static let clean: CGFloat = 1.5
 
     /// drawing starts on a map: what it is to be, the map's two conversions, and what happens when it is done or given up
     func start(_ kind: Kind, toGeo: @escaping (CGPoint) -> Geo?, toScreen: @escaping (Geo) -> CGPoint?,
-               finish: @escaping (Kind, [Geo]) -> Void, cancel: @escaping () -> Void = {}) {
+               finish: @escaping (Kind, [Geo]) -> Void, cancel: @escaping () -> Void = {}, oneStroke: Bool = false) {
         self.kind = kind
+        self.oneStroke = oneStroke
         self.toGeo = toGeo; self.toScreen = toScreen
         self.finish = finish; self.cancelled = cancel
         points = []; marks = []; live = []
@@ -116,6 +119,7 @@ final class DrawTool {
             if !closes { Feel.tick() }
         }
         if closes { if kind == .any { kind = .shape }; done() }
+        else if oneStroke, moved, canFinish { done() }
     }
 
     /// a second finger came down, or the system took the touch: the stroke so far is dropped, nothing is kept

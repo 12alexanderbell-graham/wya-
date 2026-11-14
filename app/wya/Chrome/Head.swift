@@ -535,11 +535,18 @@ struct HeadView: View {
     }
 
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
-        let names = ["Quick stamping", "Your passport", "Your history", "Upload"]
-        let on = (i == 0 && head.quickStamp) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
+        // in Pins the first tool is the quick route (2 Oct): one stroke of the finger, kept as a line as it lifts
+        let pins = head.mode == .pins
+        let names = [pins ? "Quick route" : "Quick stamping", "Your passport", "Your history", "Upload"]
+        let on = (i == 0 && !pins && head.quickStamp) || (i == 0 && pins && DrawTool.shared.on) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
         let act = {
             switch i {
             // with no country (Regions' menu) quick stamping is shown in place but refuses (6.3)
+            case 0 where pins:
+                head.toolsOpen = false
+                if DrawTool.shared.on { DrawTool.shared.cancel() }
+                else if let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true { PinDrawings.shared.start(on: v, water: water, quick: true) }
+                else { Feel.refuse() }
             case 0: if head.filtersMenu { Feel.refuse() } else { head.quickStamp.toggle() }
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
             case 1: BookState.shared.toggle()
@@ -552,7 +559,7 @@ struct HeadView: View {
             }
         }
         // the one row of its hold menu (11.4: the tool's name over a row that does what a tap does, named by it)
-        let row = [head.quickStamp ? "Quick stamping off" : "Quick stamping on",
+        let row = [pins ? "Quick route" : head.quickStamp ? "Quick stamping off" : "Quick stamping on",
                    BookState.shared.isOpen ? "Put the passport away" : "Passport",
                    head.history ? "History off" : "History on", "Upload"][i]
         return Button {
@@ -562,7 +569,7 @@ struct HeadView: View {
             // the icons (31 Oct 11:47; 13 Nov: quick stamping the bolt, quick and not a stamp): quick stamping the bolt, the passport the book, history the two ends joined, upload
             // the arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
             // (no grow, no fade)
-            let key = ["quick", "lists-books", "history", "cal-out"][i]
+            let key = [pins ? "route" : "quick", "lists-books", "history", "cal-out"][i]
             ZStack {
                 Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
                 Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
@@ -707,7 +714,7 @@ struct ModeWheel: View {
         ZStack {
             WheelFace(at: at + head.turnHint, reveal: max(reveal, min(1, head.turnHint * 3)), ink: ink, cover: toolsP, hideTop: hideDot)
                 .allowsHitTesting(false)
-            FirstTool(p: toolsP, lit: lit, ink: ink)
+            FirstTool(p: toolsP, lit: head.mode == .pins ? (DrawTool.shared.on ? 1 : 0) : lit, ink: ink, key: head.mode == .pins ? "route" : "quick")
                 .allowsHitTesting(false)
             // A PAGE OPEN: the dot carries a white cross and a tap on it closes the page 
             if PlacePageState.shared.isOpen && !tools && !hideDot {
@@ -861,6 +868,8 @@ private struct FirstTool: View, Animatable {
     /// 0: off, 1: on
     var lit: CGFloat
     var ink: Color
+    /// its icon: quick stamping's stamp, or in Pins the quick route's
+    var key = "quick"
 
     /// the capsule's end reaches the dot over the last quarter of its way out: the dot changes over exactly that
     static let start: CGFloat = 0.75
@@ -879,13 +888,13 @@ private struct FirstTool: View, Animatable {
         if p > Self.start {
             ZStack {
                 Circle().fill(ink).frame(width: dot, height: dot).opacity(Double(max(1 - t, lit)))
-                Icon5(key: "quick", ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
+                Icon5(key: key, ink: lit > 0.5 ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
                     .opacity(Double(t))
             }
         } else if lit > 0.5 {
             // quick stamping left on with the tools away: its stamp stays on the dot in white, so a tap on the map is
             // seen to stamp (7 Nov review, board 17: nothing showed it was on)
-            Icon5(key: "quick", ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
+            Icon5(key: key, ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
         }
     }
 }
