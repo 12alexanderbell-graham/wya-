@@ -199,8 +199,12 @@ struct DrawLayer: View {
 
     var body: some View {
         if tool.on {
-            TimelineView(.animation) { _ in
+            TimelineView(.animation) { t in
                 Canvas { ctx, _ in
+                    // (14 Nov: the frame's time is read here, so the drawing is worked out again every frame and stays
+                    // on its places while the map moves and zooms; without it the line stood still on the glass while
+                    // the map zoomed under it, then jumped to its real place on Done)
+                    _ = t.date
                     guard let to = tool.toScreen else { return }
                     let pts = tool.points.compactMap(to)
                     var line = Path()
@@ -212,23 +216,11 @@ struct DrawLayer: View {
                         if pts.isEmpty { line.move(to: l) } else { line.addLine(to: l) }
                         for p in tool.live.dropFirst() { line.addLine(to: p) }
                     }
-                    let style = StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
-                    // (white under the ink, so the line reads over dark land and the sea alike)
-                    ctx.stroke(line, with: .color(.white), style: StrokeStyle(lineWidth: 5.5, lineCap: .round, lineJoin: .round))
-                    ctx.stroke(line, with: .color(Palette.ink), style: style)
-                    // the corners kept (each stroke's ends and every tapped corner)
-                    for m in tool.marks where m < pts.count {
-                        let p = pts[m]
-                        let r = CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)
-                        ctx.fill(Path(r), with: .color(.white))
-                        ctx.fill(Path(r.insetBy(dx: 1.5, dy: 1.5)), with: .color(Palette.ink))
-                    }
-                    // where a shape closes, once it has the corners to
-                    if tool.kind != .line, tool.points.count >= 2, let f = pts.first {
-                        let d = DrawTool.closeDistance
-                        let c = Path(ellipseIn: CGRect(x: f.x - d, y: f.y - d, width: 2 * d, height: 2 * d))
-                        ctx.stroke(c, with: .color(Palette.ink.opacity(0.5)), style: StrokeStyle(lineWidth: 1.5))
-                    }
+                    // drawn exactly as it will be kept: the same width, colour and dashes, no white edge, no corner
+                    // marks, no ring (14 Nov)
+                    let w = CGFloat(PinsDockState.shared.drawWidth)
+                    let dash: [CGFloat] = PinsDockState.shared.drawDash ? [w * 2.5, w * 2] : []
+                    ctx.stroke(line, with: .color(Palette.ink), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round, dash: dash))
                 }
             }
             .allowsHitTesting(false)

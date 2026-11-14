@@ -714,7 +714,9 @@ struct ModeWheel: View {
         ZStack {
             WheelFace(at: at + head.turnHint, reveal: max(reveal, min(1, head.turnHint * 3)), ink: ink, cover: toolsP, hideTop: hideDot)
                 .allowsHitTesting(false)
-            FirstTool(p: toolsP, lit: head.mode == .pins ? (DrawTool.shared.on ? 1 : 0) : lit, ink: ink, key: head.mode == .pins ? "route" : "quick")
+            // (14 Nov: in Pins the dot stays a plain black dot; drawing from the sheet never puts the route mark on it, only
+            // the open tools capsule shows the quick route lit)
+            FirstTool(p: toolsP, lit: head.mode == .pins ? (DrawTool.shared.on && tools ? 1 : 0) : lit, ink: ink, key: head.mode == .pins ? "route" : "quick")
                 .allowsHitTesting(false)
             // A PAGE OPEN: the dot carries a white cross and a tap on it closes the page 
             if PlacePageState.shared.isOpen && !tools && !hideDot {

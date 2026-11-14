@@ -662,7 +662,14 @@ final class PinsMapState {
         let midX = Double(left) + seenW / 2, midY = Double(top) + seenH / 2
         let whole = MKMapRect(x: r.midX - midX * per, y: r.midY - midY * per,
                               width: Double(b.width) * per, height: Double(b.height) * per)
-        v.setVisibleMapRect(whole, animated: true)
+        // (14 Nov: one smooth glide, never Apple's zoom-out-and-back jump; no move at all when it is all in view)
+        let cur = v.visibleMapRect
+        let curPer = cur.width / Double(b.width)
+        let curSeen = MKMapRect(x: cur.minX + Double(left) * curPer, y: cur.minY + Double(top) * curPer, width: seenW * curPer, height: seenH * curPer)
+        if curSeen.contains(r.insetBy(dx: r.width * 0.08 / 1.16, dy: r.height * 0.08 / 1.16)), curPer < per * 3 { return }
+        UIView.animate(withDuration: Motion.reduce ? 0.25 : 0.7, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0, options: [.allowUserInteraction]) {
+            v.setVisibleMapRect(whole, animated: false)
+        }
     }
 
     func redrawRoutes() {
@@ -946,7 +953,10 @@ struct PinsMapView: UIViewRepresentable {
         }
         // (while drawing, a finger draws: Apple's one-finger scroll waits)
         let drawing = DrawTool.shared.on
-        if v.isScrollEnabled == drawing { v.isScrollEnabled = !drawing }
+        // (14 Nov: two fingers still move the map while drawing; one finger draws. Turning the map's scrolling off
+        // had stopped two-finger moves too, so the map could not be moved at all mid-drawing)
+        if !v.isScrollEnabled { v.isScrollEnabled = true }
+        context.coordinator.panWithTwo(v, drawing)
         let L = water.layout
         // Apple's credit (Legal) on the map just above the water, at the sheet's inner left (Apple asks for it to be
         // seen); at full nothing of the map is seen
@@ -1321,6 +1331,19 @@ struct PinsMapView: UIViewRepresentable {
             return true
         }
         var drawGestures: [UIGestureRecognizer] = []
+        private var twoFingerPan: Bool?
+        /// Apple's own map pans with one finger, or (while drawing) only with two
+        func panWithTwo(_ v: MKMapView, _ on: Bool) {
+            guard twoFingerPan != on else { return }
+            twoFingerPan = on
+            func walk(_ u: UIView) {
+                for g in u.gestureRecognizers ?? [] where !drawGestures.contains(where: { $0 === g }) {
+                    if let p = g as? UIPanGestureRecognizer, !(p is UIScreenEdgePanGestureRecognizer) { p.minimumNumberOfTouches = on ? 2 : 1 }
+                }
+                for s in u.subviews { walk(s) }
+            }
+            walk(v)
+        }
         @objc func drawPanned(_ g: UIPanGestureRecognizer) {
             let p = g.location(in: g.view)
             switch g.state {
@@ -1739,6 +1762,7 @@ struct PinsWater: View {
     let form: Water.Form
     let captionY: CGFloat
     var store = PinStore.shared
+    @FocusState private var naming: Bool
 
     var body: some View {
         let L = water.layout
@@ -1754,8 +1778,20 @@ struct PinsWater: View {
                         // 19:18), the real name blurring in over it when it comes
                         let name = p.shownTitle
                         ZStack {
-                            Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
-                                .id(name).transition(.blurReplace)
+                            if editable {
+                                // (14 Nov: the title IS the name: typed in place, the place's name standing in it until
+                                // you give it one; no second "Name" field under it)
+                                TextField("", text: Binding(get: { p.name }, set: { v in
+                                    if v.count > 60 { Feel.refuse() }
+                                    store.rename(p.id, v)
+                                }), prompt: Text(p.region.isEmpty ? name : p.region).foregroundStyle(Palette.ink))
+                                .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                                .multilineTextAlignment(.center).lineLimit(1)
+                                .focused($naming).submitLabel(.done)
+                            } else {
+                                Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
+                                    .id(name).transition(.blurReplace)
+                            }
                         }
                         .animation(Motion.quick, value: name)
                         Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
@@ -1773,8 +1809,16 @@ struct PinsWater: View {
         // (clear of the Share circle on each side while the sheet is up, so the name stays centred)
         .frame(width: L.W - 2 * L.sheetInset - 32 - (store.selected != nil && water.stop != .quarter && water.stop != .closed ? 96 : 0))
         .position(x: L.W / 2, y: captionY)
-        .allowsHitTesting(false)
+        .allowsHitTesting(editable)
+        // typing its name: the water to full for the keyboard, back to its own height after
+        .onChange(of: naming) { _, t in
+            store.typing = t
+            if t { water.fitHalf = nil; water.go(.full) } else if water.stop == .full { water.go(.half) }
+        }
     }
+
+    /// the pin's sheet is up: its title is typed in place
+    private var editable: Bool { store.selected != nil && water.stop != .quarter && water.stop != .closed }
 }
 
 
@@ -1908,9 +1952,7 @@ struct PinsList: View {
                 }
             }
             Spacer(minLength: 0)
-            // the shown map: the black band side to side, as every chosen row in the app, and the plain tick of two
-            // bars (never the pointed one)
-            if on { Icon5(key: "done", ink: Palette.white, size: 17).frame(width: 28, height: 28) }
+            // (the shown map: the black band side to side says it; no tick on top of it, 14 Nov)
         }
         .frame(minHeight: Self.rowH)
         .padding(.horizontal, 16)
@@ -1921,8 +1963,8 @@ struct PinsList: View {
             Feel.tap()
             store.selected = nil
             if on { maps.inside = true; return }
+            // (14 Nov: picking a map no longer sends the sheet down; it stays where it is and the map glides to it)
             maps.shown = m?.id
-            water.go(.quarter)
         }
         .contextMenu {
             if let m {
@@ -2109,6 +2151,17 @@ struct PinSheet: View {
     @State private var choosingPhoto = false
     @State private var chosenPhoto: PhotosPickerItem?
     @State private var rows = ScrollPosition()
+    /// the pin's rows' height, for the sheet's own height
+    @State private var contentH: CGFloat = 0
+
+    /// the sheet's 50% at the pin's rows' height (not while its colour is picked or a word typed: those need room)
+    private func fit() {
+        let L = water.layout
+        guard !picking, !typing, !store.typing, contentH > 0 else { water.fitHalf = nil; return }
+        let off = top - water.form().top
+        let need = L.capsule.minY - 24 - contentH - off
+        water.fitHalf = need > L.top(.half) + 8 ? min(need, L.top(.quarter) - 60) : nil
+    }
 
     var body: some View {
         let L = water.layout
@@ -2145,14 +2198,6 @@ struct PinSheet: View {
                     // photo, share, delete in red); under it its name, its kind, its photo and its note, each only
                     // the thing itself, no labels and no explaining
                     actions(p, width: L.W - 2 * L.sheetInset - 32)
-                    TextField("", text: Binding(get: { p.name }, set: { v in
-                        if v.count > 60 { Feel.refuse() }
-                        store.rename(p.id, v)
-                    }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                    .font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .focused($typing)
-                    .submitLabel(.done)
-                    .frame(minHeight: 44)
                     kinds(p)
                     if let img = PinStore.image(p) {
                         Menu {
@@ -2179,6 +2224,11 @@ struct PinSheet: View {
                     Color.clear.frame(height: L.H - fade + 24)
                 }
                 .padding(.horizontal, 16)
+                // (14 Nov: the sheet stands as high as the pin's rows, never higher, so nothing empty is under them)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, h in
+                    contentH = h - (L.H - fade + 24)
+                    fit()
+                }
             }
             .scrollIndicators(.hidden)
             .scrollPosition($rows)
@@ -2199,9 +2249,12 @@ struct PinSheet: View {
             .position(x: L.W / 2, y: top + max(0, L.H - top) / 2)
             // typing: the water goes to full (Part 4.4's rule), the keyboard under it
             // (and back to 50% when the keyboard goes)
+            .onChange(of: picking) { _, _ in fit() }
+            .onChange(of: store.typing) { _, _ in fit() }
             .onChange(of: typing) { _, t in
+                fit()
                 store.typing = t
-                if t { water.go(.full) } else if water.stop == .full { water.go(.half) }
+                if t { water.fitHalf = nil; water.go(.full) } else if water.stop == .full { water.go(.half) }
             }
             .onChange(of: store.selected) { _, _ in picking = false; colourIfAsked() }
             .onChange(of: store.colourAsked) { _, _ in colourIfAsked() }
@@ -2219,7 +2272,7 @@ struct PinSheet: View {
             }
             // the picker going away (closed, Reset, another pin, the water down): its moves are one undo
             .onChange(of: picking) { _, on in if on, let id = store.selected { store.colourStart(id) } else if !on { store.colourEnd() } }
-            .onDisappear { store.colourEnd(); store.typing = false }
+            .onDisappear { store.colourEnd(); store.typing = false; water.fitHalf = nil }
         }
     }
 

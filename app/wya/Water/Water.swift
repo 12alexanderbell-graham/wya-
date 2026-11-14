@@ -124,7 +124,19 @@ final class Water {
     ///)
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
-    func restTop(_ s: Stop) -> CGFloat { menuShown || lists ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s) }
+    func restTop(_ s: Stop) -> CGFloat {
+        if s == .half, let f = fitHalf, !(menuShown || lists) { return f }
+        return menuShown || lists ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s)
+    }
+    /// A SHEET AS HIGH AS WHAT IT HOLDS (14 Nov): a sheet shorter than 50% (a chosen pin's) sets its own top here; its
+    /// 50% stop is that height and it goes no higher, so no empty glass stands under its last row (Apple's sheets fit
+    /// their content the same way). nil: the ordinary stops.
+    var fitHalf: CGFloat? {
+        didSet {
+            guard fitHalf != oldValue, grab == nil, stop == .half || stop == .full else { return }
+            go(.half)
+        }
+    }
     /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
     var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
@@ -397,6 +409,7 @@ final class Water {
         if !fullAllowed { t = max(t, L.top(.half)) }
         // a country's region map with nothing open: its levels line at 25% is all there is (50% was empty glass)
         if !halfAllowed { t = max(t, L.top(.quarter)) }
+        if let f = fitHalf { t = max(t, f) }
         if t > hi { t = hi }
         fingerTop = t
         body.target = t
@@ -449,7 +462,8 @@ final class Water {
         // speed (0.1 s of it), never more than one stop from where it was picked up
         let order = Stop.allCases
         let projected = fingerTop + v * 0.1
-        var best = order.min(by: { abs(layout.top($0) - projected) < abs(layout.top($1) - projected) }) ?? .quarter
+        var best = order.min(by: { abs(restTop($0) - projected) < abs(restTop($1) - projected) }) ?? .quarter
+        if fitHalf != nil, best == .full { best = .half }
         if best == .full, !fullAllowed { best = .half }
         if !halfAllowed, best == .half || best == .full { best = .quarter }
         if PinRoutes.shared.open, best == .half || best == .full { best = .quarter }
@@ -532,6 +546,7 @@ final class Water {
         var s = s == .quarter && placesMenuUp() ? .half : s
         // (full only where something fills it: over the plain Countries map 50% is the top)
         if s == .full, !fullAllowed { s = .half }
+        if s == .full, fitHalf != nil { s = .half }
         if !halfAllowed, s == .half || s == .full { s = .quarter }
         // the Route row is the caption's line at 25%: nothing above it (as a drag, so anything asking for more)
         if PinRoutes.shared.open, s == .half || s == .full { s = .quarter }
