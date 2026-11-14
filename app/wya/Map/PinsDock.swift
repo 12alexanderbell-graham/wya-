@@ -126,10 +126,6 @@ struct PinsDock: View {
                 WordRow(items: options(c), width: w, small: true, columns: true)
                     .transition(.blurReplace)
             }
-            Text(words.isEmpty ? " " : words)
-                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                .monospacedDigit().lineLimit(1)
-                .contentTransition(.numericText())
         }
         .animation(Motion.quick, value: dock.chosen)
         .animation(Motion.quick, value: drawing)
@@ -138,7 +134,8 @@ struct PinsDock: View {
         .offset(y: Self.rowY(top) - 22)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // a tool's work done (a drawing or a measure kept, or given up): the tool lets go
-        .onChange(of: drawing) { _, on in if !on, dock.chosen == 2 || dock.chosen == 3 { dock.chosen = nil } }
+        // (a measure keeps its tool out, so what it came to stays as the title until Measure is tapped again)
+        .onChange(of: drawing) { _, on in if !on, dock.chosen == 2 { dock.chosen = nil } }
         .onChange(of: routes.open) { _, open in if !open, dock.chosen == 1 { dock.chosen = nil } }
         .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
             guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
@@ -150,8 +147,13 @@ struct PinsDock: View {
         .overlay(alignment: .topLeading) {
             let maps = PinMaps.shared
             ZStack {
-                Text(maps.map(maps.shown)?.name ?? "All pins")
+                // (14 Nov: a measure or a route's length is the title while its tool is out, never a fourth line
+                // crowding the tabs)
+                let result = dock.chosen != nil && !words.isEmpty
+                Text(result ? words : maps.map(maps.shown)?.name ?? "All pins")
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
                     .lineLimit(1).minimumScaleFactor(0.7)
                     .frame(width: L.W - 2 * L.sheetInset - (DrawTool.shared.on ? 200 : 120))
                     .allowsHitTesting(false)
@@ -229,6 +231,7 @@ struct PinsDock: View {
 
     /// under the rows: only what a route or a measure came to; never a count, never how to use a tool
     private var words: String {
+        if DrawTool.shared.on, dock.chosen == 3 { return DrawBar.caption(DrawTool.shared) }
         guard routes.open else { return dock.measured }
         // (read first, so the words change when the route is kept: the route made is not itself observed)
         let kept = routes.routes
