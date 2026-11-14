@@ -1372,7 +1372,7 @@ private struct InsideList: View {
             VStack(alignment: .leading, spacing: 1) {
                 // (a long commune, "Saint-Remy-en-Bouzemont-...", gets a little smaller before it is ever cut)
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                if !r.line.isEmpty { Text(r.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8) }
+                if !r.line.isEmpty { Text(r.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8) }
             }
             Spacer(minLength: 8)
             Button {
@@ -1549,7 +1549,7 @@ private struct ActivitiesList: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                     if !a.line.isEmpty {
-                        Text(a.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        Text(a.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
                 // (one gap between rows whatever their lines: a row of one line was centred in 52 pt, so the row

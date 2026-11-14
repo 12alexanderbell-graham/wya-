@@ -85,7 +85,7 @@ struct PageSheet: View {
             ForEach(Array(SourcesRow.lines(f, kind: key.kind, credits: credits, id: key.id).enumerated()), id: \.offset) { _, l in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(l.0).font(.subheadline).foregroundStyle(Palette.ink)
-                    Text(l.1).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                    Text(l.1).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }

@@ -717,7 +717,7 @@ struct Caption: View {
                 .padding(.top, -6)
             // an empty tail (Everywhere) keeps its line as a space, so the caption keeps its place and sizes
             Text(visible && !tail.isEmpty ? tail : Self.blank(tail, "\u{2002}"))
-                .font(.headline)
+                .font(.body.weight(.semibold))
                 .foregroundStyle(ink.opacity(0.5))
                 .contentTransition(.numericText(value: way))
                 // (rolled with the name and the number: changed at once, "World 39 of 58" stood for a frame, 12 Nov)

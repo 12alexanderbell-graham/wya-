@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// THE LISTS TAB (the square): the whole screen is the water, clear glass over the real map (as Regions' list is), with
-/// its own top row: search on the left, the four kinds (Lists, Plans, Tier lists, Books) as their icons in the middle,
-/// the plus on the right. Lists first: your wishlist always first (the map's own wishlist: what you wished there is
+/// THE LISTS TAB (the square): the living gradient, with its own top row: search on the left, the four kinds (Lists,
+/// Plans, Tier lists, Books) as one square in the middle, turned like the Map's wheel, the plus on the right. Lists first: your wishlist always first (the map's own wishlist: what you wished there is
 /// what is in it), then your lists, each a row (its first country's flag, its name, how many things are in it). A row
 /// opens the list (its things, a note shown only when the row is opened); the plus makes a new list, its name typed at
 /// once (a list left without a name is not kept).
@@ -10,8 +9,10 @@ import SwiftUI
 @Observable
 final class ListsState {
     static let shared = ListsState()
-    /// 0 Lists, 1 Plans, 2 Tier lists, 3 Books
+    /// 0 Lists, 1 Plans, 2 Tier lists, 3 Books: the kind the wheel is on, the one the shelf shows
     var kind = 0
+    /// a test's hold on the wheel mid-turn (nil: let go)
+    var testDial: CGFloat?
     /// the list open, by id ("wish" is the map's wishlist)
     var open: String?
     /// the open list's name being typed
@@ -90,6 +91,10 @@ struct ListsWater: View {
         let top = max(form.top + 12, L.safeTop)
         let room = max(56, L.capsule.minY - 8 - (top + 56))
         ZStack(alignment: .topLeading) {
+            // THE GROUND: the living gradient, the app's own (never the map: the Lists tab is not the map)
+            LivingField()
+                .frame(width: L.W, height: L.H)
+                .allowsHitTesting(false)
             VStack(spacing: 8) {
                 topRow(w)
                 Group {
@@ -131,25 +136,10 @@ struct ListsWater: View {
                         .onAppear { typing = true }
                         .frame(height: 44)
                 } else {
-                    HStack(spacing: 20) {
-                        ForEach(0 ..< 4, id: \.self) { k in
-                            Button {
-                                guard k != s.kind else { return }
-                                Feel.tap()
-                                s.kind = k
-                            } label: {
-                                Icon5(key: ListsState.kinds[k], on: k == s.kind,
-                                      ink: k == s.kind ? Palette.ink : Palette.ink.opacity(0.5), size: 24)
-                                    .frame(width: 44, height: 44).contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(ListsState.words[k])
-                            .accessibilityAddTraits(k == s.kind ? .isSelected : [])
-                        }
-                    }
+                    ListsWheel(s: s)
                 }
                 Spacer(minLength: 8)
-                // the plus: a new list, plan or tier list (books' making comes with their page)
+                // the plus makes one of the kind the wheel is on (books' making comes with their page)
                 circle("plus", dim: s.kind > 2) {
                     guard s.kind <= 2 else { Feel.refuse(); return }
                     Feel.tap()
@@ -208,37 +198,7 @@ struct ListsWater: View {
         let q = s.query.trimmingCharacters(in: .whitespaces).lowercased()
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                switch s.kind {
-                case 0:
-                    let lists = store.book.lists.filter { !$0.arch && !$0.hid }
-                    ForEach(lists.filter { q.isEmpty || $0.name.lowercased().contains(q) }) { l in
-                        let n = l.wish ? wishThings.count : things(l).count
-                        let first = l.wish ? wishThings.first?.cc : l.countries.first
-                        row(first, l.name.isEmpty ? "New list" : l.name, n == 0 ? "" : "\(n) \(n == 1 ? "place" : "places")",
-                            dim: l.name.isEmpty) {
-                            Feel.tap()
-                            withAnimation(Motion.quick) { s.open = l.id }
-                        }
-                    }
-                case 1:
-                    ForEach(store.book.plans.filter { !$0.arch && !$0.hid && (q.isEmpty || $0.name.lowercased().contains(q)) }) { p in
-                        row(nil, p.name.isEmpty ? "New plan" : p.name, Self.when(p), dim: p.name.isEmpty) {
-                            Feel.tap()
-                            withAnimation(Motion.quick) { s.open = p.id }
-                        }
-                    }
-                case 2:
-                    ForEach(store.book.tiers.filter { !$0.arch && !$0.hid && (q.isEmpty || $0.name.lowercased().contains(q)) }) { t in
-                        row(nil, t.name.isEmpty ? "New tier list" : t.name, t.count == 0 ? "" : "\(t.count) ranked", dim: t.name.isEmpty) {
-                            Feel.tap()
-                            withAnimation(Motion.quick) { s.open = t.id }
-                        }
-                    }
-                default:
-                    ForEach(store.book.books.filter { q.isEmpty || $0.name.lowercased().contains(q) }) { b in
-                        row(nil, b.name, "") { Feel.refuse() }
-                    }
-                }
+                shelf(q)
             }
             .frame(width: w, alignment: .leading)
         }
@@ -251,16 +211,94 @@ struct ListsWater: View {
         }
     }
 
-    private func row(_ cc: String?, _ name: String, _ sub: String, dim: Bool = false, _ tap: @escaping () -> Void) -> some View {
+    /// THE SHELF OF THE KIND THE WHEEL IS ON, each kind as what it is (never one card for all): Lists, the wishlist
+    /// first and then the lists as tiles two across; Plans with their days; Tier lists with their tiers; Books. A kind
+    /// with nothing in it says so, quietly, in the middle.
+    @ViewBuilder private func shelf(_ q: String) -> some View {
+        let match = { (n: String) in q.isEmpty || n.lowercased().contains(q) }
+        switch s.kind {
+        case 0:
+            let lists = store.book.lists.filter { !$0.arch && !$0.hid && match($0.name) }
+            ForEach(lists.filter(\.wish)) { l in wishTile(l) }
+            let mine = lists.filter { !$0.wish }
+            if !mine.isEmpty {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(mine) { l in listTile(l) }
+                }
+                .padding(.top, 12)
+            }
+        case 1:
+            let plans = store.book.plans.filter { !$0.arch && !$0.hid && match($0.name) }
+            if plans.isEmpty { none("No plans yet") }
+            ForEach(plans) { p in
+                row(nil, p.name.isEmpty ? "New plan" : p.name, Self.when(p), dim: p.name.isEmpty, mark: AnyView(PlanDays(plan: p))) {
+                    Feel.tap(); withAnimation(Motion.quick) { s.open = p.id }
+                }
+            }
+        case 2:
+            let tiers = store.book.tiers.filter { !$0.arch && !$0.hid && match($0.name) }
+            if tiers.isEmpty { none("No tier lists yet") }
+            ForEach(tiers) { t in
+                row(nil, t.name.isEmpty ? "New tier list" : t.name, t.count == 0 ? "" : "\(t.count) ranked", dim: t.name.isEmpty,
+                    mark: AnyView(TierStrip(tiers: t))) {
+                    Feel.tap(); withAnimation(Motion.quick) { s.open = t.id }
+                }
+            }
+        default:
+            let books = store.book.books.filter { match($0.name) }
+            if books.isEmpty { none("No books yet") }
+            ForEach(books) { b in row(nil, b.name, "") { Feel.refuse() } }
+        }
+    }
+    /// a kind with nothing in it: its words, quiet, in the middle of the shelf
+    private func none(_ t: String) -> some View {
+        Text(t).font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+            .frame(maxWidth: .infinity, minHeight: 240)
+    }
+
+    /// A LIST ON THE SHELF: a tile, its cover (until covers come: the flags of its first four countries, side by side;
+    /// none, the glass), its name at the bottom left and how many things at the right
+    private func listTile(_ l: MyList) -> some View {
+        tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
+             ccs: Array(l.countries.prefix(4)))
+    }
+    /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
+    private func wishTile(_ l: MyList) -> some View {
+        let ccs = Array(NSOrderedSet(array: wishThings.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
+        return tile(l.id, name: l.name, dim: false, count: wishThings.count, ccs: ccs)
+    }
+    private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String]) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return ListCover(ccs: ccs).frame(height: 112)
+        .overlay(alignment: .bottomLeading) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(name).font(.body.weight(.semibold))
+                    .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(2).minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                if n > 0 { Text("\(n)").font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5)) }
+            }
+            .padding(12)
+        }
+        .clipShape(shape)
+        .glassEffect(PageGlass.on, in: shape)
+        .contentShape(shape)
+        .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { s.open = id } }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name + (n > 0 ? ", \(n) \(n == 1 ? "place" : "places")" : ""))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func row(_ cc: String?, _ name: String, _ sub: String, dim: Bool = false, mark: AnyView? = nil, _ tap: @escaping () -> Void) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let cc, let f = Flags.square(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let mark { mark }
+                else if let cc, let f = Flags.square(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
-            .frame(width: 28, height: 28)
+            .frame(width: mark == nil ? 28 : 46, height: 28)
             VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.headline).foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1).minimumScaleFactor(0.7)
+                Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1).minimumScaleFactor(0.7)
                 if !sub.isEmpty {
-                    Text(sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                    Text(sub).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -286,65 +324,71 @@ struct ListsWater: View {
         }
     }
 
+    /// A LIST (LS03): its cover at the top, wide, square corners, the list's name large on it at the bottom left (a
+    /// list of no countries yet: the name alone, no cover); then its things, each its square flag at 44, its name.
+    /// A note shows when its row is tapped. Taking a thing out is in the row's hold menu, never a button on every row.
     private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat) -> some View {
-        ScrollView {
+        let ccs = Array(NSOrderedSet(array: things.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if editable, s.naming || title.isEmpty {
-                    TextField("", text: Binding(get: { store.book.lists.first { $0.id == s.open }?.name ?? "" }, set: { v in
-                        let n = String(v.prefix(60))
-                        ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].name = n } }
-                    }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .focused($naming)
-                    .submitLabel(.done)
-                    .onSubmit { s.naming = false }
-                    .onAppear { naming = true }
-                    .onChange(of: naming) { _, f in if !f { s.naming = false } }
-                    .frame(minHeight: 44)
-                } else {
-                    Text(title).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                        .frame(minHeight: 44)
-                        .onTapGesture { if editable { Feel.tap(); s.naming = true } }
+                Group {
+                    if editable, s.naming || title.isEmpty {
+                        TextField("", text: Binding(get: { store.book.lists.first { $0.id == s.open }?.name ?? "" }, set: { v in
+                            let n = String(v.prefix(60))
+                            ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].name = n } }
+                        }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                        .font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                        .focused($naming)
+                        .submitLabel(.done)
+                        .onSubmit { s.naming = false }
+                        .onAppear { naming = true }
+                        .onChange(of: naming) { _, f in if !f { s.naming = false } }
+                    } else {
+                        Text(title).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                            .lineLimit(2).minimumScaleFactor(0.6)
+                            .onTapGesture { if editable { Feel.tap(); s.naming = true } }
+                    }
                 }
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .bottomLeading)
+                .padding(.horizontal, ccs.isEmpty ? 0 : 16)
+                .padding(.bottom, ccs.isEmpty ? 0 : 12)
+                .frame(minHeight: ccs.isEmpty ? 52 : 180, alignment: .bottomLeading)
+                .background { if !ccs.isEmpty { ListCover(ccs: ccs) } }
+                .padding(.bottom, 8)
                 ForEach(things) { t in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {
                             Group {
                                 if let cc = t.cc, let f = Flags.square(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
                             }
-                            .frame(width: 28, height: 28)
+                            .frame(width: 44, height: 44)
                             Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                             Spacer(minLength: 0)
-                            // out of the list (yours only: the wishlist is the map's own, changed on the map)
-                            if editable {
-                                Button {
-                                    Feel.lift()
-                                    withAnimation(Motion.quick) {
-                                        ListsStore.shared.change { b in
-                                            if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].items.removeAll { $0.id == t.id } }
-                                        }
-                                    }
-                                } label: {
-                                    Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
-                                        .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
-                                        .frame(width: 44, height: 44).contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Take out")
-                            }
                         }
                         // a note: not shown until its row is opened
                         if s.noted == t.id, !t.note.isEmpty {
                             Text(t.note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                                .padding(.leading, 40)
+                                .padding(.leading, 56)
                         }
                     }
-                    .frame(minHeight: 52, alignment: .leading)
+                    .frame(minHeight: 56, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         guard !t.note.isEmpty else { return }
                         Feel.tap()
                         withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id }
+                    }
+                    // out of the list (yours only: the wishlist is the map's own, changed on the map)
+                    .contextMenu {
+                        if editable {
+                            Button("Take out", role: .destructive) {
+                                withAnimation(Motion.quick) {
+                                    ListsStore.shared.change { b in
+                                        if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].items.removeAll { $0.id == t.id } }
+                                    }
+                                }
+                            }
+                        }
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -399,7 +443,7 @@ struct ListsWater: View {
                 ForEach(Array(p.days.enumerated()), id: \.offset) { i, d in
                     // (a time column only on a day with a time in it)
                     let timed = d.items.contains { $0.at != nil }
-                    Text(dayName(p, i)).font(.headline).foregroundStyle(Palette.ink)
+                    Text(dayName(p, i)).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                         .padding(.top, 20).padding(.bottom, 4)
                     ForEach(d.items) { it in
                         HStack(spacing: 12) {
@@ -627,5 +671,167 @@ struct FlowRow<Content: View>: View {
     let content: (String) -> Content
     var body: some View {
         FlowLayout(spacing: 6) { ForEach(items, id: \.self) { content($0) } }
+    }
+}
+
+/// A PLAN'S DAYS on the shelf: a cell for each of its days (up to three weeks, seven across), filled where something is
+/// planned that day; a plan of no days yet (someday) one empty week
+struct PlanDays: View {
+    let plan: Plan
+    var body: some View {
+        let days = Array(plan.days.prefix(21))
+        let cols = 7, side: CGFloat = 5, gap: CGFloat = 1.5
+        // (no days yet: one empty week, so it still reads as days and not as a speck)
+        let shown = days.isEmpty ? cols : days.count
+        let rows = max(1, Int(ceil(Double(shown) / Double(cols))))
+        VStack(alignment: .leading, spacing: gap) {
+            ForEach(0 ..< rows, id: \.self) { r in
+                HStack(spacing: gap) {
+                    ForEach(0 ..< cols, id: \.self) { c in
+                        let i = r * cols + c
+                        if i < shown {
+                            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                .fill(Palette.ink.opacity(i < days.count && !days[i].items.isEmpty ? 1 : 0.15))
+                                .frame(width: side, height: side)
+                        } else { Color.clear.frame(width: side, height: side) }
+                    }
+                }
+            }
+        }
+        .frame(width: 46, height: 28, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A TIER LIST on the shelf: its tiers' colours as thin bands, top tier first
+struct TierStrip: View {
+    let tiers: TierList
+    var body: some View {
+        VStack(spacing: 1.5) {
+            ForEach(0 ..< min(tiers.rows.count, 6), id: \.self) { i in
+                let v = Palette.named[tiers.colour(i)] ?? SIMD3(0.5, 0.5, 0.5)
+                RoundedRectangle(cornerRadius: 1, style: .continuous).fill(Color(red: v.x, green: v.y, blue: v.z))
+            }
+        }
+        .frame(width: 46, height: 28)
+        .accessibilityHidden(true)
+    }
+}
+
+/// THE KINDS' WHEEL (the Map's mode wheel, the Lists tab's four kinds): one black square in the middle of the top row,
+/// whichever kind you are on, as the Map's is one black circle. Turned, never tapped: while you turn it the kinds ride
+/// the rim in their own shapes, the one coming to the top fills in as far as it has come, a tick at each kind it
+/// passes, a click when it lands, the kind's name under it while you hold it.
+struct ListsWheel: View {
+    @Bindable var s: ListsState
+    @State private var at: CGFloat = 0
+    @State private var dragging = false
+    @State private var startAt: CGFloat = 0
+    @State private var lastTick = 0
+    @State private var reveal: CGFloat = 0
+    private let step: CGFloat = 35
+
+    var body: some View {
+        ZStack {
+            WheelFace(at: at, reveal: reveal, ink: Palette.ink, keys: ListsState.kinds)
+                .allowsHitTesting(false)
+            let i = Int(at.rounded()).clamped(0, 3)
+            let name = ListsState.words[i]
+            VStack(spacing: 0) {
+                Color.clear.frame(width: 1, height: 100 + 28)
+                Text(dragging ? name : String(repeating: "\u{2002}", count: name.count))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                    .fixedSize()
+                    .contentTransition(.numericText(value: dragging ? Double(i + 1) : 0))
+                    .animation(Motion.quick, value: dragging ? i + 1 : 0)
+                    .accessibilityHidden(true)
+            }
+            .frame(width: 200, height: 200, alignment: .top)
+            .allowsHitTesting(false)
+        }
+        .frame(width: 88, height: 44)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { g in turn(g.translation.width) }
+                .onEnded { g in letGo(g.predictedEndTranslation.width - g.translation.width) }
+        )
+        .onAppear { at = CGFloat(s.kind); lastTick = s.kind }
+        .onChange(of: s.kind) { _, k in
+            if Int(at.rounded()) != k && !dragging {
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { at = CGFloat(k) }
+            }
+        }
+        .onChange(of: s.testDial) { _, v in
+            withAnimation(Motion.chrome) {
+                if let v { dragging = true; reveal = 1; at = v } else { dragging = false; reveal = 0; at = CGFloat(s.kind) }
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Kind")
+        .accessibilityValue(ListsState.words[s.kind])
+        .accessibilityAdjustableAction { dir in
+            switch dir {
+            case .increment: choose(min(3, s.kind + 1))
+            case .decrement: choose(max(0, s.kind - 1))
+            @unknown default: break
+            }
+        }
+    }
+
+    private func turn(_ dx: CGFloat) {
+        if !dragging {
+            withAnimation(Motion.quick) { dragging = true; reveal = 1 }
+            startAt = at
+        }
+        var v = startAt - dx / step
+        if v < 0 { v = -Flow.rubber(-v, 0.5) }
+        if v > 3 { v = 3 + Flow.rubber(v - 3, 0.5) }
+        at = v
+        let i = Int(v.rounded()).clamped(0, 3)
+        if i != lastTick { lastTick = i; Feel.tick(); Sound.tick() }
+    }
+    private func letGo(_ fling: CGFloat) {
+        guard dragging else { return }
+        let projected = at - fling / step * 0.3
+        choose(Int(projected.rounded()).clamped(0, 3))
+        withAnimation(Motion.quick) { dragging = false }
+        withAnimation(Motion.chrome.delay(0.12)) { reveal = 0 }
+    }
+    private func choose(_ i: Int) {
+        let changed = i != s.kind
+        withAnimation(Motion.quick) { s.kind = i; s.query = "" }
+        lastTick = i
+        withAnimation(Motion.chrome) { at = CGFloat(i) }
+        if changed { Feel.notch(); Sound.click() }
+    }
+}
+
+/// A LIST'S COVER until covers come: the flags of its first four countries side by side, each cropped to its share,
+/// a soft white rising from the foot so words sit on it. It fills whatever it is given and never sets its own size.
+struct ListCover: View {
+    let ccs: [String]
+    var body: some View {
+        Color.clear
+            .overlay {
+                GeometryReader { g in
+                    let w = g.size.width / CGFloat(max(1, ccs.count))
+                    HStack(spacing: 0) {
+                        ForEach(ccs, id: \.self) { cc in
+                            Group { if let f = Flags.square(cc.lowercased()) { f.resizable().interpolation(.high).scaledToFill() } else { Color.clear } }
+                                .frame(width: w, height: g.size.height).clipped()
+                        }
+                    }
+                }
+            }
+            .overlay {
+                if !ccs.isEmpty {
+                    LinearGradient(colors: [Palette.white.opacity(0), Palette.white.opacity(0.85)], startPoint: .center, endPoint: .bottom)
+                }
+            }
+            .clipped()
+            .accessibilityHidden(true)
     }
 }

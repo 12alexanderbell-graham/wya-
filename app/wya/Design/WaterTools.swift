@@ -54,7 +54,7 @@ struct WaterTools: View {
             ZStack {
                 // (an empty line keeps its height, so nothing moves when words come)
                 Text(words.isEmpty ? " " : words)
-                    .font(.headline)
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .monospacedDigit()
                     .lineLimit(1)

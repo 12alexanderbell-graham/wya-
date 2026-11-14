@@ -286,7 +286,7 @@ struct ProfileBadgesList: View {
                 ForEach(all) { b in
                     VStack(spacing: 8) {
                         BadgeDisc(level: b.level, size: min(72, cell - 16))
-                        Text(b.name).font(.footnote).foregroundStyle(Palette.ink)
+                        Text(b.name).font(.subheadline).foregroundStyle(Palette.ink)
                             .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
                     }
                     .frame(width: cell)
@@ -446,8 +446,8 @@ struct NationalitiesSheet: View {
                     HStack(spacing: 12) {
                         FlagCircle(cc: cc, size: 28)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(name(cc)).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                            if i == 0 { Text("Passport").font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)) }
+                            Text(name(cc)).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                            if i == 0 { Text("Passport").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)) }
                         }
                         Spacer(minLength: 8)
                         Button {
@@ -487,7 +487,7 @@ struct NationalitiesSheet: View {
                 ForEach(found, id: \.id) { f in
                     HStack(spacing: 12) {
                         FlagCircle(cc: f.id, size: 28)
-                        Text(f.n).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                        Text(f.n).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
                         Spacer(minLength: 0)
                     }
                     .frame(minHeight: Self.rowH)

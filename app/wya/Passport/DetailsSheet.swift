@@ -687,7 +687,7 @@ struct DetailsSheet: View {
     /// a section: its name (17 pt semibold, black), then its rows
     private func section<C: View>(_ name: String, blank: Bool = false, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.headline).foregroundStyle(Palette.ink)
+            Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .frame(minHeight: 32, alignment: .bottom).edgeRow()
                 .accessibilityAddTraits(.isHeader)

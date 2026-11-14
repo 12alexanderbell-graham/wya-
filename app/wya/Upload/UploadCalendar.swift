@@ -173,7 +173,7 @@ struct UploadCalendar: View {
             HStack(spacing: Self.gap) {
                 ForEach(["M", "T", "W", "T", "F", "S", "S"].indices, id: \.self) { i in
                     Text(["M", "T", "W", "T", "F", "S", "S"][i])
-                        .font(.footnote.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -308,7 +308,7 @@ struct UploadCalendar: View {
                 }
             } else {
                 shape.fill(Palette.grey.opacity(0.35))
-                Text("\(d.d)").font(.footnote).foregroundStyle(Palette.ink.opacity(0.4)).monospacedDigit()
+                Text("\(d.d)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.4)).monospacedDigit()
             }
         }
         .frame(width: side, height: side)

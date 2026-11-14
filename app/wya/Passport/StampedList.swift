@@ -381,7 +381,7 @@ struct StampedList: View {
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.7)
                     .contentTransition(.identity)
-                Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
+                Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1).minimumScaleFactor(0.75)
                     .contentTransition(.identity)
             }

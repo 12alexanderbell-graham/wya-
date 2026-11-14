@@ -94,8 +94,8 @@ struct RegionsMenu: View {
             }
             .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
-                Text(h.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Text(country).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
         }
@@ -130,8 +130,8 @@ struct RegionsMenu: View {
             VStack(alignment: .leading, spacing: 1) {
                 // (one line, so every row is the list's 56 pt step and none is cut at rest: a long name gets a
                 // little smaller instead of a second line)
-                Text(r.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Text(note ?? r.sub).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                Text(note ?? r.sub).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
                     .contentTransition(.numericText(value: Double(r.count)))
                     .animation(Motion.quick, value: r.count)
             }

@@ -690,7 +690,7 @@ struct RouteColourSheet: View {
             // picker under it
             HStack(spacing: 16) {
                 Circle().fill(now?.color ?? Palette.ink).frame(width: 28, height: 28)
-                Text(now.map { ColourNames.name($0).firstUp } ?? "Black").font(.headline).foregroundStyle(Palette.ink)
+                Text(now.map { ColourNames.name($0).firstUp } ?? "Black").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 8)
                 if now != nil {

@@ -178,7 +178,7 @@ struct ProfileView: View {
                     .onAppear { typing = .bio }
                     // the count, while typing only
                     Text("\(store.me.bio.count)/\(ProfileStore.bioMax)")
-                        .font(.footnote.monospacedDigit())
+                        .font(.subheadline.monospacedDigit())
                         .foregroundStyle(Palette.ink.opacity(0.5))
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }

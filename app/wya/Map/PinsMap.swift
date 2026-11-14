@@ -2014,7 +2014,7 @@ struct PinsList: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
                     .minimumScaleFactor(0.85).allowsTightening(true)
-                Text(PinRoutes.shared.notes[r.id] ?? r.words).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(PinRoutes.shared.notes[r.id] ?? r.words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -2062,7 +2062,7 @@ struct PinsList: View {
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                Text(d.measure).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(d.measure).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -2095,7 +2095,7 @@ struct PinsList: View {
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
                 Text(p.shownTitle.isEmpty ? " " : p.shownTitle).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                Text(p.line).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)
         }
@@ -2176,7 +2176,7 @@ struct PinSheet: View {
                     // pin's other rows, a full screen for one colour, a Share circle in the head's corner all went, 8 Nov)
                     HStack(spacing: 16) {
                         Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
-                        Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.headline).foregroundStyle(Palette.ink)
+                        Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                             .lineLimit(1).minimumScaleFactor(0.8)
                         Spacer(minLength: 8)
                         if p.pick != nil {
@@ -2357,7 +2357,7 @@ struct PinSheet: View {
 
     private func section<C: View>(_ name: String, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(name).font(.headline).foregroundStyle(Palette.ink)
+            Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .accessibilityAddTraits(.isHeader)
             c()
         }

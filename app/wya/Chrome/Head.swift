@@ -733,7 +733,7 @@ struct ModeWheel: View {
             VStack(spacing: 0) {
                 Color.clear.frame(width: 1, height: 100 + 28)
                 Text(dragging ? name : String(repeating: "\u{2002}", count: name.count))
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(ink)
                     .fixedSize()
                     // in rises, out goes down, a pass rolls the way the wheel turns

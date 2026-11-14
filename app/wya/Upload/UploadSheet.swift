@@ -1578,7 +1578,7 @@ struct UploadSheet: View {
                     .foregroundStyle(Palette.ink.opacity(r.dropped ? 0.5 : 1))
                     .lineLimit(1)
                     .contentTransition(.identity)
-                Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.footnote)
+                Text(shown ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline)
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .lineLimit(1)
                     .contentTransition(.identity)

@@ -117,9 +117,9 @@ struct RegionCard: View {
                 // (two lines each at most, held by their bottom over Stamp | Wishlist: a big type size grows them up,
                 // never down over the buttons)
                 VStack(spacing: 2) {
-                    Text(card.name).font(.headline).foregroundStyle(Palette.ink).lineLimit(2).minimumScaleFactor(0.8)
+                    Text(card.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2).minimumScaleFactor(0.8)
                     if !card.parents.isEmpty {
-                        Text(card.parents).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        Text(card.parents).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
                 .mapHalo(map.onApple)
