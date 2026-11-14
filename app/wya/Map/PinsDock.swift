@@ -80,9 +80,9 @@ struct PinsDock: View {
     @State private var routes = PinRoutes.shared
 
     /// the first row's middle from the dock's top (the draw tool's own controls sit here too)
-    static func rowY(_ top: CGFloat) -> CGFloat { top + 80 }
+    static func rowY(_ top: CGFloat) -> CGFloat { top + 74 }
     /// the map's name: its own line at the sheet's top, centred, with room under it
-    static func titleY(_ top: CGFloat) -> CGFloat { top + 34 }
+    static func titleY(_ top: CGFloat) -> CGFloat { top + 30 }
     /// where what is under the dock starts (your maps' rows): under the second row when a tool is chosen
     @MainActor static func bottom(_ top: CGFloat) -> CGFloat {
         top + (PinsDockState.shared.chosen == nil && !DrawTool.shared.on ? 112 : 168)
@@ -90,52 +90,46 @@ struct PinsDock: View {
 
     var body: some View {
         let L = water.layout
-        let w = L.W - 2 * L.sheetInset - 32
-        let drawing = DrawTool.shared.on
-        // THE TOOLS (14 Nov): two rows of plain words on the water, no capsule, no icons. The first row is the five
-        // tools; the one chosen stays black and the others go to 50%. The second row is the chosen tool's options.
-        VStack(spacing: 4) {
-            // (14 Nov: drawing keeps this row, so another tool is one tap away; Cancel, Undo and Done sit on the
-            // title's line, Cancel leading and Done trailing as on Apple's sheets)
-            Group {
-                WordRow(items: [
-                    .init(word: "Pin") {
-                        close()
-                        dock.addPin(water: water)
-                    },
-                    .init(word: "Route", on: dock.chosen == 1) {
-                        if dock.chosen == 1 { close() } else { close(); dock.chosen = 1; water.go(.quarter); routes.openEmpty() }
-                    },
-                    .init(word: "Draw", on: dock.chosen == 2) {
-                        if dock.chosen == 2 { close(); return }
-                        guard let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true else { Feel.refuse(); return }
-                        close(); dock.chosen = 2
-                        PinDrawings.shared.start(on: v, water: water)
-                    },
-                    .init(word: "Measure", on: dock.chosen == 3) {
-                        if dock.chosen == 3 { close(); return }
-                        close(); dock.chosen = 3
-                        dock.measure(water: water)
-                    },
-                    .init(word: "Files", on: dock.chosen == 4) {
-                        if dock.chosen == 4 { close() } else { close(); dock.chosen = 4 }
-                    },
-                ], width: w, anyOn: dock.chosen != nil)
-            }
+        let w = L.W - 2 * L.sheetInset - 16
+        // THE TOOLS (14 Nov, redone): the five tools as words, the one out a black chip with white words (as every
+        // chosen thing in the app); under it, that tool's choices shown as what they make (a line's weight, a dashed
+        // line, the colour, a line or an area), words only where a word is the thing (Straight, Drive, Walk; Import,
+        // Export). Drawing or measuring: a cross and a tick in glass circles at the title's two ends, Undo beside the tick.
+        VStack(spacing: 0) {
+            ChipRow(width: w, items: [
+                .init(on: false, act: { close(); dock.addPin(water: water) }) { _ in Text("Pin") },
+                .init(on: dock.chosen == 1, act: {
+                    if dock.chosen == 1 { close() } else { close(); dock.chosen = 1; water.go(.quarter); routes.openEmpty() }
+                }) { _ in Text("Route") },
+                .init(on: dock.chosen == 2, act: {
+                    if dock.chosen == 2 { close(); return }
+                    guard let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true else { Feel.refuse(); return }
+                    close(); dock.chosen = 2
+                    PinDrawings.shared.start(on: v, water: water)
+                }) { _ in Text("Draw") },
+                .init(on: dock.chosen == 3, act: {
+                    if dock.chosen == 3 { close(); return }
+                    close(); dock.chosen = 3
+                    dock.measure(water: water)
+                }) { _ in Text("Measure") },
+                .init(on: dock.chosen == 4, act: {
+                    if dock.chosen == 4 { close() } else { close(); dock.chosen = 4 }
+                }) { _ in Text("Files") },
+            ])
             if let c = dock.chosen {
-                WordRow(items: options(c), width: w, small: true, columns: true)
+                ChipRow(width: w, items: options(c), columns: true)
                     .transition(.blurReplace)
             }
         }
+        .font(.body.weight(.semibold))
         .animation(Motion.quick, value: dock.chosen)
-        .animation(Motion.quick, value: drawing)
         .frame(width: w)
         .frame(width: L.W, height: L.H, alignment: .top)
         .offset(y: Self.rowY(top) - 22)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        // a tool's work done (a drawing or a measure kept, or given up): the tool lets go
-        // (a measure keeps its tool out, so what it came to stays as the title until Measure is tapped again)
-        .onChange(of: drawing) { _, on in if !on, dock.chosen == 2 { dock.chosen = nil } }
+        // a drawing kept or given up: the draw tool lets go (a measure keeps its tool out, so what it came to stays as
+        // the title until Measure is tapped again)
+        .onChange(of: DrawTool.shared.on) { _, on in if !on, dock.chosen == 2 { dock.chosen = nil } }
         .onChange(of: routes.open) { _, open in if !open, dock.chosen == 1 { dock.chosen = nil } }
         .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
             guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
@@ -143,35 +137,28 @@ struct PinsDock: View {
             for u in urls { n += PinFiles.bring(u, country: { PinsMapView.Coordinator.country(map, $0) }) ?? 0 }
             if n == 0 { Feel.refuse() } else { Feel.tap(); PinsMapState.shared.frameShownMap() }
         }
-        // THE MAP'S NAME, centred on its own line over the tools; inside a map's list at 50%, back at its left
+        // THE TITLE LINE: the map's name centred (or what a measure or a route came to while its tool is out); inside a
+        // map's list at 50%, back at its left; drawing or measuring, the cross at its left, Undo and the tick at its right
         .overlay(alignment: .topLeading) {
             let maps = PinMaps.shared
+            let t = DrawTool.shared
+            let result = dock.chosen != nil && !words.isEmpty
             ZStack {
-                // (14 Nov: a measure or a route's length is the title while its tool is out, never a fourth line
-                // crowding the tabs)
-                let result = dock.chosen != nil && !words.isEmpty
                 Text(result ? words : maps.map(maps.shown)?.name ?? "All pins")
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(width: L.W - 2 * L.sheetInset - (DrawTool.shared.on ? 200 : 120))
+                    .frame(width: L.W - 2 * L.sheetInset - (t.on ? 200 : 120))
                     .allowsHitTesting(false)
-                if DrawTool.shared.on {
-                    let t = DrawTool.shared
-                    HStack(spacing: 0) {
-                        Button { Feel.tap(); t.cancel() } label: { SheetWord(word: "Cancel") }
-                            .buttonStyle(.plain)
+                if t.on {
+                    HStack(spacing: 10) {
+                        GlassCircle(icon: "cross", label: "Cancel") { t.cancel() }
                         Spacer(minLength: 0)
-                        Button { if t.marks.isEmpty { Feel.refuse() } else { Feel.tap(); t.undo() } } label: {
-                            SheetWord(word: "Undo", dim: t.marks.isEmpty)
-                        }
-                        .buttonStyle(.plain)
-                        Button { if t.canFinish { Feel.tap(); t.done() } else { Feel.refuse() } } label: {
-                            SheetWord(word: "Done", strong: true, dim: !t.canFinish)
-                        }
-                        .buttonStyle(.plain)
+                        GlassCircle(icon: "undo", label: "Undo", dim: t.marks.isEmpty) { t.undo() }
+                        GlassCircle(icon: "done", label: "Done", dim: !t.canFinish, filled: t.canFinish) { t.done() }
                     }
+                    .transition(.blurReplace)
                 } else if maps.inside, water.stop != .quarter {
                     HStack {
                         Button { Feel.tap(); maps.inside = false } label: {
@@ -183,7 +170,8 @@ struct PinsDock: View {
                     }
                 }
             }
-            .frame(width: L.W - 2 * L.sheetInset - 16, height: 44)
+            .animation(Motion.quick, value: t.on)
+            .frame(width: L.W - 2 * L.sheetInset - 24, height: 44)
             .position(x: L.W / 2, y: Self.titleY(top))
             .frame(width: L.W, height: L.H)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
@@ -199,33 +187,49 @@ struct PinsDock: View {
     }
 
     /// the second row: the chosen tool's options, the current value black
-    private func options(_ c: Int) -> [WordRow.Item] {
+    private func options(_ c: Int) -> [ChipRow.Item] {
         switch c {
         case 1:
             return [("Straight", "straight"), ("Drive", "drive"), ("Walk", "walk")].map { w, k in
-                WordRow.Item(word: w, on: dock.routeWay == k) { dock.routeWay = k }
+                ChipRow.Item(on: dock.routeWay == k, act: { dock.routeWay = k }) { _ in Text(w).font(.subheadline.weight(.semibold)) }
             }
         case 2:
             let last = PinDrawings.shared.all.last
-            return [("Thin", 2.0), ("Medium", 4.0), ("Thick", 7.0)].map { w, v in
-                WordRow.Item(word: w, on: dock.drawWidth == v) { dock.drawWidth = v }
-            } + [
-                .init(word: "Dashed", on: dock.drawDash) { dock.drawDash.toggle() },
-                // the colour wheel for the newest drawing (as its hold menu's Colour)
-                .init(word: "Colour", dim: last == nil) {
+            let widths: [ChipRow.Item] = [("Thin", 2.0), ("Medium", 4.0), ("Thick", 7.0)].map { name, v in
+                ChipRow.Item(on: dock.drawWidth == v, label: name, act: { dock.drawWidth = v }) { on in
+                    LineSample(width: v, dash: dock.drawDash, ink: on ? Palette.white : Palette.ink)
+                }
+            }
+            return widths + [
+                ChipRow.Item(on: dock.drawDash, label: "Dashed", act: { dock.drawDash.toggle() }) { on in
+                    LineSample(width: 3, dash: true, ink: on ? Palette.white : Palette.ink)
+                },
+                // the newest drawing's colour, as a swatch; a tap opens the colour wheel for it
+                ChipRow.Item(on: false, dim: last == nil, label: "Colour", act: {
                     guard let d = last else { return }
                     if DrawTool.shared.on { DrawTool.shared.cancel() }
                     dock.chosen = nil
                     PinDrawings.shared.colouring = d.id
                     water.go(.half)
+                }) { _ in
+                    // (Apple's colour well: the colour inside a ring of every hue)
+                    ZStack {
+                        Circle().strokeBorder(AngularGradient(colors: [.red, .yellow, .green, .cyan, .blue, .purple, .red], center: .center), lineWidth: 3)
+                        Circle().fill(last.map { Color(uiColor: $0.ink) } ?? Palette.ink).padding(5)
+                    }
+                    .frame(width: 24, height: 24)
                 },
             ]
         case 3:
-            return [WordRow.Item(word: "Line", on: !dock.measureArea) { dock.measureArea = false; dock.measure(water: water) },
-                    WordRow.Item(word: "Area", on: dock.measureArea) { dock.measureArea = true; dock.measure(water: water) }]
+            return [ChipRow.Item(on: !dock.measureArea, label: "Line", act: { dock.measureArea = false; dock.measure(water: water) }) { on in
+                        LineSample(width: 3, dash: false, ink: on ? Palette.white : Palette.ink)
+                    },
+                    ChipRow.Item(on: dock.measureArea, label: "Area", act: { dock.measureArea = true; dock.measure(water: water) }) { on in
+                        AreaSample(ink: on ? Palette.white : Palette.ink)
+                    }]
         default:
-            return [WordRow.Item(word: "Import") { dock.importing = true },
-                    WordRow.Item(word: "Export") { PinFiles.export() }]
+            return [ChipRow.Item(on: false, act: { dock.importing = true }) { _ in Text("Import").font(.subheadline.weight(.semibold)) },
+                    ChipRow.Item(on: false, act: { PinFiles.export() }) { _ in Text("Export").font(.subheadline.weight(.semibold)) }]
         }
     }
 
@@ -345,5 +349,111 @@ struct SheetWord: View {
             .padding(.horizontal, 10)
             .frame(height: 44)
             .contentShape(Rectangle())
+    }
+}
+
+
+/// A ROW OF CHIPS (Pins' tools and their choices): each in its own equal part of the row; the one chosen a black chip
+/// with its content white, the rest plain ink on the glass; one that can't be used yet at 30%
+struct ChipRow: View {
+    struct Item {
+        var on: Bool
+        var dim = false
+        var label: String? = nil
+        let act: () -> Void
+        let content: (Bool) -> AnyView
+        init<V: View>(on: Bool, dim: Bool = false, label: String? = nil, act: @escaping () -> Void, @ViewBuilder content: @escaping (Bool) -> V) {
+            self.on = on; self.dim = dim; self.label = label; self.act = act
+            self.content = { AnyView(content($0)) }
+        }
+    }
+    let width: CGFloat
+    let items: [Item]
+    /// a tool's choices: together in the middle, 20 pt apart
+    var columns = false
+
+    var body: some View {
+        // (14 Nov: every word at its own size, never squeezed: the tools spread from edge to edge with even gaps, a
+        // tool's choices sit together in the middle under them)
+        HStack(spacing: columns ? 20 : 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { k, it in
+                if k > 0, !columns { Spacer(minLength: 2) }
+                Button {
+                    if it.dim { Feel.refuse(); return }
+                    Feel.tap()
+                    it.act()
+                } label: {
+                    it.content(it.on)
+                        .foregroundStyle(it.on ? Palette.white : Palette.ink)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background { if it.on { Capsule().fill(Palette.ink) } }
+                        .opacity(it.dim ? 0.3 : 1)
+                        .frame(height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(it.label ?? "")
+                .accessibilityAddTraits(it.on ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+        .frame(width: width, height: 44)
+        .animation(Motion.quick, value: items.map(\.on))
+    }
+}
+
+/// a line as it will be drawn: its weight, solid or dashed
+struct LineSample: View {
+    let width: Double
+    let dash: Bool
+    let ink: Color
+    var body: some View {
+        Canvas { ctx, size in
+            var p = Path()
+            let w = CGFloat(width)
+            p.move(to: CGPoint(x: w / 2 + 1, y: size.height / 2))
+            p.addLine(to: CGPoint(x: size.width - w / 2 - 1, y: size.height / 2))
+            ctx.stroke(p, with: .color(ink), style: StrokeStyle(lineWidth: w, lineCap: .round, dash: dash ? [w * 2.5, w * 2] : []))
+        }
+        .frame(width: 30, height: 14)
+    }
+}
+
+/// an area: a closed shape, its inside at a quarter of its colour
+struct AreaSample: View {
+    let ink: Color
+    var body: some View {
+        let shape = Path { p in
+            p.move(to: CGPoint(x: 3, y: 12)); p.addLine(to: CGPoint(x: 10, y: 2)); p.addLine(to: CGPoint(x: 25, y: 4))
+            p.addLine(to: CGPoint(x: 27, y: 13)); p.closeSubpath()
+        }
+        return ZStack {
+            shape.fill(ink.opacity(0.25))
+            shape.stroke(ink, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+        }
+        .frame(width: 30, height: 15)
+    }
+}
+
+/// a glass circle on a sheet's title line (Cancel, Undo, Done): 44 pt; `filled`: the one that finishes, ink with a white mark
+struct GlassCircle: View {
+    let icon: String
+    let label: String
+    var dim = false
+    var filled = false
+    let act: () -> Void
+    var body: some View {
+        Button { if dim { Feel.refuse() } else { Feel.tap(); act() } } label: {
+            Icon5(key: icon, ink: filled ? Palette.white : Palette.ink, size: 17)
+                .frame(width: 44, height: 44)
+                .background { if filled { Circle().fill(Palette.ink) } }
+                .contentShape(Circle())
+                .opacity(dim ? 0.3 : 1)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(filled ? .identity : PageGlass.head, in: .circle)
+        .accessibilityLabel(label)
     }
 }
