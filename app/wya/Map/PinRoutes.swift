@@ -316,6 +316,17 @@ final class PinRoutes {
         noRoute = false
         // A ROUTE STARTS STRAIGHT (14 Nov): a line from one end to the other; its menu turns it to roads or paths
         if current == nil { keepStraight(f, t, from: fid, to: tid); return }
+        // a straight route whose end was moved stays straight: its line between the new ends
+        if let id = current, let k = routes.firstIndex(where: { $0.id == id }), routes[k].straight == true {
+            let was = routes[k].way
+            routes[k].from = fid; routes[k].to = tid
+            routes[k].points = [[f.lat, f.lon], [t.lat, t.lon]]
+            routes[k].distance = CLLocation(latitude: f.lat, longitude: f.lon).distance(from: CLLocation(latitude: t.lat, longitude: t.lon))
+            save()
+            PinsMapState.shared.redrawRoutes()
+            if was.from != fid || was.to != tid { changed(id, was: was) }
+            return
+        }
         let req = Self.request(f, t, walk: false)
         req.requestsAlternateRoutes = true
         Task {
@@ -517,10 +528,14 @@ final class PinRoutes {
         // from the newest way asked for (a Walk right after a Reverse walks the reversed route), else as it is now
         var r = asked[id]?.1 ?? routes[k]
         if reverse { swap(&r.from, &r.to) }
-        // a straight route reversed stays straight: its line turned round, no question to Apple
+        // a straight route reversed, or an end of it moved, stays straight: its line drawn again between its ends, no
+        // question to Apple
         if routes[k].straight == true, walk == nil {
+            guard let f = end(r.from, r), let t = end(r.to, r) else { return }
             let was = routes[k].way
-            routes[k].from = r.from; routes[k].to = r.to; routes[k].points.reverse()
+            routes[k].from = r.from; routes[k].to = r.to
+            routes[k].points = [[f.lat, f.lon], [t.lat, t.lon]]
+            routes[k].distance = CLLocation(latitude: f.lat, longitude: f.lon).distance(from: CLLocation(latitude: t.lat, longitude: t.lon))
             save()
             PinsMapState.shared.redrawRoutes()
             if !quiet { changed(id, was: was) }
