@@ -293,7 +293,20 @@ final class MapController {
     }
     /// counts each time the camera comes to rest (a flight landed, fingers off with no glide, a held zoom ended), so
     /// work tied to what is under the camera (the stars' darkness) is done once per rest, never on a frame that moves
-    private(set) var restVersion = 0
+    private(set) var restVersion = 0 { didSet { checkCloseUp() } }
+    /// CLOSE UP, APPLE'S MAP UNDER OURS (14 Nov): our land is one relief point a degree, so a town's worth of map was a
+    /// white or lime field; past `closeIn` Apple's map takes over, ours coming back
+    /// below `closeOut`. Decided only when the camera rests, ours or Apple's, so a pinch never changes map under the
+    /// fingers
+    private(set) var closeUp = false
+    static let closeIn: Double = 7, closeOut: Double = 5   // (relief gone by 8: seen 14 Nov at 5.1, 8.1, 12.9)
+    func checkCloseUp() {
+        let want = closeUp ? k > Self.closeOut : k >= Self.closeIn
+        #if DEBUG
+        NSLog("wya closeup k %.1f -> %d", k, want ? 1 : 0)
+        #endif
+        if want != closeUp { closeUp = want }
+    }
     /// the detailed maps (set by the renderer), so a touch is answered from what is drawn
     @ObservationIgnored weak var details: DetailMaps?
     /// the camera's level for the zoom column: at home or not
@@ -1325,6 +1338,7 @@ final class MapController {
     /// Apple's map come to rest: a continent is let go once the view's middle has left its frame (a pan or a pinch
     /// away from it, as a search pick does on ours)
     func appleSettled() {
+        checkCloseUp()
         guard let k = continent, let b = world?.contViews[k] else { return }
         if c.x < b.x || c.x > b.z || c.y < b.y || c.y > b.w { continent = nil }
     }

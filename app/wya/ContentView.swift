@@ -34,7 +34,10 @@ struct ContentView: View {
 
     /// Apple's map is asked for here and now (the Map setting, outside Pins, which has its own)
     private var appleWanted: Bool {
-        MapSettingsStore.shared.value.map == "apple" && !MapSettingsRows.notYet.contains("map")
+        // (or close up on Countries' or Places' map, where ours has nothing left to show; a country's region map keeps
+        // its own)
+        (MapSettingsStore.shared.value.map == "apple" && !MapSettingsRows.notYet.contains("map")
+            || map.closeUp && (head.mode == .countries || head.mode == .places) && map.regionScene == nil)
             // (every map but Pins, which is always Apple's; towns and cities stay on ours)
             && head.mode != .pins && !map.regionTowns
     }
