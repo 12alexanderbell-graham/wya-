@@ -29,6 +29,8 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
     // advanced
     var placesMap = "same"          // same | native-detailed | native-simple | apple-standard | apple-satellite | apple-hybrid
     var pinsMap = "same"
+    /// Pins' tracking (8.x, 1 Oct, built 14 Nov): off | exact | city | region (about 100 km); where you go drawn as pins
+    var pinsTrack = "off"
     var afghanistanFlag = "tricolour" // tricolour | taliban
     /// the moon's stop, set only by the moon (0 Both ... 4 Wishlist)
     var filter = 0
@@ -48,7 +50,7 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
         quickAlways = v(.quickAlways, d.quickAlways); territories = v(.territories, d.territories)
         count = v(.count, d.count); start = v(.start, d.start); foundPlaces = v(.foundPlaces, d.foundPlaces)
         pinMarksPlace = v(.pinMarksPlace, d.pinMarksPlace); tracking = v(.tracking, d.tracking)
-        placesMap = v(.placesMap, d.placesMap); pinsMap = v(.pinsMap, d.pinsMap)
+        placesMap = v(.placesMap, d.placesMap); pinsMap = v(.pinsMap, d.pinsMap); pinsTrack = v(.pinsTrack, d.pinsTrack)
         afghanistanFlag = v(.afghanistanFlag, d.afghanistanFlag); filter = v(.filter, d.filter)
         recent = v(.recent, d.recent)
     }

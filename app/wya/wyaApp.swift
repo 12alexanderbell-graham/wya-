@@ -14,6 +14,8 @@ struct wyaApp: App {
         LogoTurnUIView.warm()
         Snap.start()
         Task { @MainActor in Hitches.start(); HangWatch.start() }
+        // Pins' tracking, when it is on in Map settings (Map/PinTracker.swift)
+        Task { @MainActor in PinTracker.shared.follow(MapSettingsStore.shared.value.pinsTrack) }
         Task.detached(priority: .utility) { await DevDataClient.refresh() }
     }
 

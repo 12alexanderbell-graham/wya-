@@ -449,6 +449,12 @@ private struct SettingsPage: View {
                                         ("apple-satellite", "Apple, Satellite"), ("apple-hybrid", "Apple, Hybrid")]
         RowWords(name: "Places map", value: "", dim: true).onTapGesture { Feel.refuse() }
         advancedRow("pinsMap", "Pins map", maps, s.pinsMap) { v in MapSettingsStore.shared.change { $0.pinsMap = v } }
+        // PINS' TRACKING: where you go, drawn as pins at the precision you pick (Map/PinTracker.swift)
+        advancedRow("pinsTrack", "Track where I go", [("off", "Off"), ("exact", "Exact"), ("city", "City"), ("region", "About 100 km")],
+                    s.pinsTrack) { v in
+            MapSettingsStore.shared.change { $0.pinsTrack = v }
+            PinTracker.shared.follow(v)
+        }
         RowWords(name: "Afghanistan's flag", value: "", dim: true).onTapGesture { Feel.refuse() }
     }
     @ViewBuilder private func advancedRow(_ id: String, _ name: String, _ choices: [(String, String)], _ current: String,

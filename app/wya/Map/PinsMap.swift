@@ -119,6 +119,20 @@ final class PinStore {
         Task { await name(p.id, country: country?.name, known: known) }
         if MapSettingsStore.shared.value.pinMarksPlace, let cc = country?.id.lowercased() { markNear(c, cc: cc) }
     }
+    /// TRACKING (Map/PinTracker.swift): a pin where you were, in the tracked map, named as any other; never chosen,
+    /// never an undo step (nothing was done by hand)
+    func track(at c: CLLocationCoordinate2D, map: UUID, when: Date) {
+        var p = Pin(lat: c.latitude, lon: c.longitude)
+        p.map = map
+        p.kind = "tracked"
+        p.made = when
+        // (its country from our own map when the map is there; else the map names it when it next loads)
+        if let m = PinsMapState.shared.map { p.cc = PinsMapView.Coordinator.country(m, c)?.id }
+        Pin.naming.insert(p.id)
+        pins.append(p)
+        save()
+        Task { await name(p.id, country: nil) }
+    }
     /// A PIN NEAR A PLACE MARKS IT (Map settings, Off by default): a pin dropped within 200 m of a thing of the
     /// country (a museum, a lake's point, a station) stamps that thing, the nearest one, as "a pin near a place"; the
     /// pin itself is never stamped. One undo step of its own.
@@ -243,6 +257,12 @@ final class PinStore {
     /// every row of the list says where it is. A pin at sea, or one named as its country, stays as it is.
     func nameCountries(_ country: (CLLocationCoordinate2D) -> (id: String, name: String)?) {
         var changed = false
+        // (a pin with no country yet, a tracked one say, gets the one our map has under it)
+        for k in pins.indices where pins[k].cc == nil {
+            guard let c = country(pins[k].coordinate) else { continue }
+            pins[k].cc = c.id
+            changed = true
+        }
         for k in pins.indices where !pins[k].place.isEmpty && !pins[k].place.contains(", ") {
             guard let c = country(pins[k].coordinate), c.name != pins[k].place else { continue }
             pins[k].place += ", " + c.name

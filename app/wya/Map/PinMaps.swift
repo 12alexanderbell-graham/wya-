@@ -81,4 +81,12 @@ final class PinMaps {
         })
         return m
     }
+
+    /// a map made without being asked for (tracking's): not shown, not an undo step
+    func quietly(_ name: String) -> PinMap {
+        let m = PinMap(name: name)
+        all.append(m)
+        save()
+        return m
+    }
 }
