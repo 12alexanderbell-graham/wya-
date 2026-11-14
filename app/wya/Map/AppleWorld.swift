@@ -248,7 +248,14 @@ struct AppleWorldView: UIViewRepresentable {
         private var overlays: [FillOverlay] = []
         /// each place's rings in Apple's map points, worked out once
         private var rings: [Int: [[MKMapPoint]]] = [:]
-        init(map: MapController) { self.map = map; super.init(); Self.current = self }
+        init(map: MapController) {
+            self.map = map
+            // (a country already open when Apple's map comes (close up, 14 Nov) is where the camera already is: framing it
+            // again flew back out to the whole country, and ours came back)
+            opened = map.placeOpen
+            super.init()
+            Self.current = self
+        }
         /// Apple's map has taken our map's view
         var placed = false
         /// the Places names and marks laid over Apple's map (Map/TownNames.swift)
