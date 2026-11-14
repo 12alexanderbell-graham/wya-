@@ -251,7 +251,7 @@ struct ListsWater: View {
         }
     }
     /// a kind with nothing in it: its words, quiet, in the middle of the shelf
-    /// (14 Nov: no "nothing here yet" words, his rule (R01): an empty kind is simply empty, its "+" is how to start)
+    /// (14 Nov: no "nothing here yet" words (R01): an empty kind is simply empty, its "+" is how to start)
     private func none(_ t: String) -> some View {
         Color.clear.frame(maxWidth: .infinity, minHeight: 240).accessibilityLabel(t)
     }
