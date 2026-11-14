@@ -94,7 +94,11 @@ final class Water {
             self.settings = false
         }
         if regions { done(); go(.half); return }
-        if let back, stop == .half, back != .half, grab == nil { onLand = done; go(back) } else { done() }
+        // (14 Nov: from full too: closed at full over Countries, the water stayed at full with the old full-screen
+        // solar system, a height Countries no longer has)
+        if let back, stop == .half || stop == .full, back != stop, grab == nil { onLand = done; go(back) }
+        else if stop == .full, grab == nil { onLand = done; go(.half) }
+        else { done() }
     }
     /// REGIONS' SELECTION MENU is the water's content (6.3): the water is at full, and a drag on it scrolls the list and
     /// never moves it.

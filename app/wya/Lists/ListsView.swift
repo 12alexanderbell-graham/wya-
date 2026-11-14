@@ -251,9 +251,9 @@ struct ListsWater: View {
         }
     }
     /// a kind with nothing in it: its words, quiet, in the middle of the shelf
+    /// (14 Nov: no "nothing here yet" words, his rule (R01): an empty kind is simply empty, its "+" is how to start)
     private func none(_ t: String) -> some View {
-        Text(t).font(.body).foregroundStyle(Palette.ink.opacity(0.5))
-            .frame(maxWidth: .infinity, minHeight: 240)
+        Color.clear.frame(maxWidth: .infinity, minHeight: 240).accessibilityLabel(t)
     }
 
     /// A LIST ON THE SHELF: a tile, its cover (until covers come: the flags of its first four countries, side by side;
