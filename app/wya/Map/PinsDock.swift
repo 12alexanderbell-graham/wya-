@@ -95,14 +95,9 @@ struct PinsDock: View {
         // THE TOOLS (14 Nov): two rows of plain words on the water, no capsule, no icons. The first row is the five
         // tools; the one chosen stays black and the others go to 50%. The second row is the chosen tool's options.
         VStack(spacing: 4) {
-            if drawing {
-                let t = DrawTool.shared
-                WordRow(items: [
-                    .init(word: "Undo", dim: t.marks.isEmpty) { t.undo() },
-                    .init(word: "Cancel") { t.cancel() },
-                    .init(word: "Done", dim: !t.canFinish) { t.done() },
-                ], width: w)
-            } else {
+            // (14 Nov: drawing keeps this row, so another tool is one tap away; Cancel, Undo and Done sit on the
+            // title's line, Cancel leading and Done trailing as on Apple's sheets)
+            Group {
                 WordRow(items: [
                     .init(word: "Pin") {
                         close()
@@ -128,7 +123,7 @@ struct PinsDock: View {
                 ], width: w, anyOn: dock.chosen != nil)
             }
             if let c = dock.chosen {
-                WordRow(items: options(c), width: w, small: true)
+                WordRow(items: options(c), width: w, small: true, columns: true)
                     .transition(.blurReplace)
             }
             Text(words.isEmpty ? " " : words)
@@ -158,9 +153,24 @@ struct PinsDock: View {
                 Text(maps.map(maps.shown)?.name ?? "All pins")
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(width: L.W - 2 * L.sheetInset - 120)
+                    .frame(width: L.W - 2 * L.sheetInset - (DrawTool.shared.on ? 200 : 120))
                     .allowsHitTesting(false)
-                if maps.inside, water.stop != .quarter {
+                if DrawTool.shared.on {
+                    let t = DrawTool.shared
+                    HStack(spacing: 0) {
+                        Button { Feel.tap(); t.cancel() } label: { SheetWord(word: "Cancel") }
+                            .buttonStyle(.plain)
+                        Spacer(minLength: 0)
+                        Button { if t.marks.isEmpty { Feel.refuse() } else { Feel.tap(); t.undo() } } label: {
+                            SheetWord(word: "Undo", dim: t.marks.isEmpty)
+                        }
+                        .buttonStyle(.plain)
+                        Button { if t.canFinish { Feel.tap(); t.done() } else { Feel.refuse() } } label: {
+                            SheetWord(word: "Done", strong: true, dim: !t.canFinish)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else if maps.inside, water.stop != .quarter {
                     HStack {
                         Button { Feel.tap(); maps.inside = false } label: {
                             Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
@@ -244,8 +254,55 @@ struct WordRow: View {
     var small = false
     /// a tool is chosen in this row (the others fade)
     var anyOn = true
+    /// the words sit in the five tools' columns (two words under the second and fourth, three under the middle
+    /// three), so the options line up with the tools over them
+    var columns = false
+
+    /// which of the five columns each of n words takes
+    static func slots(_ n: Int) -> [Int] {
+        switch n {
+        case 1: return [2]
+        case 2: return [1, 3]
+        case 3: return [1, 2, 3]
+        case 4: return [0, 1, 3, 4]
+        default: return Array(0 ..< n)
+        }
+    }
 
     var body: some View {
+        if columns, items.count <= 5 {
+            let col = width / 5
+            let at = Self.slots(items.count)
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(items.enumerated()), id: \.offset) { k, it in
+                    word(it).position(x: col * (CGFloat(at[k]) + 0.5), y: (small ? 36 : 44) / 2)
+                }
+            }
+            .frame(width: width, height: small ? 36 : 44)
+            .animation(Motion.quick, value: items.map(\.on))
+        } else {
+            plain
+        }
+    }
+
+    private func word(_ it: Item) -> some View {
+        Button {
+            if it.dim { Feel.refuse(); return }
+            Feel.tap()
+            it.act()
+        } label: {
+            Text(it.word)
+                .font(small ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+                .foregroundStyle(Palette.ink.opacity(it.dim ? 0.3 : (it.on || !anyOn ? 1 : 0.5)))
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .frame(width: width / 5, height: small ? 36 : 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(it.on ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private var plain: some View {
         HStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, it in
                 Button {
@@ -268,5 +325,22 @@ struct WordRow: View {
         // five tools instead of spreading to the edges (14 Nov)
         .frame(width: width)
         .animation(Motion.quick, value: items.map(\.on))
+    }
+}
+
+
+/// a word on the sheet's title line (Cancel, Undo, Done): 44 pt high, Done in the heavier weight as Apple's sheets have it
+struct SheetWord: View {
+    let word: String
+    var strong = false
+    var dim = false
+    var body: some View {
+        Text(word)
+            .font(.body.weight(strong ? .semibold : .regular))
+            .foregroundStyle(Palette.ink.opacity(dim ? 0.3 : 1))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(height: 44)
+            .contentShape(Rectangle())
     }
 }
