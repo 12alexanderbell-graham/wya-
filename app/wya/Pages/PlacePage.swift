@@ -30,7 +30,11 @@ final class PlacePageState {
         var proseWikivoyage = false
     }
     struct Activity: Hashable { let name: String; let line: String }
-    struct Highlight: Hashable { let id: String; let name: String; let line: String; let photo: String? }
+    struct Highlight: Hashable {
+        let id: String; let name: String; let line: String; let photo: String?
+        /// a site of several countries (the Carpathians' beech forests are eighteen countries'): its picture may be another's
+        var shared = false
+    }
     /// the server's World Heritage list, read once
     static var heritage: [String: [String: Any]]?
     struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil }
@@ -321,14 +325,16 @@ extension PlacePageState.OnePage {
                 guard let h = PlacePageState.heritage?[q], let n = h["n"] as? String else { return nil }
                 let year = h["year"] as? String
                 return PlacePageState.Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
-                                 photo: (h["img"] as? [String])?.first)
+                                 photo: (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
         out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
         // a country whose own picture is a map (most are): its first sight's photo at the top instead
-        if out.photo == nil { out.photo = out.highlights.lazy.compactMap { PlacePageState.photo($0.photo) }.first }
+        // (14 Nov: Switzerland's top was a river in Ukraine, the photo of a forest site eighteen countries share: a site
+        // that is this country's alone first)
+        if out.photo == nil { out.photo = out.highlights.lazy.filter { !$0.shared }.compactMap { PlacePageState.photo($0.photo) }.first }
         // (a page opened since this one began loading keeps its own facts)
         guard key.id.lowercased() == cc else { return }
         facts = out
@@ -721,6 +727,31 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: "^[\\s\\]|]+", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
         }
+        // ITS NAME IN OTHER LANGUAGES before it says what it is (14 Nov: "Nigeria (Hausa: Najeriya, Igbo: Naíjíríà,
+        // Nigerian Pidgin: Naijá, ...) is a large country"; "Thailand (Thai: ประเทศไทย Prathet Thai or ...) is"): a
+        // bracket in the opening words that names a language ("Hausa:") or is written in another script goes; one in
+        // plain English stays ("Japan, known as Nihon or Nippon")
+        if let open = t.prefix(240).firstIndex(of: "(") {
+            var out = String(t[..<open]), rest = Substring(t[open...]), cut = false
+            while let o = rest.firstIndex(of: "("), rest.distance(from: rest.startIndex, to: o) < 240 - out.count,
+                  let c = rest[o...].firstIndex(of: ")") {
+                let inner = rest[rest.index(after: o) ..< c]
+                let named = inner.range(of: "^\\p{Lu}[\\p{L} ]{1,24}:", options: .regularExpression) != nil
+                let letters = inner.unicodeScalars.filter { CharacterSet.letters.contains($0) }
+                let other = letters.filter { $0.value > 0x24F }.count
+                let foreign = other >= 2 || (!letters.isEmpty && other * 2 > letters.count)
+                if named || foreign {
+                    out += rest[..<o]
+                    while out.hasSuffix(" ") { out.removeLast() }
+                    rest = rest[rest.index(after: c)...]
+                    cut = true
+                } else {
+                    out += rest[...c]
+                    rest = rest[rest.index(after: c)...]
+                }
+            }
+            if cut { t = out + rest }
+        }
         // A NOTE'S NUMBER LEFT STANDING ("² Florence (Italian: Firenze) is", 14 Nov): a raised figure that follows no
         // word or number is the source's footnote mark, never text ("km²" keeps its own)
         if t.unicodeScalars.contains(where: { "\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".unicodeScalars.contains($0) }) {
@@ -753,7 +784,7 @@ extension PlacePageState {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
             !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b",
+            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$",
                     options: [.regularExpression, .caseInsensitive]) == nil
         }
     }
