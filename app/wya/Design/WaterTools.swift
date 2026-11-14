@@ -11,20 +11,27 @@ struct WaterTools: View {
         let label: String
         var on = false
         var dim = false
+        /// a circle that opens Apple's menu of these choices instead of acting at once
+        var menu: [(String, () -> Void)]? = nil
         let act: () -> Void
     }
     let tools: [Tool]
     let words: String
     /// the words dimmer still (a hint, not a measure)
     var hint = false
+    /// the row's width: given, the circles share it evenly (each its own equal part, the button rule: widths are the
+    /// width split in n), else they sit together in the middle
+    var width: CGFloat? = nil
 
     var body: some View {
         VStack(spacing: 8) {
             GlassEffectContainer(spacing: 14) {
-                HStack(spacing: 14) {
+                HStack(spacing: width == nil ? 14 : 0) {
                     // (by place, not by tool: a circle stays where it is and only its icon changes, Apple's blur
                     // replace, when the row becomes another tool's controls)
-                    ForEach(Array(tools.enumerated()), id: \.offset) { _, t in circle(t) }
+                    ForEach(Array(tools.enumerated()), id: \.offset) { _, t in
+                        circle(t).frame(width: width.map { $0 / CGFloat(max(1, tools.count)) })
+                    }
                 }
             }
             // a number changing rolls (Apple's numeric text); other words are a new line, blurred in over the old
@@ -46,7 +53,22 @@ struct WaterTools: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
-    private func circle(_ t: Tool) -> some View {
+    @ViewBuilder private func circle(_ t: Tool) -> some View {
+        if let m = t.menu {
+            Menu {
+                ForEach(Array(m.enumerated()), id: \.offset) { _, e in Button(e.0) { e.1() } }
+            } label: {
+                icon(t.icon, Palette.ink).frame(width: 44, height: 44).contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(PageGlass.head, in: .circle)
+            .accessibilityLabel(t.label)
+        } else {
+            press(t)
+        }
+    }
+
+    private func press(_ t: Tool) -> some View {
         return Button {
             if t.dim { Feel.refuse(); return }
             Feel.tap()

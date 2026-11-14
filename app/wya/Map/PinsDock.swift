@@ -12,6 +12,33 @@ import MapKit
 @MainActor @Observable
 final class PinsDockState {
     static let shared = PinsDockState()
+    /// MEASURE: what the last line measured came to (shown under the tools until another tool is used)
+    var measured = ""
+    /// the file picker for Files' Import is up
+    var importing = false
+
+    /// MEASURE: the draw tool's line, its length under the circles as it grows; Done leaves the length there and keeps
+    /// nothing on the map
+    func measure(water: Water) {
+        guard let v = PinsMapState.shared.view else { Feel.refuse(); return }
+        measured = ""
+        if water.stop != .quarter { water.go(.quarter) }
+        DrawTool.shared.start(.line,
+            toGeo: { [weak v] p in
+                guard let v else { return nil }
+                let c = v.convert(p, toCoordinateFrom: v)
+                return CLLocationCoordinate2DIsValid(c) ? DrawTool.Geo(lat: c.latitude, lon: c.longitude) : nil
+            },
+            toScreen: { [weak v] g in
+                guard let v else { return nil }
+                return v.convert(CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon), toPointTo: v)
+            },
+            finish: { [weak self] _, pts in
+                var t = 0.0
+                for i in 1 ..< max(1, pts.count) { t += DrawTool.km(pts[i - 1], pts[i]) }
+                self?.measured = DrawTool.words(km: t)
+            })
+    }
     /// ADD PIN: a pin where the middle of the map on screen is (between the head and the water), as a hold there would
     /// drop it: chosen, named once the phone knows the place, one undo step
     func addPin(water: Water) {
@@ -53,18 +80,36 @@ struct PinsDock: View {
         let drawing = DrawTool.shared.on
         WaterTools(tools: drawing ? DrawBar.tools(DrawTool.shared) : [
             .init(icon: "pin", label: "Add pin") {
+                dock.measured = ""
                 if routes.open { routes.close() }
                 dock.addPin(water: water)
             },
             .init(icon: "route", label: "Route", on: routes.open) {
+                dock.measured = ""
                 if routes.open { routes.close() } else { water.go(.quarter); routes.openEmpty() }
             },
             .init(icon: "edit", label: "Draw") {
                 guard let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true else { Feel.refuse(); return }
+                dock.measured = ""
                 if routes.open { routes.close() }
                 PinDrawings.shared.start(on: v, water: water)
             },
-        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words)
+            .init(icon: "measure", label: "Measure") {
+                if routes.open { routes.close() }
+                dock.measure(water: water)
+            },
+            // FILES: Google Maps' and Google Earth's file tools, GeoJSON, KML and GPX in and out (Map/PinFiles.swift)
+            .init(icon: "file", label: "Files", menu: [
+                ("Import", { dock.importing = true }),
+                ("Export", { PinFiles.export() }),
+            ]) {},
+        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, width: L.W - 2 * L.sheetInset - 16)
+        .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
+            guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
+            var n = 0
+            for u in urls { n += PinFiles.bring(u, country: { PinsMapView.Coordinator.country(map, $0) }) ?? 0 }
+            if n == 0 { Feel.refuse() } else { Feel.tap(); PinsMapState.shared.frameShownMap() }
+        }
         .position(x: L.W / 2, y: Self.rowY(top))
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         // THE MAP'S NAME over the tools, on every map's name line: the map of yours shown, or All pins (no count:
@@ -95,7 +140,7 @@ struct PinsDock: View {
     /// under the circles: only what a route came to (its distance and time), or that it is being found, or that
     /// there is none by road; never a count and never how to use a tool
     private var words: String {
-        guard routes.open else { return "" }
+        guard routes.open else { return dock.measured }
         // (read first, so the words change when the route is kept: the route made is not itself observed)
         let kept = routes.routes
         if routes.noRoute { return "No route by road" }
