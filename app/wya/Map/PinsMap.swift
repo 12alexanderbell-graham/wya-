@@ -2333,24 +2333,28 @@ struct PinSheet: View {
     /// goes back to none
     private func kinds(_ p: Pin) -> some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 8) {
+            HStack(spacing: 2) {
                 ForEach(OwnPlaces.kinds, id: \.self) { k in
                     let on = p.kind == k
                     Button { Feel.tap(); store.kind(p.id, on ? nil : k) } label: {
                         Text(k.capitalizedFirst).font(.subheadline.weight(.semibold))
                             .foregroundStyle(on ? Palette.white : Palette.ink)
-                            .padding(.horizontal, 14).frame(height: 36)
+                            .padding(.horizontal, 12).frame(height: 34)
                             .background { if on { Capsule().fill(Palette.ink) } }
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .glassEffect(on ? .identity : PageGlass.head, in: .capsule)
+                    // (no glass round the others: plain words, the chosen one a black chip, as Pins' tools, 14 Nov)
                     .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
                 }
             }
             .padding(.horizontal, 16)
         }
         .scrollIndicators(.hidden)
+        // (the ends go out softly, never cut by a hard line, 14 Nov)
+        .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05),
+                                     .init(color: .black, location: 0.95), .init(color: .clear, location: 1)],
+                             startPoint: .leading, endPoint: .trailing))
         .padding(.horizontal, -16)
         .animation(Motion.quick, value: p.kind)
     }

@@ -30,26 +30,34 @@ struct RegionLevels: View {
                 .frame(maxWidth: width - 48)
                 .accessibilityAddTraits(.isHeader)
             if levels.count > 1 {
-                CentredFlow(spacing: 18, lineSpacing: 10) {
-                    ForEach(levels) { l in
-                        let here = l.row == current
-                        let coming = l.row == loading
-                        HStack(spacing: 0) {
-                            roll(l.row == notReady ? (failed ? "Couldn't load" : "Not ready") : l.word)
-                                .font(.body.weight(here ? .semibold : .regular))
-                                .multilineTextAlignment(.center)
-                            // the mark grows from its own centre (A12.2) as its room opens beside the word, and goes
-                            // back into it as the level arrives (A12.3); the words beside it move, never jump
-                            // (simply there once its room has opened, never a circle growing out of a point)
-                            WorkingMark(size: 20, running: coming)
-                                .opacity(coming ? 1 : 0)
-                                .transaction { $0.animation = nil }
-                                .frame(width: coming ? 26 : 0, alignment: .trailing)
-                        }
-                        .animation(Motion.quick, value: coming)
-                        .frame(minHeight: 20)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityValue(coming ? "Loading" : "")
+                // (14 Nov: one line, the level shown a black chip with white words as every chosen thing in the app;
+                // the line slides sideways when the levels are wider than the sheet, never wrapping onto a second line)
+                ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 2) {
+                        ForEach(levels) { l in
+                            let here = l.row == current
+                            let coming = l.row == loading
+                            HStack(spacing: 0) {
+                                roll(l.row == notReady ? (failed ? "Couldn't load" : "Not ready") : l.word)
+                                    .font(.body.weight(.semibold))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                // the mark grows from its own centre (A12.2) as its room opens beside the word, and goes
+                                // back into it as the level arrives (A12.3); the words beside it move, never jump
+                                WorkingMark(size: 20, running: coming)
+                                    .opacity(coming ? 1 : 0)
+                                    .transaction { $0.animation = nil }
+                                    .frame(width: coming ? 26 : 0, alignment: .trailing)
+                            }
+                            .foregroundStyle(here ? Palette.white : Palette.ink)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background { if here { Capsule().fill(Palette.ink) } }
+                            .frame(height: 44)
+                            .animation(Motion.quick, value: coming)
+                            .accessibilityElement(children: .combine)
+                            .accessibilityValue(coming ? "Loading" : "")
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 guard !here else { return }
@@ -57,6 +65,7 @@ struct RegionLevels: View {
                                 pick(l.row)
                             }
                             .accessibilityAddTraits(here ? [.isButton, .isSelected] : .isButton)
+                            .id(l.row)
                             // A LEVEL'S WORD HELD (11.5): the country's levels as rows, a quicker pick on a small
                             // phone; the one shown unavailable (the current row, 11.3)
                             .contextMenu {
@@ -69,9 +78,20 @@ struct RegionLevels: View {
                                     }
                                 }
                             }
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .frame(minWidth: width)
                 }
-                .frame(width: width)
+                .scrollIndicators(.hidden)
+                .frame(width: width, height: 44)
+                // (the ends go out softly, never cut by a hard line)
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05),
+                                             .init(color: .black, location: 0.95), .init(color: .clear, location: 1)],
+                                     startPoint: .leading, endPoint: .trailing))
+                .onChange(of: current) { _, c in withAnimation(Motion.quick) { reader.scrollTo(c, anchor: .center) } }
+                .onAppear { reader.scrollTo(current, anchor: .center) }
+                }
                 // (the words' places change with the words, in the same frame: see `roll`)
                 .transaction(value: visible) { $0.animation = nil; $0.disablesAnimations = true }
             }

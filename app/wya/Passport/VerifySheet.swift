@@ -86,7 +86,8 @@ struct VerifySheet: View {
                 } else {
                     ForEach(Self.ways, id: \.id) { w in wayRow(w.id, w.name).whole(cut) }
                 }
-                removeRow.whole(cut)
+                // (its own group, a gap above it, as Apple's destructive rows stand apart, 14 Nov)
+                removeRow.padding(.top, 16).whole(cut)
             }
             // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
             .background(WaterHandoff())
