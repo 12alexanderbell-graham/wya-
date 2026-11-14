@@ -1848,6 +1848,7 @@ struct PinsList: View {
             : names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")
         // YOUR MAPS as Google Earth's projects and Apple Maps' guides: the map itself small (where its pins are, on
         // Apple's map), its name, its countries; the one shown has a tick, nothing else changes
+        let ink = on ? Palette.white : Palette.ink
         return HStack(spacing: 14) {
             PinMapThumb(pins: pins.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
                 .frame(width: 56, height: 56)
@@ -1855,21 +1856,25 @@ struct PinsList: View {
             VStack(alignment: .leading, spacing: 2) {
                 if naming == m?.id, let m {
                     TextField("", text: $name)
-                        .font(.body.weight(.semibold)).foregroundStyle(Palette.ink).focused($typing)
+                        .font(.body.weight(.semibold)).foregroundStyle(ink).focused($typing)
                         .submitLabel(.done)
                         .onSubmit { maps.rename(m.id, to: name); naming = nil }
                 } else {
-                    Text(m?.name ?? "All pins").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                    Text(m?.name ?? "All pins").font(.body.weight(.semibold)).foregroundStyle(ink).lineLimit(1)
                 }
                 if !places.isEmpty {
-                    Text(places).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                    Text(places).font(.subheadline).foregroundStyle(ink.opacity(on ? 0.7 : 0.5)).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            if on { Icon5(key: "tick", ink: Palette.ink, size: 17).frame(width: 28, height: 28).transition(.blurReplace) }
+            // the shown map: the black band side to side, as every chosen row in the app, and the plain tick of two
+            // bars (never the pointed one)
+            if on { Icon5(key: "done", ink: Palette.white, size: 17).frame(width: 28, height: 28) }
         }
-        .animation(Motion.quick, value: on)
         .frame(minHeight: Self.rowH)
+        .padding(.horizontal, 16)
+        .background { Rectangle().fill(on ? Palette.ink : .clear) }
+        .padding(.horizontal, -16)
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()

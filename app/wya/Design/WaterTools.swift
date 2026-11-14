@@ -24,9 +24,21 @@ struct WaterTools: View {
     var width: CGFloat? = nil
     /// where the circles and their words sit: together in the middle, or together from the leading edge (Pins)
     var align: HorizontalAlignment = .center
+    /// the tools as words in one glass capsule, each an equal part of it (14 Nov: one capsule, words not icons); the
+    /// one in use filled black, its word white
+    var capsule = false
 
     var body: some View {
         VStack(alignment: align, spacing: 8) {
+            if capsule, let w = width {
+                HStack(spacing: 0) {
+                    ForEach(Array(tools.enumerated()), id: \.offset) { _, t in segment(t, w / CGFloat(max(1, tools.count))) }
+                }
+                .padding(3)
+                .frame(width: w, height: 44)
+                .glassEffect(PageGlass.head, in: .capsule)
+                .animation(Motion.quick, value: tools.map(\.on))
+            } else {
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: width == nil ? 12 : 0) {
                     // (by place, not by tool: a circle stays where it is and only its icon changes, Apple's blur
@@ -35,6 +47,7 @@ struct WaterTools: View {
                         circle(t).frame(width: width.map { $0 / CGFloat(max(1, tools.count)) })
                     }
                 }
+            }
             }
             // a number changing rolls (Apple's numeric text); other words are a new line, blurred in over the old
             // one (rolled letter by letter, two different lines tangled into each other, 17:42)
@@ -53,6 +66,34 @@ struct WaterTools: View {
             .animation(Motion.quick, value: words)
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    /// one tool in the capsule: its word, centred in its part; a menu tool opens Apple's menu
+    @ViewBuilder private func segment(_ t: Tool, _ w: CGFloat) -> some View {
+        let label = Text(t.label)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(t.on ? Palette.white : Palette.ink.opacity(t.dim ? 0.5 : 1))
+            .lineLimit(1).minimumScaleFactor(0.8)
+            .frame(width: w - 6, height: 38)
+            .background { if t.on { Capsule().fill(Palette.ink) } }
+            .contentShape(Capsule())
+            .id(t.label)
+            .transition(.blurReplace)
+        if let m = t.menu {
+            Menu {
+                ForEach(Array(m.enumerated()), id: \.offset) { _, e in Button(e.0) { e.1() } }
+            } label: { label }
+            .buttonStyle(.plain)
+            .accessibilityLabel(t.label)
+        } else {
+            Button {
+                if t.dim { Feel.refuse(); return }
+                Feel.tap()
+                t.act()
+            } label: { label }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(t.on ? [.isButton, .isSelected] : .isButton)
+        }
     }
 
     @ViewBuilder private func circle(_ t: Tool) -> some View {

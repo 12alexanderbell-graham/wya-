@@ -81,7 +81,7 @@ struct PinsDock: View {
         // drawing: the same three circles become Undo, Cancel, Done, their icons changing in place
         let drawing = DrawTool.shared.on
         WaterTools(tools: drawing ? DrawBar.tools(DrawTool.shared) : [
-            .init(icon: "pin", label: "Add pin") {
+            .init(icon: "pin", label: "Pin") {
                 dock.measured = ""
                 if routes.open { routes.close() }
                 dock.addPin(water: water)
@@ -105,9 +105,7 @@ struct PinsDock: View {
                 ("Import", { dock.importing = true }),
                 ("Export", { PinFiles.export() }),
             ]) {},
-        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, align: .leading)
-        // the circles together, from the same left edge as the name and the rows (Apple's sheets: one left edge)
-        .frame(width: L.W - 2 * L.sheetInset - 32, alignment: .leading)
+        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, width: L.W - 2 * L.sheetInset - 32, capsule: true)
         .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
             guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
             var n = 0
@@ -120,22 +118,25 @@ struct PinsDock: View {
         // what it holds is on the map); inside a map's list at 50%, the back circle at its left goes back to your maps
         .overlay(alignment: .topLeading) {
             let maps = PinMaps.shared
-            HStack(spacing: 4) {
-                if maps.inside, water.stop != .quarter {
-                    Button { Feel.tap(); maps.inside = false } label: {
-                        Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Your maps")
-                    .padding(.leading, -12)
-                }
+            ZStack {
+                // the map's name centred over the capsule, on its own line with room under it
                 Text(maps.map(maps.shown)?.name ?? "All pins")
-                    .font(.title2.weight(.bold)).foregroundStyle(Palette.ink)
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(width: L.W - 2 * L.sheetInset - 120)
                     .allowsHitTesting(false)
-                Spacer(minLength: 0)
+                if maps.inside, water.stop != .quarter {
+                    HStack {
+                        Button { Feel.tap(); maps.inside = false } label: {
+                            Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Your maps")
+                        Spacer(minLength: 0)
+                    }
+                }
             }
-            .frame(width: L.W - 2 * L.sheetInset - 32, height: 44)
+            .frame(width: L.W - 2 * L.sheetInset - 16, height: 44)
             .position(x: L.W / 2, y: Self.titleY(top))
             .frame(width: L.W, height: L.H)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
