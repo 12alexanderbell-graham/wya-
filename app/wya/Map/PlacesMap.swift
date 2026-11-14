@@ -145,7 +145,8 @@ extension MapController {
         guard placesMode, let w = world, let it = CollectionStore.shared.collection(set)?.items.first(where: { $0.id == id }) else { return }
         ShowJob.n += 1
         let me = ShowJob.n
-        if placesCollection != set || placesType != nil || !placesPicked { showPlacesSet(set) }
+        // (a kind picked stays when the place is of it: a lake picked from the lakes' own list keeps the lakes)
+        if placesCollection != set || (placesType != nil && placesType != it.type) || !placesPicked { showPlacesSet(set) }
         let home = it.ccs.count == 1 ? (w.placeIndex[it.cc] ?? w.placeIndex[it.cc.uppercased()]) : nil
         if let home { if placeOpen != home { closePlace(); openPlace(home) } } else { closePlace() }
         let shaped = CollectionStore.shared.collection(set)?.shapes != nil

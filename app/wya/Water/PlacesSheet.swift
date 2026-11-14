@@ -48,11 +48,61 @@ struct PlacesSheet: View {
             }
             // (the rows are there once the sets have been read, and only with room for one whole row at least; the
             // rest scroll, going out softly at the foot)
-            if store.ready, !rows.isEmpty, to - from >= Self.rowH {
-                PlacesRows(rows: rows, height: to - from)
-                    .frame(width: L.W - 2 * L.sheetInset, height: to - from)
-                    .position(x: L.W / 2, y: (from + to) / 2)
-                    .allowsHitTesting(water.stop == .half)
+            // (14 Nov: the sets, and a set's kinds, as chips that wrap, the one chosen black: no settings-style rows
+            // with arrows; the same chips as Pins' tools and a pin's kinds)
+            let places = picked ? Self.places(map: map) : []
+            if store.ready, !rows.isEmpty || !places.isEmpty, to - from >= 44 {
+                ScrollView(.vertical) {
+                  VStack(spacing: 8) {
+                    if !rows.isEmpty {
+                    CentredFlow(spacing: 4, lineSpacing: 4) {
+                        ForEach(rows) { r in
+                            Button { Feel.tick(); r.act() } label: {
+                                Text(r.title)
+                                    .font(picked ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+                                    .foregroundStyle(r.on ? Palette.white : Palette.ink)
+                                    .lineLimit(1).fixedSize()
+                                    .padding(.horizontal, 12).frame(height: 34)
+                                    .background { if r.on { Capsule().fill(Palette.ink) } }
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(r.count.isEmpty ? r.title : r.title + ", " + r.count)
+                            .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
+                        }
+                    }
+                    .frame(width: L.W - 2 * L.sheetInset - 24)
+                    .padding(.vertical, 4)
+                    }
+                    // A SET'S PLACES (14 Nov: 50% was empty under the caption): the best known first, each its name and
+                    // its country; a tap shows it on the map, the water at 25%
+                    LazyVStack(spacing: 0) {
+                        ForEach(places, id: \.id) { it in
+                            Button {
+                                Feel.tick()
+                                water.go(.quarter)
+                                map.showSetPlace(map.placesKind == CollectionStore.capitals ? CollectionStore.capitals : map.placesSet, id: it.id)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(it.short).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                                    let land = Self.country(it, map: map)
+                                    if !land.isEmpty { Text(land).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
+                                }
+                                .padding(.horizontal, 24)
+                                .frame(maxWidth: .infinity, minHeight: Self.rowH, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                  }
+                }
+                .scrollIndicators(.hidden)
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.88),
+                                             .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+                .frame(width: L.W - 2 * L.sheetInset, height: to - from)
+                .position(x: L.W / 2, y: (from + to) / 2)
+                .allowsHitTesting(water.stop == .half)
             }
             if picked, captionUp {
                 // the back arrow, as on Map settings' pages: 22 pt in a 44 pt square, on the caption's name's line
@@ -69,6 +119,20 @@ struct PlacesSheet: View {
         .transaction { $0.animation = nil }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .onAppear { ThingIndex.shared.load(); CollectionStore.shared.load() }
+    }
+
+    /// the picked set's places (its kind's, when one is picked), in the set's own order (best known first); 300 at most
+    static func places(map: MapController) -> [CollectionStore.Item] {
+        // (the capitals are their own list, each keyed as its town)
+        let kind = map.placesKind, capitals = kind == CollectionStore.capitals
+        guard let c = CollectionStore.shared.collection(capitals ? CollectionStore.capitals : map.placesSet) else { return [] }
+        return Array(c.items.lazy.filter { capitals || kind == nil || $0.type == kind }.prefix(300))
+    }
+    /// its country, or the two it lies between; a sea or a range says none
+    static func country(_ it: CollectionStore.Item, map: MapController) -> String {
+        let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
+        let ccs = (it.ccs.isEmpty ? [it.cc] : it.ccs).compactMap(named)
+        return ccs.count <= 2 ? ccs.sorted().joined(separator: ", ") : ""
     }
 }
 
