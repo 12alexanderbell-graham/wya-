@@ -315,7 +315,7 @@ final class PinRoutes {
         let me = asking
         noRoute = false
         // A ROUTE STARTS STRAIGHT (14 Nov): a line from one end to the other; its menu turns it to roads or paths
-        if current == nil { keepStraight(f, t, from: fid, to: tid); return }
+        if current == nil, PinsDockState.shared.routeWay == "straight" { keepStraight(f, t, from: fid, to: tid); return }
         // a straight route whose end was moved stays straight: its line between the new ends
         if let id = current, let k = routes.firstIndex(where: { $0.id == id }), routes[k].straight == true {
             let was = routes[k].way
@@ -327,7 +327,7 @@ final class PinRoutes {
             if was.from != fid || was.to != tid { changed(id, was: was) }
             return
         }
-        let req = Self.request(f, t, walk: false)
+        let req = Self.request(f, t, walk: PinsDockState.shared.routeWay == "walk")
         req.requestsAlternateRoutes = true
         Task {
             let answer = try? await MKDirections(request: req).calculate()
@@ -403,6 +403,7 @@ final class PinRoutes {
         } else {
             var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
             new.map = PinMaps.shared.shown
+            if PinsDockState.shared.routeWay == "walk" { new.walk = true }
             new.spots = kept
             current = new.id
             routes.append(new)

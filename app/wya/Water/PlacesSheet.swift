@@ -40,6 +40,9 @@ struct PlacesSheet: View {
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .position(x: L.W / 2, y: lineTop + 31)
+                    // (14 Nov: closing, the word rode down into the capsule and stayed over the tab buttons) gone
+                    // before it reaches the capsule
+                    .opacity(Double(min(1, max(0, (L.capsule.minY - (lineTop + 31) - 24) / 40))))
                     .allowsHitTesting(false)
                     .accessibilityAddTraits(.isHeader)
             }

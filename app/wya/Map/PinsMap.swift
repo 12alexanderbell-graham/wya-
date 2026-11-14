@@ -1192,6 +1192,12 @@ struct PinsMapView: UIViewRepresentable {
                 items.append((p, pv, v.convert(a.coordinate, toPointTo: v)))
             }
             items.sort { x, y in x.0.id == sel ? true : y.0.id == sel ? false : x.0.made > y.0.made }
+            // ZOOMED OUT, PINS GO SMALL (14 Nov, they were far too big zoomed out): as Apple Maps does, full size close in,
+            // smaller as more of the world shows, and a small dot once a whole continent is on screen
+            let span = v.region.span.longitudeDelta
+            let dot = span > 32
+            let scale = CGFloat(max(0.6, min(1, 1 - (span - 6) / 26 * 0.4)))
+            for (p, pv, _) in items { pv.setZoom(dot: dot && p.id != sel, scale: scale) }
             var fronts: [(CGPoint, Int)] = []
             var behindOf: [Int?] = []
             for (_, _, pt) in items {
@@ -1215,7 +1221,7 @@ struct PinsMapView: UIViewRepresentable {
                         if !t.isEmpty, !taken.contains(where: { $0.intersects(r.insetBy(dx: -4, dy: -2)) }) { name = t; taken.append(r) }
                     }
                 }
-                pv.arrange(behind: back && p.id != sel, name: name)
+                pv.arrange(behind: back && p.id != sel, name: dot ? nil : name)
             }
             // THE ROUTES' CAPSULES (8.3): each on its own line where the line is seen, clear of the pins, their names,
             // the head, the water and each other; one stays where it is while its spot is still clear (no hopping)
@@ -1413,15 +1419,19 @@ struct PinsMapView: UIViewRepresentable {
             // A DRAWING: its colour (black unless given one), 3 pt as a route; a shape filled with it at 25%
             if let l = o as? PinDrawingLine {
                 let r = MKPolylineRenderer(polyline: l)
-                r.strokeColor = l.drawingID.flatMap { PinDrawings.shared.drawing($0)?.ink } ?? UIColor(Palette.ink)
-                r.lineWidth = 3; r.lineCap = .round; r.lineJoin = .round
+                let d = l.drawingID.flatMap { PinDrawings.shared.drawing($0) }
+                r.strokeColor = d?.ink ?? UIColor(Palette.ink)
+                r.lineWidth = d?.width ?? 3; r.lineCap = .round; r.lineJoin = .round
+                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 3) * 2.5), NSNumber(value: (d?.width ?? 3) * 2)] }
                 return r
             }
             if let s = o as? PinDrawingShape {
                 let r = MKPolygonRenderer(polygon: s)
-                let ink = s.drawingID.flatMap { PinDrawings.shared.drawing($0)?.ink } ?? UIColor(Palette.ink)
+                let d = s.drawingID.flatMap { PinDrawings.shared.drawing($0) }
+                let ink = d?.ink ?? UIColor(Palette.ink)
                 r.strokeColor = ink; r.fillColor = ink.withAlphaComponent(0.25)
-                r.lineWidth = 2.5; r.lineJoin = .round
+                r.lineWidth = d?.width ?? 2.5; r.lineJoin = .round
+                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 2.5) * 2.5), NSNumber(value: (d?.width ?? 2.5) * 2)] }
                 return r
             }
             // a route: 3 pt black, round ends and joins, no casing; another way 2 pt black 50% (8.3)
@@ -1496,7 +1506,14 @@ struct PinsMapView: UIViewRepresentable {
 final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegate, UIDragInteractionDelegate {
     static let id = "pin"
     private static var images: [String: UIImage] = [:]
+    private static var dots: [String: UIImage] = [:]
     private var chosen = false
+    /// zoomed far out: a small dot on the spot in the pin's colour, not the marker
+    private var dot = false
+    /// the marker's size for the zoom (1 close in, smaller far out)
+    private var zoomScale: CGFloat = 1
+    private var marker: UIImage?
+    private var dotImage: UIImage?
 
     /// touched over 44 pt round the pin's head (the marker is drawn 24 x 30, smaller behind another pin, 8 Nov)
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -1569,10 +1586,33 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
             r.scale = 3
             Self.images[key] = r.uiImage
         }
-        image = Self.images[key]
-        // the image's bottom middle is the spot (the pin is 30 pt tall)
-        centerOffset = CGPoint(x: 0, y: -(image?.size.height ?? 30) / 2)
+        if Self.dots[key] == nil {
+            let p3 = p?.colour != nil
+            let r = ImageRenderer(content: Circle()
+                .fill(LinearGradient(colors: [PinLight.top(c, p3: p3), PinLight.bottom(c, p3: p3)], startPoint: .top, endPoint: .bottom))
+                .frame(width: 10, height: 10))
+            r.scale = 3
+            Self.dots[key] = r.uiImage
+        }
+        marker = Self.images[key]
+        dotImage = Self.dots[key]
+        placeImage()
         accessibilityLabel = p.map { "\($0.title), pin" }
+    }
+
+    /// the marker with its bottom middle on the spot, or the dot with its middle on it
+    private func placeImage() {
+        image = dot ? dotImage : marker
+        centerOffset = dot ? .zero : CGPoint(x: 0, y: -(image?.size.height ?? 30) / 2)
+    }
+
+    func setZoom(dot d: Bool, scale: CGFloat) {
+        guard d != dot || abs(scale - zoomScale) > 0.01 else { return }
+        let swap = d != dot
+        dot = d
+        zoomScale = scale
+        if swap { placeImage() }
+        look(animated: false)
     }
 
     func setChosen(_ on: Bool, animated: Bool = true) {
@@ -1583,7 +1623,8 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     /// chosen: 1.2x about its tip and 4 pt up (A8.4); behind a stack: 0.8x and 4 pt down (8.3); else as drawn
     private func look(animated: Bool) {
         let h = bounds.height
-        let s: CGFloat = chosen ? 1.2 : behind ? 0.8 : 1
+        if dot { transform = .identity; return }
+        let s: CGFloat = (chosen ? 1.2 : behind ? 0.8 : 1) * zoomScale
         let lift: CGFloat = chosen ? 4 : behind ? -4 : 0
         let t = CGAffineTransform(translationX: 0, y: h / 2 * (1 - s) - lift).scaledBy(x: s, y: s)
         if animated {

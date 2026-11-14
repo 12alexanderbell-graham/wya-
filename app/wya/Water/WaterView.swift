@@ -17,7 +17,9 @@ struct WaterView: View {
             // THE FROST (12 Nov: fading to none as it gets smaller): one shape, its frost
             // under the clear glass, at the water's own width between capsule and sheet; none in the capsule, all of it
             // once it is the sheet, frame by frame with the water (never a switch, never a second shape)
-            if !Perf.shared.off.contains("sheetglass"), f.sheet > 0.001 {
+            // (14 Nov: off. A material under the clear glass made every sheet more frosted than Apple's own sheets;
+            // the sheet is the system's regular glass now, the same frost as Apple's at every size)
+            if false, !Perf.shared.off.contains("sheetglass"), f.sheet > 0.001 {
                 shape.fill(.thinMaterial)
                     .opacity(Double(f.sheet))
                     .frame(width: L.W, height: L.H)
@@ -34,7 +36,7 @@ struct WaterView: View {
                             // over a place's page, the page's frosted glass like the head's (16.3)
                             // (clear Liquid Glass always: in the capsule it is the system's minimized tab bar; the
                             // frost under it says how much of a sheet it is)
-                            .glassEffect(.clear, in: shape)
+                            .glassEffect(.regular, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)

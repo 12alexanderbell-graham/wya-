@@ -17,6 +17,9 @@ struct PinDrawing: Codable, Identifiable, Hashable {
     var made = Date()
     /// the map of yours it is in (Map/PinMaps.swift); nil: none
     var map: UUID? = nil
+    /// its line's thickness in points (2 thin, 4 medium, 7 thick) and whether it is dashed; nil: medium, solid
+    var width: Double? = nil
+    var dash: Bool? = nil
 
     var isShape: Bool { kind == "shape" }
     var geo: [DrawTool.Geo] { points.map { DrawTool.Geo(lat: $0[0], lon: $0[1]) } }
@@ -56,6 +59,9 @@ final class PinDrawings {
     func add(_ kind: DrawTool.Kind, _ points: [DrawTool.Geo]) {
         var d = PinDrawing(kind: kind == .shape ? "shape" : "line", points: points.map { [$0.lat, $0.lon] })
         d.map = PinMaps.shared.shown
+        // the look chosen in Draw's row (thickness, dashes)
+        d.width = PinsDockState.shared.drawWidth
+        d.dash = PinsDockState.shared.drawDash ? true : nil
         all.append(d)
         save()
         MarkStore.shared.did(d.isShape ? "Shape drawn" : "Line drawn",

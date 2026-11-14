@@ -609,7 +609,8 @@ struct PassportPage: View {
                 .position(x: size.width / 2, y: size.height - 16)
         }
         .frame(width: size.width, height: size.height)
-        .glassEffect(.clear, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
+        // (14 Nov: frosted, the system's regular glass like every other sheet, no longer clear)
+        .glassEffect(PageGlass.surface, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
                                                          bottomTrailingRadius: corner, topTrailingRadius: corner,
                                                          style: .continuous))
     }

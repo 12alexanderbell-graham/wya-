@@ -16,6 +16,15 @@ final class PinsDockState {
     var measured = ""
     /// the file picker for Files' Import is up
     var importing = false
+    /// the tool chosen in the first row (1 Route, 2 Draw, 3 Measure, 4 Files); its options are the second row
+    var chosen: Int?
+    /// how new routes go: straight | drive | walk
+    var routeWay = "straight"
+    /// the look of what is drawn next: thickness in points, dashed
+    var drawWidth: Double = 4
+    var drawDash = false
+    /// Measure: a line's length or a shape's area
+    var measureArea = false
 
     /// MEASURE: the draw tool's line, its length under the circles as it grows; Done leaves the length there and keeps
     /// nothing on the map
@@ -23,7 +32,7 @@ final class PinsDockState {
         guard let v = PinsMapState.shared.view else { Feel.refuse(); return }
         measured = ""
         if water.stop != .quarter { water.go(.quarter) }
-        DrawTool.shared.start(.line,
+        DrawTool.shared.start(measureArea ? .shape : .line,
             toGeo: { [weak v] p in
                 guard let v else { return nil }
                 let c = v.convert(p, toCoordinateFrom: v)
@@ -33,7 +42,8 @@ final class PinsDockState {
                 guard let v else { return nil }
                 return v.convert(CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon), toPointTo: v)
             },
-            finish: { [weak self] _, pts in
+            finish: { [weak self] kind, pts in
+                if kind == .shape { self?.measured = DrawTool.words(km2: DrawTool.area(pts)); return }
                 var t = 0.0
                 for i in 1 ..< max(1, pts.count) { t += DrawTool.km(pts[i - 1], pts[i]) }
                 self?.measured = DrawTool.words(km: t)
@@ -69,57 +79,82 @@ struct PinsDock: View {
     @State private var dock = PinsDockState.shared
     @State private var routes = PinRoutes.shared
 
-    /// the row's middle from the dock's top: under the map's name, which sits on every map's name line
-    static func rowY(_ top: CGFloat) -> CGFloat { top + 88 }
-    /// the map's name: its own line at the sheet's top, left, with room under it (14 Nov: never crowding the circles)
+    /// the first row's middle from the dock's top (the draw tool's own controls sit here too)
+    static func rowY(_ top: CGFloat) -> CGFloat { top + 80 }
+    /// the map's name: its own line at the sheet's top, centred, with room under it
     static func titleY(_ top: CGFloat) -> CGFloat { top + 34 }
-    /// where what is under the dock starts (Saved's rows)
-    static func bottom(_ top: CGFloat) -> CGFloat { top + 106 }
+    /// where what is under the dock starts (your maps' rows): under the second row when a tool is chosen
+    @MainActor static func bottom(_ top: CGFloat) -> CGFloat {
+        top + (PinsDockState.shared.chosen == nil && !DrawTool.shared.on ? 112 : 168)
+    }
 
     var body: some View {
         let L = water.layout
-        // drawing: the same three circles become Undo, Cancel, Done, their icons changing in place
+        let w = L.W - 2 * L.sheetInset - 32
         let drawing = DrawTool.shared.on
-        WaterTools(tools: drawing ? DrawBar.tools(DrawTool.shared) : [
-            .init(icon: "pin", label: "Pin") {
-                dock.measured = ""
-                if routes.open { routes.close() }
-                dock.addPin(water: water)
-            },
-            .init(icon: "route", label: "Route", on: routes.open) {
-                dock.measured = ""
-                if routes.open { routes.close() } else { water.go(.quarter); routes.openEmpty() }
-            },
-            .init(icon: "edit", label: "Draw") {
-                guard let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true else { Feel.refuse(); return }
-                dock.measured = ""
-                if routes.open { routes.close() }
-                PinDrawings.shared.start(on: v, water: water)
-            },
-            .init(icon: "measure", label: "Measure") {
-                if routes.open { routes.close() }
-                dock.measure(water: water)
-            },
-            // FILES: Google Maps' and Google Earth's file tools, GeoJSON, KML and GPX in and out (Map/PinFiles.swift)
-            .init(icon: "file", label: "Files", menu: [
-                ("Import", { dock.importing = true }),
-                ("Export", { PinFiles.export() }),
-            ]) {},
-        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, width: L.W - 2 * L.sheetInset - 32, capsule: true)
+        // THE TOOLS (14 Nov): two rows of plain words on the water, no capsule, no icons. The first row is the five
+        // tools; the one chosen stays black and the others go to 50%. The second row is the chosen tool's options.
+        VStack(spacing: 4) {
+            if drawing {
+                let t = DrawTool.shared
+                WordRow(items: [
+                    .init(word: "Undo", dim: t.marks.isEmpty) { t.undo() },
+                    .init(word: "Cancel") { t.cancel() },
+                    .init(word: "Done", dim: !t.canFinish) { t.done() },
+                ], width: w)
+            } else {
+                WordRow(items: [
+                    .init(word: "Pin") {
+                        close()
+                        dock.addPin(water: water)
+                    },
+                    .init(word: "Route", on: dock.chosen == 1) {
+                        if dock.chosen == 1 { close() } else { close(); dock.chosen = 1; water.go(.quarter); routes.openEmpty() }
+                    },
+                    .init(word: "Draw", on: dock.chosen == 2) {
+                        if dock.chosen == 2 { close(); return }
+                        guard let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true else { Feel.refuse(); return }
+                        close(); dock.chosen = 2
+                        PinDrawings.shared.start(on: v, water: water)
+                    },
+                    .init(word: "Measure", on: dock.chosen == 3) {
+                        if dock.chosen == 3 { close(); return }
+                        close(); dock.chosen = 3
+                        dock.measure(water: water)
+                    },
+                    .init(word: "Files", on: dock.chosen == 4) {
+                        if dock.chosen == 4 { close() } else { close(); dock.chosen = 4 }
+                    },
+                ], width: w, anyOn: dock.chosen != nil)
+            }
+            if let c = dock.chosen {
+                WordRow(items: options(c), width: w, small: true)
+                    .transition(.blurReplace)
+            }
+            Text(words.isEmpty ? " " : words)
+                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                .monospacedDigit().lineLimit(1)
+                .contentTransition(.numericText())
+        }
+        .animation(Motion.quick, value: dock.chosen)
+        .animation(Motion.quick, value: drawing)
+        .frame(width: w)
+        .frame(width: L.W, height: L.H, alignment: .top)
+        .offset(y: Self.rowY(top) - 22)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        // a tool's work done (a drawing or a measure kept, or given up): the tool lets go
+        .onChange(of: drawing) { _, on in if !on, dock.chosen == 2 || dock.chosen == 3 { dock.chosen = nil } }
+        .onChange(of: routes.open) { _, open in if !open, dock.chosen == 1 { dock.chosen = nil } }
         .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
             guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
             var n = 0
             for u in urls { n += PinFiles.bring(u, country: { PinsMapView.Coordinator.country(map, $0) }) ?? 0 }
             if n == 0 { Feel.refuse() } else { Feel.tap(); PinsMapState.shared.frameShownMap() }
         }
-        .position(x: L.W / 2, y: Self.rowY(top))
-        .frame(width: L.W, height: L.H, alignment: .topLeading)
-        // THE MAP'S NAME over the tools, on every map's name line: the map of yours shown, or All pins (no count:
-        // what it holds is on the map); inside a map's list at 50%, the back circle at its left goes back to your maps
+        // THE MAP'S NAME, centred on its own line over the tools; inside a map's list at 50%, back at its left
         .overlay(alignment: .topLeading) {
             let maps = PinMaps.shared
             ZStack {
-                // the map's name centred over the capsule, on its own line with room under it
                 Text(maps.map(maps.shown)?.name ?? "All pins")
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1).minimumScaleFactor(0.7)
@@ -143,8 +178,46 @@ struct PinsDock: View {
         }
     }
 
-    /// under the circles: only what a route came to (its distance and time), or that it is being found, or that
-    /// there is none by road; never a count and never how to use a tool
+    /// whatever tool was out is put away
+    private func close() {
+        if routes.open { routes.close() }
+        if DrawTool.shared.on { DrawTool.shared.cancel() }
+        dock.measured = ""
+        dock.chosen = nil
+    }
+
+    /// the second row: the chosen tool's options, the current value black
+    private func options(_ c: Int) -> [WordRow.Item] {
+        switch c {
+        case 1:
+            return [("Straight", "straight"), ("Drive", "drive"), ("Walk", "walk")].map { w, k in
+                WordRow.Item(word: w, on: dock.routeWay == k) { dock.routeWay = k }
+            }
+        case 2:
+            let last = PinDrawings.shared.all.last
+            return [("Thin", 2.0), ("Medium", 4.0), ("Thick", 7.0)].map { w, v in
+                WordRow.Item(word: w, on: dock.drawWidth == v) { dock.drawWidth = v }
+            } + [
+                .init(word: "Dashed", on: dock.drawDash) { dock.drawDash.toggle() },
+                // the colour wheel for the newest drawing (as its hold menu's Colour)
+                .init(word: "Colour", dim: last == nil) {
+                    guard let d = last else { return }
+                    if DrawTool.shared.on { DrawTool.shared.cancel() }
+                    dock.chosen = nil
+                    PinDrawings.shared.colouring = d.id
+                    water.go(.half)
+                },
+            ]
+        case 3:
+            return [WordRow.Item(word: "Line", on: !dock.measureArea) { dock.measureArea = false; dock.measure(water: water) },
+                    WordRow.Item(word: "Area", on: dock.measureArea) { dock.measureArea = true; dock.measure(water: water) }]
+        default:
+            return [WordRow.Item(word: "Import") { dock.importing = true },
+                    WordRow.Item(word: "Export") { PinFiles.export() }]
+        }
+    }
+
+    /// under the rows: only what a route or a measure came to; never a count, never how to use a tool
     private var words: String {
         guard routes.open else { return dock.measured }
         // (read first, so the words change when the route is kept: the route made is not itself observed)
@@ -153,5 +226,47 @@ struct PinsDock: View {
         if routes.waiting == .from || routes.waiting == .to { return "" }
         if let id = routes.currentID, let r = kept.first(where: { $0.id == id }) { return r.words }
         return "Finding the way"
+    }
+}
+
+
+/// A ROW OF WORDS (Pins' tools and their options): plain words sharing the row evenly, no box, no icon. One chosen:
+/// it black, the others black 50%; one that can't be used yet, black 30%.
+struct WordRow: View {
+    struct Item {
+        let word: String
+        var on = false
+        var dim = false
+        let act: () -> Void
+    }
+    let items: [Item]
+    let width: CGFloat
+    var small = false
+    /// a tool is chosen in this row (the others fade)
+    var anyOn = true
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, it in
+                Button {
+                    if it.dim { Feel.refuse(); return }
+                    Feel.tap()
+                    it.act()
+                } label: {
+                    Text(it.word)
+                        .font(small ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+                        .foregroundStyle(Palette.ink.opacity(it.dim ? 0.3 : (it.on || !anyOn ? 1 : 0.5)))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                        .frame(width: width / CGFloat(max(5, items.count)), height: small ? 36 : 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(it.on ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+        // every word sits in a fifth of the width, so a row of two or three words stays in the middle under the
+        // five tools instead of spreading to the edges (14 Nov)
+        .frame(width: width)
+        .animation(Motion.quick, value: items.map(\.on))
     }
 }
