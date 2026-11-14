@@ -379,7 +379,8 @@ extension PlacePageState.OnePage {
         // article's), as a country's page has them (12 Nov 14:10: every page the same)
         out.photo = PlacePageState.photo(t["img"])
         if let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
-           let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue) {
+           let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue,
+                                                       others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
         guard key.id == id else { return }
@@ -418,7 +419,7 @@ extension PlacePageState.OnePage {
             let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
             out.rows.append(("Local time", f.string(from: Date())))
         }
-        if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon) {
+        if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon, others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: t.name), 620); out.proseWikivoyage = true
         }
         guard key.id == id, !out.rows.isEmpty || !out.prose.isEmpty else { return }
@@ -451,7 +452,9 @@ extension PlacePageState {
     /// A PLACE'S OPENING WORDS: its own Wikivoyage article, found in the country's index by its title (the place's name,
     /// or its name with a bracket after it, "Albert (France)") and lying within `within` km of it (25 for a town, more for
     /// a region, whose point is its middle); the nearest if several. Nil when it has none, or the article has no intro.
-    static func guideIntro(_ cc: String, name: String, lat: Double, lon: Double, within: Double = 25) async -> String? {
+    /// `others`: its other names, folded (a guide filed under the English name: Luzern's is "Lucerne", 14 Nov)
+    static func guideIntro(_ cc: String, name: String, lat: Double, lon: Double, within: Double = 25, others: [String] = []) async -> String? {
+        let wanted = Set(others)
         func km(_ a: Double, _ b: Double) -> Double {
             let p = Double.pi / 180
             let x = (b - lon) * p * cos((a + lat) / 2 * p), y = (a - lat) * p
@@ -464,10 +467,14 @@ extension PlacePageState {
             guard case .ok(let d) = await Servers.data.file("placeindex/\(file).json"),
                   let rows = try? JSONSerialization.jsonObject(with: d) as? [[Any]] else { continue }
             for r in rows where r.count >= 6 {
-                guard let title = r[0] as? String, title == name || title.hasPrefix(name + " ("),
+                guard let title = r[0] as? String,
+                      title == name || title.hasPrefix(name + " (")
+                        || (!wanted.isEmpty && wanted.contains(String(title.split(separator: " (").first ?? "").townFolded)),
                       let a = (r[3] as? NSNumber)?.doubleValue, let b = (r[4] as? NSNumber)?.doubleValue, let key = r[5] as? String else { continue }
-                let k = km(a, b)
-                if k < within, k < (best?.km ?? .infinity) { best = (file, key, k) }
+                // (its own name first: another name's guide counts as 10 km further)
+                let own = title == name || title.hasPrefix(name + " (")
+                let k = km(a, b) + (own ? 0 : 10)
+                if k < within + (own ? 0 : 10), k < (best?.km ?? .infinity) { best = (file, key, k) }
             }
         }
         guard let file = best?.file, let key = best?.key, case .ok(let pd) = await Servers.data.file("place/\(file)/\(key).json"),
@@ -713,6 +720,11 @@ extension PlacePageState {
         if t.contains("]]") || t.contains("[[") {
             t = t.replacingOccurrences(of: "^[\\s\\]|]+", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
+        }
+        // A NOTE'S NUMBER LEFT STANDING ("² Florence (Italian: Firenze) is", 14 Nov): a raised figure that follows no
+        // word or number is the source's footnote mark, never text ("km²" keeps its own)
+        if t.unicodeScalars.contains(where: { "\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".unicodeScalars.contains($0) }) {
+            t = t.replacingOccurrences(of: "(^|(?<=[\\s(]))[\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}-\u{2079}]+\\s*", with: "", options: .regularExpression)
         }
         return t
     }

@@ -99,6 +99,12 @@ final class TownIndex {
     }
 
     /// one town by its key's id ("de/2925533"), if the index has come
+    /// a town's other names, folded ("lucerne" for Luzern), for finding its guide under the name English uses
+    func otherNames(_ id: String) -> [String] {
+        _ = hit(id)
+        guard let i = byID?[id], i < alt.count else { return [] }
+        return alt[i].split(separator: "|").map(String.init)
+    }
     func hit(_ id: String) -> Hit? {
         if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
         // (14 Nov: once the table is made, a miss is a miss, never a walk through every row)
