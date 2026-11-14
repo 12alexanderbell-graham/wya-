@@ -128,11 +128,48 @@ struct AppleWorldView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(map: map) }
 
+    /// OUR VIEW ON APPLE'S MAP, AT OUR SCALE: the same middle and the same width across the middle (14 Nov: a region
+    /// by spans fits the taller of two spans, so the hand-over close up stepped out, our 8.1 to Apple's 6.9)
+    static func rect(_ r: MKCoordinateRegion) -> MKMapRect {
+        let a = MKMapPoint(CLLocationCoordinate2D(latitude: min(85, r.center.latitude + r.span.latitudeDelta / 2),
+                                                  longitude: r.center.longitude - r.span.longitudeDelta / 2))
+        let b = MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, r.center.latitude - r.span.latitudeDelta / 2),
+                                                  longitude: r.center.longitude + r.span.longitudeDelta / 2))
+        return MKMapRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
+    }
+    /// (the part of it inside `margins`: Apple fits a rect into the room its layout margins leave, the head's and the
+    /// water's, so the same part of our screen is given, and the scale holds)
+    static func rect(from m: MapController, margins e: UIEdgeInsets = .zero) -> MKMapRect {
+        let W = Double(m.view.width), H = Double(m.view.height)
+        guard W > 0, H > 0 else { return Self.rect(PinsMapState.region(from: m)) }
+        func point(_ x: Double, _ y: Double) -> MKMapPoint {
+            let ll = EqualEarth.unproject(m.mapPoint(CGPoint(x: x, y: y)))
+            return MKMapPoint(CLLocationCoordinate2D(latitude: max(-85, min(85, ll.lat)), longitude: ll.lon))
+        }
+        let mid = point(W / 2, H / 2), l = point(W / 2 - 50, H / 2), r = point(W / 2 + 50, H / 2)
+        let across = abs(r.x - l.x) * W / 100
+        guard across > 0, across < MKMapSize.world.width else { return Self.rect(PinsMapState.region(from: m)) }
+        let tall = across * H / W, per = across / W
+        return MKMapRect(x: mid.x - across / 2 + Double(e.left) * per, y: mid.y - tall / 2 + Double(e.top) * per,
+                         width: across - Double(e.left + e.right) * per, height: tall - Double(e.top + e.bottom) * per)
+    }
+
     func makeUIView(context: Context) -> MKMapView {
         let v = MKMapView()
         // where our map was looking, through our own camera (before Apple's projection is hooked in below)
         map.apple = nil
-        v.setRegion(PinsMapState.region(from: map), animated: false)
+        let margins = Self.margins(water)
+        v.layoutMargins = margins
+        let start = Self.rect(from: map, margins: margins)
+        v.setVisibleMapRect(start, animated: false)
+        // (again once it has its size: set while it had none, Apple kept the spans and fitted them to the screen it
+        // got, a step further out)
+        if map.ready {
+            DispatchQueue.main.async { [weak v] in
+                guard let v, v.bounds.width > 0 else { return }
+                v.setVisibleMapRect(start, animated: false)
+            }
+        }
         context.coordinator.placed = map.ready
         map.appleOwner = ObjectIdentifier(context.coordinator)
         // the journey (history on) drawn along on Apple's map, frame by frame with ours; the Places names and marks too
@@ -196,7 +233,7 @@ struct AppleWorldView: UIViewRepresentable {
             c.placed = true
             let a = map.apple
             map.apple = nil
-            v.setRegion(PinsMapState.region(from: map), animated: false)
+            v.setVisibleMapRect(Self.rect(from: map, margins: v.layoutMargins), animated: false)
             map.apple = a
         }
         // Style's Apple looks (Standard, Satellite, Hybrid)
@@ -223,10 +260,15 @@ struct AppleWorldView: UIViewRepresentable {
             c.fills(v, stamped: map.showsStamped ? map.stamped : [], wished: map.showsWished ? map.wished.subtracting(map.stamped) : [])
         }
         // Apple's credit (Legal) just above the water, as in Pins
+        let margins = Self.margins(water)
+        if v.layoutMargins != margins { v.layoutMargins = margins }
+    }
+
+    /// Apple's credit (Legal) just above the water, as in Pins: the room left between the head and the water
+    static func margins(_ water: Water) -> UIEdgeInsets {
         let L = water.layout
         let edge = max(water.form().top, water.y(.half))
-        let margins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - edge), right: L.sheetInset)
-        if v.layoutMargins != margins { v.layoutMargins = margins }
+        return UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - edge), right: L.sheetInset)
     }
 
     static func dismantleUIView(_ v: MKMapView, coordinator: Coordinator) {
