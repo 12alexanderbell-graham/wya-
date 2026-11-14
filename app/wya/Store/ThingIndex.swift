@@ -89,7 +89,9 @@ final class ThingIndex {
     func hit(_ id: String) -> Hit? {
         let q = id.hasPrefix("wd:") ? String(id.dropFirst(3)) : id
         if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
-        if let i = byID?[q] { return rows[i].hit }
+        // (14 Nov: once the table is made, a miss is a miss: the walk through every row on each miss, for each of a big
+        // country's listings, held the screen still for seconds)
+        if let byID { return byID[q].map { rows[$0].hit } }
         return rows.first { $0.hit.id == q }?.hit
     }
     /// each thing's row by its id, made once at the first look-up

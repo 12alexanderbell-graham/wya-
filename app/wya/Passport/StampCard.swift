@@ -307,6 +307,8 @@ struct StampCard: View {
             .frame(maxWidth: width + 32)
     }
 
+    // (14 Nov: the card's buttons are the system's frosted glass, so their words read over any map; on clear glass the map
+    // lensed through and "Wishlist" could not be read)
     private func stampButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
         Button {
             stampTap(s, key: key, name: name)
@@ -318,7 +320,7 @@ struct StampCard: View {
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .frame(width: w, height: 44)
-                .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
+                .glassEffect(s.stamped ? PageGlass.surface.tint(Palette.lime) : PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
         #if DEBUG
@@ -384,7 +386,7 @@ struct StampCard: View {
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .frame(width: w, height: 44)
-                .glassEffect(s.wished ? .clear.tint(Palette.blue) : .clear, in: .capsule)
+                .glassEffect(s.wished ? PageGlass.surface.tint(Palette.blue) : PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -400,7 +402,7 @@ struct StampCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(.clear, in: .capsule)
+                .glassEffect(PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -421,7 +423,7 @@ struct StampCard: View {
                 .animation(Motion.quick, value: words)
                 .animation(Motion.quick, value: proofWord)
                 .frame(width: w, height: 44)
-                .glassEffect(.clear, in: .capsule)
+                .glassEffect(PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
         .task(id: "\(key)-\(marks.changes)-\(s.stamped)") {
@@ -446,7 +448,7 @@ struct StampCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(.clear, in: .capsule)
+                .glassEffect(PageGlass.surface, in: .capsule)
         }
         .buttonStyle(.plain)
     }

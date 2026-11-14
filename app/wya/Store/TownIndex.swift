@@ -101,7 +101,8 @@ final class TownIndex {
     /// one town by its key's id ("de/2925533"), if the index has come
     func hit(_ id: String) -> Hit? {
         if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
-        if let i = byID?[id] { return rows[i].hit }
+        // (14 Nov: once the table is made, a miss is a miss, never a walk through every row)
+        if let byID { return byID[id].map { rows[$0].hit } }
         return rows.first { $0.hit.id == id }?.hit
     }
     /// ONE COUNTRY'S TOWN BY ITS NAME as it was typed (case and accents aside; its own name, then its other names), the

@@ -2,7 +2,7 @@ import Foundation
 
 /// THE NAMED MARKS OF HTML (HTML 4's 248 beyond the four every reader knows), so a source's "Reserva Faun&iacute;tica"
 /// or "N&uuml;rnberg" reads as written; the direction marks ("&lrm;", "&rlm;") stand for nothing that is seen
-enum HTMLEntities {
+nonisolated enum HTMLEntities {
     static let named: [String: UInt32] = [
         "AElig": 0xC6, "Aacute": 0xC1, "Acirc": 0xC2, "Agrave": 0xC0, "Alpha": 0x391, "Aring": 0xC5, "Atilde": 0xC3,
         "Auml": 0xC4, "Beta": 0x392, "Ccedil": 0xC7, "Chi": 0x3A7, "Dagger": 0x2021, "Delta": 0x394, "ETH": 0xD0,

@@ -217,8 +217,17 @@ extension PlacePageState.OnePage {
     fileprivate func loadCountry(_ cc: String) async {
         // (the things' index: the checked spelling of an activity's name, F147)
         ThingIndex.shared.load()
-        guard case .ok(let d) = await Servers.data.file("country/\(cc).json"),
-              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
+        // (14 Nov: asked again twice when the answer does not come: the first page after a launch, asked while the data
+        // server was still busy, stayed empty below its buttons for good)
+        var got: Data?
+        for attempt in 0 ..< 3 {
+            let answer = await Servers.data.file("country/\(cc).json")
+            if case .ok(let d) = answer, (try? JSONSerialization.jsonObject(with: d)) != nil { got = d; break }
+            NSLog("wya page %@: no data on try %d", cc, attempt + 1)
+            if case .ok = answer { DevDataClient.forget("country/\(cc).json") }
+            try? await Task.sleep(for: .milliseconds(700))
+        }
+        guard let d = got, let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any], key.id.lowercased() == cc else { return }
         let f = j["facts"] as? [String: Any] ?? [:]
         var out = PlacePageState.Facts()
         if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: name), 620); out.proseWikivoyage = true }
@@ -433,12 +442,21 @@ extension PlacePageState {
     ///   place (its listings lie more than 400 km apart: a region, an itinerary, a topic) comes after the towns and
     ///   does not put its title on its rows.
     static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
-        guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
-              let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
+        guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
+        var things: Data?
+        if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
+        // (14 Nov: worked out away from the screen: a big country's thousands of listings, read and cleaned on the main
+        // thread, held the whole app still for seconds and some pages never opened)
+        let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first) }.value
+        return rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line) }
+    }
+
+    /// the activities' rows (name as the source writes it, cleaned; its Wikidata id; its line), in their order
+    nonisolated static func activityRows(_ d: Data, _ things: Data?, town: String?, first: [String]) -> [(name: String, wd: String?, line: String)] {
+        guard let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
         // the country's things: Wikidata id -> (fame, place in the file)
         var fame: [String: (fame: Int, at: Int)] = [:]
-        if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
-           let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
+        if let td = things, let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
             for (i, r) in rows.enumerated() where r.count > 5 {
                 if let q = r[0] as? String, let f = (r[5] as? NSNumber)?.intValue, fame[q] == nil { fame[q] = (f, i) }
             }
@@ -462,12 +480,14 @@ extension PlacePageState {
         let cities = town.map { [$0] } ?? (first.filter { byCity[$0] != nil } + rest.filter { !wideOnes.contains($0) } + rest.filter { wideOnes.contains($0) })
         var seen = Set<String>()
         // ranks[r][c]: city c's rows of rank r with their place in the things' file
-        var ranks = [[[(at: Int, row: Activity)]]](repeating: [[(at: Int, row: Activity)]](repeating: [], count: cities.count), count: 10)
+        typealias Row = (name: String, wd: String?, line: String)
+        var ranks = [[[(at: Int, row: Row)]]](repeating: [[(at: Int, row: Row)]](repeating: [], count: cities.count), count: 10)
         for (ci, c) in cities.enumerated() {
             for l in byCity[c] ?? [] {
                 guard let k = l["k"] as? String, k == "see" || k == "do", let n = l["n"] as? String else { continue }
                 let q = l["wd"] as? String
-                let name = Self.corrected(plain(n), wd: q)
+                // (spelling corrected on the main thread afterwards, by its Wikidata label)
+                let name = plain(n)
                 guard !name.isEmpty, !seen.contains(name.lowercased()), q.map({ !seen.contains($0) }) ?? true else { continue }
                 seen.insert(name.lowercased())
                 if let q { seen.insert(q) }
@@ -478,10 +498,10 @@ extension PlacePageState {
                 else { r = k == "see" ? 8 : 9 }
                 let desc = (l["d"] as? String).map { plain($0) } ?? ""
                 let line = brief(town != nil || wideOnes.contains(c) ? desc : (desc.isEmpty ? c : "\(c) · \(desc)"), 112)
-                ranks[r][ci].append((known?.at ?? Int.max, Activity(name: name, line: line)))
+                ranks[r][ci].append((known?.at ?? Int.max, (name: name, wd: q, line: line)))
             }
         }
-        var out: [Activity] = []
+        var out: [Row] = []
         for byCityRows in ranks {
             let lists = byCityRows.map { $0.enumerated().sorted { ($0.element.at, $0.offset) < ($1.element.at, $1.offset) }.map(\.element.row) }
             // a town's: the rank whole; a country's: one from each city in turn (the first rows were all one city's)
@@ -533,8 +553,12 @@ extension PlacePageState {
         ("Théatre", "Théâtre"),
     ]
 
+    /// (made once: compiled again for every listing that held an "&", they held the screen still for seconds, 14 Nov)
+    nonisolated(unsafe) static let namedMark = try? NSRegularExpression(pattern: "&([A-Za-z][A-Za-z0-9]{1,7});")
+    nonisolated(unsafe) static let numberedMark = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);")
+
     /// `name`: the place the text is about, so a picture's caption left in front of it can be told from its first words
-    static func plain(_ s: String, name: String? = nil) -> String {
+    nonisolated static func plain(_ s: String, name: String? = nil) -> String {
         var t = s
         // ("&amp;" first: the source writes some marks twice over, "&amp;ndash;", and Australia's page read)
         for (e, c) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
@@ -543,14 +567,14 @@ extension PlacePageState {
             t = t.replacingOccurrences(of: e, with: c)
         }
         // every other named mark HTML has ("Faun&iacute;tica", "N&uuml;rnberg"; "&lrm;" is nothing seen)
-        if t.contains("&"), let re = try? NSRegularExpression(pattern: "&([A-Za-z][A-Za-z0-9]{1,7});") {
+        if t.contains("&"), let re = Self.namedMark {
             for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
                 guard let r = Range(m.range, in: t), let n = Range(m.range(at: 1), in: t), let c = HTMLEntities.character(String(t[n])) else { continue }
                 t.replaceSubrange(r, with: c)
             }
         }
         // numbered ones ("&#8212;", "&#x2014;")
-        if t.contains("&#"), let re = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);") {
+        if t.contains("&#"), let re = Self.numberedMark {
             for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
                 guard let r = Range(m.range, in: t), let hx = Range(m.range(at: 1), in: t), let num = Range(m.range(at: 2), in: t),
                       let v = UInt32(t[num], radix: t[hx].isEmpty ? 10 : 16), let u = Unicode.Scalar(v) else { continue }
@@ -582,7 +606,12 @@ extension PlacePageState {
         // it. Anywhere else ("... Central New York. 250px|thumb|View of the Salmon River"): from its options to the end of
         // its caption's sentence. A template ("{{pagebanner|{ }}}") is never words.
         let o = "(?:thumb|thumbnail|frame|frameless|border|left|right|center|none|upright(?:=[0-9.]+)?|[0-9]+(?:x[0-9]+)?px)"
-        if let r = t.range(of: "^\\s*(?:\(o)\\|)*\(o)(?:\\||\\s)", options: .regularExpression) {
+        // (14 Nov: each of these runs only when its marks are there; run on every one of a big country's thousands
+        // of listings, the regular expressions held the screen still for seconds and pages never opened)
+        let firstWord = String(t.drop(while: \.isWhitespace).prefix { $0 != " " && $0 != "|" })
+        let pictureFirst = ["thumb", "thumbnail", "frame", "frameless", "border", "left", "right", "center", "none"].contains(firstWord)
+            || firstWord.hasPrefix("upright") || firstWord.hasSuffix("px")
+        if pictureFirst, let r = t.range(of: "^\\s*(?:\(o)\\|)*\(o)(?:\\||\\s)", options: .regularExpression) {
             t.removeSubrange(r)
             if let name, let start = Self.articleStart(t, name) { t.removeSubrange(t.startIndex ..< start) }
             t = t.trimmingCharacters(in: .whitespaces)
@@ -604,10 +633,13 @@ extension PlacePageState {
         // the opening, and what leads into them goes with them; a "For ..., see ..." only at the start. A "see" with
         // no full stop ("see Benin City Benin is a country") ends where the text starts with its own name.
         let lead = String(t.prefix(450))
-        if let r = lead.range(of: "\"?[^\".]{1,14}\"? redirects here\\.|This (?:article|page) is about", options: .regularExpression) {
+        let notes = lead.contains("redirects here") || lead.contains("This article") || lead.contains("This page")
+            || t.drop(while: \.isWhitespace).hasPrefix("For ")
+        if notes, let r = lead.range(of: "\"?[^\".]{1,14}\"? redirects here\\.|This (?:article|page) is about", options: .regularExpression) {
             t.removeSubrange(t.startIndex ..< r.lowerBound)
         }
-        for _ in 0 ..< 4 {
+        if !notes { t = t.trimmingCharacters(in: .whitespaces) }
+        for _ in 0 ..< (notes ? 4 : 0) {
             t = t.trimmingCharacters(in: .whitespaces)
             if let r = t.range(of: "^\"?[^\".]{1,14}\"? redirects here\\.\\s*", options: .regularExpression)
                 ?? t.range(of: "^This (?:article|page) is about[^.]*\\.\\s*", options: .regularExpression) {
@@ -671,7 +703,7 @@ extension PlacePageState {
 
     /// where a text starts with its own name and then says what it is ("Debrecen is", "São Paulo, or", "Ségou (")
     /// in its first 220 characters, any case and accents; nil when it never does
-    static func articleStart(_ t: String, _ name: String) -> String.Index? {
+    nonisolated static func articleStart(_ t: String, _ name: String) -> String.Index? {
         let head = t.prefix(220)
         var from = head.startIndex
         while let r = head.range(of: name, options: [.caseInsensitive, .diacriticInsensitive], range: from ..< head.endIndex) {
@@ -703,7 +735,7 @@ extension PlacePageState {
     /// A ROW'S LINE CUT TO WHAT TWO LINES HOLD, AT A SENTENCE OR A WORD (the row cut it itself, in the middle of a
     /// word: "Staff assist if yo…"): whole sentences while they fit; a first sentence too long is cut at its last
     /// whole word, with the mark of more
-    static func brief(_ s: String, _ n: Int) -> String {
+    nonisolated static func brief(_ s: String, _ n: Int) -> String {
         guard s.count > n else { return s }
         let head = String(s.prefix(n))
         if let r = head.range(of: ". ", options: .backwards), head.distance(from: head.startIndex, to: r.lowerBound) >= n / 3 {
