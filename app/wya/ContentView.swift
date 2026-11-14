@@ -544,6 +544,8 @@ struct ContentView: View {
     /// go, the camera stays where it is (6.1 rule 4)
     private func modeChanged(from old: HeadState.Mode, to new: HeadState.Mode) {
         water.modeSwitchedAt = CACurrentMediaTime()
+        // (a pin's sheet fits its own height; on Countries that height held the water short of full, 14 Nov)
+        if old != new { water.fitHalf = nil }
         // the sun picked (Streak) is the Countries world's: another map starts on its own caption
         map.sunPicked = false
         // (the towns' index, for a town's page and search: read as the maps that show towns come up)

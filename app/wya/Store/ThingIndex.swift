@@ -81,9 +81,41 @@ final class ThingIndex {
                 return sx != sy ? sx : x.offset < y.offset
             }.map(\.element)
         }
-        let h = Array((coded + best(home) + homeIn + best(away) + awayIn).prefix(limit))
+        var h = Array((coded + best(home) + homeIn + best(away) + awayIn).prefix(limit))
+        // ONE LETTER OFF (14 Nov: "eifel" found Ireland and no Eiffel Tower): with nothing found, a word of a name that
+        // starts with what was typed give or take one letter (missed, extra, wrong or two swapped), the best known first
+        if h.isEmpty, q.count >= 4 {
+            let typed = Array(q.utf8)
+            var near: [(Hit, Int)] = []
+            for (n, r) in rows.enumerated() {
+                let f = Array(r.folded.utf8)
+                var i = 0
+                while i < f.count {
+                    var j = i
+                    while j < f.count, f[j] != 32 { j += 1 }
+                    if Self.nearStart(typed, f[i ..< j]) { near.append((r.hit, n)); break }
+                    i = j + 1
+                }
+            }
+            h = Array(near.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.prefix(limit).map(\.0))
+        }
         last = (q, open, h)
         return h
+    }
+    /// whether a word starts with `q` give or take one letter: a letter missed, one extra, one wrong, or two swapped
+    nonisolated static func nearStart(_ q: [UInt8], _ w: ArraySlice<UInt8>) -> Bool {
+        let w = Array(w)
+        guard w.count >= q.count - 1, let d = q.indices.first(where: { $0 >= w.count || q[$0] != w[$0] }) else { return false }
+        func same(_ a: Int, _ b: Int) -> Bool {   // the rest of q from a matches w from b
+            let n = q.count - a
+            guard b + n <= w.count else { return false }
+            for k in 0 ..< n where q[a + k] != w[b + k] { return false }
+            return true
+        }
+        return same(d, d + 1)                                                   // a letter missed ("eifel": eif-f-el)
+            || (d + 1 <= q.count && same(d + 1, d) && d < q.count - 1)          // one extra
+            || same(d + 1, d + 1)                                               // one wrong
+            || (d + 1 < q.count && d + 1 < w.count && q[d] == w[d + 1] && q[d + 1] == w[d] && same(d + 2, d + 2))   // two swapped
     }
     /// one thing by its key's id ("wd:Q19675"), once the index has come
     func hit(_ id: String) -> Hit? {

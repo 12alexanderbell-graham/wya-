@@ -1990,7 +1990,7 @@ struct PinsList: View {
         .onTapGesture {
             Feel.tap()
             let n = PinMaps.shared.all.count + 1
-            let m = PinMaps.shared.make("Map \(n)")
+            let m = PinMaps.shared.make("Map \(n)", rises: false)
             name = m.name; naming = m.id; typing = true
         }
         .accessibilityAddTraits(.isButton)

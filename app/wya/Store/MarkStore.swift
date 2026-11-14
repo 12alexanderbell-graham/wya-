@@ -304,13 +304,15 @@ final class MarkStore {
     // MARK: inside
 
     /// a change made elsewhere (a pin dropped or deleted) that the undo drop takes back with `back`
-    func did(_ words: String, back: @escaping @MainActor () -> Void, forth: (@MainActor () -> Void)? = nil) {
+    /// `rises`: false when the screen already answers the change (a new map's name being typed under its title), so the
+    /// drop stays down; the step is still there for a shake
+    func did(_ words: String, rises: Bool = true, back: @escaping @MainActor () -> Void, forth: (@MainActor () -> Void)? = nil) {
         undoStack.append(([], words, back, forth))
         undoSerial &+= 1
         redoStack = []
         if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
         lastWords = words
-        changes += 1
+        if rises { changes += 1 }
     }
 
     /// ONE UNDO FOR ONE TAP: the writes made inside `body` (a region and the parents it stamps, a town and its region

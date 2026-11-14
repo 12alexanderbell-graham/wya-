@@ -68,6 +68,10 @@ struct UndoDrop: View {
         // (a region's, town's or thing's card the same: its Details | Verify? row is where the drop rises)
         .onChange(of: marks.changes) { _, _ in if card.isOpen || regionCard.isOpen { pending = true } else { rise() } }
         .onChange(of: card.isOpen || regionCard.isOpen) { _, open in if !open, pending { pending = false; rise() } }
+        // (14 Nov: a Pins map's "Map made" stayed up over Countries after a switch, a tap there undoing a Pins step
+        // from another map) a change of map or tab sinks it; the step stays, for a shake
+        .onChange(of: water.head?.mode) { _, _ in pending = false; if up { sink() } }
+        .onChange(of: water.profile) { _, _ in pending = false; if up { sink() } }
     }
     @State private var card = CardState.shared
     @State private var regionCard = RegionCardState.shared

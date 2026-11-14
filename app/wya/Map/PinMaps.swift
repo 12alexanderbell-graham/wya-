@@ -67,13 +67,14 @@ final class PinMaps {
     }
 
     /// a new map, shown at once; one undo step takes it away
-    @discardableResult func make(_ name: String) -> PinMap {
+    /// (`rises`: false when its name is typed at once, the title the answer; the drop rose over it, 14 Nov)
+    @discardableResult func make(_ name: String, rises: Bool = true) -> PinMap {
         let m = PinMap(name: name)
         let was = shown
         all.append(m)
         save()
         shown = m.id
-        MarkStore.shared.did("Map made", back: { [weak self] in
+        MarkStore.shared.did("Map made", rises: rises, back: { [weak self] in
             self?.all.removeAll { $0.id == m.id }; self?.save(); self?.shown = was
         }, forth: { [weak self] in
             guard let self, !self.all.contains(where: { $0.id == m.id }) else { return }
