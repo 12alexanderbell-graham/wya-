@@ -1616,12 +1616,25 @@ struct PagePhoto: View {
                 .onAppear { onImage?(i) }
         } else {
             Palette.cream.task(id: url) {
-                guard let (d, _) = try? await URLSession.shared.data(from: url), let i = UIImage(data: d) else { return }
+                guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
+                let i = Self.upper(i0)
                 let ready = await i.byPreparingForDisplay() ?? i
                 Self.kept.setObject(ready, forKey: url as NSURL)
                 image = ready
             }
         }
+    }
+}
+
+extension PagePhoto {
+    /// A STANDING PHOTO'S UPPER PART (14 Nov: the Matterhorn's page showed only the lake it stands over; a wide frame
+    /// filled from a tall photo keeps its middle): a square from just under its top, where a mountain, a tower or a
+    /// face is; a lying photo as it is
+    static func upper(_ i: UIImage) -> UIImage {
+        guard i.imageOrientation == .up, let cg = i.cgImage, cg.height > cg.width else { return i }
+        let w = cg.width, top = cg.height / 20
+        guard let c = cg.cropping(to: CGRect(x: 0, y: top, width: w, height: min(w, cg.height - top))) else { return i }
+        return UIImage(cgImage: c, scale: i.scale, orientation: i.imageOrientation)
     }
 }
 
