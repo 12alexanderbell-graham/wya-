@@ -70,9 +70,11 @@ struct PinsDock: View {
     @State private var routes = PinRoutes.shared
 
     /// the row's middle from the dock's top: under the map's name, which sits on every map's name line
-    static func rowY(_ top: CGFloat) -> CGFloat { top + 77 }
+    static func rowY(_ top: CGFloat) -> CGFloat { top + 88 }
+    /// the map's name: its own line at the sheet's top, left, with room under it (14 Nov: never crowding the circles)
+    static func titleY(_ top: CGFloat) -> CGFloat { top + 34 }
     /// where what is under the dock starts (Saved's rows)
-    static func bottom(_ top: CGFloat) -> CGFloat { top + 95 }
+    static func bottom(_ top: CGFloat) -> CGFloat { top + 106 }
 
     var body: some View {
         let L = water.layout
@@ -103,7 +105,9 @@ struct PinsDock: View {
                 ("Import", { dock.importing = true }),
                 ("Export", { PinFiles.export() }),
             ]) {},
-        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, width: L.W - 2 * L.sheetInset - 16)
+        ], words: drawing ? DrawBar.caption(DrawTool.shared) : words, align: .leading)
+        // the circles together, from the same left edge as the name and the rows (Apple's sheets: one left edge)
+        .frame(width: L.W - 2 * L.sheetInset - 32, alignment: .leading)
         .fileImporter(isPresented: $dock.importing, allowedContentTypes: PinFiles.types, allowsMultipleSelection: true) { r in
             guard case .success(let urls) = r, let map = PinsMapState.shared.map else { return }
             var n = 0
@@ -116,22 +120,23 @@ struct PinsDock: View {
         // what it holds is on the map); inside a map's list at 50%, the back circle at its left goes back to your maps
         .overlay(alignment: .topLeading) {
             let maps = PinMaps.shared
-            ZStack {
-                Text(maps.map(maps.shown)?.name ?? "All pins")
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                    .frame(width: L.W - 2 * L.sheetInset - 120)
-                    .position(x: L.W / 2, y: Self.rowY(top) - 46)
-                    .allowsHitTesting(false)
+            HStack(spacing: 4) {
                 if maps.inside, water.stop != .quarter {
                     Button { Feel.tap(); maps.inside = false } label: {
                         Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Your maps")
-                    .position(x: L.sheetInset + 8 + 22, y: Self.rowY(top) - 46)
+                    .padding(.leading, -12)
                 }
+                Text(maps.map(maps.shown)?.name ?? "All pins")
+                    .font(.title2.weight(.bold)).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .allowsHitTesting(false)
+                Spacer(minLength: 0)
             }
+            .frame(width: L.W - 2 * L.sheetInset - 32, height: 44)
+            .position(x: L.W / 2, y: Self.titleY(top))
             .frame(width: L.W, height: L.H)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }

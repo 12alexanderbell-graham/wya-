@@ -22,11 +22,13 @@ struct WaterTools: View {
     /// the row's width: given, the circles share it evenly (each its own equal part, the button rule: widths are the
     /// width split in n), else they sit together in the middle
     var width: CGFloat? = nil
+    /// where the circles and their words sit: together in the middle, or together from the leading edge (Pins)
+    var align: HorizontalAlignment = .center
 
     var body: some View {
-        VStack(spacing: 8) {
-            GlassEffectContainer(spacing: 14) {
-                HStack(spacing: width == nil ? 14 : 0) {
+        VStack(alignment: align, spacing: 8) {
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: width == nil ? 12 : 0) {
                     // (by place, not by tool: a circle stays where it is and only its icon changes, Apple's blur
                     // replace, when the row becomes another tool's controls)
                     ForEach(Array(tools.enumerated()), id: \.offset) { _, t in
