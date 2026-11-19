@@ -1,4 +1,5 @@
-Planet surface maps (planet-earth, -mercury, -venus, -mars, -jupiter, -saturn, -uranus, -neptune, -moon, saturn-ring):
+Planet surface maps (planet-earth, -mercury, -venus, -mars, -jupiter, -saturn, -uranus, -neptune, -moon, saturn-ring)
+and Earth's night lights (earth-lights):
 Solar System Scope (https://www.solarsystemscope.com/textures/), based on NASA data, licensed CC BY 4.0
-(https://creativecommons.org/licenses/by/4.0/). Changes: resized to 1024 x 512 (the ring to 1024 x 16); Earth's
+(https://creativecommons.org/licenses/by/4.0/). Changes: resized to 1024 x 512 (the ring to 1024 x 16; the night lights as PNG); Earth's
 cloud map laid over its day map as one picture. Downloaded from Wikimedia Commons, 19 Nov 2026.
