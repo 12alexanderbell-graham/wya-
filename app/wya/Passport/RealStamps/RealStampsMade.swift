@@ -10,6 +10,18 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        "ge": Stamp(id: "ge", w: 340, h: 340, ink: "#1f9a7c", round: false, slots: [
+            Slot(what: .date("{dd} {MM} {yyyy}"), x: 150, y: 198, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 3, fill: "#1f9a7c", m: .identity, fit: 210, length: nil)
+        ]),
+        "et": Stamp(id: "et", w: 420, h: 270, ink: "#4a3b33", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {MON} {yyyy}"), x: 210, y: 150, font: .serif, size: 40, weight: 500, anchor: .middle, tracking: 1, fill: "#4a3b33", m: .identity, fit: 280, length: nil)
+        ]),
+        "sv": Stamp(id: "sv", w: 420, h: 250, ink: "#3a5fb0", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {ESd} {yyyy}"), x: 215, y: 140, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 3, fill: "#2a2a2a", m: .identity, fit: 260, length: nil)
+        ]),
+        "ni": Stamp(id: "ni", w: 420, h: 248, ink: "#3b62b3", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {ESL} {yyyy}"), x: 226, y: 144, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 3, fill: "#c8384e", m: .identity, fit: 300, length: nil)
+        ]),
         "cl": Stamp(id: "cl", w: 420, h: 273, ink: "#2f55a8", round: false, slots: [
             Slot(what: .date("{d1} {d2} {ES} {yy}"), x: 266, y: 152, font: .barlow, size: 34, weight: 500, anchor: .middle, tracking: 3.5, fill: "#7a3f78", m: .identity, fit: 176, length: nil)
         ]),
