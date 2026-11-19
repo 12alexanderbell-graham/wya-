@@ -1234,6 +1234,11 @@ final class TestDriver {
                 case "placesswipe": UserDefaults.standard.set(a == "on", forKey: "wya.placesSwipe")
                 // lens on|off: the depth of focus behind cards (direction B), for a before and after
                 case "lens": MapRenderer.lensOff = a == "off"; map?.needsFrame = true
+                // stampdump ar,cl,...: each stamp's finished picture (art, words, today's date) saved to snaps/stamp-<id>.png
+                case "stampdump":
+                    for id in a.split(separator: ",").map(String.init) {
+                        if let png = StampArt.image(id)?.pngData() { try? png.write(to: URL(fileURLWithPath: Snap.dir + "/stamp-\(id).png")) }
+                    }
                 // sun on|off: the world's light; sun shift <hours>: the sun as it will be that many hours on (0 back to now)
                 case "sun":
                     if a == "shift", p.count > 2 { UserDefaults.standard.set((Double(p[2]) ?? 0) * 3600, forKey: "wya.sunShift") }

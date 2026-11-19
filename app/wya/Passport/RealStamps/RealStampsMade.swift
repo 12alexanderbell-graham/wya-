@@ -10,6 +10,21 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        "cl": Stamp(id: "cl", w: 420, h: 273, ink: "#2f55a8", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {ES} {yy}"), x: 266, y: 152, font: .barlow, size: 34, weight: 500, anchor: .middle, tracking: 3.5, fill: "#7a3f78", m: .identity, fit: 176, length: nil)
+        ]),
+        "uy": Stamp(id: "uy", w: 420, h: 280, ink: "#2e2e2e", round: false, slots: [
+            Slot(what: .date("{dd} {ES} {yyyy}"), x: 210, y: 184, font: .barlow, size: 46, weight: 700, anchor: .middle, tracking: 5, fill: "#2e2e2e", m: .identity, fit: 330, length: nil)
+        ]),
+        "bo": Stamp(id: "bo", w: 420, h: 252, ink: "#2a9a72", round: false, slots: [
+            Slot(what: .date("{dd} {ES} {yyyy}"), x: 215, y: 148, font: .barlow, size: 42, weight: 500, anchor: .middle, tracking: 3, fill: "#d8344a", m: .identity, fit: 210, length: nil)
+        ]),
+        "cu": Stamp(id: "cu", w: 420, h: 268, ink: "#d93b93", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {ESd} {yyyy}"), x: 200, y: 148, font: .barlow, size: 44, weight: 500, anchor: .middle, tracking: 3, fill: "#d93b93", m: .identity, fit: 270, length: nil)
+        ]),
+        "cr": Stamp(id: "cr", w: 320, h: 320, ink: "#c8283c", round: false, slots: [
+            Slot(what: .date("{dd} {PE} {yyyy}"), x: 160, y: 190, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 1.5, fill: "#c8283c", m: .identity, fit: 230, length: nil)
+        ]),
         "ar": Stamp(id: "ar", w: 420, h: 268, ink: "#2b4aa8", round: false, slots: [
             Slot(what: .date("{d1} {d2} {PE} {yyyy}"), x: 238, y: 148, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 4, fill: "#2b4aa8", m: .identity, fit: 302, length: nil)
         ]),
