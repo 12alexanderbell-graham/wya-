@@ -84,7 +84,12 @@ final class MapController {
 
     // MARK: A PLACE'S COLOUR (Part 1.5): it changes in one frame
     enum Look: Equatable { case plain, lime, blue }
+    /// A LIST VIEWED ON THE MAP (Lists plan §4; P06:): its countries lime, everything else plain, until it is put
+    /// away
+    struct Viewing: Equatable { let name: String; let places: Set<Int>; let been: Int }
+    var viewing: Viewing? { didSet { if viewing != oldValue { needsFrame = true } } }
     func look(of i: Int, stamped s: Set<Int>, wished w: Set<Int>, filter f: Int) -> Look {
+        if let v = viewing { return v.places.contains(i) ? .lime : .plain }
         if f <= 2 && s.contains(i) { return .lime }
         if (f == 0 || f >= 3) && w.contains(i) { return .blue }
         return .plain

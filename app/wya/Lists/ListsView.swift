@@ -98,6 +98,9 @@ struct ListsWater: View {
     @State private var hourDays: Set<String> = []
     /// what the last calendar file did
     @State private var icsWords: String?
+    /// a row being swiped out (its id, how far), and the last thing taken out, for Undo
+    @State private var swiping: (id: String, x: CGFloat)?
+    @State private var removed: (list: String, item: ListItem, at: Int)?
 
     var body: some View {
         let L = water.layout
@@ -139,6 +142,11 @@ struct ListsWater: View {
                 circle("back") { Feel.tap(); withAnimation(Motion.quick) { s.close() } }
                 .accessibilityLabel("Back")
                 Spacer(minLength: 0)
+                // SEE IT ON THE MAP: a list with places, on the Map tab's own mark
+                if let id = s.open, let l = viewable(id) {
+                    circle("tab-map") { viewOnMap(l) }
+                        .accessibilityLabel("View on map")
+                }
             } else {
                 circle("search") {
                     Feel.tap()
@@ -284,7 +292,7 @@ struct ListsWater: View {
     /// none, the glass), its name at the bottom left and how many things at the right
     private func listTile(_ l: MyList) -> some View {
         tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
-             ccs: Array(l.countries.prefix(4)))
+             ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }))
     }
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {
@@ -293,7 +301,9 @@ struct ListsWater: View {
     }
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
-    private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String]) -> some View {
+    private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil) -> some View {
+        let sub = n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
+            .flatMap { $0 } ?? "\(n) \(n == 1 ? "place" : "places")"
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
             Color.clear
@@ -305,13 +315,13 @@ struct ListsWater: View {
                 .padding(.bottom, 6)
             Text(name).font(.body.weight(.semibold))
                 .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1)
-            Text(n == 0 ? "Nothing yet" : "\(n) \(n == 1 ? "place" : "places")").font(.subheadline)
+            Text(sub).font(.subheadline)
                 .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
         }
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { s.open = id } }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(name + (n > 0 ? ", \(n) \(n == 1 ? "place" : "places")" : ""))
+        .accessibilityLabel(name + (n > 0 ? ", " + sub : ""))
         .accessibilityAddTraits(.isButton)
     }
 
@@ -399,33 +409,67 @@ struct ListsWater: View {
                             Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                             Spacer(minLength: 0)
                         }
-                        // a note: not shown until its row is opened
-                        if s.noted == t.id, !t.note.isEmpty {
-                            Text(t.note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                                .padding(.leading, 56)
+                        // OPENED: its note, and for a place, Open, which takes it to the map (morning Q12)
+                        if s.noted == t.id {
+                            if !t.note.isEmpty {
+                                Text(t.note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                    .padding(.leading, 56)
+                            }
+                            if let cc = t.cc, !cc.isEmpty {
+                                Button { PlanPlaces.open(t.name, cc: cc) } label: {
+                                    Text("Open").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                                        .padding(.horizontal, 16).frame(height: 36)
+                                        .glassEffect(PageGlass.control.interactive(), in: .capsule)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.leading, 56).padding(.bottom, 8)
+                                .accessibilityHint("Opens it on the map")
+                            }
                         }
                     }
                     .frame(minHeight: 56, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        guard !t.note.isEmpty else { return }
+                        guard !t.note.isEmpty || !(t.cc ?? "").isEmpty else { return }
                         Feel.tap()
                         withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id }
                     }
-                    // out of the list (yours only: the wishlist is the map's own, changed on the map)
-                    .contextMenu {
-                        if editable {
-                            Button("Take out", role: .destructive) {
-                                withAnimation(Motion.quick) {
-                                    ListsStore.shared.change { b in
-                                        if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].items.removeAll { $0.id == t.id } }
-                                    }
-                                }
-                            }
+                    // out of the list (yours only: the wishlist is the map's own, changed on the map) SWIPED LEFT, it
+                    // comes out (Undo brings it back); the words show behind it as it goes
+                    .offset(x: swiping?.id == t.id ? min(0, swiping!.x) : 0)
+                    .background(alignment: .trailing) {
+                        if editable, swiping?.id == t.id, (swiping?.x ?? 0) < -12 {
+                            Text("Remove").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.white)
+                                .padding(.horizontal, 16).frame(maxHeight: .infinity)
+                                .background(Palette.ink, in: .capsule)
                         }
                     }
+                    .simultaneousGesture(editable ? DragGesture(minimumDistance: 18)
+                        .onChanged { g in
+                            guard abs(g.translation.width) > abs(g.translation.height) * 1.5 else { return }
+                            swiping = (t.id, g.translation.width)
+                        }
+                        .onEnded { g in
+                            if g.translation.width < -110 { removeThing(t.id) }
+                            withAnimation(Motion.quick) { swiping = nil }
+                        } : nil)
+                    // HELD, it lifts and moves: dropped on another row, it goes in that row's place
+                    .draggable(t.id) {
+                        Text(t.name).font(.body).foregroundStyle(Palette.ink)
+                            .padding(.horizontal, 16).frame(height: 44)
+                            .glassEffect(PageGlass.surface, in: .capsule)
+                    }
+                    .dropDestination(for: String.self) { ids, _ in
+                        guard editable, let id = ids.first, id != t.id else { return false }
+                        moveThing(id, to: t.id)
+                        return true
+                    }
+                    // (no hold menu: holding lifts the row to move it; taking out is the swipe, with Undo)
                     .accessibilityElement(children: .combine)
+                    .accessibilityAction(named: "Take out") { if editable { removeThing(t.id) } }
                 }
+                // adding, in the list (ListEdit)
+                if editable, let id = s.open { ListAddRow(listID: id) }
                 // Suggestions for one of your own lists (AI on; PlanIdeas)
                 if editable, MapSettingsStore.shared.value.ai, !things.isEmpty, let id = s.open {
                     ListSuggestions(listID: id, name: title, things: things)
@@ -436,6 +480,80 @@ struct ListsWater: View {
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
+        // UNDO, for a few seconds after something is taken out
+        .overlay(alignment: .bottom) {
+            if let r = removed, r.list == s.open {
+                Button {
+                    Feel.tap()
+                    withAnimation(Motion.quick) {
+                        ListsStore.shared.change { b in
+                            if let i = b.lists.firstIndex(where: { $0.id == r.list }) {
+                                b.lists[i].items.insert(r.item, at: min(r.at, b.lists[i].items.count))
+                            }
+                        }
+                        removed = nil
+                    }
+                } label: {
+                    Text("Undo").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .padding(.horizontal, 24).frame(height: 44)
+                        .glassEffect(PageGlass.surface.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 12)
+                .transition(.identity)
+            }
+        }
+    }
+
+    /// the open list, when it has places that are on the map (the wishlist is the map's own already)
+    private func viewable(_ id: String) -> MyList? {
+        guard id != "wish", let l = store.book.lists.first(where: { $0.id == id }) else { return nil }
+        return l.items.contains { $0.k == .place && !($0.cc ?? "").isEmpty } ? l : nil
+    }
+    /// the list's countries coloured on the Map tab, under them (P06 §3)
+    private func viewOnMap(_ l: MyList) {
+        guard let w = map.world else { return }
+        Feel.tap()
+        let ccs = Set(l.items.filter { $0.k == .place }.compactMap { $0.cc?.lowercased() }.filter { !$0.isEmpty })
+        let places = Set(ccs.compactMap { w.placeIndex[$0] })
+        guard !places.isEmpty else { Feel.refuse(); return }
+        // (the caption's count: of the list's countries, the ones you have stamped)
+        map.viewing = MapController.Viewing(name: l.name.isEmpty ? "New list" : l.name, places: places,
+                                            been: places.filter { map.stamped.contains($0) }.count)
+        // (on Countries: Pins and Places draw no countries' colours)
+        if let h = AIContext.head, h.mode != .countries { h.mode = .countries }
+        NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)
+    }
+
+    /// a thing taken out of the open list, kept for Undo for 8 s
+    private func removeThing(_ id: String) {
+        guard let lid = s.open, let l = ListsStore.shared.book.lists.first(where: { $0.id == lid }),
+              let at = l.items.firstIndex(where: { $0.id == id }) else { return }
+        Feel.lift()
+        let item = l.items[at]
+        withAnimation(Motion.quick) {
+            ListsStore.shared.change { b in
+                if let i = b.lists.firstIndex(where: { $0.id == lid }) { b.lists[i].items.removeAll { $0.id == id } }
+            }
+            removed = (lid, item, at)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            if removed?.item.id == id { withAnimation(Motion.quick) { removed = nil } }
+        }
+    }
+    /// a thing moved into another's place in the open list
+    private func moveThing(_ id: String, to target: String) {
+        guard let lid = s.open else { return }
+        Feel.notch()
+        withAnimation(Motion.quick) {
+            ListsStore.shared.change { b in
+                guard let i = b.lists.firstIndex(where: { $0.id == lid }),
+                      let from = b.lists[i].items.firstIndex(where: { $0.id == id }),
+                      let to = b.lists[i].items.firstIndex(where: { $0.id == target }) else { return }
+                let it = b.lists[i].items.remove(at: from)
+                b.lists[i].items.insert(it, at: to)
+            }
+        }
     }
 
     // MARK: one plan

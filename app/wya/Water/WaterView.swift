@@ -329,9 +329,10 @@ struct SheetContent: View {
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
                     let hc = water.historyUp ? map.historyInfo?.caption : nil
-                    Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
-                            count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
-                            tail: hc.map { "\($0.count.formatted()) \($0.tail)" } ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
+                    let vw = map.placesMode || hc != nil ? nil : map.viewing
+                    Caption(name: hc?.name ?? vw.map { "Viewing " + $0.name } ?? (map.placesMode ? (placesCaption?.name ?? "") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
+                            count: hc?.count ?? vw?.been ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
+                            tail: hc.map { "\($0.count.formatted()) \($0.tail)" } ?? vw.map { "of \($0.places.count)" } ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
                             night: FullView.night(form.page), visible: captionShown && !(map.placesMode && hc == nil && placesCaption == nil),
                             quiet: water.modeSwitching,
                             // (Places: the name keeps clear of the back arrow on its line)
@@ -347,13 +348,24 @@ struct SheetContent: View {
                 // last of a roll out is under the capsule's top (author's call, A2.5)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
+            // A LIST VIEWED ON THE MAP: a tap on its caption puts it away (the map's own colours come back)
+            if captionShown, map.viewing != nil, !map.pinsMode, !map.placesMode, !water.historyUp {
+                Color.clear
+                    .frame(width: 260, height: 76)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Feel.tap(); map.viewing = nil }
+                    .position(x: L.W / 2, y: captionY - 16)
+                    .accessibilityElement()
+                    .accessibilityLabel("Stop viewing \(map.viewing?.name ?? "the list")")
+                    .accessibilityAddTraits(.isButton)
+            }
             // THE NUMBER OPENS THE STAMPED LIST (4.6.2): at 25%, 50% or full while it shows your count; above 0 only
             // (at 0 it refuses); with the list up the same tap closes it
             // (not in Pins: its caption is its own, and its number is not your stamps)
             // (the journey's caption over a picked sun: its count opens the journey's list)
             // (only where the caption is your stamped count: not over Places' menu, where it was a blank square on the
             // buttons, nor the journey's caption, whose number is not that count)
-            if captionShown, !map.pinsMode, !map.placesMode, !water.historyUp, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
+            if captionShown, map.viewing == nil, !map.pinsMode, !map.placesMode, !water.historyUp, !map.sunPicked, !map.moonHeld, !water.settings, !water.details, !water.upload, !water.pageSheet, region == nil {
                 Color.clear
                     .frame(width: 180, height: 76)
                     .contentShape(Rectangle())

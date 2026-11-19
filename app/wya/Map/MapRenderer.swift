@@ -788,8 +788,13 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let placesOn = controller.placesMode
         // (and under Pins when it came from Places, until Apple's map is up)
         let drained = placesOn || controller.pinsDrained
+        // A LIST VIEWED ON THE MAP (MapController.viewing): only its places, lime; your stamps and wishes wait
+        let viewing = controller.viewing
+        if !drained, let v = viewing {
+            group(v.places.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV, pattern: hatch)
+        }
         // Stamped+ and Wishlist+ (1.14): each place by its passes (lime by visits, ink where you lived; blue by want)
-        if drained {
+        if drained || viewing != nil {
         } else if controller.filter == 2 {
             let sp = controller.stampPasses
             let st = controller.stamped.filter { $0 != pressed }
@@ -798,7 +803,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         } else if controller.showsStamped {
             group(controller.stamped.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV, pattern: hatch)
         }
-        if drained {
+        if drained || viewing != nil {
         } else if controller.filter == 3 {
             let wp = controller.wantPasses
             let wi = controller.wished.filter { $0 != pressed }
