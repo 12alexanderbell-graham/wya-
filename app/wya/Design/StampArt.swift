@@ -31,7 +31,7 @@ enum StampArt {
     /// and Mayotte drawn on another series' pattern, Taiwan and Turkey plausible designs, Indonesia's unsure). A
     /// stamp is the real one made from its images or the black circle, nothing between; each comes back when a photo
     /// of its real stamp is found.
-    static let withdrawn: Set<String> = ["ad", "re", "yt", "tw", "tr", "id"]
+    static let withdrawn: Set<String> = ["ad", "re", "yt"]
 
     /// the stamp's picture (its own inks), or nil when the place has no art yet each stamped country's day, set with
     /// the passport's order (MarkStore.passportOrder)
