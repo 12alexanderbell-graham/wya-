@@ -10,6 +10,9 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        "mg": Stamp(id: "mg", w: 430, h: 340, ink: "#d6303c", round: false, slots: [
+            Slot(what: .date("{d1} {d2} {MON} {yyyy}"), x: 322, y: 149, font: .serif, size: 25, weight: 600, anchor: .middle, tracking: 1, fill: "#d6303c", m: .identity, fit: 170, length: nil)
+        ]),
         "tr": Stamp(id: "tr", w: 420, h: 268, ink: "#2b2b2b", round: false, slots: [
             Slot(what: .date("{dd}.{MM}.{yy}"), x: 182, y: 152, font: .barlow, size: 44, weight: 500, anchor: .middle, tracking: 2, fill: "#2b2b2b", m: .identity, fit: 190, length: nil)
         ]),
