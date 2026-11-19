@@ -2,7 +2,7 @@ import AVFoundation
 
 @MainActor
 enum Sound {
-    enum Name: String { case stamp, page }
+    enum Name: String { case stamp, page, close }
     private static var players: [Name: AVAudioPlayer] = [:]
     private static var ready = false
 
@@ -12,7 +12,7 @@ enum Sound {
         guard !ready else { return }
         ready = true
         try? AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
-        for n in [Name.stamp, .page] {
+        for n in [Name.stamp, .page, .close] {
             guard let url = Bundle.main.url(forResource: n.rawValue, withExtension: "caf"),
                   let p = try? AVAudioPlayer(contentsOf: url) else { continue }
             p.prepareToPlay()

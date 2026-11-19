@@ -42,6 +42,8 @@ final class BookState {
             // the cover starts to swing at p = 0.55 of the flight (about 0.15 s in)
             try? await Task.sleep(for: .milliseconds(Int(150 * CardState.slow)))
             guard job == j, isOpen else { return }
+            // (the cover swinging open sounds as a leaf does, a little louder)
+            Sound.play(.page)
             withAnimation(.spring(response: 0.36 * CardState.slow, dampingFraction: 1)) { cover = 90 }
         }
     }
@@ -66,6 +68,8 @@ final class BookState {
         Task {
             try? await Task.sleep(for: .milliseconds(120))
             guard job == j else { return }
+            // (a real book shutting, as the cover meets the pages)
+            Sound.play(.close, volume: 0.7)
             withAnimation(.spring(response: 0.30, dampingFraction: 1)) { p = 0 } completion: {
                 if self.job == j { Feel.land(speed: 0); self.shown = false }
             }

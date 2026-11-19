@@ -19,7 +19,8 @@
 
 - `app/wya/Resources/Sounds/stamp.caf`: "traditional stamp.wav" by I.fekry, [Freesound 470710](https://freesound.org/s/470710/), CC0 1.0.
 - `app/wya/Resources/Sounds/page.caf`: "Quiet Page Turn - 8" by SpaceJoe, [Freesound 484968](https://freesound.org/s/484968/), CC0 1.0.
-- Both trimmed to one event, faded at the ends, loudness evened, mono AAC.
+- `app/wya/Resources/Sounds/close.caf`: "Close Book 1" by qubodup, [Freesound 862315](https://freesound.org/s/862315/), CC0 1.0.
+- All trimmed to one event, faded at the ends, loudness evened, mono AAC.
 
 ## Planets
 

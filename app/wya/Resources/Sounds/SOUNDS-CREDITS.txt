@@ -1,3 +1,4 @@
 stamp.caf: "traditional stamp.wav" by I.fekry, Freesound sound 470710 (https://freesound.org/s/470710/), CC0 1.0.
 page.caf: "Quiet Page Turn - 8" by SpaceJoe, Freesound sound 484968 (https://freesound.org/s/484968/), CC0 1.0.
 Both: trimmed to one event, faded at the ends, loudness evened, mono, AAC in CAF. Downloaded 20 Nov 2026.
+close.caf: "Close Book 1" by qubodup, Freesound sound 862315 (https://freesound.org/s/862315/), CC0 1.0. Trimmed, faded, loudness evened, mono AAC.

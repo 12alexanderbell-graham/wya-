@@ -479,6 +479,7 @@ struct SourcesPage: View {
               url: "https://www.solarsystemscope.com/textures/"),
         .init(name: "I.fekry, on Freesound", what: "The stamp's sound", licence: "CC0", url: "https://freesound.org/s/470710/"),
         .init(name: "SpaceJoe, on Freesound", what: "The page's sound", licence: "CC0", url: "https://freesound.org/s/484968/"),
+        .init(name: "qubodup, on Freesound", what: "The passport closing", licence: "CC0", url: "https://freesound.org/s/862315/"),
     ]
     @Environment(\.openURL) private var openURL
     var body: some View {
