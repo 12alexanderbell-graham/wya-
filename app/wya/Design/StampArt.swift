@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreImage
 
 /// THE STAMP ART (Part 4.3.4): the old app's 104 stamps, drawn once by Chromium into one pack in their own inks
 /// (Resources/Stamps/stamps.wyaf, tools/stamps-render.py), so the phone never draws SVG. A place without art shows a
@@ -48,7 +49,8 @@ enum StampArt {
         guard s + e[1] <= p.data.count, let art = UIImage(data: p.data.subdata(in: s ..< s + e[1]), scale: 3) else { return nil }
         // ITS WORDS SET OVER ITS ART (the old app's RealStampView): the pack holds the art alone; each stamp's words,
         // your date in its own form among them, are set here for its day
-        let ui = RealStamps.stamp(id).map { withWords(art, $0, day: days[id].flatMap(RealStamps.Day.init(iso:)) ?? today) } ?? art
+        let worded = RealStamps.stamp(id).map { withWords(art, $0, day: days[id].flatMap(RealStamps.Day.init(iso:)) ?? today) } ?? art
+        let ui = inked ? Self.inked(worded, seed: id) : worded
         cache[id] = ui
         return ui
     }
@@ -56,6 +58,43 @@ enum StampArt {
     private static var today: RealStamps.Day {
         let c = Calendar(identifier: .gregorian).dateComponents([.year, .month, .day], from: Date())
         return RealStamps.Day(y: c.year ?? 2026, m: c.month ?? 1, d: c.day ?? 1)
+    }
+
+    /// AS A RUBBER STAMP LEAVES IT: the ink never lies perfectly even; it is a little lighter where the pad pressed
+    /// less, in broad soft patches, and the paper's grain leaves small gaps. Each stamp's pattern comes from its own
+    /// id, so it is the same every time it is shown
+    static var inked = true
+    private static let ci = CIContext()
+    private static func inked(_ img: UIImage, seed: String) -> UIImage {
+        guard let cg = img.cgImage else { return img }
+        let src = CIImage(cgImage: cg)
+        let e = src.extent
+        var h: UInt32 = 2166136261
+        for b in seed.utf8 { h = (h ^ UInt32(b)) &* 16777619 }
+        let ox = CGFloat(h & 0x3ff), oy = CGFloat((h >> 10) & 0x3ff)
+        guard let rnd = CIFilter(name: "CIRandomGenerator")?.outputImage else { return img }
+        func gray(_ i: CIImage, _ k: CGFloat, _ bias: CGFloat) -> CIImage {
+            i.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: k, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: k, y: 0, z: 0, w: 0),
+                "inputBVector": CIVector(x: k, y: 0, z: 0, w: 0), "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
+                "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)])
+        }
+        let px = max(1, e.width / 360)   // the art's pixels to a stamp point at the page's size
+        // broad patches: 84 percent to full ink
+        let patches = gray(rnd.transformed(by: CGAffineTransform(translationX: ox, y: oy).scaledBy(x: 28 * px, y: 28 * px))
+                            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 14 * px]), 0.16, 0.84)
+        // the paper's gaps: the brightest few percent of a finer noise, each a couple of points, ink kept at 40 percent there
+        let fine = rnd.transformed(by: CGAffineTransform(translationX: oy, y: ox).scaledBy(x: 2.2 * px, y: 2.2 * px))
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 0.8 * px])
+        let spots = gray(fine, 9, -8).applyingFilter("CIColorClamp", parameters: [
+            "inputMinComponents": CIVector(x: 0, y: 0, z: 0, w: 1), "inputMaxComponents": CIVector(x: 1, y: 1, z: 1, w: 1)])
+        let gaps = gray(spots, -0.6, 1)
+        let mask = gaps.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: patches])
+            .cropped(to: e).applyingFilter("CIMaskToAlpha")
+        let out = src.applyingFilter("CIBlendWithAlphaMask", parameters: [
+            kCIInputBackgroundImageKey: CIImage.empty().cropped(to: e), kCIInputMaskImageKey: mask])
+        guard let res = ci.createCGImage(out, from: e) else { return img }
+        return UIImage(cgImage: res, scale: img.scale, orientation: .up)
     }
 
     /// the art with the stamp's words drawn on it, at the art's own size
