@@ -10,6 +10,14 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        "sr": Stamp(id: "sr", w: 420, h: 268, ink: "#2a2a2a", round: false, slots: [
+            Slot(what: .date("{yyyy}"), x: 236, y: 92, font: .caveat, size: 36, weight: 600, anchor: .middle, tracking: 1, fill: "#3048a8", m: .identity, fit: 120, length: nil),
+            Slot(what: .date("{d}/{MM}"), x: 136, y: 182, font: .caveat, size: 40, weight: 600, anchor: .middle, tracking: 1, fill: "#3048a8", m: .identity, fit: 110, length: nil),
+            Slot(what: .date("{dd+30}/{MM+30}"), x: 318, y: 180, font: .caveat, size: 40, weight: 600, anchor: .middle, tracking: 1, fill: "#3048a8", m: .identity, fit: 110, length: nil)
+        ]),
+        "af": Stamp(id: "af", w: 420, h: 300, ink: "#3a3a3a", round: false, slots: [
+            Slot(what: .date("{dd}. {MON} {yyyy}"), x: 210, y: 176, font: .barlow, size: 46, weight: 500, anchor: .middle, tracking: 4, fill: "#e0447a", m: .identity, fit: 330, length: nil)
+        ]),
         "ge": Stamp(id: "ge", w: 340, h: 340, ink: "#1f9a7c", round: false, slots: [
             Slot(what: .date("{dd} {MM} {yyyy}"), x: 150, y: 198, font: .barlow, size: 40, weight: 500, anchor: .middle, tracking: 3, fill: "#1f9a7c", m: .identity, fit: 210, length: nil)
         ]),
