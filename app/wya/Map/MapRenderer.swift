@@ -408,6 +408,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         lensFrom + (lensTo - lensFrom) * Float(Motion.blend((now - lensAt) / 0.45))
     }
     static var lensOff = false
+    /// the set whose marks were last drawn, and when it came (its marks settle in, see the set's marks)
+    private var setArrivedFor: String?
+    private var setArrivedAt: CFTimeInterval = 0
     /// a place's shape into a mask (the fans fill even-odd), from the level's slices or the world's own outlines
     private func placeFans(_ me: MTLRenderCommandEncoder, _ fp: Int, _ tiles: [DetailTile]?) -> Bool {
         var drew = false
@@ -1305,10 +1308,25 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             var plain: [D] = [], wished: [D] = [], stamped: [D] = [], pressed: [D] = []
             let W = Float(controller.view.width), H = Float(controller.view.height)
             // (one size for all of them at any zoom, smaller far out where they are many: the map's one mark)
-            let size = Float(controller.markPad)
+            let size0 = Float(controller.markPad)
+            // A NEW SET SETTLES IN (no teleports): its marks grow into place from the middle of the screen outward,
+            // each over 0.32 s on a spring with no bounce, the last 0.28 s after the first; the old set is gone at once
+            if setArrivedFor != c.id { setArrivedFor = c.id; setArrivedAt = now }
+            let since = Float(now - setArrivedAt)
+            if since < 0.7 { controller.needsFrame = true }
+            let diag = max(1, (W * W + H * H).squareRoot() / 2)
             for it in c.items where controller.setMarkShown(it, scene) {
                 let q = controller.screenPoint(SIMD2(Double(it.at.x), Double(it.at.y)))
                 guard Float(q.x) > -10, Float(q.x) < W + 10, Float(q.y) > -10, Float(q.y) < H + 10 else { continue }
+                var size = size0
+                if since < 0.7 {
+                    let dx = Float(q.x) - W / 2, dy = Float(q.y) - H / 2
+                    let t = min(1, max(0, (since - 0.28 * min(1, (dx * dx + dy * dy).squareRoot() / diag)) / 0.32))
+                    // (critically damped: quick out, settling without overshoot)
+                    let x = t * 6
+                    size *= 1 - exp(-x) * (1 + x)
+                    if size < 0.02 { continue }
+                }
                 let st = MarkStore.shared.state(it.key)
                 // (one that is yours and big enough to see is its filled shape, not also a mark on it)
                 if st.stamped || st.wished, let a = scene?.across(it.id), Double(a) * controller.k >= 8 { continue }
