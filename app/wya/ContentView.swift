@@ -478,7 +478,11 @@ struct ContentView: View {
         }
         // any control of the head closes the card first (and Details over it), keeping their changes (Part 4.2.3)
         // (What's here? goes back into its point too: its name no longer stands under the search or settings)
-        .onChange(of: head.searching) { _, v in if v { closeCard(); WhatsHere.shared.close() } }
+        .onChange(of: head.searching, initial: true) { _, v in
+            if v { closeCard(); WhatsHere.shared.close() }
+            // (search's results over the map: the map behind them out of focus, the same lens as behind a card)
+            map.lensAsked = v
+        }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
         // a continent follows the sheet (A1.16)

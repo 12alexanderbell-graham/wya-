@@ -747,7 +747,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         // DEPTH OF FOCUS: what is in front (a card, the region card, the passport) decides; the map draws as always into
         // a texture of its own and is laid over the screen through the lens
-        let lensWant: Float = !Self.lensOff && (CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown) ? 1 : 0
+        let lensWant: Float = !Self.lensOff && (CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown || controller.lensAsked) ? 1 : 0
         if lensWant != lensTo { lensFrom = lensNow(now); lensTo = lensWant; lensAt = now }
         let lens = lensNow(now)
         if abs(lens - lensTo) > 0.001 { controller.needsFrame = true }
