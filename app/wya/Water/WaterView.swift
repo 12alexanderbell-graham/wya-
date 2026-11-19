@@ -348,6 +348,21 @@ struct SheetContent: View {
                 // last of a roll out is under the capsule's top (author's call, A2.5)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .mask(alignment: .top) { Rectangle().frame(height: L.capsule.minY - 2) } }
+            // PLACES, THE CAPTION AS THE MENU: swiped sideways, the caption goes to the next set or the one before,
+            // and the map shows it at once; no list, no menu
+            if captionShown, map.placesMode, map.placesPicked, PlacesSheet.swipeCaption, !water.historyUp {
+                Color.clear
+                    .frame(width: water.layout.W - 2 * water.layout.sheetInset, height: 110)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 20).onEnded { g in
+                        guard abs(g.translation.width) > 50, abs(g.translation.width) > abs(g.translation.height) else { return }
+                        PlacesSheet.step(g.translation.width < 0 ? 1 : -1, map: map)
+                    })
+                    .position(x: L.W / 2, y: captionY)
+                    .accessibilityElement()
+                    .accessibilityLabel("Places set")
+                    .accessibilityAdjustableAction { d in PlacesSheet.step(d == .increment ? 1 : -1, map: map) }
+            }
             // A LIST VIEWED ON THE MAP: a tap on its caption puts it away (the map's own colours come back)
             if captionShown, map.viewing != nil, !map.pinsMode, !map.placesMode, !water.historyUp {
                 Color.clear
@@ -404,6 +419,11 @@ struct SheetContent: View {
             }
         }
         .onChange(of: water.pageUp) { _, v in DispatchQueue.main.async { pageWasUp = v } }
+        // (the caption as the menu: Places opens straight on a set, the last one looked at, else the first)
+        .onChange(of: map.placesMode, initial: true) { _, on in
+            guard on, PlacesSheet.swipeCaption, !map.placesPicked else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { PlacesSheet.step(0, map: map) }
+        }
         .onChange(of: water.settings || water.details || water.upload) { _, v in DispatchQueue.main.async { takenWas = v } }
         // PINS AT FULL is a name or note being typed, or a route's colour: when the pin or the colour goes (deleted,
         // done, put away) the water comes back to 50%, where the toolkit and the list are

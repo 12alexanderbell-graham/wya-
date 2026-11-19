@@ -254,22 +254,34 @@ struct ListsWater: View {
                 }
                 .padding(.top, 4)
             }
+        // PLANS AND TIER LISTS AS TILES, the same shape as Lists': a plan's cover the map of where it goes, or its
+        // days as a little calendar while it has no places; a tier list's its tiers in full colour
         case 1:
-            let plans = store.book.plans.filter { !$0.arch && !$0.hid && match($0.name) }
+            let plans = store.book.plans.filter { !$0.arch && !$0.hid && !$0.ai && match($0.name) }
             if plans.isEmpty { if q.isEmpty { none("No plans yet") } else { noResults } }
-            ForEach(plans) { p in
-                row(nil, p.name.isEmpty ? "New plan" : p.name, Self.when(p), dim: p.name.isEmpty) {
-                    Feel.tap(); withAnimation(Motion.quick) { s.open = p.id }
+            if !plans.isEmpty {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
+                    ForEach(plans) { p in
+                        let ccs = Array(NSOrderedSet(array: (p.days.flatMap(\.items) + p.ideas).compactMap { $0.cc?.lowercased() })
+                            .array.compactMap { $0 as? String }.prefix(4))
+                        tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs,
+                             cover: ccs.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p))
+                    }
                 }
+                .padding(.top, 4)
             }
         case 2:
             let tiers = store.book.tiers.filter { !$0.arch && !$0.hid && match($0.name) }
             if tiers.isEmpty { if q.isEmpty { none("No tier lists yet") } else { noResults } }
-            ForEach(tiers) { t in
-                row(nil, t.name.isEmpty ? "New tier list" : t.name, t.count == 0 ? "" : "\(t.count) ranked", dim: t.name.isEmpty,
-                    mark: nil) {
-                    Feel.tap(); withAnimation(Motion.quick) { s.open = t.id }
+            if !tiers.isEmpty {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
+                    ForEach(tiers) { t in
+                        tile(t.id, name: t.name.isEmpty ? "New tier list" : t.name, dim: t.name.isEmpty, count: t.count, ccs: [],
+                             cover: AnyView(TierBandsCover(tiers: t)),
+                             words: t.count == 0 ? "Nothing ranked yet" : "\(t.count) ranked")
+                    }
                 }
+                .padding(.top, 4)
             }
         default:
             let books = store.book.books.filter { match($0.name) }
@@ -301,17 +313,18 @@ struct ListsWater: View {
     }
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
-    private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil) -> some View {
-        let sub = n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
-            .flatMap { $0 } ?? "\(n) \(n == 1 ? "place" : "places")"
+    private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil,
+                      cover: AnyView? = nil, words: String? = nil) -> some View {
+        let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
+            .flatMap { $0 } ?? "\(n) \(n == 1 ? "place" : "places")")
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
-                .overlay { ListCover(ccs: ccs, world: map.world) }
+                .overlay { if let cover { cover } else { ListCover(ccs: ccs, world: map.world) } }
                 .clipShape(shape)
-                // (glass only for a list with no places yet: over the map it washed Apple's colours out)
-                .glassEffect(ccs.isEmpty ? PageGlass.on : .clear, in: shape)
+                // (glass only for a tile with nothing of its own to show: over the map it washed Apple's colours out)
+                .glassEffect(ccs.isEmpty && cover == nil ? PageGlass.on : .clear, in: shape)
                 .padding(.bottom, 6)
             Text(name).font(.body.weight(.semibold))
                 .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1)
@@ -558,6 +571,24 @@ struct ListsWater: View {
 
     // MARK: one plan
 
+    /// a plan's dates short enough for its tile:,, the year only when it is not this one, or
+    static func shortWhen(_ p: Plan) -> String {
+        guard !p.start.isEmpty, let a = PlanDates.date(p.start), let b = PlanDates.date(p.end.isEmpty ? p.start : p.end) else { return "Someday" }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.timeZone = TimeZone(identifier: "UTC")
+        let ya = cal.component(.year, from: a), yb = cal.component(.year, from: b)
+        let thisYear = Calendar.current.component(.year, from: Date())
+        func day(_ d: Date) -> String { "\(cal.component(.day, from: d))" }
+        f.dateFormat = "MMM"
+        if ya != yb {
+            f.dateFormat = "d MMM yyyy"; let x = f.string(from: a), y = f.string(from: b); return "\(x) to \(y)"
+        }
+        let yr = ya == thisYear ? "" : " \(ya)"
+        if p.start == p.end || p.end.isEmpty { f.dateFormat = "d MMM"; return f.string(from: a) + yr }
+        if cal.component(.month, from: a) == cal.component(.month, from: b) { return "\(day(a)) to \(day(b)) \(f.string(from: b))" + yr }
+        f.dateFormat = "d MMM"
+        return "\(f.string(from: a)) to \(f.string(from: b))" + yr
+    }
     /// a plan's dates as you'd say them:, or
     static func when(_ p: Plan) -> String {
         p.start.isEmpty ? "Someday" : WhenWords.exact(from: p.start, to: p.end) ?? ""
@@ -937,12 +968,15 @@ struct TierPage: View {
                         .frame(minHeight: 44)
                         .onTapGesture { Feel.tap(); s.naming = true }
                 }
-                VStack(spacing: 2) {
+                // EDGE TO EDGE, FULL COLOUR: each tier's whole row is its colour, from one side of the screen to the
+                // other; its letter in line with the title
+                let m = max(0, (UIScreen.main.bounds.width - w) / 2)
+                // (bands flush: 2 pt gaps showed the gradient through as muddy lines between them)
+                VStack(spacing: 0) {
                     ForEach(Array(t.rows.enumerated()), id: \.offset) { i, r in
                         HStack(alignment: .top, spacing: 0) {
                             Text(r.t).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
                                 .frame(width: 52, height: 52)
-                                .background(Self.colour(t.colour(i)))
                             ScrollView(.horizontal) {
                                 HStack(spacing: 6) { ForEach(r.items, id: \.self) { chip($0) } }
                                     .padding(.horizontal, 6).frame(minHeight: 52)
@@ -950,6 +984,9 @@ struct TierPage: View {
                             .scrollIndicators(.hidden)
                             .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                         }
+                        .padding(.horizontal, m)
+                        .background(Self.colour(t.colour(i)))
+                        .padding(.horizontal, -m)
                         .dropDestination(for: String.self) { names, _ in
                             guard let n = names.first else { return false }
                             Feel.tap()
@@ -1035,6 +1072,49 @@ struct PlanDays: View {
             }
         }
         .frame(width: 46, height: 28, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A TIER LIST'S COVER: its tiers in full colour, flush, top tier first, the tile's whole square (as its page shows them)
+struct TierBandsCover: View {
+    let tiers: TierList
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0 ..< max(1, min(tiers.rows.count, 8)), id: \.self) { i in
+                let v = Palette.named[tiers.colour(i)] ?? SIMD3(0.5, 0.5, 0.5)
+                Rectangle().fill(Color(red: v.x, green: v.y, blue: v.z))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// A PLAN'S COVER while it has no places: its days as a little calendar, seven across, a day with something planned
+/// filled black, the rest faint (a someday plan, one empty week)
+struct PlanCalendarCover: View {
+    let plan: Plan
+    var body: some View {
+        let days = Array(plan.days.prefix(28))
+        let shown = max(7, days.count)
+        let rows = Int(ceil(Double(shown) / 7))
+        GeometryReader { g in
+            let gap: CGFloat = 4
+            let side = min((g.size.width - 32 - gap * 6) / 7, (g.size.height - 32 - gap * CGFloat(rows - 1)) / CGFloat(rows))
+            VStack(alignment: .leading, spacing: gap) {
+                ForEach(0 ..< rows, id: \.self) { r in
+                    HStack(spacing: gap) {
+                        ForEach(0 ..< 7, id: \.self) { c in
+                            let i = r * 7 + c
+                            RoundedRectangle(cornerRadius: side * 0.22, style: .continuous)
+                                .fill(Palette.ink.opacity(i >= shown ? 0 : i < days.count && !days[i].items.isEmpty ? 1 : 0.12))
+                                .frame(width: side, height: side)
+                        }
+                    }
+                }
+            }
+            .frame(width: g.size.width, height: g.size.height)
+        }
         .accessibilityHidden(true)
     }
 }

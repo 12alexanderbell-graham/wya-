@@ -33,6 +33,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var coverage: MTLTexture?
     /// the relief laid over what is drawn at a strength (the land round a continent coming over its borders)
     private var sampler: MTLSamplerState!
+    /// DEPTH OF FOCUS (direction B): the frame kept sharp, a quarter-size copy blurred, the kept place's mask
+    private var lensDownPipe: MTLRenderPipelineState?, lensBlurPipe: MTLRenderPipelineState?, lensCompositePipe: MTLRenderPipelineState?
+    private var lensMaskPipe: MTLRenderPipelineState?
+    private var lensSharp: MTLTexture?, lensA: MTLTexture?, lensB: MTLTexture?, lensMask: MTLTexture?
+    private var lensSampler: MTLSamplerState?
 
     private var noStencil: MTLDepthStencilState!
     private var markLand: MTLDepthStencilState!      // invert bit 1
@@ -172,6 +177,34 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         sd.minFilter = .linear; sd.magFilter = .linear
         sd.sAddressMode = .repeat; sd.tAddressMode = .clampToEdge
         sampler = device.makeSamplerState(descriptor: sd)
+        // the lens's passes: one sample, no stencil, the drawable's format
+        func lensPipe(_ f: String, _ format: MTLPixelFormat) -> MTLRenderPipelineState? {
+            let p = MTLRenderPipelineDescriptor()
+            p.vertexFunction = lib.makeFunction(name: "lensVertex")
+            p.fragmentFunction = lib.makeFunction(name: f)
+            p.rasterSampleCount = 1
+            p.colorAttachments[0].pixelFormat = format
+            return try? device.makeRenderPipelineState(descriptor: p)
+        }
+        lensDownPipe = lensPipe("lensDown", .bgra8Unorm)
+        lensBlurPipe = lensPipe("lensBlur", .bgra8Unorm)
+        lensCompositePipe = lensPipe("lensComposite", view.colorPixelFormat)
+        if let vf = lib.makeFunction(name: "fanVertex"), let ff = lib.makeFunction(name: "maskFragment") {
+            let p = MTLRenderPipelineDescriptor()
+            p.vertexFunction = vf; p.fragmentFunction = ff
+            p.rasterSampleCount = 1
+            let c = p.colorAttachments[0]!
+            c.pixelFormat = .r8Unorm
+            c.isBlendingEnabled = true
+            c.rgbBlendOperation = .add; c.alphaBlendOperation = .add
+            c.sourceRGBBlendFactor = .oneMinusDestinationColor; c.sourceAlphaBlendFactor = .oneMinusDestinationAlpha
+            c.destinationRGBBlendFactor = .zero; c.destinationAlphaBlendFactor = .zero
+            lensMaskPipe = try? device.makeRenderPipelineState(descriptor: p)
+        }
+        let ld = MTLSamplerDescriptor()
+        ld.minFilter = .linear; ld.magFilter = .linear
+        ld.sAddressMode = .clampToEdge; ld.tAddressMode = .clampToEdge
+        lensSampler = device.makeSamplerState(descriptor: ld)
 
         func state(_ f: MTLCompareFunction, read: UInt32, write: UInt32, pass: MTLStencilOperation) -> MTLDepthStencilState? {
             let s = MTLStencilDescriptor()
@@ -356,7 +389,9 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     struct Look { var tint: SIMD4<Float>; var kind: Float; var texelU: Float; var texelV: Float; var pad: Float = 0
                   var clip = SIMD4<Float>(0, 0, 0, 0); var clip2 = SIMD4<Float>(1, 0, 0, 0)
                   /// the country's finer relief: its box in the world picture (u0 v0 u1 v1); its texel, and 1 when it is in
-                  var det = SIMD4<Float>(0, 0, 0, 0); var det2 = SIMD4<Float>(0, 0, 0, 0) }
+                  var det = SIMD4<Float>(0, 0, 0, 0); var det2 = SIMD4<Float>(0, 0, 0, 0)
+                  /// the real sun (SunPosition): subsolar latitude and longitude in radians, 1 when on, the night's depth
+                  var sun = SIMD4<Float>(0, 0, 0, 0) }
     struct LineStyle { var colour: SIMD4<Float>; var width: Float; var feather: Float; var dash: Float; var gap: Float }
     struct AuroraU { var yNorth: Float; var ySouth: Float; var bottom: Float; var strength: Float; var pin: Float = 0; var away: Float = 0 }
 
@@ -366,6 +401,41 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     /// continents is drawn as its pieces, so on Europe's map Russia is Russia to the Urals (the old pieceItems).
     private var flatFrom: Float = 0, flatTo: Float = 0, flatAt: CFTimeInterval = -10
     private var awayKey: String?
+    /// DEPTH OF FOCUS: the lens pulls in over 0.45 s on the camera's curve as a card, the region card or the passport
+    /// comes up, and back out as it goes
+    private var lensFrom: Float = 0, lensTo: Float = 0, lensAt: CFTimeInterval = -10
+    private func lensNow(_ now: CFTimeInterval) -> Float {
+        lensFrom + (lensTo - lensFrom) * Float(Motion.blend((now - lensAt) / 0.45))
+    }
+    static var lensOff = false
+    /// a place's shape into a mask (the fans fill even-odd), from the level's slices or the world's own outlines
+    private func placeFans(_ me: MTLRenderCommandEncoder, _ fp: Int, _ tiles: [DetailTile]?) -> Bool {
+        var drew = false
+        if let tiles {
+            var m = detail?.morph ?? 1
+            me.setVertexBytes(&m, length: 4, index: 3)
+            for t in tiles {
+                me.setVertexBuffer(t.points, offset: 0, index: 0)
+                me.setVertexBuffer(t.from, offset: 0, index: 2)
+                for it in t.items where it.place == fp && it.count > 0 {
+                    me.drawIndexedPrimitives(type: .triangle, indexCount: it.count, indexType: .uint32, indexBuffer: t.fans,
+                                             indexBufferOffset: it.start * 4)
+                    drew = true
+                }
+            }
+        } else if let pts = points, let fi = fanIndex {
+            var one: Float = 1
+            me.setVertexBytes(&one, length: 4, index: 3)
+            me.setVertexBuffer(pts, offset: 0, index: 0)
+            me.setVertexBuffer(pts, offset: 0, index: 2)
+            for u in placeUnits[fp] ?? [] where unitRun[u].count > 0 {
+                me.drawIndexedPrimitives(type: .triangle, indexCount: unitRun[u].count, indexType: .uint32, indexBuffer: fi,
+                                         indexBufferOffset: unitRun[u].start * 4)
+                drew = true
+            }
+        }
+        return drew
+    }
     private func flatNow(_ now: CFTimeInterval) -> Float {
         flatFrom + (flatTo - flatFrom) * Float(Motion.blend((now - flatAt) / 0.5))
     }
@@ -675,10 +745,50 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 maskOn = true
             }
         }
+        // DEPTH OF FOCUS: what is in front (a card, the region card, the passport) decides; the map draws as always into
+        // a texture of its own and is laid over the screen through the lens
+        let lensWant: Float = !Self.lensOff && (CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown) ? 1 : 0
+        if lensWant != lensTo { lensFrom = lensNow(now); lensTo = lensWant; lensAt = now }
+        let lens = lensNow(now)
+        if abs(lens - lensTo) > 0.001 { controller.needsFrame = true }
+        var lensOn = false, lensKeep = false
+        if lens > 0.001, lensDownPipe != nil, lensBlurPipe != nil, lensCompositePipe != nil {
+            func tex(_ t: MTLTexture?, _ w: Int, _ h: Int, _ f: MTLPixelFormat) -> MTLTexture? {
+                if let t, t.width == w, t.height == h { return t }
+                let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: f, width: w, height: h, mipmapped: false)
+                td.usage = [.renderTarget, .shaderRead]
+                td.storageMode = .private
+                return device.makeTexture(descriptor: td)
+            }
+            let qw = max(1, tw / 4), qh = max(1, th / 4)
+            lensSharp = tex(lensSharp, tw, th, .bgra8Unorm)
+            lensA = tex(lensA, qw, qh, .bgra8Unorm)
+            lensB = tex(lensB, qw, qh, .bgra8Unorm)
+            lensMask = tex(lensMask, qw, qh, .r8Unorm)
+            if let sharp = lensSharp, lensA != nil, lensB != nil, let lm = lensMask {
+                pass.colorAttachments[0].resolveTexture = sharp
+                pass.colorAttachments[0].storeAction = .multisampleResolve
+                lensOn = true
+                // the place the card is about, its shape at a quarter (nothing kept: all of the map goes soft)
+                let d = MTLRenderPassDescriptor()
+                d.colorAttachments[0].texture = lm
+                d.colorAttachments[0].loadAction = .clear
+                d.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+                d.colorAttachments[0].storeAction = .store
+                if let kp = controller.kept, let mp = lensMaskPipe, let me = cb.makeRenderCommandEncoder(descriptor: d) {
+                    me.setRenderPipelineState(mp)
+                    me.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
+                    lensKeep = placeFans(me, kp, tiles)
+                    me.endEncoding()
+                } else if let me = cb.makeRenderCommandEncoder(descriptor: d) { me.endEncoding() }
+            }
+        }
         guard let enc = cb.makeRenderCommandEncoder(descriptor: pass) else { return }
         enc.setVertexBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
         enc.setFragmentBytes(&cam, length: MemoryLayout<Cam>.stride, index: 1)
 
+        // THE WORLD'S LIGHT: where the sun is this frame (it moves a quarter of a degree a minute)
+        let sunNow = SunPosition.uniform()
         func relief(_ kind: Float, _ tint: SIMD4<Float> = .zero, pattern: Float = 0) {
             var look = Look(tint: tint, kind: kind, texelU: texel.x, texelV: texel.y)
             // Differentiate Without Colour (1.14): the pattern in screen points
@@ -687,6 +797,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             look.clip2.y = controller.simple ? 1 : 0
             look.det = detailBox
             look.det2 = SIMD4(detailTexel.x, detailTexel.y, detailTex == nil ? 0 : 1, 0)
+            look.sun = sunNow
             enc.setRenderPipelineState(reliefPipe)
             enc.setVertexBuffer(grid, offset: 0, index: 0)
             enc.setFragmentTexture(reliefTex, index: 0)
@@ -1229,6 +1340,39 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         }
         _ = w
         enc.endEncoding()
+        if lensOn, let sharp = lensSharp, let qa = lensA, let qb = lensB, let lm = lensMask, let ls = lensSampler {
+            func pass1(_ target: MTLTexture, _ pipe: MTLRenderPipelineState?, _ body: (MTLRenderCommandEncoder) -> Void) {
+                let d = MTLRenderPassDescriptor()
+                d.colorAttachments[0].texture = target
+                d.colorAttachments[0].loadAction = .dontCare
+                d.colorAttachments[0].storeAction = .store
+                guard let pipe, let e = cb.makeRenderCommandEncoder(descriptor: d) else { return }
+                e.setRenderPipelineState(pipe)
+                e.setFragmentSamplerState(ls, index: 0)
+                body(e)
+                e.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+                e.endEncoding()
+            }
+            // (its strength grows with the lens: about 6 pt across at full, in quarter texels at this scale)
+            let sigma = Float(view.contentScaleFactor) * 6 / 4 * lens
+            pass1(qa, lensDownPipe) { $0.setFragmentTexture(sharp, index: 0); $0.setFragmentTexture(lm, index: 1) }
+            pass1(qb, lensBlurPipe) { e in var u = SIMD4<Float>(1, 0, sigma, 0); e.setFragmentTexture(qa, index: 0); e.setFragmentBytes(&u, length: 16, index: 0) }
+            pass1(qa, lensBlurPipe) { e in var u = SIMD4<Float>(0, 1, sigma, 0); e.setFragmentTexture(qb, index: 0); e.setFragmentBytes(&u, length: 16, index: 0) }
+            let d = MTLRenderPassDescriptor()
+            d.colorAttachments[0].texture = drawable.texture
+            d.colorAttachments[0].loadAction = .dontCare
+            d.colorAttachments[0].storeAction = .store
+            if let cp = lensCompositePipe, let e = cb.makeRenderCommandEncoder(descriptor: d) {
+                var u = SIMD4<Float>(lens, lensKeep ? 1 : 0, 0, 0)
+                e.setRenderPipelineState(cp)
+                e.setFragmentSamplerState(ls, index: 0)
+                e.setFragmentTexture(sharp, index: 0)
+                e.setFragmentTexture(qa, index: 1)
+                e.setFragmentBytes(&u, length: 16, index: 0)
+                e.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+                e.endEncoding()
+            }
+        }
         #if DEBUG
         // the frame's cost, measured: CPU time to build it, and the GPU's time once it has run (logged every 2 s
         // while the map draws, so lag can be found by numbers, not by eye)
@@ -1878,4 +2022,31 @@ struct MapLayer: UIViewRepresentable {
         return v
     }
     func updateUIView(_ uiView: MapMTKView, context: Context) {}
+}
+
+
+/// WHERE THE SUN IS: the point on Earth with the sun straight overhead right now, from the usual low-precision solar
+/// formulas (good to a fraction of a degree, nothing online)
+enum SunPosition {
+    static func subsolar(at date: Date = Date()) -> (lat: Double, lon: Double) {
+        let n = date.timeIntervalSince1970 / 86400 + 2440587.5 - 2451545.0
+        let rad = Double.pi / 180
+        let L = (280.460 + 0.9856474 * n).truncatingRemainder(dividingBy: 360)
+        let g = (357.528 + 0.9856003 * n).truncatingRemainder(dividingBy: 360) * rad
+        let lambda = (L + 1.915 * sin(g) + 0.020 * sin(2 * g)) * rad
+        let eps = (23.439 - 0.0000004 * n) * rad
+        let dec = asin(sin(eps) * sin(lambda))
+        let ra = atan2(cos(eps) * sin(lambda), cos(lambda))
+        let gmst = (280.46061837 + 360.98564736629 * n).truncatingRemainder(dividingBy: 360) * rad
+        var lon = ra - gmst
+        while lon > .pi { lon -= 2 * .pi }
+        while lon < -.pi { lon += 2 * .pi }
+        return (dec, lon)
+    }
+    /// for the relief: on unless the test switch turns it off; the night's depth
+    static func uniform() -> SIMD4<Float> {
+        guard UserDefaults.standard.object(forKey: "wya.sunLight") as? Bool ?? true else { return .zero }
+        let s = subsolar(at: Date().addingTimeInterval(UserDefaults.standard.double(forKey: "wya.sunShift")))
+        return SIMD4(Float(s.lat), Float(s.lon), 1, 1)
+    }
 }

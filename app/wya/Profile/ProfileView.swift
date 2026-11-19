@@ -251,7 +251,7 @@ struct ProfileView: View {
             } else {
                 // (no colour picked: white, never black:)
                 Circle().fill(me.colour?.color ?? Palette.white)
-                if let first = me.name.trimmingCharacters(in: .whitespaces).first {
+                if let first = me.name.trimmingCharacters(in: .whitespaces).first ?? me.handle.first(where: { $0.isLetter }) {
                     Text(String(first).uppercased())
                         .font(Typeface.nature(Self.picture * 0.5, relativeTo: .largeTitle))
                         .foregroundStyle((me.colour?.light ?? 1) > 0.72 ? Palette.ink : Palette.white)

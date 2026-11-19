@@ -333,6 +333,7 @@ private struct SettingsPage: View {
                 case "borders": borders(s)
                 case "disputes": disputes(s)
                 case "aiNotes": AINotesPage()
+                case "sources": SourcesPage()
                 default: advanced(s)
                 }
             }
@@ -447,6 +448,60 @@ private struct SettingsPage: View {
     }
 }
 
+
+/// SOURCES: what the app is made from, who made it and under what licence, as their licences ask; a tap opens the
+/// source. A page's own photos and words are credited on that page (its Sources).
+struct SourcesPage: View {
+    struct Source: Hashable { let name: String; let what: String; let licence: String; let url: String }
+    static let all: [Source] = [
+        .init(name: "Natural Earth", what: "Countries' outlines", licence: "Public domain", url: "https://www.naturalearthdata.com"),
+        .init(name: "OpenStreetMap contributors", what: "Coasts and borders up close, time zones", licence: "ODbL",
+              url: "https://www.openstreetmap.org/copyright"),
+        .init(name: "NOAA ETOPO", what: "The land's height and the sea's depth", licence: "Public domain",
+              url: "https://www.ncei.noaa.gov/products/etopo-global-relief-model"),
+        .init(name: "geoBoundaries", what: "Regions", licence: "CC BY 4.0", url: "https://www.geoboundaries.org"),
+        .init(name: "GeoNames", what: "Towns and their names", licence: "CC BY 4.0", url: "https://www.geonames.org"),
+        .init(name: "Wikidata", what: "Facts, places and World Heritage sites", licence: "CC0", url: "https://www.wikidata.org"),
+        .init(name: "Wikivoyage", what: "Guides and things to do", licence: "CC BY-SA 4.0", url: "https://www.wikivoyage.org"),
+        .init(name: "Wikimedia Commons", what: "Photos, flags and passport covers, each credited where it shows",
+              licence: "Each picture's own", url: "https://commons.wikimedia.org"),
+        .init(name: "World Bank", what: "Country figures", licence: "CC BY 4.0", url: "https://data.worldbank.org"),
+        .init(name: "CHELSA (Karger et al. 2017)", what: "Climate", licence: "CC BY 4.0", url: "https://chelsa-climate.org"),
+        .init(name: "NASA POWER", what: "Rain days", licence: "Public domain", url: "https://power.larc.nasa.gov"),
+        .init(name: "Nager.Date", what: "Public holidays", licence: "MIT", url: "https://date.nager.at"),
+        .init(name: "Governments of Canada, the US and the UK", what: "Travel advice",
+              licence: "OGL-Canada, public domain, OGL v3", url: "https://travel.gc.ca"),
+        .init(name: "OpenFlights", what: "Flight routes", licence: "ODbL", url: "https://openflights.org"),
+        .init(name: "UN M49, via lukes/ISO-3166", what: "Which region each country is in", licence: "CC BY-SA 4.0",
+              url: "https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes"),
+        .init(name: "IANA tz database", what: "Each country's clocks", licence: "Public domain", url: "https://www.iana.org/time-zones"),
+        .init(name: "Solar System Scope", what: "The planets' surfaces, from NASA's data, resized", licence: "CC BY 4.0",
+              url: "https://www.solarsystemscope.com/textures/"),
+    ]
+    @Environment(\.openURL) private var openURL
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Self.all, id: \.self) { s in
+                Button {
+                    Feel.tap()
+                    if let u = URL(string: s.url) { openURL(u) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.name).font(.body).foregroundStyle(Palette.ink)
+                        Text("\(s.what) · \(s.licence)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint("Opens \(s.name)")
+            }
+        }
+    }
+}
 
 /// WHAT THE AI KNOWS ABOUT YOU (AINotes): the notes you told it to remember, in your words; held, Forget; typed at the
 /// foot, a new one. Besides these it knows only your map, lists and plans, and says so.

@@ -306,7 +306,8 @@ struct CosmosView: View {
         let dx = Double(sun.x - it.pos.x), dy = Double(it.pos.y - sun.y)
         let len = max(1e-6, (dx * dx + dy * dy).squareRoot())
         let light = SIMD3<Float>(Float(dx / len * sin(alpha)), Float(dy / len * sin(alpha)), Float(cos(alpha)))
-        PlanetBody(tex: pl.tex, size: it.size, spin: Float(it.face * 2 * .pi), light: light, ring: pl.n == "Saturn", lights: pl.n == "Earth")
+        PlanetBody(tex: pl.tex, size: it.size, spin: Float(it.face * 2 * .pi), light: light, ring: pl.n == "Saturn", lights: pl.n == "Earth",
+                   sunDir: SIMD2(Float(dx / len), Float(dy / len)))
             // (the Earth waits under the launch's sphere until the sphere has landed on it and become it)
             .opacity(pl.n == "Earth" && Launch.shared.lands && !Launch.shared.done ? 0 : 1)
             // the tap and the hold on a clear disc over the planet (the planet and 6 pt round it), given before it is
@@ -438,7 +439,7 @@ struct CosmosView: View {
             // both ways
             PlanetBody(tex: "planet-moon", size: size, spin: Float(-(moonAngle - .pi / 2)),
                        light: SIMD3<Float>(Float(dx / len * sin(a)), Float(dy / len * sin(a)), Float(cos(a))),
-                       ring: false, lights: false)
+                       ring: false, lights: false, sunDir: SIMD2(Float(dx / len), Float(dy / len)))
                 .scaleEffect(max(0.001, out))
                 .position(at)
                 .allowsHitTesting(false)
@@ -630,6 +631,19 @@ struct PlanetBody: View {
     let light: SIMD3<Float>
     let ring: Bool
     let lights: Bool
+    /// the way to the sun on screen (x right, y up): its side of the planet a little brighter
+    var sunDir = SIMD2<Float>(0, 1)
+    /// what the world is made of, for how it takes the light (planetSphere's kind)
+    private var kind: Float {
+        switch tex {
+        case "planet-venus": return 1
+        case "planet-earth": return 2
+        case "planet-mars": return 3
+        case "planet-jupiter", "planet-saturn": return 4
+        case "planet-uranus", "planet-neptune": return 5
+        default: return 0
+        }
+    }
 
     var body: some View {
         if Perf.shared.off.contains("planets") { Circle().fill(Palette.grey).frame(width: size, height: size).frame(width: size * 2.3, height: size * 2.3) } else {
@@ -639,7 +653,8 @@ struct PlanetBody: View {
                 .frame(width: size, height: size)
                 .colorEffect(ShaderLibrary.planetSphere(
                     .float2(Float(size), Float(size)), .float(spin), .float3(light.x, light.y, light.z),
-                    .image(Textures.image(tex)), .image(Textures.image("earth-lights")), .float(lights ? 1 : 0), .float(0)))
+                    .image(Textures.image(tex)), .image(Textures.image("earth-lights")), .float(lights ? 1 : 0), .float(kind),
+                    .float2(sunDir.x, sunDir.y)))
             if ring { ringHalf(front: true) }
         }
         .frame(width: size * 2.3, height: size * 2.3)

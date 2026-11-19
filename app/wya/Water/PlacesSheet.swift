@@ -87,7 +87,7 @@ struct PlacesSheet: View {
                 .position(x: L.W / 2, y: from + EdgeRows.fit(to - from, cuts: cuts) / 2)
                 .allowsHitTesting(water.stop == .half)
             }
-            if picked, captionUp {
+            if picked, captionUp, !Self.swipeCaption {
                 // the back arrow, as on Map settings' pages: 22 pt in a 44 pt square, on the caption's name's line
                 // (the menu's rows need the water at 50%: a set that sent it down to 25% brings it back up with them)
                 Button { Feel.tap(); map.clearPlacesSet(); if water.stop == .quarter { water.go(.half) } } label: {
@@ -102,8 +102,28 @@ struct PlacesSheet: View {
         .transaction { $0.animation = nil }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .onAppear { ThingIndex.shared.load(); CollectionStore.shared.load() }
+        // (the caption as the menu: Places opens on a set as soon as the sets are read; never the old menu)
+        .task(id: "\(store.ready)|\(picked)") {
+            guard Self.swipeCaption, store.ready, !map.placesPicked, map.placesMode else { return }
+            Self.step(0, map: map)
+        }
     }
 
+    /// THE CAPTION IS THE MENU: Places opens on a set and the caption is swiped from set to set. (The test switch can
+    /// still turn it off to see the old menu.)
+    static var swipeCaption: Bool { UserDefaults.standard.object(forKey: "wya.placesSwipe") as? Bool ?? true }
+    /// the set after (1) or before (-1) the one shown, round the menu's order; 0 the last one looked at (or the first)
+    @MainActor static func step(_ by: Int, map: MapController) {
+        let menu = CollectionStore.shared.menu
+        guard !menu.isEmpty else { return }
+        let last = UserDefaults.standard.string(forKey: "wya.placesLast")
+        let now = map.placesPicked ? map.placesSet : (last.flatMap { menu.contains($0) ? $0 : nil } ?? menu[0])
+        let i = menu.firstIndex(of: now) ?? 0
+        let next = menu[(i + by + menu.count) % menu.count]
+        if by != 0 { Feel.tick() }
+        map.showPlacesSet(next)
+        UserDefaults.standard.set(next, forKey: "wya.placesLast")
+    }
     /// the sets (or a set's kinds) in rows of `columns` equal parts, each word whole in the middle of its part
     @ViewBuilder private func setGrid(_ rows: [PlacesRows.Row], columns: Int, width: CGFloat, small: Bool) -> some View {
         let lines = stride(from: 0, to: rows.count, by: columns).map { Array(rows[$0 ..< min($0 + columns, rows.count)]) }

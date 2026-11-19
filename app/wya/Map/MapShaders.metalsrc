@@ -54,7 +54,44 @@ struct Look {
     float4 clip2;    // x pixels per point, y Style Simple, z the pattern for Differentiate Without Colour (1 hatch, 2 dots)
     float4 det;      // the open country's finer relief: its box in the world picture (u0 v0 u1 v1)
     float4 det2;     // its texel (u, v), z 1 when it is in
+    float4 sun;      // THE REAL SUN: x the subsolar latitude, y its longitude (radians), z 1 when on, w the night's depth
 };
+
+// THE WORLD'S LIGHT: the relief lit by where the sun really is now. For a point (uv: longitude, latitude), the sun's
+// height over its horizon and its direction along the ground. Out: xyz the light in the relief's frame (x east, y
+// south, z up), w how far into the day (0 night, 1 day)
+inline float4 sunLight(float2 uv, float4 sun) {
+    float lat = (0.5 - uv.y) * M_PI_F, lon = (uv.x - 0.5) * 2.0 * M_PI_F;
+    float dl = sun.y - lon;
+    float sd = sin(sun.x), cd = cos(sun.x);
+    float up = sin(lat) * sd + cos(lat) * cd * cos(dl);
+    float east = cd * sin(dl);
+    float north = cos(lat) * sd - sin(lat) * cd * cos(dl);
+    float2 h = float2(east, -north);
+    float hl = length(h);
+    h = hl > 1e-4 ? h / hl : float2(-0.7071, -0.7071);
+    // always from the north side (mirrored when the sun is to the south): lit from the south, as the real sun mostly
+    // is for the north, hills read as hollows and valleys as ridges (relief inversion), which is why every good map
+    // lights from the north-west; the light still swings east to west with the day
+    h.y = -abs(h.y);
+    if (abs(h.y) < 0.35) h = normalize(float2(h.x, -0.35));
+    // never a grazing light (it blows slopes out into black and white): at least 28 degrees up for the shading
+    float e = max(asin(clamp(up, -1.0, 1.0)), 0.49);
+    float3 L = float3(h * cos(e), sin(e));
+    // the day, with a soft twilight about 12 degrees deep (civil to nautical); the sign of how far the sun is up rides
+    // in the light's length so the warm low light can be told (low sun: up near 0)
+    float day = smoothstep(-0.21, 0.06, up);
+    float warm = day * (1.0 - smoothstep(0.02, 0.32, up));
+    return float4(L * (1.0 + warm), day);
+}
+// the night side: the same land and sea, a little dimmer and cooler, never dark; near sunrise and sunset the day side
+// warms a little, as low light does
+inline float3 nightSide(float3 c, float4 sunL, float depth) {
+    float warm = length(sunL.xyz) - 1.0;
+    float3 night = c * float3(0.86, 0.89, 0.96);
+    float3 lit = c * mix(float3(1.0), float3(1.035, 1.0, 0.94), warm);
+    return mix(mix(c, night, depth), lit, sunL.w);
+}
 
 // DIFFERENTIATE WITHOUT COLOUR (Part 1.14): stamped land hatched (0.5 pt lines of 50% ink at 45 degrees, 4 pt apart),
 // wished land dotted (1 pt dots of 50% ink, 5 pt apart), in screen points so they keep their size at every zoom
@@ -134,12 +171,15 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         }
         return float4(flat, 1.0);
     }
+    float4 sunL = look.sun.z > 0.5 ? sunLight(in.uv, look.sun) : float4(0.0, 0.0, 1.0, 1.0);
     if (kind == 0) {
         // outside the real world (past ±180°) the depth deepens into open ocean over 25°, so no ghost of the other side
         float out = max(-in.uv.x, in.uv.x - 1.0);
         float d = out > 0.0 ? mix(dh.r, 0.9, smoothstep(0.0, 0.07, out)) : dh.r;
         // on a continent's map the sea goes into the flat blue (tint.rgb, by tint.a)
-        return float4(mix(seaColour(d), look.tint.rgb, look.tint.a), 1.0);
+        float3 sea = mix(seaColour(d), look.tint.rgb, look.tint.a);
+        if (look.sun.z > 0.5) sea = nightSide(sea, sunL, look.sun.w);
+        return float4(sea, 1.0);
     }
     if (kind == 3) return float4(look.tint.rgb, 1.0);
     // land: white to grey by height, with a soft light from the north-west so the mountains read the way Apple Maps'
@@ -161,6 +201,8 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     }
     float3 n = normalize(float3(grad.x * 7.0, grad.y * 7.0, 1.0));
     float3 L = normalize(float3(-1.0, -1.0, 1.6));
+    // by day the real sun's direction; through twilight it turns back to the soft north-west light of the night
+    if (look.sun.z > 0.5) L = normalize(mix(L, normalize(sunL.xyz), sunL.w));
     float shade = dot(n, L) / L.z;
     // zoomed in past the relief's own detail (a texel bigger than a few pixels) the hills would turn into soft grey
     // blobs, so the relief eases out and the land goes calm and flat instead
@@ -176,12 +218,21 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     land *= mix(1.0, clamp(shade, 0.6, 1.25), 0.55 * detail);
     land = clamp(land, 0.0, 1.0);
     if (kind == 2) land = pattern(land * look.tint.rgb, look.clip2.z, in.position.xy, look.clip2.x);   // stamped lime soaks into the land; the Alps still show
+    // YOUR LAND AS A MATERIAL, NOT PAINT: by day a slight sheen where its slopes face the sun, as a lacquered surface
+    // catches light; never on the night side, never on flat ground (it follows the relief)
+    if (kind == 2 && look.sun.z > 0.5 && look.clip2.z < 0.5) {
+        float3 hv = normalize(normalize(L) + float3(0.0, 0.0, 1.0));
+        float sheen = pow(max(dot(n, hv), 0.0), 60.0) * sunL.w * detail;
+        float flatK = 1.0 - smoothstep(0.985, 0.999, n.z);
+        land = min(land + sheen * flatK * 0.16, 1.0);
+    }
     // THE LAND ROUND A CONTINENT (the old fadedLand, Slice 127l): away from the continent you're on the land stays
     // land, its own relief, mixed halfway toward our blue, and the colours on it go (tint.a: how far it has gone)
     if (kind == 5) land = mix(land * look.tint.rgb, mix(land, BLUE, 0.5), look.tint.a);
     // THE WORLD ROUND A COUNTRY'S OWN MAP: its own relief kept, multiplied by the sea's lightest blue (the shallows'
     // colour), its colours going (tint.a: how far it has gone)
     if (kind == 6) land = mix(land * look.tint.rgb, land * mix(WHITE, BLUE, 0.20), look.tint.a);
+    if (look.sun.z > 0.5) land = nightSide(land, sunL, look.sun.w);
     // pad > 0: laid over what is there at that strength (premultiplied), so the borders under it go with it
     if (look.pad > 0.0 || look.clip.w > 0.5) {
         float a = (look.pad > 0.0 ? look.pad : 1.0) * front;
@@ -467,4 +518,50 @@ fragment float4 diamondFragment(DiamondV in [[stage_in]]) {
     float inside = clamp((size - edge - r) / 0.7 + 0.5, 0.0, 1.0);
     float cover = inside + (1.0 - inside) * 0.5;
     return float4(in.colour.rgb * inside * a, cover * a);
+}
+
+// DEPTH OF FOCUS: with a card or the passport up, the map behind it goes softly out of focus, as through a lens
+// focused on what is in front; the place the card is about stays sharp. The frame is drawn as always, then taken down
+// to a quarter (its place's mask riding in alpha), blurred both ways, and laid back over.
+struct LensV { float4 position [[position]]; float2 uv; };
+vertex LensV lensVertex(uint vid [[vertex_id]]) {
+    float2 p = float2((vid << 1) & 2, vid & 2);
+    LensV o;
+    o.position = float4(p * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+    o.uv = p;
+    return o;
+}
+// the frame to a quarter: four bilinear taps, a 4 x 4 box; the kept place's mask into alpha
+fragment float4 lensDown(LensV in [[stage_in]], texture2d<float> src [[texture(0)]], texture2d<float> mask [[texture(1)]],
+                         sampler s [[sampler(0)]]) {
+    float2 t = 1.0 / float2(src.get_width(), src.get_height());
+    float3 c = src.sample(s, in.uv + t * float2(-1.0, -1.0)).rgb + src.sample(s, in.uv + t * float2(1.0, -1.0)).rgb
+             + src.sample(s, in.uv + t * float2(-1.0, 1.0)).rgb + src.sample(s, in.uv + t * float2(1.0, 1.0)).rgb;
+    return float4(c * 0.25, mask.sample(s, in.uv).r);
+}
+// one direction of a gaussian; u.xy the step in texels, u.z its sigma in texels
+fragment float4 lensBlur(LensV in [[stage_in]], texture2d<float> src [[texture(0)]], sampler s [[sampler(0)]],
+                         constant float4& u [[buffer(0)]]) {
+    float2 t = u.xy / float2(src.get_width(), src.get_height());
+    float sg = max(u.z, 0.5);
+    float4 sum = float4(0.0);
+    float wsum = 0.0;
+    for (int i = -12; i <= 12; i++) {
+        float x = float(i);
+        float w = exp(-0.5 * x * x / (sg * sg));
+        sum += src.sample(s, in.uv + t * x) * w;
+        wsum += w;
+    }
+    return sum / wsum;
+}
+// laid back: the sharp frame where the place is (with a soft edge just outside its coast), the soft one elsewhere;
+// u.x how far the lens has gone (0 to 1), u.y 1 when a place stays sharp
+fragment float4 lensComposite(LensV in [[stage_in]], texture2d<float> sharp [[texture(0)]],
+                              texture2d<float> soft [[texture(1)]], sampler s [[sampler(0)]],
+                              constant float4& u [[buffer(0)]]) {
+    float3 a = sharp.read(uint2(in.position.xy)).rgb;
+    float4 b = soft.sample(s, in.uv);
+    float keep = u.y > 0.5 ? smoothstep(0.06, 0.45, b.a) : 0.0;
+    float k = smoothstep(0.0, 0.35, u.x) * (1.0 - keep);
+    return float4(mix(a, b.rgb, k), 1.0);
 }

@@ -84,7 +84,9 @@ enum MapSettingsRows {
         // what it remembers about you (AINotes): its own page, each note taken out by its hold menu, new ones typed
         .init(id: "aiNotes", name: "What it knows", group: 2, choices: nil, page: "aiNotes", defaultValue: nil,
               shows: { $0.ai }, get: { _ in "" }, set: { _, _ in }),
-        // group 4: more
+        // group 4: more where the app's maps, words and pictures come from, each with its licence
+        .init(id: "sources", name: "Sources", group: 3, choices: nil, page: "sources", defaultValue: nil,
+              shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
         .init(id: "advanced", name: "Advanced", group: 3, choices: nil, page: "advanced", defaultValue: nil,
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
         .init(id: "all", name: "All settings", group: 3, choices: nil, page: "all", defaultValue: nil,

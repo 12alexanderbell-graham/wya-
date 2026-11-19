@@ -351,6 +351,7 @@ extension PlacePageState.OnePage {
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
         out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
         // a country whose own picture is a map (most are): its first sight's photo at the top instead
+        if out.photo == nil { out.photo = await PlacePageState.bestSightPhoto(cc) }
         if out.photo == nil { out.photo = out.highlights.lazy.filter { !$0.shared }.compactMap { PlacePageState.photo($0.photo) }.first }
         // (a page opened since this one began loading keeps its own facts)
         guard key.id.lowercased() == cc else { return }
@@ -865,6 +866,25 @@ extension PlacePageState {
     /// A PAGE'S PHOTO: the first of the place's pictures that is a photo of it as you would see it there; never the
     /// place seen from space (satellite, Landsat, MODIS, Sentinel, the Blue Marble), a map (locator, location, relief,
     /// topographic) or a drawing (any .svg). None left: the page has no photo.
+    /// A COUNTRY'S BEST-KNOWN SIGHT'S PHOTO: its things, famous first, the first that is a sight of its own (a
+    /// landmark, a mountain, water, nature or a spot) with a photo of it as you would see it there; never one on a
+    /// border, a school, a stadium, an airport, a museum's building, a place of mourning, or a picture from above
+    static func bestSightPhoto(_ cc: String) async -> String? {
+        guard case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
+              let rows = try? JSONSerialization.jsonObject(with: d) as? [[Any]] else { return nil }
+        let skip = "border|between|universit|college|school|stadium|arena|airport|station|territory|museum|concentration|camp\\b|memorial|genocide|cemetery|prison|place name"
+        let fromAbove = "\\b[0-9]+\\.[0-9]+[NSEW]\\b|^A[0-9]+\\.[0-9]+|aerial image|\\bISS\\b"
+        for r in rows {
+            guard r.count > 7, let kind = (r[2] as? NSNumber)?.intValue, (2...6).contains(kind),
+                  let name = r[1] as? String, let file = r[7] as? String, !file.isEmpty else { continue }
+            let what = ((r[6] as? String) ?? "") + " " + name
+            if what.range(of: skip, options: [.regularExpression, .caseInsensitive]) != nil { continue }
+            if file.range(of: fromAbove, options: [.regularExpression, .caseInsensitive]) != nil { continue }
+            if let f = photo(file) { return f }
+        }
+        return nil
+    }
+
     static func photo(_ any: Any?) -> String? {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in

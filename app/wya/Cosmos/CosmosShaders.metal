@@ -20,12 +20,12 @@ inline float ridged(float2 p) {
     return v;
 }
 
-// MARK: THE SUN: a ball of plasma, realistic as Apple Maps draws things, warm like the real one (yellow-white at the centre, an
-// orange surface that churns, orange prominences looping off the limb that grow, drift and fall back), never a flat
-// yellow fill, never a dark outline. It is your streak: - flare 0...1: the streak's length (8 weeks = 1, the cap); the
-// prominences reach further and rise higher with it - glow 0...1: the sun picked; a warm halo grows round it and the
-// corona brightens The plasma round the limb is always moving: tongues rise off the edge, swell and fall back. The
-// plasma itself, in any three colours (the sun's: cream, yellow, red; a star's: whites)
+// MARK: THE SUN: a ball of plasma,, warm like the real one (yellow-white at the centre, an orange surface that
+// churns, orange prominences looping off the limb that grow, drift and fall back), never a flat yellow fill, never a
+// dark outline. It is your streak: - flare 0...1: the streak's length (8 weeks = 1, the cap); the prominences reach
+// further and rise higher with it - glow 0...1: the sun picked; a warm halo grows round it and the corona brightens
+// The plasma round the limb is always moving: tongues rise off the edge, swell and fall back. The plasma itself, in
+// any three colours (the sun's: cream, yellow, red; a star's: whites)
 static half4 plasma(float2 position, float2 size, float t, float discFraction, float flare, float glow,
                     float3 core, float3 yel, float3 red, float cellScale = 1.0) {
     float2 c = size * 0.5;
@@ -83,11 +83,11 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
 
 // THE SUN LIVES A STAR'S LIFE AS THE STREAK GROWS. `heat` 0...1 is the star's age (SunView.heat: 1 week 0.13, 4 weeks
 // 0.40, 10 weeks 0.62, a year 0.85, ten years 1), smooth in the weeks, most of it spent in the first ten weeks, so
-// every week is a clear step: - our sun in its prime (0 to about 3 weeks): yellow, brighter and more alive every week,
-// flares reaching out - it swells into a red giant (about 3 to 10 weeks): bigger, orange to red, huge slow cells,
-// calmer flares - it turns white (about 3 months to 10 years): the same big star burns white-hot, its surface boils
-// fast and a white corona reaches further every year. No rings, no shells, nothing round it but its own light. `swell`
-// (from the view): how far the giant may grow here (less at 50%, where Earth's moon is close below).
+// every week is a clear step: - our sun in its prime (0 to about 3 weeks): yellow, brighter and more alive every
+// week, flares reaching out - it swells into a red giant (about 3 to 10 weeks): bigger, orange to red, huge slow
+// cells, calmer flares - it turns white (about 3 months to 10 years): the same big star burns white-hot, its surface
+// boils fast and a white corona reaches further every year. No rings, no shells, nothing round it but its own light.
+// `swell` (from the view): how far the giant may grow here (less at 50%, where Earth's moon is close below).
 [[ stitchable ]] half4 sunPlasma(float2 position, half4 colour, float2 size, float t, float discFraction, float flare,
                                  float glow, float heat, float swell) {
     float3 cream = float3(1.0, 0.975, 0.86), yel = float3(1.0, 0.878, 0.290) /* FFE04A */,
@@ -157,7 +157,7 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     return half4(half3(min(col, float3(alpha * 1.6))), half(alpha));
 }
 
-// A STAR IS THE SUN'S PLASMA, ONLY THE PLASMA (11:39): the sun's tongues and corona with no disc, all white, at
+// A STAR IS THE SUN'S PLASMA, ONLY THE PLASMA (; 11:39:): the sun's tongues and corona with no disc, all white, at
 // full strength
 [[ stitchable ]] half4 starPlasma(float2 position, half4 colour, float2 size, float t, float discFraction, float flare) {
     float2 c = size * 0.5;
@@ -182,11 +182,11 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     return half4(half3(lum), half(lum));
 }
 
-// MARK: A PLANET: a real sphere lit by one light, wearing its NASA surface map (public domain), graded to style A:
-// realistic, but softened toward pastel colours. Like a moon phase it
-// darkens as you stamp more of its continent; Earth's night side shows its city lights.
+// MARK: A PLANET: a real sphere lit by one light, wearing its real surface map in its real colours. Like a moon phase
+// it darkens as you stamp more of its continent; Earth's night side shows its city lights.
 [[ stitchable ]] half4 planetSphere(float2 position, half4 colour, float2 size, float spin, float3 light,
-                                    texture2d<half> surface, texture2d<half> nightLights, float hasLights, float bands) {
+                                    texture2d<half> surface, texture2d<half> nightLights, float hasLights, float kind,
+                                    float2 sunDir) {
     float2 c = size * 0.5;
     float R = min(size.x, size.y) * 0.5;
     float2 q = (position - c) / R;
@@ -201,28 +201,58 @@ static half4 plasma(float2 position, float2 size, float t, float discFraction, f
     float lat = asin(clamp(nt.y, -1.0, 1.0));
     float2 uv = float2(fract(lon / (2.0 * M_PI_F) + 0.5), 0.5 - lat / M_PI_F);
     constexpr sampler s(address::repeat, filter::linear);
-    float3 albedo = float3(surface.sample(s, uv).rgb);
-    // the pastel grade: lifted shadows, softer colour
-    float lumA = dot(albedo, float3(0.299, 0.587, 0.114));
-    albedo = mix(float3(lumA), albedo, 0.82);
-    albedo = albedo * 0.86 + 0.12;
+    float3 raw = float3(surface.sample(s, uv).rgb);
+    // REAL COLOURS: the worlds as they are (Solar System Scope's maps, CC BY 4.0, from NASA's own), only a little
+    // lifted so the night side still reads on the sheet's light glass
+    float3 albedo = raw * 0.94 + 0.04;
+    // WHAT EACH WORLD IS MADE OF: 0 bare rock (Mercury, the Moon), 1 Venus under its cloud, 2 Earth, 3 Mars, 4 the
+    // gas giants, 5 the ice giants. One front light made every one a plastic ball; each now takes the light as its
+    // surface does, and the sun's side is always a little brighter, wherever it is (no shine: a glint made it a
+    // plastic ball)
+    int k = int(kind + 0.5);
+    bool rock = k == 0 || k == 3;
+    bool giant = k == 4 || k == 5;
     // the light: `light` is the way to the sun (x across, y up, z towards you), so the lit side turns with the sun's
-    // direction and can never flip
+    // direction and can never flip; how much of the disc is night is your share of its continent stamped, exactly as
+    // before
     float3 L = normalize(light + float3(0.0, 0.06, 0.0));
-    float lambert = dot(n, L);
-    float day = smoothstep(-0.06, 0.10, lambert);
-    float shade = 0.55 + 0.45 * clamp(lambert, 0.0, 1.0);
-    float3 col = albedo * shade * day;
-    // the night side: darker, with enough light that the planet still reads; Earth's cities glow there
-    float3 nightCol = albedo * 0.30;
+    float mu0 = dot(n, L);
+    float mu = max(z, 0.02);
+    // the terminator: soft on worlds with air, crisp on bare rock
+    float soft = rock ? 0.05 : (k == 1 ? 0.16 : 0.10);
+    float day = smoothstep(-soft, soft, mu0);
+    float m0 = max(mu0, 0.0);
+    // rock scatters light back the way it came (Lommel-Seeliger: a full moon is a flat bright disc, every crater
+    // sharp); clouds and gas fall off toward the edge (Lambert, and the giants' limbs darker still)
+    float ls = 2.0 * m0 / (m0 + mu);
+    float lam = m0;
+    float shade = rock ? mix(lam, ls, 0.7) : lam;
+    if (giant) shade *= pow(mu, k == 5 ? 0.38 : 0.22);
+    shade = 0.55 + 0.45 * shade;
+    // the sun's side a little brighter even at full (the direction is on screen, x right, y up)
+    float sunSide = dot(normalize(float3(sunDir, 0.0) + float3(0.0, 0.0, 1e-4)).xy, n.xy);
+    shade *= 0.94 + 0.10 * sunSide;
+    float3 col = albedo * shade;
+    // THE AIR AT THE EDGE: Earth's thin blue, Venus's yellow haze, the ice giants' cyan, Mars's faint dust; none on rock
+    float3 airCol = k == 2 ? float3(0.55, 0.75, 1.0) : k == 1 ? float3(1.0, 0.93, 0.75) : k == 5 ? float3(0.70, 0.93, 1.0)
+                  : k == 3 ? float3(1.0, 0.82, 0.70) : float3(1.0, 0.95, 0.85);
+    float airK = k == 2 ? 0.55 : k == 1 ? 0.40 : k == 5 ? 0.35 : k == 3 ? 0.12 : k == 4 ? 0.10 : 0.0;
+    float limb = pow(1.0 - z, 2.2);
+    float airLit = smoothstep(-0.25, 0.35, mu0);
+    col = mix(col, airCol, clamp(limb * airK * airLit, 0.0, 0.85));
+    // twilight: a warm band along the terminator where there is air
+    if (!rock && k != 4) {
+        float band = smoothstep(0.22, 0.0, abs(mu0)) * smoothstep(-soft, 0.0, mu0);
+        col *= mix(float3(1.0), float3(1.0, 0.86, 0.74), band * 0.5);
+    }
+    // the night side: darker, with enough light that the planet still reads (cool, as by starlight); Earth's cities
+    // glow there
+    float3 nightCol = albedo * float3(0.22, 0.24, 0.28);
     if (hasLights > 0.5) {
         float lights = float(nightLights.sample(s, uv).r);
         nightCol += float3(1.0, 0.88, 0.62) * lights * 0.85;
     }
-    col += nightCol * (1.0 - day);
-    // a soft rim, the atmosphere's edge
-    float rim = pow(1.0 - z, 3.0);
-    col += float3(0.95, 0.97, 1.0) * rim * 0.18 * day;
+    col = col * day + nightCol * (1.0 - day);
     // anti-aliased edge
     float edge = smoothstep(1.0, 1.0 - 1.5 / R, sqrt(r2));
     return half4(half3(col * edge), half(edge));

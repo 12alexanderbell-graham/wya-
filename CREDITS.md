@@ -17,7 +17,8 @@
 
 ## Planets
 
-- The planet, moon and night-sky textures in `app/wya/Resources/Cosmos` were carried over from the earlier wya?! build. Their source is being confirmed and will be credited here.
+- The planet and moon surface maps and Saturn's ring in `app/wya/Resources/Cosmos` (`planet-*.jpg`, `saturn-ring.png`): [Solar System Scope](https://www.solarsystemscope.com/textures/), based on NASA data, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Resized to 1024 x 512 (the ring to 1024 x 16); Earth's cloud map laid over its day map. See `app/wya/Resources/Cosmos/CREDITS.txt`.
+- The moons' small pictures, Earth's night lights and the night sky in the same folder were carried over from the earlier wya?! build. Their source is being confirmed and will be credited here.
 
 ## Data server
 
