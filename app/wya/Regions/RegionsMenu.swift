@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// REGIONS' LIST (BUILD-BOOK 6.3, as the old native app had it: RegionsList, map.js buildRegionList): the whole screen,
-/// clear glass with the world under it, every country that has regions, by name; each row its square flag, its name,
-/// and under it what its first level holds ("34 provinces", " · 2 stamped" once you have). It starts 10 pt under the head
-/// and stops 10 pt above the tab bar, whole rows at rest, soft at both ends. The head's search is the list's search
-/// (3 Oct). The rows ride the water's top edge as it comes up out of the capsule and go back down with it.
+/// REGIONS' LIST (BUILD-BOOK 6.3, as the old native app had it: RegionsList, map.js buildRegionList): the whole
+/// screen, clear glass with the world under it, every country that has regions, by name; each row its square flag,
+/// its name, and under it what its first level holds (, once you have). It starts 10 pt under the head and stops 10
+/// pt above the tab bar, whole rows at rest, soft at both ends. The head's search is the list's search. The rows ride
+/// the water's top edge as it comes up out of the capsule and go back down with it.
 struct RegionsMenu: View {
     let water: Water
     let map: MapController
@@ -37,6 +37,7 @@ struct RegionsMenu: View {
                 }
                 .scrollTargetLayout()
             }
+            .scrollBlur()
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
             .scrollTargetBehavior(RowSnap(row: Self.rowH))
@@ -48,13 +49,13 @@ struct RegionsMenu: View {
             }
             .onChange(of: water.regions) { _, on in if on { lifted = nil; reader.scrollTo("top", anchor: .top) } }
         }
-        // soft at the top (under the head) and at the foot (above the tabs), never a straight cut (P3); the foot stays
+        // soft at the foot (above the tabs), never a straight cut (P3); the top is the scroll blur, as everywhere; the foot stays
         // where it is while the water moves, so rows going down with it leave through it
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         .mask(alignment: .topLeading) {
             let mh = max(0, bottom - top)
             let f = mh > 0 ? min(0.5, 14 / mh) : 0.5
-            LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: f),
+            LinearGradient(stops: [.init(color: .black, location: 0),
                                    .init(color: .black, location: 1 - f), .init(color: .clear, location: 1)],
                            startPoint: .top, endPoint: .bottom)
                 .frame(width: L.W, height: mh)
@@ -90,12 +91,13 @@ struct RegionsMenu: View {
         let country = place.flatMap { map.world?.places[$0].n } ?? ""
         return HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(h.place.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.row(h.place.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
+            .frame(width: 28, height: 21)
             .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
-                Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                Text(country).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
             }
             Spacer(minLength: 0)
         }
@@ -117,12 +119,13 @@ struct RegionsMenu: View {
         ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map)
     }
 
-    /// `note` in place of the row's count line ("Did you mean?", as search's own rows say it)
+    /// `note` in place of the row's count line (, as search's own rows say it)
     private func row(_ r: RegionsMenuModel.Row, note: String? = nil) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.row(r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
             }
+            .frame(width: 28, height: 21)
             .frame(width: 28, height: 28)
             // the picked row's flag lifts 4 pt and grows to 1.1 about its centre (A6.7's first frame)
             .scaleEffect(lifted == r.id ? 1.1 : 1)
@@ -130,8 +133,8 @@ struct RegionsMenu: View {
             VStack(alignment: .leading, spacing: 1) {
                 // (one line, so every row is the list's 56 pt step and none is cut at rest: a long name gets a
                 // little smaller instead of a second line)
-                Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                Text(note ?? r.sub).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                Text(note ?? r.sub).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     .contentTransition(.numericText(value: Double(r.count)))
                     .animation(Motion.quick, value: r.count)
             }
@@ -142,8 +145,8 @@ struct RegionsMenu: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .contentShape(Rectangle())
         .onTapGesture { pick(r) }
-        // APPLE'S MENU ON A ROW (11.5), under the country's name: Open its region map · Open its page · Stamp the
-        // country (Add to a list waits for Lists)
+        // APPLE'S MENU ON A ROW (11.5), under the country's name: Open its region map · Open its page · Stamp ·
+        // Wish (the words of the country's own hold menu; Add to a list waits for Lists)
         .contextMenu {
             Section(r.name) {
                 Button("Open its region map") { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { pick(r) } }
@@ -153,10 +156,19 @@ struct RegionsMenu: View {
                                                    from: CGRect(x: map.view.width / 2 - 22, y: map.view.height / 2 - 22, width: 44, height: 44))
                     }
                 }
-                let stamped = MarkStore.shared.state(.country(r.id)).stamped
-                Button(stamped ? "Unstamp the country" : "Stamp the country", role: stamped ? .destructive : nil) {
+                let st = MarkStore.shared.state(.country(r.id))
+                Button(st.stamped ? "Unstamp" : "Stamp", role: st.stamped ? .destructive : nil) {
                     ContentView.quickStamp(r.place, map: map)
                 }
+                // (as the country's own hold menu: Wish or Unwish, not while stamped)
+                Button(st.wished ? "Unwish" : "Wish") {
+                    Feel.tap()
+                    Task {
+                        if st.wished { await MarkStore.shared.unwish(.country(r.id), name: r.name) }
+                        else { await MarkStore.shared.wish(.country(r.id), name: r.name) }
+                    }
+                }
+                .disabled(st.stamped)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -165,8 +177,8 @@ struct RegionsMenu: View {
         .accessibilityAddTraits(.isButton)
     }
 
-    /// nothing matches: the nearest country's own row, its line saying "Did you mean?" (as search's rows say it; a tap
-    /// opens its regions), else "No results" (the old app's guessNode)
+    /// nothing matches: the nearest country's own row, its line saying (as search's rows say it; a tap opens its
+    /// regions), else (the old app's guessNode)
     @ViewBuilder private var missRow: some View {
         if let near = SearchResults.nearest(map: map, query: query).flatMap({ i in model.rows.first { $0.place == i } }) {
             row(near, note: "Did you mean?")
@@ -201,11 +213,11 @@ final class RegionsMenuModel {
         let flag: String
         let row: Int
         let total: Int
-        /// the first level's word, singular and plural, lower case ("province", "provinces")
+        /// the first level's word, singular and plural, lower case
         let one: String
         let many: String
         var count: Int
-        /// "34 provinces", and " · 2 stamped" once you have
+        /// , and once you have
         var sub: String {
             let n = "\(total.formatted()) \(total == 1 ? one : many)"
             return count > 0 ? n + " · \(count) stamped" : n
@@ -231,9 +243,9 @@ final class RegionsMenuModel {
                            one: Self.word(f.level.one), many: Self.word(f.level.many), count: 0))
         }
         rows = out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        Flags.prewarm(rows.map(\.flag))
+        Flags.prewarmRows(rows.map(\.flag))
     }
-    /// small letters as an English word is ("34 wilayas"), but a country's own word keeps its own ("9 Bundesländer")
+    /// small letters as an English word is, but a country's own word keeps its own
     static func word(_ w: String) -> String { w.unicodeScalars.allSatisfy(\.isASCII) ? w.lowercased() : w }
     /// the same word standing alone as a label (the region map's level line): its first letter capitalised
     static func label(_ w: String) -> String { let s = word(w); return s.prefix(1).uppercased() + s.dropFirst() }

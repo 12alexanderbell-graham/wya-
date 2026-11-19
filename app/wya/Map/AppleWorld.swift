@@ -2,12 +2,10 @@ import SwiftUI
 import MapKit
 import simd
 
-// THE MAP: APPLE (Map settings' first row: Apple's map instead of ours, on every map, the stamps still colouring the
-// countries on it). Apple's map lies under the map instead of ours;
-// your countries' colour is laid into it with no outline of ours (the old app's green outline stood out):
-// the colour at 75% (60% on the photos) under Apple's names, so its names and its coasts show and every edge is
-// Apple's. A tap on a country is a tap on ours. Pins keeps its
-// own Apple map (Map/PinsMap.swift); the zoom column, Reset and full screen move whichever Apple map is up, through
+// THE MAP: APPLE. Apple's map lies under the map instead of ours; your countries' colour is laid into it with no
+// outline of ours (the old app's green outline): the colour at 75% (60% on the photos) under Apple's names, so its
+// names and its coasts show and every edge is Apple's. A tap on a country is a tap on ours. Pins keeps its own Apple
+// map (Map/PinsMap.swift); the zoom column, Reset and full screen move whichever Apple map is up, through
 // PinsMapState.
 
 /// your countries in one colour: every piece of every one of them, as rings in Apple's map points
@@ -53,8 +51,6 @@ final class FillRenderer: MKOverlayRenderer {
         super.init(overlay: o)
     }
     override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in ctx: CGContext) {
-        // (the colour itself at 75%, not
-        // multiplied into Apple's green land, where it all but vanished; 60% on the photos. Apple's names stay over it)
         ctx.setBlendMode(.normal)
         ctx.setFillColor(fill.colour.withAlphaComponent(photo ? 0.6 : 0.75).cgColor)
         for (path, box) in paths where box.intersects(mapRect) {
@@ -64,9 +60,9 @@ final class FillRenderer: MKOverlayRenderer {
     }
 }
 
-/// THE JOURNEY'S START AND END CAPSULES ON APPLE'S MAP (Part 13, as on ours; 12 Nov: the two histories the same): the
-/// start's from the first moment, the end's once the line has arrived; kept in the room between the head and the water,
-/// left of the zoom column, and away while their stop is off the screen
+/// THE JOURNEY'S START AND END CAPSULES ON APPLE'S MAP: the start's from the first moment, the end's once the line
+/// has arrived; kept in the room between the head and the water, left of the zoom column, and away while their stop
+/// is off the screen
 @MainActor
 final class JourneyCaps {
     private let start = HistoryCapsule(), end = HistoryCapsule()
@@ -80,8 +76,9 @@ final class JourneyCaps {
         let room = CGRect(x: 0, y: rr.lowerBound, width: v.bounds.width - L.side - 44, height: rr.upperBound - rr.lowerBound)
         let seen = room.insetBy(dx: -24, dy: -24)
         let p0 = pt(line[0]), p1 = pt(line[1]), pn = pt(line[line.count - 1]), pm = pt(line[line.count - 2])
-        start.set(words.0, near: p0, awayFrom: p1, in: room, visible: progress > 0.001 && seen.contains(p0))
-        end.set(words.1, near: pn, awayFrom: pm, in: room, visible: progress > 0.999 && seen.contains(pn))
+        _ = seen
+        start.set(words.0, near: p0, awayFrom: p1, in: room, visible: false)
+        end.set(words.1, near: pn, awayFrom: pm, in: room, visible: false)
     }
     func hide() { start.hide(); end.hide() }
 }
@@ -128,8 +125,7 @@ struct AppleWorldView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(map: map) }
 
-    /// OUR VIEW ON APPLE'S MAP, AT OUR SCALE: the same middle and the same width across the middle (14 Nov: a region
-    /// by spans fits the taller of two spans, so the hand-over close up stepped out, our 8.1 to Apple's 6.9)
+    /// OUR VIEW ON APPLE'S MAP, AT OUR SCALE: the same middle and the same width across the middle
     static func rect(_ r: MKCoordinateRegion) -> MKMapRect {
         let a = MKMapPoint(CLLocationCoordinate2D(latitude: min(85, r.center.latitude + r.span.latitudeDelta / 2),
                                                   longitude: r.center.longitude - r.span.longitudeDelta / 2))
@@ -197,7 +193,7 @@ struct AppleWorldView: UIViewRepresentable {
         v.showsScale = false
         v.showsUserLocation = false
         v.isPitchEnabled = false
-        v.isRotateEnabled = false
+        v.isRotateEnabled = true
         // (the margins set below are the whole inset, never the home bar's safe area added under them)
         v.insetsLayoutMarginsFromSafeArea = false
         // the finger's first contact: the app's map touch (search, settings, the book put away), as on ours
@@ -236,8 +232,11 @@ struct AppleWorldView: UIViewRepresentable {
             v.setVisibleMapRect(Self.rect(from: map, margins: v.layoutMargins), animated: false)
             map.apple = a
         }
-        // Style's Apple looks (Standard, Satellite, Hybrid)
-        let look = MapSettingsStore.shared.value.style
+        // Style's Apple looks (Standard, Satellite, Hybrid), or Places' own look when its row picks one of Apple's
+        let s = MapSettingsStore.shared.value
+        // (Places set to Native still comes here close up, where ours has nothing to show: then Apple's plain look)
+        let look = !map.placesMode || s.placesMap == "same" ? s.style
+            : s.placesMap.hasPrefix("apple-") ? String(s.placesMap.dropFirst(6)) : "standard"
         if c.look != look {
             c.look = look
             switch look {
@@ -247,14 +246,21 @@ struct AppleWorldView: UIViewRepresentable {
             }
             c.fillsKey = ""
         }
+        // APPLE'S MAP A STEP DEEPER here too, as in Pins, under our own fills and lines; a photo of the earth keeps
+        // its own colours
+        let deep = v.overlays.contains { $0 === PinsDeepen.world }
+        if look == "satellite" || look == "hybrid" { if deep { v.removeOverlay(PinsDeepen.world) } }
+        else if !deep { v.insertOverlay(PinsDeepen.world, at: 0, level: .aboveRoads) }
         // (Places: no stamps on its map, borders only, as on ours; the country opened framed on Apple's map)
         if map.placesMode {
             c.leaveRegions(v)
             c.setShapes(v)
             c.placeOpened(map.placeOpen)
         } else if let sc = map.regionScene {
-            c.regions(v, sc, stamped: map.showsStamped ? map.regionStamped : [],
-                      wished: map.showsWished ? map.regionWished.subtracting(map.regionStamped) : [])
+            // (the towns level: the level's borders only, no fills, as on ours; the towns and their names over them)
+            let towns = map.regionTowns
+            c.regions(v, sc, stamped: map.showsStamped && !towns ? map.regionStamped : [],
+                      wished: map.showsWished && !towns ? map.regionWished.subtracting(map.regionStamped) : [])
         } else {
             c.leaveRegions(v)
             c.fills(v, stamped: map.showsStamped ? map.stamped : [], wished: map.showsWished ? map.wished.subtracting(map.stamped) : [])
@@ -267,8 +273,9 @@ struct AppleWorldView: UIViewRepresentable {
     /// Apple's credit (Legal) just above the water, as in Pins: the room left between the head and the water
     static func margins(_ water: Water) -> UIEdgeInsets {
         let L = water.layout
-        let edge = max(water.form().top, water.y(.half))
-        return UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - edge), right: L.sheetInset)
+        // the credit at Apple's own place: just above the water's lowest resting stop (25%), fixed there; a higher
+        // water covers it, as Maps' card does
+        return UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - L.top(.quarter)), right: L.sheetInset)
     }
 
     static func dismantleUIView(_ v: MKMapView, coordinator: Coordinator) {
@@ -292,8 +299,8 @@ struct AppleWorldView: UIViewRepresentable {
         private var rings: [Int: [[MKMapPoint]]] = [:]
         init(map: MapController) {
             self.map = map
-            // (a country already open when Apple's map comes (close up, 14 Nov) is where the camera already is: framing it
-            // again flew back out to the whole country, and ours came back)
+            // (a country already open when Apple's map comes is where the camera already is: framing it again flew
+            // back out to the whole country, and ours came back)
             opened = map.placeOpen
             super.init()
             Self.current = self
@@ -456,7 +463,7 @@ struct AppleWorldView: UIViewRepresentable {
 
         private func frameJourney(_ v: MKMapView) {
             guard !journeyRect.isNull else { return }
-            v.setVisibleMapRect(journeyRect, edgePadding: UIEdgeInsets(top: 46, left: 32, bottom: 32, right: 60), animated: true)
+            v.setVisibleMapRect(journeyRect, edgePadding: PinsMapState.shared.raised(UIEdgeInsets(top: 46, left: 32, bottom: 32, right: 60)), animated: true)
         }
         private func words() -> (String, String) {
             guard let t = map.historyTrack, let a = t.stops.first, let b = t.stops.last else { return ("", "") }
@@ -581,6 +588,12 @@ struct AppleWorldView: UIViewRepresentable {
         func mapViewDidChangeVisibleRegion(_ v: MKMapView) { follow(v) }
         func mapViewDidFinishRenderingMap(_ v: MKMapView, fullyRendered: Bool) { if fullyRendered, v.alpha < 1 { v.alpha = 1 } }
         func mapView(_ v: MKMapView, rendererFor o: MKOverlay) -> MKOverlayRenderer {
+            if o === PinsDeepen.world {
+                let r = MKPolygonRenderer(polygon: PinsDeepen.world)
+                r.fillColor = UIColor(white: PinsDeepen.white, alpha: 1)
+                r.blendMode = .multiply
+                return r
+            }
             if let f = o as? FillOverlay { return FillRenderer(f, photo: look == "satellite" || look == "hybrid") }
             if let b = o as? BorderOverlay { return BorderRenderer(b) }
             if let l = o as? MKPolyline {

@@ -37,8 +37,10 @@ struct PageSheet: View {
                 .padding(.bottom, 24)
                 .frame(width: w, alignment: .leading)
             }
+            .scrollBlur()
             .scrollIndicators(.hidden)
-            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets
+            // and the Places shelf; at full they scroll
             .scrollDisabled(water.stop != .full)
             .frame(width: w, height: max(0, bottom - top))
             .position(x: L.W / 2, y: top + max(0, bottom - top) / 2)
@@ -48,7 +50,7 @@ struct PageSheet: View {
             .onChange(of: stack.reportAsked) { _, r in
                 guard let r else { return }
                 stack.reportAsked = nil
-                reporting = true; reason = r  // (the form simply replaces the list, no crossfade, 8 Nov)
+                reporting = true; reason = r
             }
             .task(id: page.key.description) {
                 reporting = false; reason = nil; note = ""; sent = false
@@ -118,18 +120,21 @@ struct PageSheet: View {
                 }
             }
         }
-        TextField("A note (if it helps)", text: $note, axis: .vertical)
+        TextField("", text: $note, prompt: Text("Explain the issue").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
             .font(.body)
             .lineLimit(1 ... 4)
             .focused($noteFocused)
-            .onChange(of: note) { _, n in if n.count > 300 { note = String(n.prefix(300)) } }
+            .onChange(of: note) { o, n in if n.count > 300, o.count <= 300 { Feel.refuse() } }
             .padding(.horizontal, 16).padding(.vertical, 12)
             .frame(minHeight: 44)
             .glassEffect(PageGlass.on, in: .rect(cornerRadius: 22))
             .padding(.top, 16)
+        if note.count > 300 {
+            Text("\(note.count)/300").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
+                .frame(maxWidth: .infinity, alignment: .trailing).padding(.top, 4)
+        }
         Button { send(page) } label: {
-            // nowhere to send yet: the report waits on the phone for the server's ledger, said plainly (as Verify's
-            // "Waiting to send")
+            // nowhere to send yet: the report waits on the phone for the server's ledger, said plainly (as Verify's)
             Text(sent ? "Waiting to send" : "Send")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
@@ -146,7 +151,7 @@ struct PageSheet: View {
         guard let reason, !sent else { Feel.refuse(); return }
         Feel.tap()
         noteFocused = false
-        Reports.shared.add(key: page.key.description, name: page.name, reason: reason, note: note)
+        Reports.shared.add(key: page.key.description, name: page.name, reason: reason, note: String(note.prefix(300)))
         withAnimation(Motion.quick) { sent = true }
     }
 
@@ -156,10 +161,10 @@ struct PageSheet: View {
             Feel.tap()
             reason = on ? nil : r
         } label: {
-            Text(r).font(.subheadline).foregroundStyle(Palette.ink)
+            Text(r).font(.subheadline).foregroundStyle(on ? Palette.white : Palette.ink)
                 .frame(width: width, height: 44)
-                // (the one picked in lime glass, as every picked capsule)
-                .glassEffect(on ? PageGlass.control.tint(Palette.lime) : PageGlass.control, in: .capsule)
+                .background { Capsule().fill(on ? Palette.ink : .clear) }
+                .glassEffect(on ? .identity : PageGlass.control, in: .capsule)
         }
         .buttonStyle(.plain)
     }

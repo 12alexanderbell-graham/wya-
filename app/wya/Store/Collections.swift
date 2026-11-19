@@ -1,10 +1,9 @@
 import Foundation
 import simd
 
-/// COLLECTIONS (7.2, D7): named lists people tick off, each from its authoritative source, read once from the data server
-/// (`native/collections/collections-2.wyco`). Each item is a place (a thing's key, `m:wd:Q…`) with its point; an event
-/// collection's items are dated stops ("12 Jul 2026 · Silverstone"). Only the easy ones for now (29 Oct 20:30:
-///).
+/// COLLECTIONS (7.2, D7): named lists people tick off, each from its authoritative source, read once from the data
+/// server (`native/collections/collections-2.wyco`). Each item is a place (a thing's key, `m:wd:Q…`) with its point;
+/// an event collection's items are dated stops. Only the easy ones for now.
 @MainActor
 @Observable
 final class CollectionStore {
@@ -14,16 +13,15 @@ final class CollectionStore {
         let name: String
         let cc: String
         let at: SIMD2<Float>
-        /// an event stop's day ("2026-07-05") and its name ("British Grand Prix"), or ""
+        /// an event stop's day  and its name, or ""
         let date: String
         let label: String
         /// how well known, 0-3 (which of a long list's places show first, far out); 9 in a short list: all at once
         var fame: Int = 9
         /// every country it is in (a site shared by countries is each one's)
         var ccs: [String] = []
-        /// its kind within its set (a sea: "ocean", "sea", "gulf", "strait"; a World Heritage site: "cultural" ...), or ""
         var type = ""
-        /// its key when it is not a thing (a capital is its town, "t:fr/2988507": one stamp for both)
+        /// its key when it is not a thing (a capital is its town,: one stamp for both)
         var own: String? = nil
         /// its name on the map: a list's long official name up to its first comma, colon or bracket; its card and
         /// page say it whole
@@ -54,7 +52,7 @@ final class CollectionStore {
         var menu: Int? = nil
         /// how it is cut down by kind of the same thing: [kind, its name] (seas: Oceans, Seas, Gulfs and bays, Straits)
         var types: [[String]] = []
-        /// which cut of which set this is ("seas|ocean|", "world-heritage||it"): one name per list of places
+        /// which cut of which set this is: one name per list of places
         var tag: String = ""
         /// how many it lists
         var total: Int { items.count + offMap }
@@ -65,11 +63,10 @@ final class CollectionStore {
 
     func collection(_ id: String) -> Collection? { all.first { $0.id == id } }
 
-    // MARK: PLACES' SETS (Places is the map and Regions again with real named things; first comes the pick
-    // of what to look at, tallest mountains, seas, national parks, and then within it a narrowing, national parks in
-    // one country). A set is a real list with its own name and total: the towns (the world's towns as
-    // their own shapes, Towns.swift), then every collection read from the data server (World Heritage as UNESCO lists it,
-    // Formula 1's season). Our twelve kinds are never a set and never shown: they file things, and a place of your own.
+    // MARK: PLACES' SETS. A set is a real list with its own name and total: the towns (the world's towns as their own
+    // shapes, Towns.swift), then every collection read from the data server (World Heritage as UNESCO lists it,
+    // Formula 1's season). Our twelve kinds are never a set and never shown: they file things, and a place of your
+    // own.
     /// the towns' set (not a collection: the towns' own files and shapes)
     static let towns = "towns"
     /// the menu, in its order: the towns, then the lists that last (World Heritage), then the events (a season)
@@ -79,12 +76,12 @@ final class CollectionStore {
     static let capitals = "capitals"
     /// the cities people know (Cities' marks far out, where no town's own shape can show; each keyed as its town)
     static let famousCities = "famouscities"
-    /// A SET'S KINDS (step two cuts the same thing down, seas of one type): [kind, its name]
+    /// A SET'S KINDS: [kind, its name]
     func types(_ id: String) -> [[String]] {
         if id == Self.towns { return collection(Self.capitals) == nil ? [] : [[Self.capitals, "Capitals"]] }
         return collection(id)?.types ?? []
     }
-    /// a set cut down to one of its kinds, named as the kind ("Oceans"); the whole set for no kind
+    /// a set cut down to one of its kinds, named as the kind; the whole set for no kind
     func typed(_ id: String, _ type: String?) -> Collection? {
         guard let c = collection(id) else { return nil }
         guard let type, let name = c.types.first(where: { $0.first == type })?.last else { return c }
@@ -142,16 +139,11 @@ final class CollectionStore {
     }
     @ObservationIgnored private var knownCut: (key: String, list: Collection)?
 
-    /// THE SETS' OWN PLACES BY NAME (Places' search): the places of the menu's sets whose name, or a word of it, starts
-    /// with what was typed ("yellowst" Yellowstone National Park, "baikal" Lake Baikal, "kili" Mount Kilimanjaro: the
-    /// things' index holds none of the three). A name that starts with it before one that has it further in, the best
-    /// known first, the set looked at first among equals ("taj" is the Taj Mahal with Mountain peaks up too); a place
-    /// in two sets once.
     struct Found: Hashable { let list: String; let item: Item; var key: String { list + "|" + item.id } }
     func find(_ query: String, first: String?, limit: Int = 4) -> [Found] {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, q.count >= 2 else { return [] }
-        if let l = lastFind, l.q == q, l.first == first { return l.hits }
+        if let l = lastFind.first(where: { $0.q == q && $0.first == first }) { return l.hits }
         let word = " " + q
         var hits: [(Found, Int, Bool, Int)] = []   // found, fame (and the set looked at, and a set of shapes), starts with it, its place in its list
         for id in menu {
@@ -175,11 +167,12 @@ final class CollectionStore {
             out.append(h.0)
             if out.count == limit { break }
         }
-        lastFind = (q, first, out)
+        lastFind = Array(([(q, first, out)] + lastFind).prefix(2))
         return out
     }
     @ObservationIgnored private var foldedNames: [String: [String]] = [:]
-    @ObservationIgnored private var lastFind: (q: String, first: String?, hits: [Found])?
+    /// the last two (a name and its short words in full are asked one after the other)
+    @ObservationIgnored private var lastFind: [(q: String, first: String?, hits: [Found])] = []
 
     /// A LIST ON A CONTINENT (the rest of the world is one flat blue there, and a mark out on the blue is nobody's): its
     /// places in that continent's countries, the list's scope the continent's name. A list of places that are no
@@ -246,8 +239,7 @@ final class CollectionStore {
         }
     }
 
-    /// a stop's line ("5 Jul 2026 · British Grand Prix")
-    /// a stop of any collection read, by its key
+    /// a stop's line  a stop of any collection read, by its key
     func item(_ key: PlaceKey) -> Item? {
         for c in all { if let it = c.items.first(where: { $0.key == key }) { return it } }
         return nil

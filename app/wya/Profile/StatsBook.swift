@@ -1,7 +1,7 @@
 import Foundation
 
-// THE STATS PAGE FROM THE CATALOG: each badge that has a count is a row in its group ("12 of 48"), the app's own rows at
-// the groups' heads; and a section for every country you have been to, from its levels of regions and its towns.
+// THE STATS PAGE FROM THE CATALOG: each badge that has a count is a row in its group, the app's own rows at the
+// groups' heads; and a section for every country you have been to, from its levels of regions and its towns.
 
 nonisolated enum StatsBook {
     static func of(_ a: String, _ b: String) -> String { a + " of " + b }
@@ -127,7 +127,7 @@ nonisolated enum StatsBook {
         if m.capital, let capital { rows.append(StatRow(label: "Capital", value: capital)) }
         if m.places > 0 { rows.append(StatRow(label: "Your places", value: format(m.places))) }
         if m.things > 0 { rows.append(StatRow(label: "Things marked", value: format(m.things))) }
-        if m.stamped && m.visits > 1 { rows.append(StatRow(label: "Times been", value: format(m.visits))) }
+        if m.stamped && m.visits > 1 { rows.append(StatRow(label: "Visits", value: format(m.visits))) }
         if m.lived { rows.append(StatRow(label: "Lived here", value: "Yes")) }
         return rows.isEmpty ? nil : Section(cc: cc, name: name, rows: rows)
     }

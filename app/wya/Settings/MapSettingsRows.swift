@@ -40,14 +40,12 @@ enum MapSettingsRows {
         .init(id: "projection", name: "Projection", group: 0,
               choices: c([("equalearth", "Equal Earth"), ("classic", "Classic"), ("mercator", "Mercator")]), page: nil, defaultValue: "equalearth",
               shows: { $0.map == "native" }, get: { $0.projection }, set: { s, v in s.projection = v }),
-        // (7 Nov 16:49: diamonds are the map's small places, so the row says that, in two words)
         .init(id: "diamonds", name: "Small places", group: 0,
               choices: c([("main", "Main map"), ("everywhere", "Everywhere"), ("nowhere", "Nowhere")]), page: nil, defaultValue: "main",
               shows: { _ in true }, get: { $0.diamonds }, set: { s, v in s.diamonds = v }),
         .init(id: "townDots", name: "Towns", group: 0, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
               shows: { _ in true }, get: { flag($0.townDots) }, set: { s, v in s.townDots = v == "on" }),
-        // no Labels row: no names drawn on the map (the label system was removed 30 Oct 22:13)
-        // group 2: borders
+        // no Labels row: no names drawn on the map group 2: borders
         .init(id: "borders", name: "Borders", group: 1, choices: nil, page: "borders", defaultValue: nil,
               shows: { _ in true }, get: { $0.borders ?? "deFacto" }, set: { s, v in s.borders = v }),
         .init(id: "disputes", name: "Disputes", group: 1, choices: nil, page: "disputes", defaultValue: nil,
@@ -70,10 +68,22 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { $0.start }, set: { s, v in s.start = v }),
         .init(id: "foundPlaces", name: "Found places", group: 2, choices: c([("wait", "Wait for me"), ("stamp", "Stamp them")]), page: nil, defaultValue: "wait",
               shows: { _ in true }, get: { $0.foundPlaces }, set: { s, v in s.foundPlaces = v }),
-        .init(id: "pinMarksPlace", name: "A pin near a place marks it", group: 2, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
+        .init(id: "pinMarksPlace", name: "Pin stamping", group: 2, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
               shows: { _ in true }, get: { flag($0.pinMarksPlace) }, set: { s, v in s.pinMarksPlace = v == "on" }),
-        .init(id: "tracking", name: "Tracking", group: 2, choices: c([("off", "Off"), ("on", "On")]), page: nil, defaultValue: "off",
-              shows: { _ in true }, get: { flag($0.tracking) }, set: { s, v in s.tracking = v == "on" }),
+        // TRACKING: Pins' tracking, built (Map/PinTracker.swift)
+        .init(id: "tracking", name: "Tracking", group: 2,
+              choices: c([("off", "Off"), ("exact", "Exact"), ("city", "City"), ("region", "About 100 km")]), page: nil, defaultValue: "off",
+              shows: { _ in true }, get: { $0.pinsTrack }, set: { s, v in s.pinsTrack = v }),
+        // THE AI: off, no AI section shows anywhere and Siri's wya questions say it is off
+        .init(id: "ai", name: "AI", group: 2, choices: c([("on", "On"), ("off", "Off")]), page: nil, defaultValue: "on",
+              shows: { _ in true }, get: { $0.ai ? "on" : "off" }, set: { s, v in s.ai = v == "on" }),
+        // how long its answers are: the same answer, at the length you like (shown only while the AI is on)
+        .init(id: "aiLength", name: "Answers", group: 2,
+              choices: c([("0", "Shortest"), ("1", "Short"), ("2", "Normal"), ("3", "Long")]), page: nil, defaultValue: "2",
+              shows: { $0.ai }, get: { String($0.aiLength) }, set: { s, v in s.aiLength = Int(v) ?? 2 }),
+        // what it remembers about you (AINotes): its own page, each note taken out by its hold menu, new ones typed
+        .init(id: "aiNotes", name: "What it knows", group: 2, choices: nil, page: "aiNotes", defaultValue: nil,
+              shows: { $0.ai }, get: { _ in "" }, set: { _, _ in }),
         // group 4: more
         .init(id: "advanced", name: "Advanced", group: 3, choices: nil, page: "advanced", defaultValue: nil,
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
@@ -81,9 +91,9 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
     ]
 
-    /// ROWS THE APP DOES NOT FOLLOW YET (12 Nov audit: saved, never read): in their "not yet" look, refusing a tap, as
-    /// All settings (A.1.5: never a control that silently does nothing). A row leaves this list when its part is built.
-    static let notYet: Set<String> = ["projection", "quickAlways", "tracking"]
+    /// ROWS THE APP DOES NOT FOLLOW YET: in their look, refusing a tap, as All settings (A.1.5: never a control that
+    /// silently does nothing). A row leaves this list when its part is built.
+    static let notYet: Set<String> = ["projection"]
 
     /// Style's choices follow the Map row (Apple's looks only once the Map row is followed)
     static func choices(_ row: SettingRow, _ s: MapSettings) -> [SettingRow.Choice] {
@@ -113,7 +123,8 @@ enum MapSettingsRows {
     static func defaults(from s: MapSettings) -> MapSettings {
         var t = s
         let d = MapSettings()
-        for row in all where !notYet.contains(row.id) { if let v = row.defaultValue { row.set(&t, v) } }
+        // (Tracking and the AI are not looks of the map: Reset leaves them as they are)
+        for row in all where !notYet.contains(row.id) && row.id != "tracking" && row.id != "ai" && row.id != "aiLength" { if let v = row.defaultValue { row.set(&t, v) } }
         t.style = d.style; t.borders = s.borders == nil ? nil : "deFacto"; t.disputes = [:]; t.placesMap = d.placesMap; t.pinsMap = d.pinsMap
         return t
     }
@@ -145,9 +156,10 @@ enum MapSettingsRows {
         map.diamondsOff = b.diamonds == "nowhere"
         map.diamondsEverywhere = b.diamonds == "everywhere"
         map.simple = (b.map == "native" || notYet.contains("map")) && b.style == "simple"
+        if a.pinsTrack != b.pinsTrack { PinTracker.shared.follow(b.pinsTrack) }
     }
 
-    /// every row as an action the AI, Siri and links can call ("setting.count" with "countries")
+    /// every row as an action the AI, Siri and links can call ( with)
     static func registerActions(map: MapController) {
         for row in all where row.page == nil || row.page == "borders" {
             Actions.shared.register(.init(id: "setting.\(row.id)", name: row.name, role: .normal, available: { true }) { arg, _ in
@@ -156,7 +168,7 @@ enum MapSettingsRows {
             })
         }
         Actions.shared.register(.init(id: "setting.dispute", name: "Disputes", role: .normal, available: { true }) { arg, _ in
-            // "piece=owner", or "piece=" to give it back to the view
+            // , or to give it back to the view
             guard let parts = arg?.split(separator: "=", omittingEmptySubsequences: false), parts.count == 2 else { return false }
             await pick(String(parts[0]), parts[1].isEmpty ? nil : String(parts[1]), map: map)
             return true

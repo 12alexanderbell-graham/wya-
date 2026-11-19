@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// THE TOP PULL IS THE AI'S, AND ONLY THE AI'S. Pulled down from the head, following the finger: the wheel's black dot
-/// is the AI's needle in disguise. Its round edge draws out into the needle's black point and swings round to where the
-/// needle rests, the needle's white point grows out of its middle, and the lime glass circle grows out from behind it
-/// to its full size. Let go past half way and it settles there; pull back up or tap the map and it goes back into the
-/// dot the same way. Search and the plus stay exactly as they are. No bell, no gear, no notifications, no rank drop, no
-/// page. The same dot, held still, turns into the gear: its edge notches in between the teeth until it is the gear icon
-/// exactly, turning a little as it forms; it then rolls slowly for as long as settings are open (BUILD-BOOK 5: one turn
-/// in 6 s), and a tap on it turns it back into the dot.
 enum TopPull {
     /// how long the dot has to be held, still, before it starts to become the gear, and how long it takes to become it
     static let holdDelay: Double = 0.18
@@ -38,11 +30,11 @@ struct DotMorph: View, Animatable {
         ZStack {
             if ai > 0.0005 {
                 // A glyph into a glyph by rolling within its circle (Part 0.4 rule 4): the dot rolls down out of the
-                // lime circle as the needle, at its full size and resting angle, rolls in from above, both at the same
-                // speed, clipped by the lime circle. No dot stays in the middle, and nothing is uncovered by a growing
-                // circle. The lime glass still grows out from behind the dot. the lime is (nearly) whole before the
-                // roll, so the roll happens inside the AI's own circle; the clip is the mark's own reach, fixed, never
-                // growing
+                // lime circle as the needle, at its full size and resting angle, rolls in from above, both at the
+                // same speed, clipped by the lime circle. No dot stays in the middle, and nothing is uncovered by a
+                // growing circle. The lime glass still grows out from behind the dot. the lime is (nearly) whole
+                // before the roll, so the roll happens inside the AI's own circle; the clip is the mark's own reach,
+                // fixed, never growing
                 let k = Flow.smooth(0, 0.35, ai)
                 let limeD = Flow.lerp(2 * Self.dotR, Self.aiSize, k)
                 Color.clear
@@ -68,10 +60,6 @@ struct DotMorph: View, Animatable {
                 .frame(width: Self.aiSize, height: Self.aiSize)
                 .mask { Circle().frame(width: Self.aiSize + 7.2, height: Self.aiSize + 7.2) }
             } else {
-                // THE GEAR, THE SAME WAY: the gear icon, never bent out of the dot, is behind it from the start (its
-                // teeth reach exactly the dot's edge, so the dot covers it); the dot, a circle all the way, sinks into
-                // its middle and the teeth are there as it goes, the gear turning a little; then it rolls while open.
-                // Nothing gets smaller and then bigger again.
                 let gt = Flow.smooth(0, 1, gear)
                 GearMorph(t: 1)
                     .fill(ink)
@@ -90,9 +78,7 @@ struct DotMorph: View, Animatable {
     }
 }
 
-/// The AI needle's two halves as the AIMark draws them (24-unit grid: the black point up to y -1.5, the white down to
-/// 25.5, both on a base 5.14 wide through the middle, turned 45 degrees), in the 58-point box.
-private struct NeedleHalf: Shape {
+struct NeedleHalf: Shape {
     let black: Bool
     func path(in rect: CGRect) -> Path {
         let c = CGPoint(x: rect.midX, y: rect.midY)
@@ -109,8 +95,6 @@ private struct NeedleHalf: Shape {
     }
 }
 
-/// The gear (Icons5 "settings": one outline, eight teeth, no hole). Drawn at t 1, the icon exactly (DotMorph grows it
-/// out of the dot by size; t below 1 bends the dot's edge into the teeth, which is no longer used).
 private struct GearMorph: Shape {
     var t: CGFloat
     /// the gear's corners in grid units (0 to 8, the middle at 4,4), read once from the icon itself
@@ -158,24 +142,22 @@ struct TopPullView: View {
     var body: some View {
         let L = water.layout
         ZStack(alignment: .topLeading) {
-            // no screen-wide catcher: a finger on the map or the sheet puts them away (HeadState.putAway) and goes on.
-            // THE PULL ONLY OVER THE MAP: once the water's top is up at the head, the top of the screen is the water's
-            // to pull down
+            // no screen-wide catcher: a finger on the map or the sheet puts them away (HeadState.putAway) and goes
+            // on. THE PULL ONLY OVER THE MAP: once the water's top is up at the head, the top of the screen is the
+            // water's to pull down
             let sheetHigh = water.form().top < L.headBottom + 40
             Color.clear
                 .frame(width: L.W, height: L.H)
                 .contentShape(PullArea(layout: L, ai: head.pullStop > 0))
                 .gesture(pullGesture)
                 // a pull cancelled with no end (Notification or Control Center took the touch at the top): the pull
-                // settles from where it is, never left half out with the wheel switched off (8 Nov)
+                // settles from where it is, never left half out with the wheel switched off
                 .onChange(of: pullLive) { _, live in
                     if !live, dragging { dragging = false; head.pullEnded(velocity: 0) }
                 }
-                // sideways (1.11) the strip would be one of the map's side edges: the map's own; over a page the top is
-                // the page's (its own pull closes it; the AI came out over it instead, 8 Nov)
+                // sideways (1.11) the strip would be one of the map's side edges: the map's own; over a page the top
+                // is the page's
                 .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on && !pages.isOpen)
-                // (the AI only: settings pulled up to full are still the water's, Part 3.9; closing them here took
-                // the rows away as the sheet reached the top, 8 Nov)
                 .onChange(of: sheetHigh) { _, high in if high { head.putAwayAI() } }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)

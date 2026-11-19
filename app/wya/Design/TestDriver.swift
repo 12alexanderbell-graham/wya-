@@ -46,9 +46,6 @@ final class TestDriver {
         let path = Snap.dir + "/cmd.txt"
         // a command left over from the last run is not run again
         lastID = (try? String(contentsOfFile: path, encoding: .utf8))?.split(separator: "\n").first.map(String.init) ?? ""
-        // (8 Nov 01:20: the read itself sometimes never came back, the file in the synced folder held by something
-        // outside the app, and the whole app stood still with it; now it is read off the main thread, one read at a
-        // time, and a read that hangs only stops the commands, said once in the log)
         let queue = DispatchQueue(label: "testdriver.read", qos: .userInitiated)
         let ownerPath = Snap.dir + "/owner.txt"
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
@@ -134,6 +131,11 @@ final class TestDriver {
                     h.pullMoved(v - h.pull)
                     if a == "ai" || a == "off" { h.settlePull(to: v >= HeadState.aiStop ? 1 : 0) }
                 case "tools": head?.toolsOpen = a == "on"
+                // siri ask <words> | stamp <cc> | plan <cc> | show <cc>: wya's Siri actions run as Siri would run them
+                // (the simulator has no Siri AI to say them to)
+                case "siri":
+                    let rest = p.dropFirst(2).joined(separator: " ")
+                    await SiriTest.run(a, rest, map: map)
                 // history on|off; history tap <x> <y> (a tap on the journey at that point, as the map's confirmed tap
                 // would hand it over); history pull <dy> (the water grabbed at its top, moved dy pt, let go still)
                 case "history": await HistoryLineView.drive(p, map: map, water: water, head: head)
@@ -201,6 +203,8 @@ final class TestDriver {
                 case "hold": head?.dotHeld = a == "on"
                 // gear <0..1>: holds the dot part way to the gear, to look at one frame of it
                 case "gear": head?.gear = CGFloat(Double(a) ?? 0)
+                // scrolltest <y>: a list that takes the driver's scroll goes to y points down
+                case "scrolltest": ScrollTest.shared.y = CGFloat(Double(a) ?? 0)
                 case "drag":
                     // drag <dy> <ms>: the top pull as a finger would do it, through the same code as the gesture
                     guard let h = head else { break }
@@ -262,6 +266,31 @@ final class TestDriver {
                     h.capsuleDragFling = 0
                     h.capsuleDrag = nil
                 // sheet flags: a review sheet (1p) into snaps/review-<name>.png
+                // stampmissing: the stamped countries that have no stamp of their own yet, logged
+                case "stampmissing":
+                    let order = await MarkStore.shared.passportOrder()
+                    NSLog("wya stampmissing %d of %d: %@", order.filter { RealStamps.stamp($0) == nil }.count, order.count,
+                          order.filter { RealStamps.stamp($0) == nil }.joined(separator: " "))
+                // stampsheet: every realistic stamp as the passport draws it (art and words), 8 across, 56 to a picture
+                case "stampsheet":
+                    let ids = RealStamps.ids.sorted()
+                    for part in 0 ..< (ids.count + 55) / 56 {
+                        let chunk = Array(ids.dropFirst(part * 56).prefix(56))
+                        let cell: CGFloat = 200, cols = 8
+                        let rows = (chunk.count + cols - 1) / cols
+                        let size = CGSize(width: cell * CGFloat(cols), height: (cell + 20) * CGFloat(rows))
+                        let img = UIGraphicsImageRenderer(size: size).image { c in
+                            UIColor.white.setFill(); c.fill(CGRect(origin: .zero, size: size))
+                            for (i, id) in chunk.enumerated() {
+                                guard let ui = StampArt.image(id) else { continue }
+                                let x = CGFloat(i % cols) * cell, y = CGFloat(i / cols) * (cell + 20)
+                                let f = min((cell - 10) / ui.size.width, (cell - 10) / ui.size.height)
+                                ui.draw(in: CGRect(x: x + 5, y: y + 5, width: ui.size.width * f, height: ui.size.height * f))
+                                (id as NSString).draw(at: CGPoint(x: x + 5, y: y + cell), withAttributes: [.font: UIFont.systemFont(ofSize: 12)])
+                            }
+                        }
+                        try? img.jpegData(compressionQuality: 0.85)?.write(to: URL(fileURLWithPath: Snap.dir + "/stampsheet-\(part).jpg"))
+                    }
                 case "sheet":
                     if a == "flags" { ReviewSheet.flags(world: map?.world) }
                     if a == "tabicons" { ReviewSheet.tabIcons() }
@@ -294,7 +323,7 @@ final class TestDriver {
                             }
                         }
                     case "add":
-                        // lists add <day> <words>: a plan's day gets a thing to do ("09:40 Land" with its time)
+                        // lists add <day> <words>: a plan's day gets a thing to do ( with its time)
                         if p.count > 3, let d = Int(p[2]) {
                             let words = p.dropFirst(3).joined(separator: " ")
                             ListsStore.shared.change { b in
@@ -312,7 +341,15 @@ final class TestDriver {
                             }
                         }
                     case "close": ls.close()
-                    case "kind": ls.kind = Int(p.count > 2 ? p[2] : "0") ?? 0
+                    // lists put <cc> <name>: a place put in the open list (its country for the flag)
+                    case "put":
+                        if p.count > 3 {
+                            let item = ListItem(n: p.dropFirst(3).joined(separator: " "), cc: p[2])
+                            ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].items.append(item) } }
+                        }
+                    case "kind": ls.kind = min(3, max(0, Int(p.count > 2 ? p[2] : "0") ?? 0))
+                    // lists dial <at>|off: the kinds' wheel held mid-turn
+                    case "dial": ls.testDial = p.count > 2 && p[2] != "off" ? CGFloat(Double(p[2]) ?? 0) : nil
                     case "name":
                         let n = p.dropFirst(2).joined(separator: " ")
                         ListsStore.shared.change { b in
@@ -417,6 +454,24 @@ final class TestDriver {
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
                 case "settings": if a == "on" { head?.openSettings() } else { head?.closeSettings() }
+                // pinsclear: every route and drawing taken away (the test ones), each file first copied beside itself
+                // as so they can be brought back by hand
+                case "pinsclear":
+                    let fm = FileManager.default
+                    if let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                        let stamp = Int(Date().timeIntervalSince1970)
+                        for name in ["routes.json", "pin-drawings.json", "pins.json"] {
+                            let f = dir.appendingPathComponent(name)
+                            if fm.fileExists(atPath: f.path) { try? fm.copyItem(at: f, to: dir.appendingPathComponent("\(name).backup-\(stamp)")) }
+                        }
+                    }
+                    for r in PinRoutes.shared.routes { PinRoutes.shared.remove(r.id, undoable: false) }
+                    for d in PinDrawings.shared.all { PinDrawings.shared.remove(d.id, undoable: false) }
+                    // pinsclear all: the pins too (the backups above first)
+                    if a == "all" { for p in PinStore.shared.pins { PinStore.shared.remove(p.id, undoable: false) } }
+                    NSLog("wya pinsclear: %d routes, %d drawings, %d pins left", PinRoutes.shared.routes.count, PinDrawings.shared.all.count, PinStore.shared.pins.count)
+                // setpage borders|disputes|advanced|all|off: Map settings' page pushed (as its row's tap), or back to the top
+                case "setpage": SettingsNav.shared.path = a == "off" || a.isEmpty ? [] : [a]
                 case "frames":
                     NSLog("wya frames content %@", NSCoder.string(for: contentFrame))
                     // the windows and their root views, to see whether anything has been moved (the keyboard)
@@ -440,6 +495,12 @@ final class TestDriver {
                     case "show": maps.shown = p.count > 2 && p[2] != "all" ? Int(p[2]).flatMap { $0 < maps.all.count ? maps.all[$0].id : nil } : nil
                     case "inside": maps.inside = p.count > 2 && p[2] == "on"
                     case "delete": if p.count > 2, let n = Int(p[2]), n < maps.all.count { maps.remove(maps.all[n].id) }
+                    // pinmap deletenamed <name>: the map of that name (a test's own map taken away), logged
+                    case "deletenamed":
+                        let nm = p.dropFirst(2).joined(separator: " ")
+                        let hit = maps.all.filter { $0.name == nm }
+                        NSLog("wya pinmap deletenamed %@: %d of %d", nm, hit.count, maps.all.count)
+                        if hit.count == 1 { maps.remove(hit[0].id) }
                     default: break
                     }
                 case "pins":
@@ -515,8 +576,6 @@ final class TestDriver {
                         PinRoutes.shared.colouring = PinRoutes.shared.routes[n].id
                         if w.stop == .quarter || w.stop == .closed { w.go(.half) }
                     } else if a == "routeclose" { PinRoutes.shared.close()
-                    // pins routeempty: the dock's Route tool
-                    } else if a == "routeempty" { PinRoutes.shared.openEmpty()
                     // pins days: how many pins were made on each day, logged with every pin (name, place, day, where)
                     // pins prune <yyyy-mm-dd> ...: the pins made on those days deleted, after pins.json is copied beside
                     // itself (pins-backup-<time>.json); the routes that end on them go with them
@@ -547,15 +606,65 @@ final class TestDriver {
                     // (only ever the pin this test added: its id is kept from the add)
                     } else if a == "add", let w = water {
                         let before = Set(PinStore.shared.pins.map(\.id))
-                        PinsDockState.shared.addPin(water: w)
+                        if let v = PinsMapState.shared.view {
+                            let L = w.layout
+                            PinsDockState.shared.place(at: v.convert(CGPoint(x: L.W / 2, y: (L.headBottom + w.level) / 2), from: nil), in: v)
+                        }
                         testPin = PinStore.shared.pins.first { !before.contains($0.id) }?.id
                     } else if a == "unadd", let id = testPin { PinStore.shared.remove(id, undoable: false); testPin = nil
                     } else if a == "list" {
                         for (i, pin) in PinStore.shared.pins.enumerated() { NSLog("wya pin %d %@ (%@)", i, pin.title, pin.place) }
                         for (i, r) in PinRoutes.shared.routes.enumerated() {
                             NSLog("wya route %d %@ -> %@ %@ walk %d", i, PinRoutes.shared.end(r.from, r)?.title ?? "?", PinRoutes.shared.end(r.to, r)?.title ?? "?", r.words, r.walk == true ? 1 : 0)
+                            let c = r.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
+                            let h = PinsMapState.halfway(c)
+                            NSLog("wya route %d points %d first %.2f,%.2f last %.2f,%.2f half %.2f,%.2f", i, c.count, c.first?.latitude ?? 0, c.first?.longitude ?? 0, c.last?.latitude ?? 0, c.last?.longitude ?? 0, h.latitude, h.longitude)
                         }
+                    // pins colourask: the chosen pin's colour picker, as its menu's Colour opens it
+                    } else if a == "colourask" { PinStore.shared.colourAsked = true; water?.go(.full)
                     } else if a == "none" { PinStore.shared.selected = nil
+                    // pins maps: every map, its pins, routes and drawings, logged; pins mapgone NAME: that map and all it holds
+                    // taken away (test residue only)
+                    } else if a == "maps" {
+                        for m in PinMaps.shared.all {
+                            let ps = PinStore.shared.pins.filter { $0.map == m.id }
+                            NSLog("wya map '%@' pins %d (%@) routes %d drawings %d layers %d", m.name, ps.count,
+                                  ps.map { "\($0.cc ?? "?") \(String(format: "%.2f,%.2f", $0.lat, $0.lon)) \($0.kind ?? "")" }.joined(separator: "; "),
+                                  PinRoutes.shared.routes.filter { $0.map == m.id }.count, PinDrawings.shared.all.filter { $0.map == m.id }.count,
+                                  m.layers?.count ?? 0)
+                        }
+                        let loose = PinStore.shared.pins.filter { p in p.map == nil || !PinMaps.shared.all.contains { $0.id == p.map } }
+                        NSLog("wya map (none) pins %d: %@", loose.count, loose.map { "\($0.cc ?? "?") \(String(format: "%.2f,%.2f", $0.lat, $0.lon))" }.joined(separator: "; "))
+                    } else if a == "mapgone", p.count > 2 {
+                        let name = p.dropFirst(2).joined(separator: " ")
+                        for m in PinMaps.shared.all where m.name == name {
+                            for x in PinStore.shared.pins where x.map == m.id { PinStore.shared.remove(x.id, undoable: false) }
+                            for r in PinRoutes.shared.routes where r.map == m.id { PinRoutes.shared.remove(r.id, undoable: false) }
+                            for d in PinDrawings.shared.all where d.map == m.id { PinDrawings.shared.remove(d.id, undoable: false) }
+                            PinMaps.shared.remove(m.id)
+                            NSLog("wya mapgone '%@'", name)
+                        }
+                    // pins layer make NAME | add NAME | hide N | show N | rm N | list: the shown map's layers (make: a new map)
+                    } else if a == "layer", p.count > 2 {
+                        let pm = PinMaps.shared
+                        let rest = p.dropFirst(3).joined(separator: " ")
+                        let n = p.count > 3 ? Int(p[3]) : nil
+                        if p[2] == "make" { pm.make(rest.isEmpty ? "Layer test" : rest) }
+                        if let m = pm.shown {
+                            let ls = pm.map(m)?.layers ?? []
+                            switch p[2] {
+                            case "add": pm.addLayer(to: m, named: p.dropFirst(3).joined(separator: " "))
+                            case "hide": if let n, n < ls.count { pm.setHidden(ls[n].id, in: m, true) }
+                            case "show": if let n, n < ls.count { pm.setHidden(ls[n].id, in: m, false) }
+                            case "rm": if let n, n < ls.count { pm.removeLayer(ls[n].id, in: m) }
+                            default: break
+                            }
+                            let now = pm.map(m)?.layers ?? []
+                            let mine = PinStore.shared.pins.filter { $0.map == m }
+                            NSLog("wya layers %@ pick %@ pins %d drawn %d", now.map { l in "\(l.name)\(l.hidden ? "(hidden)" : ""):\(mine.filter { $0.layer == l.id }.count)" }.joined(separator: ", "),
+                                  pm.layerForNew.map { u in now.first { $0.id == u }?.name ?? "?" } ?? "none",
+                                  mine.count, mine.filter { pm.draws(pin: $0.map, layer: $0.layer) }.count)
+                        }
                     } else if a == "colour", p.count > 2, let h = Double(p[2]), let id = PinStore.shared.selected {
                         PinStore.shared.colour(id, ColourPick(hue: h, light: 0.55, strength: 0.9))
                     }
@@ -595,9 +704,57 @@ final class TestDriver {
                 // cardtap stamp: the open country card's Stamp / Stamped pressed
                 case "cardtap": if a == "stamp" { CardTest.stamp?() }
                 case "searchpick": if let i = map?.world?.placeIndex[a] { HeadTest.pick?(i) }
+                // sweep countries|places|regions [ids...]: every place picked as search picks it (regions: from Regions'
+                // menu), then checked: the right one selected (its card, its open place, its region map) and its middle
+                // in the room above the water; each failure logged, then a count
+                case "sweep":
+                    guard let m = map, let w = m.world, let water else { break }
+                    if a == "regions", let mm = map { RegionsMenuModel.shared.build(map: mm) }
+                    head?.mode = a == "places" ? .places : a == "regions" ? .regions : .countries
+                    try? await Task.sleep(for: .milliseconds(900))
+                    let ids: [String] = p.count > 2 ? Array(p.dropFirst(2))
+                        : a == "regions" ? RegionsMenuModel.shared.rows.map(\.id)
+                        : w.places.indices.filter { !w.places[$0].junk }.map { w.places[$0].id }
+                    var fails = 0, n = 0
+                    // (each pick goes through search's own pick, which keeps it as a recent search: put back after)
+                    let recentBefore = MapSettingsStore.shared.value.recent
+                    for id in ids {
+                        guard let i = w.placeIndex[id] else { NSLog("wya sweep FAIL %@ %@: not a place", a, id); fails += 1; continue }
+                        CardState.shared.close(map: m)
+                        if a == "regions" {
+                            guard let r = RegionsMenuModel.shared.rows.first(where: { $0.id == id }) else { continue }
+                            RegionsMenuModel.shared.load(r.flag); RegionsMenuModel.shared.onPick?(r)
+                        } else { HeadTest.pick?(i) }
+                        try? await Task.sleep(for: .milliseconds(300))
+                        for _ in 0 ..< 40 where m.flight != nil { try? await Task.sleep(for: .milliseconds(100)) }
+                        try? await Task.sleep(for: .milliseconds(a == "countries" ? 1100 : 400))
+                        n += 1
+                        var why: [String] = []
+                        let name = { (k: Int?) in k.map { w.places[$0].id } ?? "none" }
+                        switch a {
+                        case "places": if m.placeOpen != i, id != "aq" { why.append("open \(name(m.placeOpen))") }
+                        case "regions": if m.regionScene?.place != i { why.append("region map \(name(m.regionScene?.place))") }
+                        default: if CardState.shared.place != i { why.append("card \(name(CardState.shared.place))") }
+                        }
+                        if id == "aq" {
+                            if m.continent != "Antarctica" { why.append("not on Antarctica's own map") }
+                        } else {
+                            let c = m.screenPoint(SIMD2(w.places[i].c[0], w.places[i].c[1]))
+                            let room = water.layout.room(sheetTop: water.form().top)
+                            if c.x < -20 || c.x > water.layout.W + 20 || c.y < room.lowerBound - 60 || c.y > room.upperBound + 60 {
+                                why.append(String(format: "middle at %.0f,%.0f, room %.0f-%.0f", c.x, c.y, room.lowerBound, room.upperBound))
+                            }
+                        }
+                        if !why.isEmpty { fails += 1; NSLog("wya sweep FAIL %@ %@: %@", a, id, why.joined(separator: "; ")) }
+                    }
+                    CardState.shared.close(map: m)
+                    MapSettingsStore.shared.change { $0.recent = recentBefore }
+                    NSLog("wya sweep DONE %@ %d checked, %d failed", a, n, fails)
                 // recent: the recent searches in the log; recent drop <id>: one taken out again (a test's own pick)
                 case "recent":
                     if a == "drop", p.count > 2 { MapSettingsStore.shared.change { $0.recent.removeAll { $0 == p[2] } } }
+                    // recent clear: a test run's picks taken out
+                    if a == "clear" { MapSettingsStore.shared.change { $0.recent = [] } }
                     NSLog("wya recent searches: %@", MapSettingsStore.shared.value.recent.joined(separator: ","))
                 case "tap":
                     // tap x y (screen points): what a finger there would press, logged and pressed
@@ -668,7 +825,11 @@ final class TestDriver {
                 // card <id>: its stamping card, as a tap on the place opens it; details: that card's Details;
                 // close: Details first, then the card (as taps off do)
                 case "card":
+                    // card <id>: as a search pick opens it (the camera on the place, then the card); card off: closed
+                    if a == "off", let m = map { CardState.shared.close(map: m); break }
                     if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == a }) {
+                        if let water { m.show(place: i, sheetTop: water.layout.top(.quarter)) }
+                        try? await Task.sleep(for: .milliseconds(900))
                         let p = w.places[i]
                         CardState.shared.open(i, at: m.screenPoint(SIMD2(p.c[0], p.c[1])), map: m, water: water)
                     }
@@ -756,8 +917,8 @@ final class TestDriver {
                         RegionsMenuModel.shared.load(r.flag)
                         RegionsMenuModel.shared.onPick?(r)
                     } else { NSLog("wya regionpick %@: not in the list", a) }
-                // regiondirect fr: a country's "Open its region map" (A6.14), from whatever mode
-                // thingfind jfk: search's first thing found, shown (as its row's tap)
+                // regiondirect fr: a country's (A6.14), from whatever mode thingfind jfk: search's first thing found,
+                // shown (as its row's tap)
                 case "thingfind":
                     ThingIndex.shared.load()
                     for _ in 0 ..< 150 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
@@ -804,6 +965,14 @@ final class TestDriver {
                         if CollectionStore.shared.types(rest).isEmpty { water?.go(.quarter) }
                     }
                     // pick kind ocean / pick kind none: a kind under the picked set tapped; pick menu: the lime set tapped
+                    // pick place <n>: the n-th row of the picked set's places, as a tap on it
+                    else if a == "place", let n = Int(rest), let m = map {
+                        let ps = PlacesSheet.places(map: m)
+                        if n < ps.count {
+                            water?.go(.quarter)
+                            m.showSetPlace(m.placesKind == CollectionStore.capitals ? CollectionStore.capitals : m.placesSet, id: ps[n].id)
+                        }
+                    }
                     else if a == "kind" { map?.showPlacesType(rest == "none" ? nil : rest) }
                     else if a == "menu" { map?.clearPlacesSet(); if water?.stop == .quarter { water?.go(.half) } }
                     else if a == "col" {
@@ -820,6 +989,14 @@ final class TestDriver {
                 case "page":
                     if a == "off" { PlacePageState.shared.close() }
                     // page acts: the open page's first eight activities, logged (to read many countries' lists at once)
+                    // page prose: the open page's opening words and its photo's address, logged (a sweep of many pages)
+                    // page sheet: the open page's own sheet (the "..." circle's tap)
+                    else if a == "sheet" { PlacePageState.shared.sheetAsked += 1 }
+                    else if a == "prose" {
+                        let f = PlacePageState.shared.facts
+                        NSLog("wya page prose %@ | photo %@ | %@", PlacePageState.shared.top?.name ?? "?",
+                              String((f?.photo ?? "none").suffix(70)), String((f?.prose ?? "").prefix(260)))
+                    }
                     else if a == "acts" {
                         let f = PlacePageState.shared.facts
                         NSLog("wya page acts %@ (%d): %@", PlacePageState.shared.top?.name ?? "?", f?.activities.count ?? -1,
@@ -857,8 +1034,8 @@ final class TestDriver {
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }
-                // owntest lat lon | owntest off: one own place made for a check (its name "owntest"), and only those taken
-                // away again (the person's own places are never touched)
+                // owntest lat lon | owntest off: one own place made for a check (its name), and only those taken away
+                // again (the person's own places are never touched)
                 case "owntest":
                     if a == "off" { for o in OwnPlaces.shared.all where o.name == "owntest" { OwnPlaces.shared.remove(o.id) } }
                     else if p.count > 2, let la = Double(a), let lo = Double(p[2]) {
@@ -1038,6 +1215,24 @@ final class TestDriver {
                 case "slowmo": CardState.slow = Double(a) ?? 1
                 // unstamp <id>: a test's stamp taken off again (test residue)
                 case "unstamp": await MarkStore.shared.unstamp(.country(a))
+                case "unwish": await MarkStore.shared.unwish(.country(a))
+                // planseed: a test plan with places, open in Lists > Plans (taken out again with)
+                case "planseed":
+                    let wine = PlanItem(at: nil, what: "Qvevri wine at a family cellar", place: "Telavi", cc: "ge")
+                    let bus = PlanItem(at: "09:00", what: "Marshrutka up to the towers", place: "Mestia", c: "blue", cc: "ge")
+                    let first = PlanDay(items: [wine, bus])
+                    // (soon: three days from today, for the next trip's line; during: began yesterday)
+                    let today = PlanDates.key(local: Date())
+                    let start: String = a == "dated" ? "2026-12-09" : a == "soon" ? PlanDates.key(today, 3)
+                        : a == "during" ? PlanDates.key(today, -1) : a == "after" ? PlanDates.key(today, -6) : ""
+                    let pl = Plan(name: "Test places", start: start, days: [first, PlanDay(), PlanDay(), PlanDay()])
+                    ListsStore.shared.change { $0.plans.append(pl) }
+                    ListsState.shared.kind = 1; ListsState.shared.open = p.count > 2 && p[2] == "home" ? nil : pl.id
+                    NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
+                // plandrop <name>: a test's plan taken out again
+                case "plandrop": ListsStore.shared.change { $0.plans.removeAll { $0.name == p.dropFirst().joined(separator: " ") } }
+                // bookdrop <name>: a test's photo book taken out again
+                case "bookdrop": ListsStore.shared.change { $0.books.removeAll { $0.name == p.dropFirst().joined(separator: " ") } }
                 case "marks":
                     // every mark in the store (stamped, then wished), and the places not in the debug demo set
                     let ms = MarkStore.shared.marks
@@ -1167,6 +1362,57 @@ final class TestDriver {
                     } else if a == "pins", let v = PinsMapState.shared.view, let w = water {
                         // draw pins: the tool on Apple's map (Pins' Draw)
                         PinDrawings.shared.start(on: v, water: w)
+                    } else if a == "files" {
+                        // draw files: the shown map written out as GeoJSON, KML and GPX and each read back (counts logged)
+                        let gj = PinFiles.fromGeoJSON((try? JSONSerialization.jsonObject(with: PinFiles.geoJSON())) ?? [:])
+                        let dir = FileManager.default.temporaryDirectory
+                        var out = "geojson \(gj.points.count)/\(gj.routes.count)/\(gj.lines.count)/\(gj.shapes.count)"
+                        for (ext, d) in [("kml", PinFiles.kml()), ("gpx", PinFiles.gpx())] {
+                            _ = dir
+                            let f = PinFiles.read(d)
+                            out += " \(ext) \(f.points.count)/\(f.routes.count)/\(f.lines.count)/\(f.shapes.count)"
+                        }
+                        NSLog("wya files %@ pins %d routes %d drawings %d", out, PinStore.shared.pins.count, PinRoutes.shared.routes.count, PinDrawings.shared.all.count)
+                    } else if a == "importtest", let m = PinsMapState.shared.map {
+                        // draw importtest: a small GPX (3 points, a route, a track) brought in through Files' Import, logged,
+                        // then undone with one undo step and logged again (nothing of it is kept)
+                        let gpx = "<gpx><wpt lat=\"46.5\" lon=\"7.5\"><name>A</name></wpt><wpt lat=\"46.6\" lon=\"7.6\"><name>B</name></wpt><wpt lat=\"46.7\" lon=\"7.7\"><name>C</name></wpt><rte><rtept lat=\"46.5\" lon=\"7.5\"/><rtept lat=\"46.7\" lon=\"7.7\"/></rte><trk><trkseg><trkpt lat=\"46.5\" lon=\"7.5\"/><trkpt lat=\"46.8\" lon=\"7.9\"/></trkseg></trk></gpx>"
+                        let u = FileManager.default.temporaryDirectory.appendingPathComponent("importtest.gpx")
+                        try? Data(gpx.utf8).write(to: u)
+                        let before = (PinStore.shared.pins.count, PinRoutes.shared.routes.count, PinDrawings.shared.all.count)
+                        let n = await PinFiles.bring(u, country: { PinsMapView.Coordinator.country(m, $0) })
+                        NSLog("wya importtest: %d in, now pins %d routes %d drawings %d (were %d %d %d), undo says %@", n, PinStore.shared.pins.count, PinRoutes.shared.routes.count, PinDrawings.shared.all.count, before.0, before.1, before.2, MarkStore.shared.lastWords ?? "")
+                        await MarkStore.shared.undo()
+                        NSLog("wya importtest undone: pins %d routes %d drawings %d", PinStore.shared.pins.count, PinRoutes.shared.routes.count, PinDrawings.shared.all.count)
+                    } else if a == "filetest" {
+                        // draw filetest: sample GPX, GeoJSON and KML read (points/routes/lines/shapes logged), nothing added
+                        let gpx = "<gpx><wpt lat=\"1\" lon=\"2\"><name>W</name></wpt><rte><rtept lat=\"1\" lon=\"2\"/><rtept lat=\"3\" lon=\"4\"/></rte><trk><trkseg><trkpt lat=\"1\" lon=\"2\"/><trkpt lat=\"5\" lon=\"6\"/></trkseg></trk></gpx>"
+                        let gj = "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\",\"properties\":{\"kind\":\"route\"},\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[2,1],[4,3]]}},{\"type\":\"Feature\",\"properties\":{},\"geometry\":{\"type\":\"LineString\",\"coordinates\":[[2,1],[4,3]]}}]}"
+                        let kml = "<kml><Document><Placemark><name>Route</name><LineString><coordinates>2,1,0 4,3,0</coordinates></LineString></Placemark><Placemark><name>Path</name><LineString><coordinates>2,1,0 4,3,0</coordinates></LineString></Placemark></Document></kml>"
+                        for (k, t) in [("gpx", gpx), ("geojson", gj), ("kml", kml)] {
+                            let f = PinFiles.read(Data(t.utf8))
+                            NSLog("wya filetest %@ %d/%d/%d/%d", k, f.points.count, f.routes.count, f.lines.count, f.shapes.count)
+                        }
+                    } else if a == "track", p.count > 2 {
+                        // draw track off|exact|city|region: Pins' tracking set, as Map settings sets it
+                        MapSettingsStore.shared.change { $0.pinsTrack = p[2] }
+                        PinTracker.shared.follow(p[2])
+                        NSLog("wya track %@ pins tracked %d", p[2], PinStore.shared.pins.filter { $0.kind == "tracked" }.count)
+                    } else if a == "tool", p.count > 2, let w = water {
+                        // draw tool <1..4|off>: Pins' first-row tool chosen as a tap chooses it
+                        let d = PinsDockState.shared
+                        if DrawTool.shared.on { DrawTool.shared.cancel() }
+                        if PinRoutes.shared.open { PinRoutes.shared.close() }
+                        d.chosen = Int(p[2])
+                        if d.chosen == 1, let v = PinsMapState.shared.view { PinRoutes.shared.draw(on: v, water: w, way: d.routeWay) }
+                        if d.chosen == 2, let v = PinsMapState.shared.view { PinDrawings.shared.start(on: v, water: w) }
+                        if d.chosen == 3 { d.measure(water: w) }
+                    } else if a == "quick", let v = PinsMapState.shared.view, let w = water {
+                        // draw quick: Pins' quick route (one stroke, kept as it lifts)
+                        PinDrawings.shared.start(on: v, water: w, quick: true)
+                    } else if a == "measure", let w = water {
+                        // draw measure: Pins' Measure (a line measured, nothing kept)
+                        PinsDockState.shared.measure(water: w)
                     } else if a == "clearpins" {
                         // draw clearpins: the drawings in Pins made in the last 30 minutes taken away (test data; older
                         // ones are never touched)
@@ -1200,8 +1446,8 @@ final class TestDriver {
     }
 }
 
-/// TEST ONLY: parts switched off to find what costs frames ("off <part>", "on <part>"; observed, so a switch takes
-/// effect on the next frame): map, cosmos, planets, sun, stars, caption, sheetglass, sheet, tabs, head, zoom, pull
+/// TEST ONLY: parts switched off to find what costs frames (,; observed, so a switch takes effect on the next frame):
+/// map, cosmos, planets, sun, stars, caption, sheetglass, sheet, tabs, head, zoom, pull
 @MainActor @Observable
 final class Perf {
     static let shared = Perf()

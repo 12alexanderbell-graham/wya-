@@ -11,7 +11,7 @@ final class VerifyState {
     private(set) var place: Int?
     /// the stamp's proof as stored (nil: none yet)
     var proof: Verification?
-    /// what the "Where you are" row says now (nil: its own name)
+    /// what the row says now (nil: its own name)
     var hereWord: String?
     var finding = false
     /// the consent line is up for this way (4.5.2)
@@ -45,11 +45,11 @@ final class VerifyState {
 }
 
 /// VERIFY IN THE WATER (Part 4.5): the ways to prove a stamp, chosen by you, rows of 52 pt with no title (the card's
-/// name is above). Laid out as Details and Map settings are: black and white, words on the water.
-/// As built (30 Oct): there is no server yet, so nothing can be checked by a person or by the server. "Where you are"
-/// works on the phone (asked at this press only; the inside test on the stamp's real place) and a proof is kept as
-/// "Waiting to send" (the card reads "In process"); the other five ways are in the "not yet" look and refuse.
-/// Remove the stamp works. Not here yet: the logo sphere while it waits (a plain "Finding you" for now), icons.
+/// name is above). Laid out as Details and Map settings are: black and white, words on the water. As built: there is
+/// no server yet, so nothing can be checked by a person or by the server. works on the phone (asked at this press
+/// only; the inside test on the stamp's real place) and a proof is kept as (the card reads); the other five ways are
+/// in the look and refuse. Remove the stamp works. Not here yet: the logo sphere while it waits (a plain for now),
+/// icons.
 struct VerifySheet: View {
     let water: Water
     let map: MapController
@@ -66,9 +66,9 @@ struct VerifySheet: View {
         let top = max(form.top + 20, L.headBottom + 8)
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - top)
-        // below full only whole rows show (the last one was cut in half at 50%, 8 Nov)
-        // (8 pt of give: the last row's bottom is within a point of the cut at rest, so it waited for the water's spring
-        // to settle its last points and came two frames after the others; its words sit in its middle, never cut)
+        // below full only whole rows show (8 pt of give: the last row's bottom is within a point of the cut at rest,
+        // so it waited for the water's spring to settle its last points and came two frames after the others; its
+        // words sit in its middle, never cut)
         let cut: CGFloat? = water.stop == .full ? nil : top + h + 9
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
@@ -86,7 +86,6 @@ struct VerifySheet: View {
                 } else {
                     ForEach(Self.ways, id: \.id) { w in wayRow(w.id, w.name).whole(cut) }
                 }
-                // (its own group, a gap above it, as Apple's destructive rows stand apart, 14 Nov)
                 removeRow.padding(.top, 16).whole(cut)
             }
             // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
@@ -94,8 +93,10 @@ struct VerifySheet: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+        .scrollBlur()
         .scrollIndicators(.hidden)
-        // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+        // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and
+        // the Places shelf; at full they scroll
         .scrollDisabled(water.stop != .full)
         .frame(width: L.W - 2 * L.sheetInset, height: h)
         .position(x: L.W / 2, y: top + h / 2)
@@ -153,8 +154,8 @@ struct VerifySheet: View {
                 Task {
                     // after the water is back down (nothing moves into the card while it changes)
                     try? await Task.sleep(for: .milliseconds(450))
-                    // the same unstamp as the card's Stamped: a region takes back the parents stamped only through it,
-                    // a town or thing its country stamped only through it (8 Nov answer 13)
+                    // the same unstamp as the card's Stamped: a region takes back the parents stamped only through
+                    // it, a town or thing its country stamped only through it
                     if key.kind == .region, let sc = map.regionScene, let u = sc.unitIDs.firstIndex(of: key.id) {
                         await RegionStamps.unstamp(u, in: sc)
                     } else if key.kind == .town || key.kind == .thing, let i = pl, let w = map.world, i < w.places.count {
@@ -170,7 +171,7 @@ struct VerifySheet: View {
     }
 
     /// WHERE YOU ARE: location asked at this press only; inside the stamp's place: the consent line; outside: the row
-    /// rolls to "You're in <X>" for 2.5 s and back; location off: "Allow Location in Settings", a tap opens Settings
+    /// rolls to for 2.5 s and back; location off:, a tap opens Settings
     private func here() {
         if s.hereWord == "Allow Location in Settings" {
             if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
@@ -191,7 +192,7 @@ struct VerifySheet: View {
             case .some(let c):
                 guard let w = map.world, let i = s.place else { return }
                 let p = EqualEarth.project(lon: c.longitude, lat: c.latitude)
-                // a region is verified by its own shape (4.5: "a region by its shape"), on the region map it is from
+                // a region is verified by its own shape (4.5:), on the region map it is from
                 if let key = s.key, key.kind == .region, let sc = map.regionScene {
                     let u = sc.unit(at: p)
                     if let u, sc.unitIDs[u] == key.id {

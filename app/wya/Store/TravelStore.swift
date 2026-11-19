@@ -228,6 +228,26 @@ actor TravelStore {
             .map { String($0.key.dropFirst(2)) }
     }
 
+    /// THE DAY EACH STAMP CARRIES (the old book's): the day or month you gave, else the latest visit, dated or picked
+    /// in Details' calendar, else the day you stamped it, by country
+    func passportDays(account: String) throws -> [String: String] {
+        let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))
+        // (a day needs its month at least: a year alone is no stamp's date)
+        func dated(_ s: String?) -> String? { s.flatMap { $0.count >= 7 ? $0 : nil } }
+        var latest: [String: String] = [:]
+        for v in vs { if let a = dated(v.arrived), a > (latest[v.key] ?? "") { latest[v.key] = a } }
+        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.dateFormat = "yyyy-MM-dd"
+        var out: [String: String] = [:]
+        for r in rs where r.key.hasPrefix("c:") {
+            let d = StampDetails(json: r.details)
+            let picked = ([d.visitFrom] + (d.trips ?? []).map { $0.from }).compactMap(dated).sorted()
+            // (the later of the dated visits and the days picked in Details: either can be the latest trip)
+            out[String(r.key.dropFirst(2))] = dated(r.when) ?? [latest[r.key], picked.last].compactMap { $0 }.max() ?? f.string(from: r.at)
+        }
+        return out
+    }
+
     /// When each mark was made (for the Streak: weeks with an act).
     func markDates(account: String) throws -> [Date] {
         try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account })).map(\.at)
@@ -235,10 +255,10 @@ actor TravelStore {
 
     // MARK: the writes (the old StampBook's rules)
 
-    /// STAMP a place. A wished place loses its wish and keeps when it was wished (`came`). A region, town or thing in one
-    /// country stamps that country too, on only (unstamping it later leaves the country), the old app's cascade.
-    /// With `day` ("2026-07-05", an event stop's day: D7) the place gets that day as a visit too, in the same write and
-    /// the same undo step, unless it has that visit already (a stamped place only gains the visit).
+    /// STAMP a place. A wished place loses its wish and keeps when it was wished (`came`). A region, town or thing in
+    /// one country stamps that country too, on only (unstamping it later leaves the country), the old app's cascade.
+    /// With `day` (, an event stop's day: D7) the place gets that day as a visit too, in the same write and the same
+    /// undo step, unless it has that visit already (a stamped place only gains the visit).
     func stamp(_ key: PlaceKey, account: String, source: MarkSource, at: Date = Date(),
                name: String = "", cc: String = "", level: Int = 0, day: String? = nil) throws -> Result {
         var res = Result()
@@ -306,9 +326,8 @@ actor TravelStore {
         res.changed[key] = (state(r, visits: v), .none)
         let cc = r.cc.lowercased()
         modelContext.delete(r)
-        // ITS COUNTRY WITH IT (7 Nov, the friend's review board 14: Western Australia unstamped, Australia still counted
-        // as a visit): a country stamped only through its places (via) goes too when no other place of it is still
-        // stamped and it has no visits of its own, in the same undo step; a country you stamped yourself stays
+        // ITS COUNTRY WITH IT: a country stamped only through its places (via) goes too when no other place of it is
+        // still stamped and it has no visits of its own, in the same undo step; a country you stamped yourself stays
         if !cc.isEmpty, !(key.kind == .country && cc == key.id.lowercased()), let c = try record(account, .country(cc)), c.stamped, c.via != nil {
             // (the country codes compared without case: places are saved with their file's code as it came)
             let others = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
@@ -394,7 +413,7 @@ actor TravelStore {
         var key: PlaceKey
         var name: String
         var cc: String
-        /// each trip's first and last day ("2024-08-03")
+        /// each trip's first and last day
         var trips: [(String, String)]
         /// a region's level row (its regions' counts read it); 0 for a country
         var level: Int = 0

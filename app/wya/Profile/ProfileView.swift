@@ -12,11 +12,14 @@ struct ProfileView: View {
     @State private var store = ProfileStore.shared
     @State private var edit = ProfileEdit.shared
     @FocusState private var typing: ProfileEdit.Field?
+    /// WHAT IS BEING TYPED, past the limit too: the saved name or bio is what fits, the typed words stay on screen
+    /// until the line is left
+    @State private var draft: String?
 
     static let picture: CGFloat = 132
     static let gap: CGFloat = 16
     /// the column the page is placed for: the picture, the name's line, the handle's, the code's, two lines of bio
-    static let column: CGFloat = picture + gap + 41 + 4 + 22 + gap + 25 + gap + 44
+    static let column: CGFloat = picture + 20 + 41 + 2 + 20 + 16 + 2 * 22 + 4 + 44
     /// the gradient's strength (saturation, power): the stronger pair the first app kept for a picture's gradient; at
     /// the field's own (1.16, 2.0) the page was pale. The test driver can set it to compare (0 0 = the field's own)
     static var look = SIMD2<Double>(1.42, 2.9)
@@ -25,7 +28,8 @@ struct ProfileView: View {
         let L = water.layout
         let me = store.me
         let mid = (L.safeTop + L.top(.quarter)) / 2
-        let top = (mid - Self.column / 2).rounded()
+        // (a code line adds its 8 pt and its line)
+        let top = (mid - (Self.column + (me.code.isEmpty ? 0 : 28)) / 2).rounded()
         ZStack(alignment: .topLeading) {
             // (two to four colours of your own; the field draws four, so two are each twice and three the first again;
             // the strength from calm to strong, the middle the first app's picture gradient)
@@ -53,34 +57,40 @@ struct ProfileView: View {
                     .accessibilityLabel("Picture")
                     .accessibilityHint("Changes your picture")
                 nameLine(me)
-                    .padding(.top, Self.gap)
+                    .padding(.top, 20)
                 if !store.handleShown.isEmpty || edit.field == .handle {
                     handleLine
-                        // (clear of the name's descenders)
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                 }
                 if !me.code.isEmpty {
                     Text(me.code)
-                        .font(.title3.weight(.semibold))
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(Palette.ink)
                         .lineLimit(1)
-                        .padding(.top, Self.gap)
+                        .padding(.top, 8)
                 }
                 bioLine(me)
-                    .padding(.top, Self.gap)
+                    .frame(maxWidth: 300)
+                    .padding(.top, 16)
                 nationalitiesLine
-                    .padding(.top, Self.gap)
+                    .padding(.top, 4)
             }
             .multilineTextAlignment(.center)
             .frame(width: L.W - 2 * L.circle)
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .frame(width: L.W, alignment: .top)
             .offset(y: top)
-            // (under your stats at full the column goes, so the black picture is no smudge through the glass)
-            .opacity((edit.sheet == .stats || edit.sheet == .badges) && water.stop == .full ? 0 : 1)
-            .animation(Motion.quick, value: (edit.sheet == .stats || edit.sheet == .badges) && water.stop == .full)
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        // (under a page, the Profile is not read by VoiceOver)
+        .accessibilityHidden(edit.sheet == .stats || edit.sheet == .badges)
+        // YOUR STATS, YOUR BADGES: their own pages, slid in from the right over all of it
+        .overlay(alignment: .topLeading) {
+            if let s = edit.sheet, s == .stats || s == .badges {
+                ProfilePushedPage(kind: s, water: water)
+                    .transition(.move(edge: .trailing))
+            }
+        }
         .onChange(of: edit.field) { _, f in typing = f }
         // (the keyboard put away: that line is kept; a tap from one line to another keeps typing)
         .onChange(of: typing) { was, t in if t == nil, let w = was, w == edit.field { edit.field = nil } }
@@ -95,23 +105,25 @@ struct ProfileView: View {
         let font = Typeface.nature(34, relativeTo: .largeTitle)
         return Group {
             if edit.field == .name {
-                TextField("", text: Binding(get: { store.me.name }, set: { v in
-                    if v.count > ProfileStore.nameMax { Feel.refuse() }
-                    store.set { $0.name = String(v.prefix(ProfileStore.nameMax)) }
-                }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                .font(font)
-                .textContentType(.name)
-                .submitLabel(.done)
-                .onSubmit { edit.field = nil }
-                .focused($typing, equals: .name)
-                .onAppear { typing = .name }
+                VStack(spacing: 4) {
+                    TextField("", text: Binding(get: { draft ?? store.me.name }, set: { v in
+                        if v.count > ProfileStore.nameMax, (draft ?? "").count <= ProfileStore.nameMax { Feel.refuse() }
+                        draft = v
+                        store.set { $0.name = String(v.prefix(ProfileStore.nameMax)) }
+                    }), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(font)
+                    .textContentType(.name)
+                    .submitLabel(.done)
+                    .onSubmit { edit.field = nil }
+                    .focused($typing, equals: .name)
+                    .onAppear { draft = nil; typing = .name }
+                    .onDisappear { draft = nil }
+                    if let d = draft, d.count > ProfileStore.nameMax { overCount(d.count, ProfileStore.nameMax) }
+                }
             } else {
                 Text(me.name.isEmpty ? "Name" : me.name)
                     .font(font)
                     .lineLimit(2)
-                    // (a long name a little smaller rather than cut short)
-                    .minimumScaleFactor(0.7)
-                    .allowsTightening(true)
                     .onTapGesture { Feel.tap(); edit.field = .name }
                     .accessibilityAddTraits(.isButton)
                     .accessibilityHint("Edits your name")
@@ -123,22 +135,28 @@ struct ProfileView: View {
     private var handleLine: some View {
         Group {
             if edit.field == .handle {
-                HStack(spacing: 0) {
-                    Text("@")
-                    TextField("", text: Binding(get: { store.me.handle }, set: { v in
-                        // lowercase letters, digits and "_", 20 at most
-                        let h = String(v.lowercased().filter { ($0.isLetter && $0.isASCII) || $0.isNumber || $0 == "_" }.prefix(ProfileStore.handleMax))
-                        if h.count < v.count { Feel.refuse() }
-                        store.set { $0.handle = h }
-                    }), prompt: Text(String(store.handleShown.dropFirst())).foregroundStyle(Palette.ink.opacity(0.5)))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.asciiCapable)
-                    .submitLabel(.done)
-                    .onSubmit { edit.field = nil }
-                    .focused($typing, equals: .handle)
-                    .onAppear { typing = .handle }
-                    .fixedSize()
+                VStack(spacing: 4) {
+                    HStack(spacing: 0) {
+                        Text("@")
+                        TextField("", text: Binding(get: { draft ?? store.me.handle }, set: { v in
+                            // lowercase letters, digits and "_" (anything else refused); past 20 the letters go on
+                            // with the count in red,, and the saved handle is what fits
+                            let h = String(v.lowercased().filter { ($0.isLetter && $0.isASCII) || $0.isNumber || $0 == "_" })
+                            if h.count < v.count || (h.count > ProfileStore.handleMax && (draft ?? "").count <= ProfileStore.handleMax) { Feel.refuse() }
+                            draft = h
+                            store.set { $0.handle = String(h.prefix(ProfileStore.handleMax)) }
+                        }), prompt: Text(String(store.handleShown.dropFirst())).foregroundStyle(Palette.ink.opacity(0.5)))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.asciiCapable)
+                        .submitLabel(.done)
+                        .onSubmit { edit.field = nil }
+                        .focused($typing, equals: .handle)
+                        .onAppear { draft = nil; typing = .handle }
+                        .onDisappear { draft = nil }
+                        .fixedSize()
+                    }
+                    if let d = draft, d.count > ProfileStore.handleMax { overCount(d.count, ProfileStore.handleMax) }
                 }
             } else {
                 // (twice in 14 days: a tap while it is shut says from when, in the handle's place, for 2 s)
@@ -158,33 +176,41 @@ struct ProfileView: View {
                     .accessibilityHint("Edits your handle")
             }
         }
-        .font(.body)
+        .font(.subheadline)
         .foregroundStyle(Palette.ink.opacity(0.5))
+    }
+
+    /// a line typed past its limit: its count in red under it ("34/30")
+    private func overCount(_ n: Int, _ max: Int) -> some View {
+        Text("\(n)/\(max)").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
     }
 
     private func bioLine(_ me: ProfileStore.Me) -> some View {
         Group {
             if edit.field == .bio {
                 VStack(spacing: 4) {
-                    TextField("", text: Binding(get: { store.me.bio }, set: { v in
+                    TextField("", text: Binding(get: { draft ?? store.me.bio }, set: { v in
                         // (one paragraph: Return is Done)
                         if v.contains("\n") { edit.field = nil; return }
-                        if v.count > ProfileStore.bioMax { Feel.refuse() }
+                        if v.count > ProfileStore.bioMax, (draft ?? "").count <= ProfileStore.bioMax { Feel.refuse() }
+                        draft = v
                         store.set { $0.bio = String(v.prefix(ProfileStore.bioMax)) }
                     }), prompt: Text("Bio").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
-                    .lineLimit(1 ... 3)
+                    .lineLimit(1 ... 4)
                     .submitLabel(.done)
                     .focused($typing, equals: .bio)
-                    .onAppear { typing = .bio }
-                    // the count, while typing only
-                    Text("\(store.me.bio.count)/\(ProfileStore.bioMax)")
+                    .onAppear { draft = nil; typing = .bio }
+                    .onDisappear { draft = nil }
+                    // the count, while typing only, under the words and centred with them; red past the limit
+                    let n = (draft ?? store.me.bio).count
+                    Text("\(n)/\(ProfileStore.bioMax)")
                         .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(Palette.ink.opacity(0.5))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .foregroundStyle(n > ProfileStore.bioMax ? Palette.red : Palette.ink.opacity(0.5))
                 }
             } else {
                 Text(me.bio.isEmpty ? "Bio" : me.bio)
                     .lineLimit(3)
+                    .lineSpacing(2)
                     .foregroundStyle(me.bio.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
                     .onTapGesture { Feel.tap(); edit.field = .bio }
                     .accessibilityAddTraits(.isButton)
@@ -199,7 +225,7 @@ struct ProfileView: View {
     private var nationalitiesLine: some View {
         Group {
             if edit.nationalities.isEmpty {
-                Text("Nationality").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                Text("Nationality").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
             } else {
                 HStack(spacing: 8) {
                     ForEach(edit.nationalities, id: \.self) { FlagCircle(cc: $0, size: 24) }
@@ -223,12 +249,15 @@ struct ProfileView: View {
             } else if let f = me.picture, f.hasPrefix("flag:") {
                 FlagCircle(cc: String(f.dropFirst(5)), size: Self.picture)
             } else {
-                Circle().fill(me.colour?.color ?? Palette.ink)
+                // (no colour picked: white, never black:)
+                Circle().fill(me.colour?.color ?? Palette.white)
                 if let first = me.name.trimmingCharacters(in: .whitespaces).first {
                     Text(String(first).uppercased())
                         .font(Typeface.nature(Self.picture * 0.5, relativeTo: .largeTitle))
-                        .foregroundStyle((me.colour?.light ?? 0) > 0.72 ? Palette.ink : Palette.white)
+                        .foregroundStyle((me.colour?.light ?? 1) > 0.72 ? Palette.ink : Palette.white)
                         .dynamicTypeSize(.large)
+                } else if me.colour == nil {
+                    Icon5(key: "plus", ink: Palette.ink.opacity(0.5), size: Self.picture * 0.22)
                 }
             }
         }
@@ -237,11 +266,12 @@ struct ProfileView: View {
     }
 }
 
-/// THE PROFILE'S WATER AT 25%: the three numbers, your stats, your stamps and your badge levels, in three equal columns
-/// across the water, each the map sheet's own big number at the very height the map's number has (76 pt under the
-/// water's top), so your stamps in the middle stand where the map's count stands. No words, no boxes, no marks. They count up the first time the Profile is opened after
-/// the app starts; they are there only while the whole line fits above the capsule and roll out before the water's
-/// edge comes down to them, as the map's caption does.
+/// THE PROFILE'S WATER AT 25%: the three numbers, your stats, your stamps and your badge levels, in three equal
+/// columns across the water, each the map sheet's own big number at the very height the map's number has (76 pt under
+/// the water's top), so your stamps in the middle stand where the map's count stands, each its word under it as the
+/// map's; no boxes, no marks. They count up the first time the Profile is opened after the app starts; they are there
+/// only while the whole line fits above the capsule and roll out before the water's edge comes down to them, as the
+/// map's caption does.
 struct ProfileWater: View {
     let water: Water
     let form: Water.Form
@@ -256,12 +286,14 @@ struct ProfileWater: View {
     /// the count up has run since the app started
     static var counted = false
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         let L = water.layout
-        let column = (L.W - 2 * L.sheetInset) / 3
+        let column = (L.W - 2 * L.sheetInset - 32) / 3
         let values = [numbers.stats, numbers.stamps, numbers.badges]
         let names = ["stats", "stamps", "badge levels"]
+        let words = ["stats", "stamps", "badges"]
         // (four digits and more: all three a size down together, so each still fits its column)
         let size: CGFloat = (values.max() ?? 0) >= 1000 ? big * 0.75 : big
         let fits = form.top <= L.capsule.minY - 134 && !(water.stop == .closed && !water.held)
@@ -280,6 +312,16 @@ struct ProfileWater: View {
                         .position(x: L.W / 2 + CGFloat(i - 1) * column, y: form.top + 76)
                         .accessibilityLabel("\(values[i]) \(names[i])")
                         // (the three numbers are read as their buttons, below)
+                        .accessibilityHidden(true)
+                    // ITS WORD under it, as the map's caption writes under its number: the body size, semibold, the
+                    // one grey
+                    Text(shown ? words[i] : Caption.blank(words[i], "\u{2002}"))
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Palette.ink.opacity(0.5))
+                        .lineLimit(1)
+                        .contentTransition(.numericText(value: shown ? 1 : 0))
+                        .frame(width: column)
+                        .position(x: L.W / 2 + CGFloat(i - 1) * column, y: form.top + 76 + size * 0.59 + 3)
                         .accessibilityHidden(true)
                 }
             }
@@ -331,19 +373,22 @@ struct ProfileWater: View {
                     switch s {
                     case .picture: ProfilePictureSheet(water: water, width: w)
                     case .ground: ProfileGroundSheet(width: w)
-                    case .stats: ProfileStatsList(width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop)))
-                    case .badges: ProfileBadgesList(width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop)))
+                    // (stats and badges are their own pages, ProfilePushedPage)
+                    case .stats, .badges: EmptyView()
                     case .nationalities:
-                        NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - (form.top + 16)))
+                        NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop + 8)))
                     }
                 }
-                // (at full, clear of the clock and the island)
-                .offset(x: L.sheetInset + 16, y: s == .stats || s == .badges ? max(form.top + 16, L.safeTop) : form.top + (s == .nationalities ? 16 : 24))
+                .offset(x: L.sheetInset + 16, y: s == .stats || s == .badges ? max(form.top + 16, L.safeTop)
+                        : max(form.top + (s == .nationalities ? 16 : 24), L.safeTop + 8))
             }
         }
         // (the water pulled down from 50%: the sheet is put away with it)
         .onChange(of: water.stop) { _, st in
-            if edit.sheet != nil, st == .quarter || st == .closed { edit.close(water: water, move: false) }
+            // (stats and badges close the water under their pages: their back circle closes them)
+            if let s = edit.sheet, s != .stats, s != .badges, st == .quarter || st == .closed { edit.close(water: water, move: false) }
+            // (Stats or Badges up and the water pulled up from closed: the page goes, the water where it was pulled)
+            if let s = edit.sheet, s == .stats || s == .badges, st != .closed { withAnimation(Motion.chrome) { edit.close(water: water, move: false) } }
         }
         .onChange(of: fits, initial: true) { was, f in
             guard shown != f else { return }
@@ -369,6 +414,11 @@ struct ProfileWater: View {
                 run = 1 - pow(1 - t, 3)
             }
             run = 1
+        }
+        // the Badges page's first pictures made while the Profile sits still (after the count up), so its tap is instant
+        .task {
+            try? await Task.sleep(for: .milliseconds(1400))
+            await ProfileBadgesList.prewarm(width: water.layout.W - 2 * water.layout.side, scale: displayScale)
         }
     }
 }

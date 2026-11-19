@@ -1,10 +1,10 @@
 import Foundation
 import simd
 
-/// ONE COUNTRY'S REGIONS AS THE MAP DRAWS THEM (Part 6.5): its units' rings laid in the map's Equal Earth, as fans for
-/// the stencil (even-odd, so a ring inside another of the same unit is a hole), the lines between two regions as the
-/// lines' segments, and each entry's box and rings for the finger. Built off the main thread from the bundled file
-/// (or a downloaded finer level later), before the country's land changes (6.4: never "blue for a second").
+/// ONE COUNTRY'S REGIONS AS THE MAP DRAWS THEM (Part 6.5): its units' rings laid in the map's Equal Earth, as fans
+/// for the stencil (even-odd, so a ring inside another of the same unit is a hole), the lines between two regions as
+/// the lines' segments, and each entry's box and rings for the finger. Built off the main thread from the bundled
+/// file (or a downloaded finer level later), before the country's land changes (6.4: never).
 nonisolated final class RegionScene: @unchecked Sendable {
     /// the place on the world map whose regions these are, its id as the files name it, the level's row in the table
     let place: Int
@@ -30,14 +30,14 @@ nonisolated final class RegionScene: @unchecked Sendable {
     /// each entry's box and rings in map units, for the finger
     private let boxes: [SIMD4<Float>]
     private let rings: [[[SIMD2<Float>]]]
-    /// the regions' box (every part, far ones included)
+    /// the regions' box
     let box: SIMD4<Float>
-    /// A REGION THAT CAN BE LOST (12 Nov): one standing alone in the sea (its box touches no other region's), on a level
-    /// of at most 200 regions: the middle of its biggest piece (x, y) and how big its land is (z, map units: the width
-    /// of a circle with all its pieces' area, so an atoll's thin rim 12 points long counts as the speck it is).
-    /// Such a region is the map's diamond while it is under 6 points across (an island country's regions are specks at
-    /// the country's size: Tuvalu's nine atolls over 600 km). z is infinite for every other region: a region that
-    /// touches its neighbours is part of land that can be seen, however small it is (France's communes get none).
+    /// A REGION THAT CAN BE LOST: one standing alone in the sea (its box touches no other region's), on a level of at
+    /// most 200 regions: the middle of its biggest piece (x, y) and how big its land is (z, map units: the width of a
+    /// circle with all its pieces' area, so an atoll's thin rim 12 points long counts as the speck it is). Such a
+    /// region is the map's diamond while it is under 6 points across (an island country's regions are specks at the
+    /// country's size: Tuvalu's nine atolls over 600 km). z is infinite for every other region: a region that touches
+    /// its neighbours is part of land that can be seen, however small it is (France's communes get none).
     let unitSpot: [SIMD3<Float>]
     /// each region's box (all its entries), for VoiceOver's elements
     func unitBox(_ u: Int) -> SIMD4<Float>? {
@@ -59,7 +59,8 @@ nonisolated final class RegionScene: @unchecked Sendable {
         var eu: [Int] = [], pts: [SIMD2<Float>] = [], fan: [UInt32] = [], rn: [(Int, Int)] = []
         var bx: [SIMD4<Float>] = [], rs: [[[SIMD2<Float>]]] = []
         var all = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
-        for u in f.units {
+        let projected = f.units.map { u in u.rings.filter { $0.count >= 3 }.map { Self.project($0) } }
+        for (e, u) in f.units.enumerated() {
             let ui: Int
             if let i = index[u.id] { ui = i } else {
                 ui = ids.count; index[u.id] = ui; ids.append(u.id); names.append(u.name); parents.append(u.parent)
@@ -68,8 +69,7 @@ nonisolated final class RegionScene: @unchecked Sendable {
             let s = fan.count
             var b = SIMD4<Float>(.greatestFiniteMagnitude, .greatestFiniteMagnitude, -.greatestFiniteMagnitude, -.greatestFiniteMagnitude)
             var mine: [[SIMD2<Float>]] = []
-            for ring in u.rings where ring.count >= 3 {
-                let m = Self.project(ring)
+            for m in projected[e] {
                 let start = UInt32(pts.count)
                 pts += m
                 for i in 1 ..< m.count - 1 { fan += [start, start + UInt32(i), start + UInt32(i + 1)] }
@@ -309,10 +309,10 @@ nonisolated final class RegionScene: @unchecked Sendable {
     func entries(of units: Set<Int>) -> [Int] { units.sorted().flatMap { unitEntries[$0] } }
 }
 
-/// WHAT A CHANGE OF REGION MAP DRAWS (A6.9, the yes of): the borders both levels have stay as they are; borders
-/// only the new level has draw in from both their
-/// ends; borders only the old level had undraw back into their ends (0.4 s each). Opening a country, every border is
-/// new (drawing in from the outline, A6.7); leaving it, every border is old (undrawing into the outline, A6.13).
+/// WHAT A CHANGE OF REGION MAP DRAWS: the borders both levels have stay as they are; borders only the new level has
+/// draw in from both their ends; borders only the old level had undraw back into their ends (0.4 s each). Opening a
+/// country, every border is new (drawing in from the outline, A6.7); leaving it, every border is old (undrawing into
+/// the outline, A6.13).
 nonisolated final class RegionLines: @unchecked Sendable {
     let shared: [Float]
     let new: [Float]

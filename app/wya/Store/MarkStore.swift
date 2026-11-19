@@ -12,9 +12,9 @@ struct MarksChanged {
     var ids: Set<PlaceKey> { Set(changed.keys) }
 }
 
-/// THE STORE'S FACE ON THE MAIN THREAD (Part 0.2.2: "MarkStore is its interface for Stamps, Wishes and Visits"):
-/// what every marking surface calls, the marks as they are now for drawing, the change stream, and undo (every write
-/// one step, up to 20 in a session; Part 3.10's drop and the shake use it).
+/// THE STORE'S FACE ON THE MAIN THREAD (Part 0.2.2:): what every marking surface calls, the marks as they are now for
+/// drawing, the change stream, and undo (every write one step, up to 20 in a session; Part 3.10's drop and the shake
+/// use it).
 @MainActor @Observable
 final class MarkStore {
     static let shared = MarkStore()
@@ -25,7 +25,7 @@ final class MarkStore {
     private(set) var loaded = false
     /// the account the records belong to ("": no account, Part 20.10)
     private(set) var account = ""
-    /// the words of the last change, for the undo drop ("France stamped")
+    /// the words of the last change, for the undo drop
     private(set) var lastWords: String?
     /// counts every undoable write (not the undos): the undo drop rises when it changes
     private(set) var changes = 0
@@ -39,8 +39,8 @@ final class MarkStore {
     @ObservationIgnored private var listeners: [UUID: (MarksChanged) -> Void] = [:]
     @ObservationIgnored let container: ModelContainer?
 
-    /// THE APP GROUP (Part 0.2.2); the app's own
-    /// container when the group isn't there (a build without the entitlement), never a crash
+    /// THE APP GROUP (Part 0.2.2:); the app's own container when the group isn't there (a build without the
+    /// entitlement), never a crash
     static let group = "group.com.alexanderbell.wya"
 
     private init() {
@@ -107,20 +107,20 @@ final class MarkStore {
                who: Who = .you, origin: CGPoint? = nil, day: String? = nil) async {
         guard let store else { return }
         let acc = account
-        // a territory stamps its country with it (Territories: "Stamp the country too", the default)
+        // a territory stamps its country with it (Territories:, the default)
         var cc = cc
         if key.kind == .country, cc.isEmpty, MapSettingsStore.shared.value.territories != "separate",
            let s = Territories.sovereign[key.id.lowercased()] { cc = s }
-        guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { return }
+        guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { refused(); return }
         apply(r, words: "\(both(r, key, name)) stamped", origin: origin, who: who)
     }
 
     func unstamp(_ key: PlaceKey, name: String = "", who: Who = .you, origin: CGPoint? = nil) async {
-        // a country unstamped any way is no longer "stamped only through a town" (7.4's unstamp rule)
+        // a country unstamped any way is no longer (7.4's unstamp rule)
         if key.kind == .country { TownStamps.forget(key.id) }
         guard let store else { return }
         let acc = account
-        guard let r = try? await store.unstamp(key, account: acc) else { return }
+        guard let r = try? await store.unstamp(key, account: acc) else { refused(); return }
         apply(r, words: "\(both(r, key, name)) unstamped", origin: origin, who: who)
     }
 
@@ -129,14 +129,14 @@ final class MarkStore {
         guard let store else { return }
         let acc = account
         guard let r = try? await store.wish(key, account: acc, want: want, source: source, name: name, cc: cc, level: level,
-                                            when: when) else { return }
+                                            when: when) else { refused(); return }
         apply(r, words: "\(label(key, name)) wished", origin: origin, who: who)
     }
 
     func unwish(_ key: PlaceKey, name: String = "", who: Who = .you, origin: CGPoint? = nil) async {
         guard let store else { return }
         let acc = account
-        guard let r = try? await store.unwish(key, account: acc) else { return }
+        guard let r = try? await store.unwish(key, account: acc) else { refused(); return }
         apply(r, words: "\(label(key, name)) off the wishlist", origin: origin, who: who)
     }
 
@@ -234,6 +234,8 @@ final class MarkStore {
     func passportOrder() async -> [String] {
         guard let store else { return [] }
         let acc = account
+        // (each stamp's day with it: the words set on its stamp, Design/StampArt.swift)
+        if let d = try? await store.passportDays(account: acc) { StampArt.days = d }
         return (try? await store.passportOrder(account: acc)) ?? []
     }
 
@@ -248,7 +250,7 @@ final class MarkStore {
         undoSerial &+= 1
         if let run = last.run {
             run()
-            // a change of Pins' made again by redo when it says how (8 Nov: pin and route steps had no redo)
+            // a change of Pins' made again by redo when it says how
             if let forth = last.forth {
                 redoStack.append(([], last.words, forth, run))
                 if redoStack.count > 20 { redoStack.removeFirst(redoStack.count - 20) }
@@ -303,9 +305,13 @@ final class MarkStore {
 
     // MARK: inside
 
-    /// a change made elsewhere (a pin dropped or deleted) that the undo drop takes back with `back`
-    /// `rises`: false when the screen already answers the change (a new map's name being typed under its title), so the
-    /// drop stays down; the step is still there for a shake
+    /// a change made elsewhere (a pin dropped or deleted) that the undo drop takes back with `back` `rises`: false
+    /// when the screen already answers the change (a new map's name being typed under its title), so the drop stays
+    /// down; the step is still there for a shake A WRITE THE STORE REFUSED (4.4.6): nothing changed; the undo drop
+    /// rises with and no undo in it
+    private(set) var notKept = 0
+    private func refused() { notKept &+= 1; Feel.refuse() }
+
     func did(_ words: String, rises: Bool = true, back: @escaping @MainActor () -> Void, forth: (@MainActor () -> Void)? = nil) {
         undoStack.append(([], words, back, forth))
         undoSerial &+= 1
@@ -363,8 +369,7 @@ final class MarkStore {
     }
 
     private func label(_ key: PlaceKey, _ name: String) -> String { name.isEmpty ? key.id.uppercased() : name }
-    /// a place and the country that came or went with it, both in the undo drop's words (7 Nov, the friend's review
-    /// board 14): "Western Australia and Australia stamped"
+    /// a place and the country that came or went with it, both in the undo drop's words:
     private func both(_ r: TravelStore.Result, _ key: PlaceKey, _ name: String) -> String {
         guard key.kind != .country, let c = r.changed.keys.first(where: { $0.kind == .country && $0 != key }) else { return label(key, name) }
         let country = Locale.current.localizedString(forRegionCode: c.id.uppercased()) ?? c.id.uppercased()

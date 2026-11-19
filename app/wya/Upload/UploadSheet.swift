@@ -36,7 +36,7 @@ final class UploadState {
     /// the pair's icons (left, right) grown, and its words in
     private(set) var shapes = [false, false]
     private(set) var words = false
-    /// a choice's word rolled to what it has to say ("Allow Photos in Settings", "Can't find you"); key step * 2 + side
+    /// a choice's word rolled to what it has to say; key step * 2 + side
     private(set) var note: [Int: String] = [:]
     /// Here waiting for its fix: the icon gives way to the working mark
     private(set) var locating = false
@@ -72,7 +72,7 @@ final class UploadState {
     /// closing, the words roll out first, then the space closes: List's own insert would fade a row with words in it)
     private(set) var datesIn: Set<String> = []
     @ObservationIgnored weak var map: MapController?
-    /// what A9.8 says when a file gave nothing (not a history, unreadable); nil: "No places found"
+    /// what A9.8 says when a file gave nothing (not a history, unreadable); nil:
     @ObservationIgnored private var failed: String?
     @ObservationIgnored private var job = 0
     /// on its way out (the 0.42 s before the water lets it go): taps on the map are the map's again, and a second touch
@@ -93,9 +93,9 @@ final class UploadState {
     @ObservationIgnored private var datesJob = 0
     @ObservationIgnored private var moving = false
 
-    // THE SECOND ROUND (9.5, "what else was found"; Q9.1): once the countries are stamped, the regions found inside them
-    // that are not stamped yet, asked about in the review's own form (Regions / n / found, Stamp all); a row tapped is
-    // dropped or kept again. With Map settings' Found places at Stamp them there is no round: they are stamped at once.
+    // THE SECOND ROUND (9.5,; Q9.1): once the countries are stamped, the regions found inside them that are not
+    // stamped yet, asked about in the review's own form (Regions / n / found, Stamp all); a row tapped is dropped or
+    // kept again. With Map settings' Found places at Stamp them there is no round: they are stamped at once.
     struct RegionFind: Identifiable, Equatable, Sendable {
         var id: String
         var name: String
@@ -149,15 +149,12 @@ final class UploadState {
         w.openUpload()
         job += 1
         let me = job
-        // at 25% the caption is cut as the upload takes the water, so the pair comes at once (it waited 0.36 s for the
-        // caption's roll, which is no longer how the caption leaves: an empty sheet, 12 Nov strip); from elsewhere the
+        // at 25% the caption is cut as the upload takes the water, so the pair comes at once; from elsewhere the
         // water arrives first
         grow(after: at25 ? 0 : 0.45, job: me)
     }
 
-    /// the pair in: both icons and both words in one frame. (The icons have been simply there since 8 Nov, nothing
-    /// grows from a point, and words no longer roll since 12 Nov; what was left of the old sequence was one icon
-    /// alone for a frame, then two, then the words cut in.)
+    /// the pair in: both icons and both words in one frame.
     private func grow(after d: Double, job me: Int) {
         let start = { [self] in
             guard me == job else { return }
@@ -230,8 +227,7 @@ final class UploadState {
         moving = true
         job += 1
         let me = job
-        // the next pair takes the old one's place in the same frame (it used to wait 0.42 s for the old words' roll
-        // and the icons' shrink, neither of which exists now: three frames of empty sheet, 12 Nov strip)
+        // the next pair takes the old one's place in the same frame
         _ = lead
         step = s
         locating = false; photosBusy = nil
@@ -258,7 +254,6 @@ final class UploadState {
         if !order.isEmpty {
             if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         }
-        // (in the same frame: the 0.42 s this waited for the pair's roll and shrink is an empty sheet now, 12 Nov)
         closing = false
         guard me == job else { return }
         w.closeUpload()
@@ -380,9 +375,7 @@ final class UploadState {
         NSLog("wya upload read %d items: %d samples with a place (%@)", n, s.count, src == .photos ? "photos" : "history")
         // a read from a sheet or step that has gone since is dropped
         guard token == nil || token == readToken, let w = water, w.upload else { return }
-        // a file's finding has already started (its line growing): the samples go to it. (Also while finding is still
-        // coming in: a tiny file is read before the 0.42 s it takes, and its samples were dropped, the caption left at
-        // "0 found" for good; 7 Nov, the friend's review board 15. Kept here, finding delivers them when it is in.)
+        // a file's finding has already started (its line growing): the samples go to it.
         if reading {
             pending = (s, src, why)
             reading = false
@@ -403,7 +396,6 @@ final class UploadState {
         moving = true
         findingIn = false
         shrink()
-        // (at once: the pair is gone in one frame now, so the caption does not wait 0.42 s over an empty sheet, 12 Nov)
         DispatchQueue.main.async { [self] in
             guard me == job else { return }
             phase = .finding
@@ -420,7 +412,7 @@ final class UploadState {
             }
         }
     }
-    /// VOICEOVER WHILE FINDING (9.4): every 5 s the count so far ("12 places found"); the end says "Done" itself
+    /// VOICEOVER WHILE FINDING (9.4): every 5 s the count so far; the end says "Done" itself
     private func speakCount(_ me: Int) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [self] in
             guard me == job, phase == .finding else { return }
@@ -616,8 +608,7 @@ final class UploadState {
         let held = heldOrder?.dropped ?? dropped
         return all.filter { !held.contains($0.place) }.sorted { last($0) > last($1) } + all.filter { held.contains($0.place) }.sorted { last($0) > last($1) }
     }
-    /// a find's second line: its trip's dates ("12–18 Aug 2024"), "3 trips", "+2 trips" for a place already stamped,
-    /// "Home" for your home base
+    /// a find's second line: its trip's dates,, for a place already stamped, "Home" for your home base
     static func line(_ f: Finds.Find, stamped: Bool) -> String {
         if f.home { return "Home" }
         let n = f.visits.count
@@ -625,7 +616,7 @@ final class UploadState {
         if n != 1 { return "\(n) trips" }
         return range(f.visits[0])
     }
-    /// one trip's dates, arrived to left: "24 Dec 2022", "12–18 Aug 2024", "30 Dec 2023 – 2 Jan 2024"
+    /// one trip's dates, arrived to left:,,
     static func range(_ v: Finds.Visit) -> String {
         let a = v.from, b = v.to
         let mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -819,7 +810,7 @@ final class UploadState {
         calendarChanged()
     }
     /// at launch, once the map is loaded: the waiting finds back, darkened (a place stamped since is not drawn darkened;
-/// at the review it reads "+n trips")
+/// at the review it reads)
     func restoreWaiting(map m: MapController) {
         guard let url = Self.waitingURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(Waiting.self, from: d),
               let w = m.world else { return }
@@ -928,7 +919,7 @@ final class UploadState {
         calendarChanged()
     }
 
-    // THE CALENDAR (Part 9, his calendar of 5 Sep): the same finds a day at a time, full screen
+    // THE CALENDAR: the same finds a day at a time, full screen
     var calendarOpen = false
     /// the finds as days: each found day its place (the first find listed on a day it shares), crossed out where its
     /// place or that trip was dropped at the review
@@ -990,8 +981,8 @@ final class UploadState {
         m.show(place: i, sheetTop: w.y(.quarter))
     }
 
-    /// GO (A9.10): every kept find becomes a stamp with its found trips, in one write and one undo step; the go circle
-    /// shrinks into its centre, the caption's tail rolls back to "of 263" and the number to your count (the map's
+    /// GO (A9.10): every kept find becomes a stamp with its found trips, in one write and one undo step; the go
+    /// circle shrinks into its centre, the caption's tail rolls back to and the number to your count (the map's
     /// colours change in one frame as the write lands); then the sheet gives the water back
     func go() {
         if round != nil { goRound(); return }
@@ -1276,8 +1267,8 @@ final class UploadState {
                                                   join: places > 0)
     }
 
-    /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls back
-    /// to your count and the tail to "of 263" (the sheet closes into the caption); the water stays at 25%
+    /// × (A9.9): stops; nothing is stamped; the finds clear in one frame; the mark and × shrink; the number rolls
+    /// back to your count and the tail to (the sheet closes into the caption); the water stays at 25%
     func cancel() {
         if round != nil { leaveRound(); return }
         guard let w = water, phase == .finding || phase == .review, !busy else { return }
@@ -1433,7 +1424,6 @@ struct UploadSheet: View {
                 .frame(width: run, alignment: .leading)
                 .position(x: L.W / 2, y: form.top + 3)
         }
-        // (there or not, no growing from a point, 8 Nov; its spinning is its own)
         WorkingMark(size: 20, running: u.markIn)
             .opacity(u.markIn ? 1 : 0)
             .position(x: L.sheetInset + 36, y: y)
@@ -1451,9 +1441,6 @@ struct UploadSheet: View {
                 .transition(.identity)
                 .accessibilityAddTraits(.isButton)
         }
-        // once the review is up, the go says what it does (7 Nov, the friend's review board 15: the bare stamp glyph
-        // "saved the visit" without saying so): "Stamp" for one place, "Stamp all" for more (the caption above says how
-        // many), as the card's own Stamp capsule; the × until then. There at once, no grow (31 Oct)
         ZStack(alignment: .trailing) {
             if u.goIn {
                 // (with every find dropped there is nothing to stamp: its words in black 50%, and a press refuses)
@@ -1538,19 +1525,13 @@ struct UploadSheet: View {
             .contentMargins(.top, 0, for: .scrollContent)
             .contentMargins(.bottom, 8, for: .scrollContent)
             .scrollTargetBehavior(RowSnap(row: 56))
+            .scrollBlur()
             .animation(Motion.chrome, value: u.rows.map(\.id))
             .scrollIndicators(.hidden)
             // SHOW IN THE LIST / ITS DATES from the map's menu: the list scrolls the find's row to its top
             .onChange(of: u.scrollAsk) { _, _ in
                 guard let id = u.scrollID else { return }
                 withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .top) }
-            }
-        }
-        // the soft bottom edge, 16 pt over the last whole row's empty bottom margin and the next row's empty top one
-        .mask(alignment: .top) {
-            VStack(spacing: 0) {
-                Color.black.frame(height: vh - 16)
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
         }
         .frame(width: L.W - 2 * L.sheetInset, height: vh)
@@ -1569,8 +1550,9 @@ struct UploadSheet: View {
     private func findRow(_ r: UploadState.Row, shown: Bool) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.flag.isEmpty ? r.id : r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.row(r.flag.isEmpty ? r.id : r.flag) { f.resizable().interpolation(.high) } else { Color.clear }
             }
+            .frame(width: 28, height: 21)
             .frame(width: 28, height: 28)
             .opacity(shown ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
             VStack(alignment: .leading, spacing: 1) {
@@ -1612,7 +1594,7 @@ struct UploadSheet: View {
             Spacer(minLength: 0)
             Icon5Still(key: "cross", progress: 0, ink: Palette.ink, size: 13)
                 .opacity(off ? 0.5 : 1)
-                // there with the words, as the flags are (nothing grows from a point, 8 Nov)
+                // there with the words, as the flags are
                 .opacity(shown ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
@@ -1633,14 +1615,13 @@ struct UploadSheet: View {
         let busy = (u.locating && u.step == 2 && side == 1) || (u.photosBusy != nil && u.photosBusy == u.step * 2 + side)
         return VStack(spacing: 12) {
             ZStack {
-                // EACH CHOICE ITS OWN ICON (they were empty rings, read as unticked boxes; 8 Nov: drawn or reused,
-                // never SF Symbols): Photos and Pick a photo, All four of them, Location and Here the locate mark,
-                // File the file
+                // EACH CHOICE ITS OWN ICON: Photos and Pick a photo, All four of them, Location and Here the locate
+                // mark, File the file
                 UploadChoiceIcon(key: UploadState.icons[u.step][side])
                     .frame(width: 24, height: 24)
                     .opacity(grown && !busy ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 // Here waiting, or Pick's or All's photos being read: the small working mark is there in the icon's
-                // place (nothing grows from a point, 8 Nov)
+                // place
                 if (u.step == 2 && side == 1) || u.step == 1 {
                     WorkingMark(size: 20, running: busy).opacity(busy ? 1 : 0)
                 }

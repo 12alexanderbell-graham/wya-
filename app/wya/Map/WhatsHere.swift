@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and things,
-/// nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over the map, its
-/// bottom 12 pt above the held point; each name is a tap to its card.
-/// THE ANSWER FITS HOW FAR OUT THE MAP IS (12 Nov): only names within a finger of the held point on the screen count
-/// (44 pt, and only while that is under about 30 km of ground), and the country is always the last line. Held on a world map over Cameroon it named three villages, one of
-/// them across the border in Nigeria; now it says "Cameroon", and names towns once the map is close enough for a
-/// finger to mean a town. A name from another country than the point's carries its country. Rows are 44 pt. The panel (frosted, as every surface) is simply
-/// there, and a touch anywhere else on the map simply takes it away (A11.4's grow and roll dropped: no grow,
-/// no roll). At sea: "Open sea".
+/// WHAT'S HERE? (A11.4; 11.5's empty-land and pin menus): the nearest three names from our own data (towns and
+/// things, nearest first, one a line, the subheadline style: 15 pt, larger with larger text) in a glass panel over
+/// the map, its bottom 12 pt above the held point; each name is a tap to its card. THE ANSWER FITS HOW FAR OUT THE
+/// MAP IS: only names within a finger of the held point on the screen count (44 pt, and only while that is under
+/// about 30 km of ground), and the country is always the last line. Held on a world map over Cameroon it named three
+/// villages, one of them across the border in Nigeria; now it says, and names towns once the map is close enough for
+/// a finger to mean a town. A name from another country than the point's carries its country. Rows are 44 pt. The
+/// panel (frosted, as every surface) is simply there, and a touch anywhere else on the map simply takes it away
+/// (A11.4's grow and roll dropped: no grow, no roll). At sea:.
 @MainActor
 @Observable
 final class WhatsHere {
@@ -46,9 +46,9 @@ final class WhatsHere {
     func show(at p: CGPoint, lat: Double, lon: Double, land: Int?, reach: Double, map: MapController) {
         items = Self.nearest(lat: lat, lon: lon, land: land, reach: reach, map: map)
         job += 1
-        // THE REGION IT IS IN on the country's line ("Kigoma, Tanzania"): the first level's file is on the phone; read
-        // and looked in off the main thread, the line changed once it is known (held on Tanzania it said three villages,
-        // then the country alone, never which part of it)
+        // THE REGION IT IS IN on the country's line: the first level's file is on the phone; read and looked in off
+        // the main thread, the line changed once it is known (held on Tanzania it said three villages, then the
+        // country alone, never which part of it)
         if let land, let w = map.world, land >= 0, land < w.places.count {
             let cc = w.places[land].id.lowercased(), country = w.places[land].n, me = job
             let at = EqualEarth.project(lon: lon, lat: lat)
@@ -96,7 +96,7 @@ final class WhatsHere {
         }
         var found: [(Double, Item)] = []
         // (towns and things are an answer only when a finger is under about 30 km of ground: farther out a finger
-        // covers a region or a country, and the three "nearest" are three villages somewhere under it)
+        // covers a region or a country, and the three are three villages somewhere under it)
         let far = reach <= 0.28 ? reach * reach : -1
         for h in TownIndex.shared.nearest(lat: lat, lon: lon, count: 3) where d2(h.lat, h.lon) <= far {
             let place = w.placeIndex[h.file] ?? w.placeIndex[h.file.uppercased()] ?? land
@@ -169,7 +169,6 @@ struct WhatsHereView: View {
             .font(.subheadline)
             .foregroundStyle(Palette.ink)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
             .contentTransition(.identity)
             .frame(height: lineHeight, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -324,14 +324,21 @@ nonisolated struct Plan: Codable, Equatable, Sendable, Identifiable {
     var pics: [String]
     var arch: Bool
     var hid: Bool
+    /// MADE BY THE AI AND NOT KEPT YET: shown when it is made, not among your plans until you keep it
+    var ai: Bool = false
+    /// the AI's one line on why the plan is shaped as it is
+    var note: String = ""
+    /// IDEAS: things you might do on the trip, not on a day yet (audit D672-D688:); one is put on a day from its row
+    var ideas: [PlanItem] = []
     init(id: String = "p-" + UUID().uuidString, name: String, start: String, end: String? = nil, days: [PlanDay],
                 cols: [String] = ["blue", "teal", "lime"], cov: String = "bands", pics: [String] = [],
-                arch: Bool = false, hid: Bool = false) {
+                arch: Bool = false, hid: Bool = false, ai: Bool = false, note: String = "") {
         self.id = id; self.name = name; self.start = start; self.days = days
         self.end = end ?? (start.isEmpty ? "" : PlanDates.key(start, max(0, days.count - 1)))
         self.cols = cols; self.cov = cov; self.pics = pics; self.arch = arch; self.hid = hid
+        self.ai = ai; self.note = note
     }
-    enum CodingKeys: String, CodingKey { case id, name, start, end, days, cols, cov, pics, arch, hid }
+    enum CodingKeys: String, CodingKey { case id, name, start, end, days, cols, cov, pics, arch, hid, ai, note, ideas }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -345,6 +352,9 @@ nonisolated struct Plan: Codable, Equatable, Sendable, Identifiable {
         pics = try c.decodeIfPresent([String].self, forKey: .pics) ?? []
         arch = try c.decodeIfPresent(Bool.self, forKey: .arch) ?? false
         hid = try c.decodeIfPresent(Bool.self, forKey: .hid) ?? false
+        ai = try c.decodeIfPresent(Bool.self, forKey: .ai) ?? false
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        ideas = try c.decodeIfPresent([PlanItem].self, forKey: .ideas) ?? []
     }
 
     var count: Int { days.reduce(0) { $0 + $1.items.count } }
@@ -692,7 +702,7 @@ nonisolated struct ListsBook: Codable, Equatable, Sendable {
         let wish = lists.filter(\.wish)
         return wish + inOrder(lists.filter { !$0.wish && !$0.arch && !$0.hid }, name: \.name)
     }
-    var shownPlans: [Plan] { inOrder(plans.filter { !$0.arch && !$0.hid }, name: \.name) }
+    var shownPlans: [Plan] { inOrder(plans.filter { !$0.arch && !$0.hid && !$0.ai }, name: \.name) }
     var shownTiers: [TierList] { inOrder(tiers.filter { !$0.arch && !$0.hid }, name: \.name) }
     var shownBooks: [PhotoBook] { inOrder(books.filter { !$0.arch && !$0.hid }, name: \.name) }
 

@@ -1,16 +1,19 @@
 import Foundation
 import CoreLocation
 
-/// PINS' TRACKING (1 Oct; built now, 14 Nov): with your location shared, where you go is drawn as pins on its own map,
-/// "Where I've been", at the precision you pick in Map settings: Exact (a new pin past 300 m), City (past 15 km) or
-/// About 100 km. Apple's significant-change and visit services do the watching, so it goes on with the app closed when
-/// the location is shared Always, and costs almost no battery. Off stops it at once.
+/// PINS' TRACKING: with your location shared, where you go is drawn as pins on its own map,, at the precision you
+/// pick in Map settings: Exact (a new pin past 300 m), City (past 15 km) or About 100 km. Apple's significant-change
+/// and visit services do the watching, so it goes on with the app closed when the location is shared Always, and
+/// costs almost no battery. Off stops it at once.
 @MainActor
 final class PinTracker: NSObject, CLLocationManagerDelegate {
     static let shared = PinTracker()
     private let manager = CLLocationManager()
     private var mode = "off"
-    static let mapName = "Where I've been"
+    static let mapName = "Tracked"
+    /// the tracked map is known by its id, so renaming it never makes a second one (it was found by its name; "been"
+    /// is never a word in the app, so the old name is renamed once)
+    private static let idKey = "wya.pins.trackedMap"
 
     private override init() {
         super.init()
@@ -47,8 +50,16 @@ final class PinTracker: NSObject, CLLocationManagerDelegate {
 
     /// the tracked map, made the first time something is tracked
     private func trackedMap() -> UUID {
-        if let m = PinMaps.shared.all.first(where: { $0.name == Self.mapName }) { return m.id }
-        return PinMaps.shared.quietly(Self.mapName).id
+        let d = UserDefaults.standard
+        if let s = d.string(forKey: Self.idKey), let id = UUID(uuidString: s), PinMaps.shared.map(id) != nil { return id }
+        if let m = PinMaps.shared.all.first(where: { $0.name == "Where I've been" || $0.name == Self.mapName }) {
+            if m.name != Self.mapName { PinMaps.shared.rename(m.id, to: Self.mapName) }
+            d.set(m.id.uuidString, forKey: Self.idKey)
+            return m.id
+        }
+        let id = PinMaps.shared.quietly(Self.mapName).id
+        d.set(id.uuidString, forKey: Self.idKey)
+        return id
     }
 
     private func took(_ l: CLLocation, when: Date) {

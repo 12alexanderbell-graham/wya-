@@ -1,22 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// THE FLAGS for rows (search results first). Never simplified: every flag with its full arms and emblems, from
-/// flag-icons' square compositions (MIT, Panayiotis Lipiridis) and, for the places it lacks (Abkhazia, South Ossetia,
-/// Transnistria, Northern Cyprus, Somaliland, Rapa Nui, Mount Athos, Bonaire, Saba, Sint Eustatius), Wikimedia Commons'
-/// flags (public domain), cut square round their emblem's side. The sovereign base areas fly the United Kingdom's flag,
-/// the Coral Sea and Ashmore and Cartier Islands Australia's. Drawn by Chromium into one pack of 132-pixel pictures
-/// (tools/flags- render.py, flags-pack.py), so the phone never draws SVG. Never cut blindly: a flag whose emblem sits
-/// by a corner or at the fly (Oman, Malta, Uruguay, Fiji, Bermuda, the British ensigns with badges) is drawn a little
-/// smaller and pulled toward its emblem, its stripes and fields carried out to the edge, so the circle keeps the emblem
-/// whole. flags-round.wyaf: "WYAF", u32 version 1, u32 head length, a JSON head {"size": 132, "flags": {id: [offset,
-/// length]}}, then the PNGs.
 @MainActor
 enum Flags {
     private static let pack = load("flags-round")
     /// THE SQUARE AND 4:3 FLAGS AS VECTORS (Part 17.4 D14: no flag ships as a raster): one PDF each in
-    /// flags-vector.wyaf (head {"square": {id: [offset, length]}, "wide": {...}}; tools/flags-vector-*.py), drawn by
-    /// iOS itself at the size a row asks for and kept; never rounded, never in a box. The old 132-pixel square pack
+    /// flags-vector.wyaf (head {: {id: [offset, length]}, "wide": {...}}; tools/flags-vector-*.py), drawn by iOS
+    /// itself at the size a row asks for and kept; never rounded, never in a box. The old 132-pixel square pack
     /// answers only if the vector pack is missing.
     private static let vectorPack: (square: [String: [Int]], wide: [String: [Int]], data: Data, base: Int)? = {
         guard let url = Bundle.main.url(forResource: "flags-vector", withExtension: "wyaf"),
@@ -51,6 +41,11 @@ enum Flags {
         return img
     }
 
+    /// A ROW'S FLAG: the flag at 4:3, its real shape as near as one size can be (the square pack cut the Union Jack's
+    /// and the stars' layouts and could not hold Nepal); the square only where there is no 4:3 one. Circles and
+    /// covers keep the square, which they fill.
+    static func row(_ id: String) -> Image? { wide(id) ?? square(id) }
+
     /// the place's 4:3 flag (pages, Part 16; cards, Part 7), or nil if there is none
     static func wide(_ id: String) -> Image? {
         if let i = wideCache[id] { return i }
@@ -71,6 +66,20 @@ enum Flags {
 
     /// THE ROWS' FLAGS DRAWN AHEAD, in the background (the Stamped list's rows then never wait on a PDF; drawing 34 on
     /// the main thread as the list opened cost a 220 ms hitch)
+    /// the rows' 4:3 flags drawn ahead, in the background (as `prewarm` for the squares)
+    static func prewarmRows(_ ids: [String]) {
+        guard let v = vectorPack else { return }
+        let data = v.data, base = v.base
+        let jobs = ids.compactMap { id in v.wide[id].map { (id, $0) } }.filter { wideCache[$0.0] == nil }
+        guard !jobs.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            var done: [(String, UIImage)] = []
+            for (id, e) in jobs { autoreleasepool { if let ui = Flags.draw(data, base, e, CGSize(width: 64, height: 48)) { done.append((id, ui)) } } }
+            let drawn = done
+            await MainActor.run { for (id, ui) in drawn where wideCache[id] == nil { wideCache[id] = Image(uiImage: ui) } }
+        }
+    }
+
     static func prewarm(_ ids: [String]) {
         guard let v = vectorPack else { return }
         let data = v.data, base = v.base

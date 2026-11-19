@@ -3,10 +3,9 @@ import UIKit
 import simd
 
 // THE COLOUR PICKER (Part 15): one system for every colour a person chooses (pins, drawings, routes, the profile's
-// picture, letter and gradient). No presets anywhere: a field of every hue (across) and lightness (down) at the
-// most colour
-// Display P3 allows, a strength strip under it, then your last ten colours led by one suggested from what the thing
-// already has. No hex, no numbers, no words; no lime ring round anything (29 Oct 20:30, Q15.2).
+// picture, letter and gradient). No presets anywhere: a field of every hue (across) and lightness (down) at the most
+// colour Display P3 allows, a strength strip under it, then your last ten colours led by one suggested from what the
+// thing already has. No hex, no numbers, no words; no lime ring round anything.
 
 /// A colour as the picker holds it: where it sits on the field and the strip. Its P3 value is worked out from these.
 struct ColourPick: Codable, Hashable, Sendable {
@@ -36,6 +35,8 @@ struct ColourPick: Codable, Hashable, Sendable {
         return SIMD3(light, c * cos(r), c * sin(r))
     }
     func near(_ o: ColourPick) -> Bool { simd_distance(lab, o.lab) < 0.02 }
+    /// two colours that read as the same swatch (two blacks, two pale greens): the recent row keeps one
+    func alike(_ o: ColourPick) -> Bool { simd_distance(lab, o.lab) < 0.04 }
 }
 
 /// OKLCH to Display P3 (Björn Ottosson's OKLab; the sRGB-to-P3 matrix in linear light)
@@ -103,11 +104,16 @@ final class ColourStore {
     private(set) var recent: [ColourPick] = []
     private let key = "wya.colours.recent"
     private init() {
-        if let d = UserDefaults.standard.data(forKey: key), let a = try? JSONDecoder().decode([ColourPick].self, from: d) { recent = a }
+        if let d = UserDefaults.standard.data(forKey: key), let a = try? JSONDecoder().decode([ColourPick].self, from: d) {
+            // (kept before swatches that look alike were folded into one: folded now, newest kept)
+            var one: [ColourPick] = []
+            for c in a where !one.contains(where: { $0.alike(c) }) { one.append(c) }
+            recent = one
+        }
     }
     func add(_ c: ColourPick) {
         var a = recent
-        if let i = a.firstIndex(where: { $0.near(c) }) { a.remove(at: i) }
+        a.removeAll { $0.alike(c) }
         a.insert(c, at: 0)
         recent = Array(a.prefix(10))
         save()
@@ -133,7 +139,10 @@ struct ColourPicker: View {
     @State private var lastEnd = 0
     @State private var stripEnd = 0
 
-    static let fieldH: CGFloat = 168, stripH: CGFloat = 32, circle: CGFloat = 32, gap: CGFloat = 10
+    static let fieldH: CGFloat = 132, stripH: CGFloat = 32, circle: CGFloat = 32, gap: CGFloat = 10
+    /// the marker's half: it is drawn inside the field at every edge; the colour is still the one under the finger
+    /// across the whole field
+    static let edge: CGFloat = 11
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,7 +158,8 @@ struct ColourPicker: View {
 
     private var field: some View {
         let s = colour.spot
-        let marker = CGPoint(x: s.x * width, y: s.y * Self.fieldH)
+        let marker = CGPoint(x: min(max(s.x * width, Self.edge), width - Self.edge),
+                             y: min(max(s.y * Self.fieldH, Self.edge), Self.fieldH - Self.edge))
         return ZStack(alignment: .topLeading) {
             Group {
                 if let image { Image(decorative: image, scale: 1).resizable().interpolation(.high) } else { Color.clear }
@@ -245,7 +255,6 @@ struct ColourPicker: View {
             ForEach(mine, id: \.self) { c in
                 swatch(c)
                     .contextMenu { Button("Remove", role: .destructive) { Feel.lift(); withAnimation(Motion.quick) { store.remove(c) } } }
-                    // (no circle growing from nothing: a swatch is simply there or gone, the others slide over, 8 Nov)
                     .transition(.identity)
             }
             Spacer(minLength: 0)
@@ -257,7 +266,7 @@ struct ColourPicker: View {
     private func swatch(_ c: ColourPick) -> some View {
         Button {
             Feel.tap()
-            // the colour just appears (no blend into it, 8 Nov)
+            // the colour just appears
             colour = c
             done(c)
         } label: {
@@ -277,13 +286,14 @@ struct ColourPicker: View {
     private func redraw() async {
         let s = colour.strength
         guard abs(s - imageStrength) > 0.02 || image == nil else { return }
-        let w = Int(width.rounded()), h = Int(Self.fieldH)
+        // (drawn at twice the points: at 1x the field was soft on the phone's screen)
+        let w = Int((width * 2).rounded()), h = Int(Self.fieldH * 2)
         let img = await Task.detached(priority: .userInitiated) { OKLCH.field(width: w, height: h, strength: s) }.value
         image = img; imageStrength = s
     }
 }
 
-/// A colour's spoken name for VoiceOver (15.4: "deep teal"): its lightness word and its hue's name
+/// A colour's spoken name for VoiceOver (15.4:): its lightness word and its hue's name
 enum ColourNames {
     static let hues: [(Double, String)] = [(15, "pink"), (40, "red"), (65, "orange"), (95, "yellow"), (130, "lime"),
                                            (165, "green"), (200, "teal"), (235, "cyan"), (270, "blue"), (300, "violet"),

@@ -21,7 +21,14 @@ final class ThingIndex {
     private(set) var ready = false
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, codes: [String], hit: Hit)] = []
-    @ObservationIgnored private var last: (q: String, open: String?, hits: [Hit])?
+    /// the folded names as bytes, one after another, and where each row's starts (one more than rows): the search's
+    /// pass over every thing, as strings, took 40 to 90 ms a letter
+    @ObservationIgnored private var nameBytes: [UInt8] = []
+    @ObservationIgnored private var nameStart: [Int32] = []
+    /// whether any row has a code at all (none: the codes' test is skipped)
+    @ObservationIgnored private var anyCodes = false
+    /// the last two searches (a name and its short words in full are asked one after the other)
+    @ObservationIgnored private var last: [(q: String, open: String?, near: Bool, hits: [Hit])] = []
 
     func load() {
         guard !ready, !loading else { return }
@@ -39,9 +46,14 @@ final class ThingIndex {
                     out.append((n.townFolded, codes, h))
                 }
             }
+            var bytes: [UInt8] = [], start: [Int32] = [0]
+            start.reserveCapacity(out.count + 1)
+            for r in out { bytes.append(contentsOf: r.0.utf8); start.append(Int32(bytes.count)) }
+            let coded = out.contains { !$0.1.isEmpty }
             await MainActor.run {
                 let me = ThingIndex.shared
                 me.rows = out
+                (me.nameBytes, me.nameStart, me.anyCodes) = (bytes, start, coded)
                 me.loading = false
                 me.ready = !out.isEmpty
             }
@@ -49,28 +61,39 @@ final class ThingIndex {
     }
 
     /// at most `limit` things for what was typed: a code typed whole first, then names (the open country's first),
-    /// the best known first among them (the index is in the data's order: "yellowst" found a lake, a waterfall and two
-    /// airports and never the park). A name with a word that starts with what was typed counts as one that starts
-    /// with it ("baikal" finds Lake Baikal before the airport named after it).
-    func hits(_ query: String, open: String?, limit: Int = 4) -> [Hit] {
+    /// the best known first among them (the index is in the data's order: found a lake, a waterfall and two airports
+    /// and never the park). A name with a word that starts with what was typed counts as one that starts with it (
+    /// finds Lake Baikal before the airport named after it).
+    func hits(_ query: String, open: String?, limit: Int = 4, near: Bool = true) -> [Hit] {
         let raw = query.trimmingCharacters(in: .whitespaces)
         let q = raw.townFolded
         guard ready, q.count >= 2 else { return [] }
-        if let l = last, l.q == q, l.open == open { return l.hits }
+        if let l = last.first(where: { $0.q == q && $0.open == open && $0.near == near }) { return l.hits }
         let code = raw.lowercased()
         var coded: [Hit] = [], home: [Hit] = [], away: [Hit] = [], homeIn: [Hit] = [], awayIn: [Hit] = []
         var starts = Set<String>()
-        let word = " " + q
-        for r in rows {
-            if code.count >= 3, code.count <= 4, r.codes.contains(code) { coded.append(r.hit); continue }
-            let mine = r.hit.file == open
-            if r.folded.hasPrefix(q) {
-                starts.insert(r.hit.id)
-                if mine { home.append(r.hit) } else { away.append(r.hit) }
-            } else if r.folded.contains(word) {
-                if mine { home.append(r.hit) } else { away.append(r.hit) }
-            } else if q.count >= 3, r.folded.contains(q) {
-                if mine { if homeIn.count < limit { homeIn.append(r.hit) } } else if awayIn.count < limit { awayIn.append(r.hit) }
+        guard nameStart.count == rows.count + 1 else { return [] }
+        let qb = Array(q.utf8), wb = Array((" " + q).utf8), ql = qb.count, inside = q.count >= 3
+        let byCode = anyCodes && code.count >= 3 && code.count <= 4
+        nameBytes.withUnsafeBufferPointer { nb in
+            qb.withUnsafeBufferPointer { qp in
+                wb.withUnsafeBufferPointer { wp in
+                    guard let base = nb.baseAddress, let qa = qp.baseAddress, let wa = wp.baseAddress else { return }
+                    for i in 0 ..< rows.count {
+                        if byCode, rows[i].codes.contains(code) { coded.append(rows[i].hit); continue }
+                        let a = Int(nameStart[i]), n = Int(nameStart[i + 1]) - a
+                        // (the same tests as the names as strings: its start, a later word's start, anywhere from three
+                        // letters)
+                        if n >= ql, memcmp(base + a, qa, ql) == 0 {
+                            starts.insert(rows[i].hit.id)
+                            if rows[i].hit.file == open { home.append(rows[i].hit) } else { away.append(rows[i].hit) }
+                        } else if n > ql, memmem(base + a, n, wa, ql + 1) != nil {
+                            if rows[i].hit.file == open { home.append(rows[i].hit) } else { away.append(rows[i].hit) }
+                        } else if inside, n > ql, memmem(base + a, n, qa, ql) != nil {
+                            if rows[i].hit.file == open { if homeIn.count < limit { homeIn.append(rows[i].hit) } } else if awayIn.count < limit { awayIn.append(rows[i].hit) }
+                        }
+                    }
+                }
             }
         }
         // (by fame; at equal fame a name that starts with it first; then the data's order)
@@ -82,24 +105,24 @@ final class ThingIndex {
             }.map(\.element)
         }
         var h = Array((coded + best(home) + homeIn + best(away) + awayIn).prefix(limit))
-        // ONE LETTER OFF (14 Nov: "eifel" found Ireland and no Eiffel Tower): with nothing found, a word of a name that
-        // starts with what was typed give or take one letter (missed, extra, wrong or two swapped), the best known first
-        if h.isEmpty, q.count >= 4 {
+        // ONE LETTER OFF: with nothing found, a word of a name that starts with what was typed give or take one
+        // letter (missed, extra, wrong or two swapped), the best known first
+        if h.isEmpty, near, q.count >= 4 {
             let typed = Array(q.utf8)
-            var near: [(Hit, Int)] = []
+            var close: [(Hit, Int)] = []
             for (n, r) in rows.enumerated() {
                 let f = Array(r.folded.utf8)
                 var i = 0
                 while i < f.count {
                     var j = i
                     while j < f.count, f[j] != 32 { j += 1 }
-                    if Self.nearStart(typed, f[i ..< j]) { near.append((r.hit, n)); break }
+                    if Self.nearStart(typed, f[i ..< j]) { close.append((r.hit, n)); break }
                     i = j + 1
                 }
             }
-            h = Array(near.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.prefix(limit).map(\.0))
+            h = Array(close.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.prefix(limit).map(\.0))
         }
-        last = (q, open, h)
+        last = Array(([(q, open, near, h)] + last).prefix(2))
         return h
     }
     /// whether a word starts with `q` give or take one letter: a letter missed, one extra, one wrong, or two swapped
@@ -117,19 +140,17 @@ final class ThingIndex {
             || same(d + 1, d + 1)                                               // one wrong
             || (d + 1 < q.count && d + 1 < w.count && q[d] == w[d + 1] && q[d + 1] == w[d] && same(d + 2, d + 2))   // two swapped
     }
-    /// one thing by its key's id ("wd:Q19675"), once the index has come
+    /// one thing by its key's id, once the index has come
     func hit(_ id: String) -> Hit? {
         let q = id.hasPrefix("wd:") ? String(id.dropFirst(3)) : id
         if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
-        // (14 Nov: once the table is made, a miss is a miss: the walk through every row on each miss, for each of a big
-        // country's listings, held the screen still for seconds)
         if let byID { return byID[q].map { rows[$0].hit } }
         return rows.first { $0.hit.id == q }?.hit
     }
     /// each thing's row by its id, made once at the first look-up
     @ObservationIgnored private var byID: [String: Int]?
-    /// A KIND'S THINGS EVERYWHERE (Places' types, 9 Nov): the best known first (fame, then the index's own order, which
-    /// is the data's), made once per kind
+    /// A KIND'S THINGS EVERYWHERE: the best known first (fame, then the index's own order, which is the data's), made
+    /// once per kind
     func kind(_ k: Int) -> [Hit] {
         guard ready else { return [] }
         if let c = byKind[k] { return c }

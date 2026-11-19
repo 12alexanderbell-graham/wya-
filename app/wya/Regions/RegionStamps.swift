@@ -12,38 +12,56 @@ enum RegionStamps {
         // one undo step for the region and its parents, named by the region tapped
         await MarkStore.shared.grouped { await stampChain(unit, in: scene, source: source) }
     }
+    /// the same for a region named without its map drawn (Details' region chips): its id, name and parent at level
+    /// `row` of place `cc`
+    @MainActor
+    static func stamp(id: String, name: String, parent: String?, cc: String, row: Int, source: MarkSource) async {
+        await MarkStore.shared.grouped { await stampChain(id: id, name: name, parent: parent, cc: cc, row: row, source: source) }
+    }
     @MainActor
     private static func stampChain(_ unit: Int, in scene: RegionScene, source: MarkSource) async {
-        let id = scene.unitIDs[unit]
-        await MarkStore.shared.stamp(PlaceKey(.region, id), name: scene.unitNames[unit], cc: scene.id, level: scene.row,
-                                     source: source)
-        // stamped by hand at its own level: no longer "only through a child"
+        await stampChain(id: scene.unitIDs[unit], name: scene.unitNames[unit], parent: scene.unitParents[unit],
+                         cc: scene.id, row: scene.row, source: source)
+    }
+    @MainActor
+    private static func stampChain(id: String, name unitName: String, parent: String?, cc: String, row: Int,
+                                   source: MarkSource) async {
+        await MarkStore.shared.stamp(PlaceKey(.region, id), name: unitName, cc: cc, level: row, source: source)
+        // stamped by hand at its own level: no longer
         forget(id)
-        for (pid, name, row) in await parents(of: unit, in: scene) {
+        for (pid, name, row) in await parents(parent, cc: cc, row: row) {
             let key = PlaceKey(.region, pid)
             guard !MarkStore.shared.state(key).stamped else { continue }
-            await MarkStore.shared.stamp(key, name: name, cc: scene.id, level: row, source: source)
+            await MarkStore.shared.stamp(key, name: name, cc: cc, level: row, source: source)
             remember(pid)
         }
     }
 
-    /// THE UNSTAMP RULE (23 Oct 16:17: a parent goes only if it was stamped through that region; one you
-    /// stamped yourself, or one another stamped child still holds, stays): the region, then each parent stamped only
-    /// through it, nearest first, stopping at the first that stays
+    /// THE UNSTAMP RULE: the region, then each parent stamped only through it, nearest first, stopping at the first
+    /// that stays
     @MainActor
     static func unstamp(_ unit: Int, in scene: RegionScene) async {
         await MarkStore.shared.grouped { await unstampChain(unit, in: scene) }
     }
+    /// the same for a region named without its map drawn (Details' region chips)
+    @MainActor
+    static func unstamp(id: String, name: String, parent: String?, cc: String, row: Int) async {
+        await MarkStore.shared.grouped { await unstampChain(id: id, name: name, parent: parent, cc: cc, row: row) }
+    }
     @MainActor
     private static func unstampChain(_ unit: Int, in scene: RegionScene) async {
-        let id = scene.unitIDs[unit]
-        await MarkStore.shared.unstamp(PlaceKey(.region, id), name: scene.unitNames[unit])
+        await unstampChain(id: scene.unitIDs[unit], name: scene.unitNames[unit], parent: scene.unitParents[unit],
+                           cc: scene.id, row: scene.row)
+    }
+    @MainActor
+    private static func unstampChain(id: String, name unitName: String, parent: String?, cc: String, row: Int) async {
+        await MarkStore.shared.unstamp(PlaceKey(.region, id), name: unitName)
         forget(id)
         // the level the children are on, starting with this one
-        var childRow = scene.row
-        for (pid, name, row) in await parents(of: unit, in: scene) {
+        var childRow = row
+        for (pid, name, row) in await parents(parent, cc: cc, row: row) {
             guard through.contains(pid), MarkStore.shared.state(PlaceKey(.region, pid)).stamped,
-                  let f = await RegionCatalog.shared.fetch(scene.id, row: childRow) else { break }
+                  let f = await RegionCatalog.shared.fetch(cc, row: childRow) else { break }
             let held = f.units.contains { $0.parent == pid && MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
             if held { break }
             await MarkStore.shared.unstamp(PlaceKey(.region, pid), name: name)
@@ -63,13 +81,17 @@ enum RegionStamps {
 
     /// the parents of a region, nearest first: (id, name, row)
     static func parents(of unit: Int, in scene: RegionScene) async -> [(String, String, Int)] {
+        await parents(scene.unitParents[unit], cc: scene.id, row: scene.row)
+    }
+    /// the same from a region's parent id, its place and level
+    static func parents(_ first: String?, cc: String, row at0: Int) async -> [(String, String, Int)] {
         // the levels coarser than this one, nearest first (the table's `used` order is coarsest first)
-        let used = RegionCatalog.shared.used(scene.id).map(\.row)
-        guard let at = used.firstIndex(of: scene.row) else { return [] }
+        let used = RegionCatalog.shared.used(cc).map(\.row)
+        guard let at = used.firstIndex(of: at0) else { return [] }
         var out: [(String, String, Int)] = []
-        var parent = scene.unitParents[unit]
+        var parent = first
         for row in used[..<at].reversed() {
-            guard let pid = parent, let f = await RegionCatalog.shared.fetch(scene.id, row: row),
+            guard let pid = parent, let f = await RegionCatalog.shared.fetch(cc, row: row),
                   let u = f.units.first(where: { $0.id == pid }) else { break }
             out.append((u.id, u.name, row))
             parent = u.parent

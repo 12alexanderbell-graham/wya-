@@ -12,9 +12,7 @@ final class BookState {
     var p: CGFloat = 0
     /// A4.2: the cover's turn, 0 flat over the page, 90 edge-on at the spine
     var cover: Double = 0
-    /// the book is on the screen: from the tap that brings it out until it is back in the tool. (The view went by
-    /// `p > 0`, and the model's p is 0 from the moment the flight back starts, so the open book was gone in one frame
-    /// and never closed or flew back; 12 Nov)
+    /// the book is on the screen: from the tap that brings it out until it is back in the tool.
     var shown = false
     /// the page showing (0 is page 01)
     var page = UserDefaults.standard.integer(forKey: "passportPage")
@@ -80,7 +78,8 @@ final class BookState {
 /// on one arc leaving straight down (A4.12), its cover swings open about the spine with real perspective (A4.2), and
 /// its pages turn under the finger about the spine (A4.13). Haptics only.
 /// The cover until Step 6 brings the real ones from the server: the old app's own drawn cover (its colour, the word,
-/// the chip). Not here yet: a stamp's tap (its place page), its hold menu, the flick through several pages.
+/// the chip). A stamp's tap shows its place on the map; its hold, Apple's menu. Not here yet: the flick through several
+/// pages.
 struct PassportBook: View {
     let water: Water
     let map: MapController
@@ -90,10 +89,13 @@ struct PassportBook: View {
     var body: some View {
         if b.shown {
             let L = water.layout
-            let size = Self.size(L, sheetTop: water.form().top)
             let room = L.room(sheetTop: water.form().top)
-            let mid = CGPoint(x: L.W / 2, y: min(max(L.H / 2, room.lowerBound + size.height / 2),
-                                                  max(room.lowerBound + size.height / 2, room.upperBound - size.height / 2)))
+            let card = CardState.shared
+            let cg = card.place == nil ? nil : StampCard.Geometry(L: L, sheetTop: card.heldTop ?? card.goingTop ?? water.form().top)
+            let size = cg.map { CGSize(width: $0.bookW, height: $0.bookH) } ?? Self.size(L, sheetTop: water.form().top)
+            let mid = cg.map { CGPoint(x: L.W / 2, y: $0.mid.y + 28) }
+                ?? CGPoint(x: L.W / 2, y: min(max(L.H / 2, room.lowerBound + size.height / 2),
+                                              max(room.lowerBound + size.height / 2, room.upperBound - size.height / 2)))
             let spacing = (L.rightX - L.W / 2) / 4
             let tool = CGPoint(x: L.rightX - 3 * spacing, y: L.headY)
             let ctrl = CGPoint(x: tool.x, y: max(tool.y + 24, mid.y - 148))
@@ -119,7 +121,8 @@ struct PassportBook: View {
             PassportPage(id: "", order: b.order, hidden: nil, size: size,
                          pageIndex: b.turn > 0 ? min(current + 1, b.pages - 1) : current,
                          menu: b.turn == 0 ? { stampMenu($0) } : nil,
-                         name: { id in map.world?.places.first { $0.id == id }?.n ?? id.uppercased() })
+                         name: { id in map.world?.places.first { $0.id == id }?.n ?? id.uppercased() },
+                         tap: b.turn == 0 ? { goTo($0) } : nil)
             // THE LEAF keeps its height the whole way: it narrows toward the spine as it turns (the turn seen straight
             // on), never growing toward the eye; a flat squeeze keeps the page's glass and its light on every frame
             // (a 3D turn drops the glass while it moves)
@@ -148,6 +151,16 @@ struct PassportBook: View {
         .accessibilityLabel("Your passport, page \(current + 1) of \(b.pages)")
         .accessibilityAction(named: "Next page") { turn(forward: true, from: 0, speed: 0) }
         .accessibilityAction(named: "Previous page") { turn(forward: false, from: 0, speed: 0) }
+    }
+
+    /// A STAMP TAPPED: the book goes back into its tool, then the map shows the place (Antarctica: its own map)
+    private func goTo(_ id: String) {
+        guard let i = map.world?.places.firstIndex(where: { $0.id == id }) else { Feel.refuse(); return }
+        Feel.tap()
+        b.close()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if id == "aq" { map.show(continent: "Antarctica") } else { map.show(place: i, sheetTop: water.layout.top(.quarter)) }
+        }
     }
 
     /// A STAMP HELD (4.3.3): Apple's menu: Details · Verify · Unstamp (red). The book goes back into its tool first,

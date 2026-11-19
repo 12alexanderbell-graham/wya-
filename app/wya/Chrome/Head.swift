@@ -62,8 +62,8 @@ final class HeadState {
     func roll(at d: Date) -> Double {
         settingsOpen ? gearRoll + d.timeIntervalSince(settingsSince) * 60 : gearRoll
     }
-    /// SETTINGS CLOSE, from wherever: the gear keeps the turn it had (an eighth of
-    /// a turn looks the same, so it is kept under 45 degrees) and goes back into the dot, unless a pull is taking it
+    /// SETTINGS CLOSE, from wherever: the gear keeps the turn it had (an eighth of a turn looks the same, so it is
+    /// kept under 45 degrees) and goes back into the dot, unless a pull is taking it
     func closeSettings(animated: Bool = true) {
         guard settingsOpen else { return }
         gearRoll = roll(at: Date()).truncatingRemainder(dividingBy: 45)
@@ -79,9 +79,9 @@ final class HeadState {
         // the hold that opened them is done: a later hold starts fresh, whatever happened to the finger
         dotHeld = false
     }
-    /// THE MAP OR THE SHEET TOUCHED
-    /// settings and the AI go back into the dot, and the touch goes on doing what it does. Before, a screen-wide catcher
-    /// took every touch while they were out, so a drag on the map or the sheet did nothing at all.
+    /// THE MAP OR THE SHEET TOUCHED: settings and the AI go back into the dot, and the touch goes on doing what it
+    /// does. Before, a screen-wide catcher took every touch while they were out, so a drag on the map or the sheet
+    /// did nothing at all.
     func putAway() {
         closeSettings()
         if pullStop > 0 || pull > 0.5 { settlePull(to: 0) }
@@ -100,7 +100,7 @@ final class HeadState {
         Hints.shared.touched()
         pullStart = pull
         // from the gear (settings open): its first part turns the gear back into the dot, following the finger, then
-        // the AI comes out of the dot (the 10:40)
+        // the AI comes out of the dot
         if settingsOpen {
             pullGearStart = gear
             pullFromGear = true
@@ -118,7 +118,7 @@ final class HeadState {
         let was = ai >= 1
         pull = p
         if pullFromGear { gear = pullGearStart * (1 - Flow.clamp01(ai / 0.35)) }
-        if (ai >= 1) != was { Feel.notch(); Sound.click() }
+        if (ai >= 1) != was { Feel.notch() }
     }
     func pullEnded(velocity: CGFloat) {
         let projected = pull + Flow.project(velocity) * 0.5
@@ -145,8 +145,8 @@ final class HeadState {
     var aiShown: CGFloat { pullFromGear ? Flow.clamp01((ai - 0.35) / 0.65) : ai }
     /// test only: holds the mode wheel mid-turn at this position, as if a finger were on it
     var testDial: CGFloat?
-    /// a sideways drag on the tools capsule turns the wheel as if it were on the dot (the 15:36): the drag's
-    /// translation while it lasts, and its predicted extra travel when it ends
+    /// a sideways drag on the tools capsule turns the wheel as if it were on the dot: the drag's translation while it
+    /// lasts, and its predicted extra travel when it ends
     var capsuleDrag: CGFloat?
     var capsuleDragFling: CGFloat = 0
 
@@ -179,8 +179,8 @@ struct IconRoll: View {
 }
 
 /// THE HEAD (Apple's toolbar: 44 glass circles 16 from the edges, centred 22 under the safe top): search · the mode
-/// wheel · plus. Pulled from the top, the wheel's dot becomes the AI; held, it becomes the gear (TopPull). It stays put
-/// at every height of the sheet, the night included (the 02:32).
+/// wheel · plus. Pulled from the top, the wheel's dot becomes the AI; held, it becomes the gear (TopPull). It stays
+/// put at every height of the sheet, the night included.
 struct HeadView: View {
     let map: MapController
     let water: Water
@@ -206,16 +206,14 @@ struct HeadView: View {
         // the search grows out of its circle into the field, up to the plus
         let fieldW = L.W - 2 * L.side - L.circle - 8
         // the plus stretches to the left into one capsule that reaches the wheel's dot, which becomes the first tool
-        // (BUILD-BOOK 3.1a)
         let plusX = L.W - L.side - L.circle / 2
         let spacing = (plusX - L.W / 2) / 4
         ZStack(alignment: .topLeading) {
             // SEARCH: one capsule of glass for its whole life, grown from its circle into the field by the same value
-            // that opens the results under it, so the two always move together, both ways (29 Oct 01:06
-            // search closes first, then the results go away)
-            // SEARCH AND ITS RESULTS ARE ONE GLASS: the results box starts as the search circle itself, in its
-            // place, and flows down out of it as it grows; closing, it flows back up into the circle and is the circle
-            // again. One glass container, so the two melt into each other and part the way water does.
+            // that opens the results under it, so the two always move together, both ways SEARCH AND ITS RESULTS ARE
+            // ONE GLASS: the results box starts as the search circle itself, in its place, and flows down out of it
+            // as it grows; closing, it flows back up into the circle and is the circle again. One glass container, so
+            // the two melt into each other and part the way water does.
             let gap = L.headBottom + 10 - (L.headY - L.circle / 2)
             GlassEffectContainer(spacing: 14) {
                 ZStack(alignment: .topLeading) {
@@ -232,13 +230,13 @@ struct HeadView: View {
                     .padding(.leading, L.side)
                     .padding(.top, L.headBottom + 10)
 
-                    // (the field over the results: closing, the results' glass flows back up into the circle under its
-                    // glyph, which stays; drawn under it, it covered the glyph for 0.4 s, 8 Nov)
                     Animated(p: searchP) { p in
                         searchCapsule(ink: ink, p: p, fieldW: fieldW)
                             .frame(width: L.circle + (fieldW - L.circle) * p, height: L.circle, alignment: .leading)
                             .clipShape(Capsule())
-                            .glassEffect(PageGlass.head, in: .capsule)
+                            // open, the field is the sheet's glass like its results under it; shut, a head circle
+                            // like the rest
+                            .glassEffect(p > 0.01 ? PageGlass.surface : PageGlass.head, in: .capsule)
                     }
                     .frame(width: fieldW, height: L.circle, alignment: .leading)
                     .position(x: L.side + fieldW / 2, y: L.headY)
@@ -251,8 +249,8 @@ struct HeadView: View {
             ToolsCapsule(p: toolsP, full: 4 * spacing, spacing: spacing,
                          tool: { i, slot in toolButton(i, ink: ink, slot: slot).allowsHitTesting(tools) },
                          plus: plusButton(ink: ink))
-                // a sideways drag anywhere on the open capsule turns the modes, as on the dot (23 Oct 15:36); a
-                // tap is still the tool's (the drag needs 8 points)
+                // a sideways drag anywhere on the open capsule turns the modes, as on the dot; a tap is still the
+                // tool's (the drag needs 8 points)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)
                         .onChanged { g in
@@ -279,8 +277,8 @@ struct HeadView: View {
                 .position(x: L.W / 2, y: L.headY)
                 .allowsHitTesting(!head.searching && !aiOut)
             // FOR SEARCH THE DOT GOES UP INTO THE DYNAMIC ISLAND: it rises as search starts to grow and is in the
-            // island before the field reaches
-            // it, so the two never overlap; closing, it drops back out of the island once the field has drawn back.
+            // island before the field reaches it, so the two never overlap; closing, it drops back out of the island
+            // once the field has drawn back.
             if dotInIsland {
                 Animated(p: searchP) { p in
                     IslandDrop(p: p, dot: CGPoint(x: L.W / 2, y: L.headY), island: L.island, notch: L.notch, ink: ink)
@@ -335,9 +333,9 @@ struct HeadView: View {
         }
         .onChange(of: head.toolsOpen) { _, v in
             if v { putAIBack() }
-            // quick stamping ends with the tools (3.6), unless Map settings' "Always on" (Part 4.7, not built yet)
-            else if head.quickStamp { withAnimation(Motion.chrome) { head.quickStamp = false } }
-            // and history goes off with them (13.4)
+            // quick stamping ends with the tools (3.6), unless Map settings' Quick stamping is Always on (Part 4.7)
+            else if head.quickStamp, !MapSettingsStore.shared.value.quickAlways { withAnimation(Motion.chrome) { head.quickStamp = false } }
+            // and history goes off with them (13.4:)
             if !v, head.history { head.history = false }
         }
         // held still, the dot becomes the gear over the hold; let go early and it goes back; held to the end,
@@ -349,7 +347,7 @@ struct HeadView: View {
                 withAnimation(.timingCurve(0.3, 0, 0.2, 1, duration: TopPull.holdForm)) { head.gear = 1 } completion: {
                     guard head.dotHeld, !head.settingsOpen else { return }
                     head.openSettings()
-                    Feel.notch(); Sound.click()
+                    Feel.notch()
                 }
             } else if !head.settingsOpen {
                 withAnimation(Motion.quick) { head.gear = 0 }
@@ -372,8 +370,8 @@ struct HeadView: View {
     }
 
     // MARK: search
-    /// the search glyph never moves or changes (one glyph, never two: 29 Oct 01:06 search animation); the field's
-    /// words are there from the start and are uncovered by the capsule as it grows, and covered again as it shrinks
+    /// the search glyph never moves or changes; the field's words are there from the start and are uncovered by the
+    /// capsule as it grows, and covered again as it shrinks
     private func searchCapsule(ink: Color, p: CGFloat, fieldW: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             if p > 0.001 || head.searching {
@@ -428,18 +426,26 @@ struct HeadView: View {
         }
     }
 
+    /// the open card (a country's or a region's), its book, Details and Verify put away, as ContentView's closeCard
+    @MainActor static func putAwayCard(map: MapController, water: Water) {
+        BookState.shared.close(instant: false)
+        DetailsState.shared.close(water: water)
+        VerifyState.shared.close(water: water)
+        CardState.shared.close(map: map, instant: false)
+        RegionCardState.shared.close(map: map, instant: false)
+    }
+
     @MainActor private static var pickJob = 0
 
-    /// the sheet stays where it is (14:17: never at full either): the results sit under the field, over the map or
-    /// the glass
+    /// the sheet stays where it is: the results sit under the field, over the map or the glass
     private func openSearch() {
-        Feel.tap(); Sound.tap()
+        Feel.tap()
         head.toolsOpen = false
         // closed by a touch on the map less than 10 s ago: what was typed comes back (1.10)
         if CACurrentMediaTime() - head.mapClosedSearchAt > 10 || head.mapClosedMode != head.mode { head.query = "" }
+        if let w = map.world { Flags.prewarmRows(w.places.map { $0.id.lowercased() }) }
         head.searching = true
-        // the keyboard comes the moment search opens (no late task that could leave the field unfocusable when the
-        // keyboard drops mid-move, 23 Oct 14:17); the field exists from the first frame of the opening
+        // the keyboard comes the moment search opens; the field exists from the first frame of the opening
         DispatchQueue.main.async { typing = true }
     }
     /// what was typed stays until search opens again, so the rows don't change while they draw back into the field
@@ -449,7 +455,7 @@ struct HeadView: View {
     }
     /// a result: the search closes and the map flies to the place, framed in the room the sheet leaves
     private func pick(_ i: Int) {
-        Feel.tap(); Sound.tap()
+        Feel.tap()
         // a result picked over a page: the pages go first, so what it does on the map is seen (16.8)
         PlacePageState.shared.closeAll()
         // a card up (the recent searches' menu picks with search never opened): it goes, the new place's comes
@@ -461,18 +467,23 @@ struct HeadView: View {
         if map.placesMode { map.showPlacesMap(.country(i)); head.water?.go(.half); closeSearch(); return }
         // Pins: Apple's map frames the country (our map is under it, unseen)
         if map.pinsMode { PinsMapState.shared.show(place: i, world: map.world); closeSearch(); return }
-        // COUNTRIES: the card comes up ready to stamp (7 Nov, the friend's review boards 02 and 12: picking Japan left the owner
-        // on the map, tapping the country again to find Stamp). The water to 25%, the camera frames the place, and the
-        // card grows out of it once the camera has landed, as from the Stamped list
+        // COUNTRIES: the card comes up ready to stamp. The water to 25%, the camera frames the place, and the card
+        // grows out of it once the camera has landed, as from the Stamped list
         if water.stop != .quarter && water.stop != .closed { water.go(.quarter) }
-        map.show(place: i, sheetTop: water.layout.top(.quarter))
+        // Antarctica is shown on its own round map (Map/AntarcticaPolar.swift), never as the world's bottom strip; its
+        // card grows from the map's middle
+        let polar = map.world?.places[i].id == "aq"
+        if polar { map.show(continent: "Antarctica") } else { map.show(place: i, sheetTop: water.layout.top(.quarter)) }
         closeSearch()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8 + 0.1) {
             // nothing came over the map meanwhile (another pick, search again, the tools, Upload, a page)
             guard me == Self.pickJob, let w = map.world, !map.placesMode, !map.pinsMode, map.regionScene == nil, !head.searching,
                   !head.toolsOpen, !water.upload, !water.settings, !PlacePageState.shared.isOpen else { return }
             let p = w.places[i]
-            CardState.shared.open(i, at: map.screenPoint(SIMD2(p.c[0], p.c[1])), map: map, water: water)
+            let room = water.layout.room(sheetTop: water.layout.top(.quarter))
+            let at = polar ? CGPoint(x: water.layout.W / 2, y: (room.lowerBound + room.upperBound) / 2)
+                : map.screenPoint(SIMD2(p.c[0], p.c[1]))
+            CardState.shared.open(i, at: at, map: map, water: water)
         }
     }
 
@@ -481,16 +492,14 @@ struct HeadView: View {
     private func plusButton(ink: Color) -> some View {
         // on a place's page the plus rolls into Share inside its own circle, with the page's growth (A16.1, 16.3)
         let page = PlacePageState.shared
-        // (search open on a page: the circle is search's close, as everywhere)
         let share = page.isOpen && !head.searching ? page.p : 0
         return Button {
-            Feel.tap(); Sound.tap()
+            Feel.tap()
             if page.isOpen && page.p > 0.5 && !head.searching { sharePage(); return }
             putAIBack()
             if head.searching { closeSearch() } else { head.toolsOpen.toggle() }
         } label: {
-            // THE TOOLS BUTTON IS THREE DOTS (8 Nov answer A: not a plus, which also stood for zooming in and for
-            // the first tool); open, or with search open, it is the cross; on a page, Share
+            // THE TOOLS BUTTON IS THREE DOTS; open, or with search open, it is the cross; on a page, Share
             Group {
                 if share > 0.5 {
                     Icon5(key: "share", ink: ink, size: 22)
@@ -535,7 +544,7 @@ struct HeadView: View {
     }
 
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
-        // in Pins the first tool is the quick route (2 Oct): one stroke of the finger, kept as a line as it lifts
+        // in Pins the first tool is the quick route: one stroke of the finger, kept as a line as it lifts
         let pins = head.mode == .pins
         let names = [pins ? "Quick route" : "Quick stamping", "Your passport", "Your history", "Upload"]
         let on = (i == 0 && !pins && head.quickStamp) || (i == 0 && pins && DrawTool.shared.on) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
@@ -544,17 +553,25 @@ struct HeadView: View {
             // with no country (Regions' menu) quick stamping is shown in place but refuses (6.3)
             case 0 where pins:
                 head.toolsOpen = false
-                if DrawTool.shared.on { DrawTool.shared.cancel() }
-                else if let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true { PinDrawings.shared.start(on: v, water: water, quick: true) }
+                if DrawTool.shared.on { PinsDockState.shared.reset() }
+                else if let v = PinsMapState.shared.view, PinsMapState.shared.map?.locked != true {
+                    // (the dock's tool put away first: a Pin tool waiting dropped a pin at every corner tapped)
+                    PinsDockState.shared.reset()
+                    PinDrawings.shared.start(on: v, water: water, quick: true)
+                }
                 else { Feel.refuse() }
             case 0: if head.filtersMenu { Feel.refuse() } else { head.quickStamp.toggle() }
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
             case 1: BookState.shared.toggle()
-            case 2: head.history.toggle()
+            case 2:
+                if !head.history { Self.putAwayCard(map: map, water: water) }
+                head.history.toggle()
             // Upload (9.2): the tools go back into the plus as the upload sheet opens in the water (the two never cross:
             // one is in the head, the other at the bottom)
             default:
                 head.toolsOpen = false
+                if head.history { head.history = false }
+                Self.putAwayCard(map: map, water: water)
                 UploadState.shared.open(water: water, map: map)
             }
         }
@@ -563,13 +580,10 @@ struct HeadView: View {
                    BookState.shared.isOpen ? "Put the passport away" : "Passport",
                    head.history ? "History off" : "History on", "Upload"][i]
         return Button {
-            Feel.tap(); Sound.tap()
+            Feel.tap()
             act()
         } label: {
-            // the icons (31 Oct 11:47; 13 Nov: quick stamping the bolt, quick and not a stamp): quick stamping the bolt, the passport the book, history the two ends joined, upload
-            // the arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
-            // (no grow, no fade)
-            let key = [pins ? "route" : "quick", "lists-books", "history", "cal-out"][i]
+            let key = [pins ? "route" : "quick", "passport", "history", "cal-out"][i]
             ZStack {
                 Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
                 Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
@@ -649,9 +663,10 @@ struct Animated<Content: View>: View, Animatable {
     var body: some View { build(p) }
 }
 
-/// THE TOOLS CAPSULE (BUILD-BOOK 3.1a): it grows leftward out of the plus while the plus stays exactly where it is
-/// and only turns. Each tool sits in its own slot and grows from its middle as the capsule's end passes over it, the
-/// nearest first, so none is ever drawn over the × or over another. Plain glass: Apple's interactive glass swells under the finger, which pushed the plus forward and back.
+/// THE TOOLS CAPSULE: it grows leftward out of the plus while the plus stays exactly where it is and only turns. Each
+/// tool sits in its own slot and grows from its middle as the capsule's end passes over it, the nearest first, so
+/// none is ever drawn over the × or over another. Plain glass: Apple's interactive glass swells under the finger,
+/// which pushed the plus forward and back.
 private struct ToolsCapsule<Tool: View, Plus: View>: View, Animatable {
     var p: CGFloat
     let full: CGFloat
@@ -683,11 +698,11 @@ private struct ToolsCapsule<Tool: View, Plus: View>: View, Animatable {
     }
 }
 
-/// THE MODE WHEEL (the 00:11, 00:26, 01:02, 01:36, 02:09): black, no glass, turned, never tapped. The modes sit on a
-/// wheel whose hub is under the glyph; the one at the top is the one you are on, a full black circle. While you turn
-/// it, its neighbours ride the rim left and right, smaller and lower, in their unselected shapes; the one coming to the
-/// top fills in exactly as far as it has come (no little film of its own, no holes). A tick at each mode it passes,
-/// a click when it lands; the name shows under it while you hold it. Let go and the neighbours go back into the hub.
+/// THE MODE WHEEL: black, no glass, turned, never tapped. The modes sit on a wheel whose hub is under the glyph; the
+/// one at the top is the one you are on, a full black circle. While you turn it, its neighbours ride the rim left and
+/// right, smaller and lower, in their unselected shapes; the one coming to the top fills in exactly as far as it has
+/// come (no little film of its own, no holes). A tick at each mode it passes, a click when it lands; the name shows
+/// under it while you hold it. Let go and the neighbours go back into the hub.
 struct ModeWheel: View {
     @Bindable var head: HeadState
     var ink: Color
@@ -714,20 +729,18 @@ struct ModeWheel: View {
         ZStack {
             WheelFace(at: at + head.turnHint, reveal: max(reveal, min(1, head.turnHint * 3)), ink: ink, cover: toolsP, hideTop: hideDot)
                 .allowsHitTesting(false)
-            // (14 Nov: in Pins the dot stays a plain black dot; drawing from the sheet never puts the route mark on it, only
-            // the open tools capsule shows the quick route lit)
             FirstTool(p: toolsP, lit: head.mode == .pins ? (DrawTool.shared.on && tools ? 1 : 0) : lit, ink: ink, key: head.mode == .pins ? "route" : "quick")
                 .allowsHitTesting(false)
-            // A PAGE OPEN: the dot carries a white cross and a tap on it closes the page 
+            // A PAGE OPEN: the dot carries a white cross and a tap on it closes the page
             if PlacePageState.shared.isOpen && !tools && !hideDot {
                 Icon5(key: "cross", ink: Palette.white, size: 12)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's middle,
-            // clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as the
-            // wheel
-            // passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces when not shown.
+            // THE MODE'S NAME under the wheel while you turn it (A3.4): its top edge 28 points under the wheel's
+            // middle, clear of the circle; it rolls in by the text roll as the turn starts, rolls to the next name as
+            // the wheel passes a mode, and rolls out when the wheel lands. Never scaled (0.8.5): placeholder spaces
+            // when not shown.
             let i = Int(at.rounded()).clamped(0, 3)
             let name = HeadState.Mode(rawValue: i)!.name
             VStack(spacing: 0) {
@@ -745,16 +758,15 @@ struct ModeWheel: View {
             .allowsHitTesting(false)
         }
         .frame(width: 88, height: 44)
-        // with the tools out the dot is one slot of the capsule: it touches over its own 44 pt only (its 88 pt took
-        // half the Passport tool beside it, 8 Nov)
+        // with the tools out the dot is one slot of the capsule: it touches over its own 44 pt only
         .contentShape(tools ? AnyShape(Rectangle().size(width: 44, height: 44).offset(x: 22)) : AnyShape(Rectangle()))
         .gesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { g in turn(g.translation.width) }
                 .onEnded { g in letGo(g.predictedEndTranslation.width - g.translation.width) }
         )
-        // HOLD THE DOT FOR SETTINGS (29 Oct 01:13, 01:18): still for a moment, it starts turning into the gear
-        // moving (turning the wheel) or letting go before it is the gear puts it back
+        // HOLD THE DOT FOR SETTINGS: still for a moment, it starts turning into the gear; moving (turning the wheel)
+        // or letting go before it is the gear puts it back
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { g in
@@ -776,10 +788,10 @@ struct ModeWheel: View {
         // the wheel itself is never tapped
         .onTapGesture {
             if PlacePageState.shared.isOpen && !tools { Feel.tap(); PlacePageState.shared.close(); return }
-            if head.settingsOpen { Feel.tap(); Sound.tap(); head.closeSettings(); return }
+            if head.settingsOpen { Feel.tap(); head.closeSettings(); return }
             guard tools else { return }
             if head.filtersMenu { Feel.refuse(); return }
-            Feel.tap(); Sound.tap()
+            Feel.tap()
             withAnimation(Motion.chrome) { head.quickStamp.toggle() }
         }
         .onAppear { at = CGFloat(head.mode.rawValue); lastTick = head.mode.rawValue; lit = head.quickStamp ? 1 : 0 }
@@ -794,7 +806,7 @@ struct ModeWheel: View {
             }
         }
         // a mode changed from elsewhere (the tabs' hold, a hold menu, the upload): the dot is simply the new mode's,
-        // no turn through the ones between (a mode change moves nothing, 8 Nov)
+        // no turn through the ones between
         .onChange(of: head.mode) { _, m in
             if Int(at.rounded()) != m.rawValue && !dragging {
                 var t = Transaction(); t.disablesAnimations = true
@@ -819,8 +831,8 @@ struct ModeWheel: View {
         if head.dotHeld { head.dotHeld = false }
     }
 
-    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule)
-    /// With settings open the wheel still turns and changes the mode; the gear stays on top.
+    /// the finger has moved `dx` sideways since it went down (on the wheel, or on the tools capsule) With settings
+    /// open the wheel still turns and changes the mode; the gear stays on top.
     private func turn(_ dx: CGFloat) {
         // over a page the dot is the page's close, not the wheel
         if PlacePageState.shared.isOpen && !dragging { return }
@@ -837,7 +849,7 @@ struct ModeWheel: View {
         if v > 3 { v = 3 + Flow.rubber(v - 3, 0.5) }
         at = v
         let i = Int(v.rounded()).clamped(0, 3)
-        if i != lastTick { lastTick = i; Feel.tick(); Sound.tick() }
+        if i != lastTick { lastTick = i; Feel.tick() }
     }
     /// the finger is off; `fling` is how much further it would have gone
     private func letGo(_ fling: CGFloat) {
@@ -856,14 +868,14 @@ struct ModeWheel: View {
         lastTick = i
         withAnimation(Motion.chrome) { at = CGFloat(i) }
         // (a turn that settles back on the same mode, e.g. a pull straight down on the dot, clicks nothing)
-        if changed { Feel.notch(); Sound.click() }
+        if changed { Feel.notch() }
     }
 }
 
-/// THE FIRST TOOL IS THE DOT, BECOME A TOOL: as the capsule reaches it, the black dot draws in to the tools' own
-/// size and hollows into
-/// the same ring the other three are, one shape changing (a solid circle is a ring as thick as its radius); on, it is
-/// filled the way the others are when on. Closing is the same in reverse, ending as the dot exactly.
+/// THE FIRST TOOL IS THE DOT, BECOME A TOOL: as the capsule reaches it, the black dot draws in to the tools' own size
+/// and hollows into the same ring the other three are, one shape changing (a solid circle is a ring as thick as its
+/// radius); on, it is filled the way the others are when on. Closing is the same in reverse, ending as the dot
+/// exactly.
 private struct FirstTool: View, Animatable {
     /// how far the tools capsule is out (ToolsCapsule's p)
     var p: CGFloat
@@ -885,8 +897,8 @@ private struct FirstTool: View, Animatable {
         // the dot's own size: the wheel draws it 30 points on the 9-unit icon box, so the circle is 8/9 of that
         let dot: CGFloat = 30 * 8 / 9
         let t = Flow.smooth(Self.start, 1, p)
-        // (31 Oct 11:47: quick stamping gets its icon, the stamp.) The dot fades as the icon comes in over the same
-        // stretch, never shrinking; on, the dot stays behind the icon and the icon turns white, as the other tools'
+        // The dot fades as the icon comes in over the same stretch, never shrinking; on, the dot stays behind the
+        // icon and the icon turns white, as the other tools'
         if p > Self.start {
             ZStack {
                 Circle().fill(ink).frame(width: dot, height: dot).opacity(Double(max(1 - t, lit)))
@@ -895,7 +907,7 @@ private struct FirstTool: View, Animatable {
             }
         } else if lit > 0.5 {
             // quick stamping left on with the tools away: its stamp stays on the dot in white, so a tap on the map is
-            // seen to stamp (7 Nov review, board 17: nothing showed it was on)
+            // seen to stamp
             Icon5(key: key, ink: ink == Palette.white ? Palette.ink : Palette.white, size: 17)
         }
     }
@@ -962,8 +974,8 @@ struct ResultSlot {
     }
 }
 
-/// The search results: the places whose name, formal name, other names or the names people type match. The box is
-/// the field's own width, under it (the 02:09).
+/// The search results: the places whose name, formal name, other names or the names people type match. The box is the
+/// field's own width, under it.
 struct SearchResults: View {
     let map: MapController
     @Bindable var head: HeadState
@@ -978,16 +990,26 @@ struct SearchResults: View {
     /// as the circle) flows down over them, so none is ever seen inside the circle
     var gap: CGFloat = 0
 
+    #if DEBUG
+    static func timed<T>(_ what: String, _ f: () -> T) -> T {
+        let t = CACurrentMediaTime(); let v = f(); let ms = (CACurrentMediaTime() - t) * 1000
+        if ms > 8 { NSLog("wya searchtime %@ %.0f ms", what, ms) }
+        return v
+    }
+    #else
+    static func timed<T>(_ what: String, _ f: () -> T) -> T { f() }
+    #endif
+
     var body: some View {
         let typed = !head.query.trimmingCharacters(in: .whitespaces).isEmpty
-        let hits = typed ? Self.matches(map: map, query: head.query) : Self.suggestions(map: map)
-        // a typo with no match: the nearest place, as a row of its own (29 Oct 01:06: not over two lines)
-        // the index first; with nothing there, Apple Intelligence's pick among the nearest names, once it has answered
-        let near = hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil
+        let hits = Self.timed("matches") { typed ? Self.matches(map: map, query: head.query) : Self.suggestions(map: map) }
+        // a typo with no match: the nearest place, as a row of its own the index first; with nothing there, Apple
+        // Intelligence's pick among the nearest names, once it has answered
+        let near = Self.timed("nearest") { hits.isEmpty && typed ? Self.nearest(map: map, query: head.query) : nil }
         let guess = near ?? (hits.isEmpty && typed && smart?.q == head.query ? smart?.i : nil)
         // rows keyed by place, so a row that stays moves to its new y (A1.13); a guess is its place's own row, so
-        // "Fra" to "Frnace" keeps the France row and only its note rolls to "Did you mean?"
-        // with Map settings open, the field searches the settings (Part 3.4, 5.11)
+        // "Fra" to keeps the France row and only its note rolls to with Map settings open, the field searches the
+        // settings (Part 3.4, 5.11)
         let settingHits = head.settingsOpen ? SettingsSearch.hits(head.query, map: map) : []
         // on a region map the field finds the country's regions at every level (6.5)
         let regionHits = map.regionScene != nil && !head.settingsOpen && typed
@@ -1004,62 +1026,72 @@ struct SearchResults: View {
         // countries cannot be taken to Paris or the Eiffel Tower)
         let spotSearch = placesSearch || (map.pinsMode && !head.settingsOpen)
         let _ = spotSearch ? TownIndex.shared.load() : ()
-        // (on the Countries map: the big towns of that name, for the search's town rows; 14 Nov)
         let onCountries = !spotSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
-        let townHits = spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID)
-            : onCountries && typed ? TownIndex.shared.hits(head.query, open: nil, limit: 6).filter { $0.people >= 50_000 } : []
+        let townHits = Self.timed("towns") { spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID)
+            : onCountries && typed ? TownIndex.shared.hits(head.query, open: nil, limit: 6).filter { $0.people >= 50_000 } : [] }
         // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
         let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
-        let thingHits = (spotSearch || sightSearch) && typed ? ThingIndex.shared.hits(head.query, open: map.placeOpenID) : []
         // (the sets' own places: the parks, peaks, lakes and the rest of Places' menu, the set looked at first)
         let _ = map.pinsMode ? CollectionStore.shared.load() : ()
-        let itemHits = spotSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
+        let spelled = Self.spelledOut(head.query)
+        let itemTyped = spotSearch && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
+        let itemHits = itemTyped.isEmpty && spotSearch && typed && spelled != head.query
+            ? CollectionStore.shared.find(spelled, first: map.placesCollection) : itemTyped
+        // (a near spelling only with nothing else found: found Vinson Massif, then Tinson Pen Aerodrome)
+        let thingHits = Self.timed("things") { (spotSearch || sightSearch) && typed
+            ? Self.thingHits(head.query, spelled: spelled, open: map.placeOpenID, near: itemHits.isEmpty) : [] }
         let townGuess = spotSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty && itemHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
         // (the towns' index too: it tells the regions' search how many people live in each)
         let _ = countriesSearch ? TownIndex.shared.load() : ()
-        let anyRegionHits = countriesSearch && typed ? RegionIndex.shared.hits(head.query) : []
-        // (two sights at most, the known ones, after the countries; a sight found means no "Did you mean?" country)
-        // (sights only: landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region
-        // named as typed before them, "paris" the city first, the rest after)
+        let anyRegionHits = Self.timed("regions") { countriesSearch && typed ? RegionIndex.shared.hits(head.query) : [] }
+        // (two sights at most, the known ones, after the countries; a sight found means no country) (sights only:
+        // landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region named as typed
+        // before them, "paris" the city first, the rest after)
         let sights = sightSearch ? thingHits.filter { $0.fame >= 3 && (2...6).contains($0.kind) }.prefix(2).map { ResultKey.thing($0.key) } : []
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
         let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) }
-        // (14 Nov: a traveller types a city: big towns, 50,000 people and more, found by their own or other names
-        // ("lucerne" is Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country
-        // that only looks like it)
+        // (: a traveller types a city: big towns, 50,000 people and more, found by their own or other names ( is
+        // Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country that only looks
+        // like it)
         let bigTowns = countriesSearch && typed ? Array(townHits.prefix(2)) : []
         let w0 = map.world
         let countryStarts = hits.filter { i in w0.map { $0.places[i].n.townFolded.hasPrefix(typedFold) || $0.aliases[typedFold] != nil } ?? false }
         let countryOthers = hits.filter { !countryStarts.contains($0) }
+        let wholeCountry = countryStarts.first { i in w0.map { $0.places[i].n.townFolded == typedFold || $0.aliases[typedFold] == $0.places[i].id } ?? false }
+        let countryCities = Self.timed("cities") { countriesSearch && typed ? wholeCountry.flatMap { i in w0.map { TownIndex.shared.biggest(in: $0.places[i].id, count: 3) } } ?? [] : [] }
         let exactRegions = namedRegions.filter { $0.name.townFolded == typedFold }
-        let namedRest = namedRegions.filter { $0.name.townFolded != typedFold }
-        // (a town leads only by its own name, typed whole or a big town's start; one found by another name, Luzern for
-        // "lucerne", comes after the sights: Bari's other name "Bali" never put it before Bali. A town that is also a
+        // (a small region that only starts with it comes after a country found by a near spelling: "rome" listed
+        // Romelândia and Romeas Haek before Romania)
+        let small = countryOthers.isEmpty || !TownIndex.shared.ready ? Set<RegionIndex.Hit>()
+            : Set(namedRegions.filter { RegionIndex.shared.people($0) < 100_000 })
+        let namedRest = namedRegions.filter { $0.name.townFolded != typedFold && !small.contains($0) }
+        let smallRest = namedRegions.filter { $0.name.townFolded != typedFold && small.contains($0) }
+        // (a town leads only by its own name, typed whole or a big town's start; one found by another name, Luzern
+        // for, comes after the sights: Bari's other name "Bali" never put it before Bali. A town that is also a
         // region of that name in its country, Paris, is shown once, as the region)
         let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
         let exactTowns = bigTowns.filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || ($0.people >= 200_000 && $0.name.townFolded.hasPrefix(typedFold))) }
         // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
             ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
-        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty ? baseKeys
-            : Array((countryStarts.prefix(3).map { ResultKey.place($0) } + exactTowns.map { ResultKey.town($0.key) }
-                     + exactRegions.map { .anyRegion($0.key) } + namedRest.map { .anyRegion($0.key) } + sights
-                     + otherTowns.map { ResultKey.town($0.key) }
-                     + countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count)).map { ResultKey.place($0) }
-                     + otherRegions.map { .anyRegion($0.key) }).prefix(8))
+        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
+            : Self.countryKeys(starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
+                               named: namedRest, sights: sights, otherTowns: otherTowns,
+                               others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
+                               small: smallRest, rest: otherRegions)
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
         let pinHits = pinsSearch && typed ? Self.pinMatches(head.query) : []
         // the places found, in Places' order (Pins: after your pins, and without the types of place, which are Places')
         let spots: () -> [ResultKey] = {
-                // a country typed by a name people use for it ("UK", "Britain") or by its own whole name leads; then the
-                // towns; then the other countries found
+                // a country typed by a name people use for it ("UK",) or by its own whole name leads; then the towns;
+                // then the other countries found
                 let q = head.query.trimmingCharacters(in: .whitespaces).lowercased()
                 let lead = hits.filter { i in
                     guard let w = map.world else { return false }
@@ -1084,42 +1116,38 @@ struct SearchResults: View {
                 let towns = cut.filter { starts($0.name.townFolded) }.map { ResultKey.town($0.key) }
                 let others = cut.filter { !starts($0.name.townFolded) }.map { ResultKey.town($0.key) }
                 let known = thingHits.filter { $0.fame >= 3 && !inSets.contains($0.id) }.prefix(2).map { ResultKey.thing($0.key) }
-                // the types of place it names first ("lakes", "castle", "f1"), then the places themselves
+                // the types of place it names first ("lakes",, "f1"), then the places themselves
                 let sets = map.pinsMode ? [] : Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
-                // (what was typed as a whole name leads, a town then a set's place: "bali" is Bali before Balikpapan,
-                // "london" London before the Tower of London; then the big towns that start with it, 300,000 people and
-                // more: "par" is Paris before Parinacota (at 100,000 "taj" was Tajimi before the Taj Mahal); then the
-                // sets' places, the best known things, the rest)
-                // (a big town of that name, then the set's place of that name, then a small town of it: "bali" is the
-                // island before the town in Cameroon)
                 let named = cut.filter { $0.name.townFolded == folded }
+                    + cut.filter { $0.name.townFolded != folded && TownIndex.shared.otherNames($0.id).contains(folded) }
                 let whole = named.filter { $0.people >= 500_000 }.map { ResultKey.town($0.key) }
                     + itemHits.prefix(3).filter { $0.item.name.townFolded == folded }.map { ResultKey.item($0.key) }
                     + named.map { ResultKey.town($0.key) }
                 let big = cut.filter { $0.people >= 300_000 && $0.name.townFolded.hasPrefix(folded) }.prefix(2).map { ResultKey.town($0.key) }
-                // (the countries whose name starts with it, two, after the big towns: "par" had no Paraguay in its
-                // eight rows, "rom" no Romania, "taj" no Tajikistan)
                 let lands = rest.filter { i in map.world.map { $0.places[i].n.townFolded.hasPrefix(folded) } ?? false }.prefix(2)
                 let k = Array(sets) + lead.map { ResultKey.place($0) } + (coded && !things.isEmpty ? [things[0]] : []) + whole + Array(big)
                     + lands.map { ResultKey.place($0) } + Array(items) + Array(known) + towns + things + others
                     + rest.prefix(max(2, 8 - cut.count - things.count - lead.count)).map { ResultKey.place($0) }
-                // nothing found: the nearest town by spelling first ("Frankfrut"), else the nearest country
+                // nothing found: the nearest town by spelling first, else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }
-                return k.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(k.prefix(8))
+                // (each once before the eight are counted: 's three towns of that name, listed twice, took the eight
+                // rows' room and Luzern itself was cut)
+                var once = Set<ResultKey>()
+                let each = k.filter { once.insert($0).inserted }
+                return each.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(each.prefix(8))
         }
         let found: [ResultKey] = pinsSearch && typed
             ? { () -> [ResultKey] in
-                // (your pins, four at most, then the places; "No results" only when there is neither)
+                // (your pins, four at most, then the places; only when there is neither)
                 let pins = pinHits.prefix(4).map { ResultKey.pin($0.id) }
                 let rest = spots()
                 return Array((pins + (pins.isEmpty || rest != [.miss] ? rest : [])).prefix(8))
             }()
             : !placesSearch ? mapKeys
-            // (nothing typed: nothing, as everywhere; the types are the water's own menu, 9 Nov)
             : !typed ? []
             : typed ? spots() : baseKeys
-        // each result once: a region or a thing found by two of its names is one key, and a key twice in the rows drew
-        // one of them blank (8 Nov)
+        // each result once: a region or a thing found by two of its names is one key, and a key twice in the rows
+        // drew one of them blank
         var seen = Set<ResultKey>()
         let keys = found.filter { seen.insert($0).inserted }
         let w = width > 0 ? width : fullWidth
@@ -1130,8 +1158,8 @@ struct SearchResults: View {
             if !shown.isEmpty && reveal > 0.001 {
                 TimelineView(.animation(paused: Date().timeIntervalSinceReferenceDate > until)) { ctx in
                     let t = ctx.date.timeIntervalSinceReferenceDate
-                    // a row whose result is no longer there (its index changed under it: the towns cut to four as
-                    // the things came in) has nothing to show: its slot is shut at once, never a blank row (8 Nov)
+                    // a row whose result is no longer there (its index changed under it: the towns cut to four as the
+                    // things came in) has nothing to show: its slot is shut at once, never a blank row
                     let has = { (k: ResultKey) -> Bool in
                         switch k {
                         case .place, .miss: return true
@@ -1139,7 +1167,7 @@ struct SearchResults: View {
                         case .region(let r): return regionHits.contains { $0.key == r }
                         case .thing(let r): return thingHits.contains { $0.key == r }
                         case .item(let r): return itemHits.contains { $0.key == r }
-                        case .town(let r): return townHits.contains { $0.key == r } || townGuess?.key == r
+                        case .town(let r): return townHits.contains { $0.key == r } || townGuess?.key == r || countryCities.contains { $0.key == r }
                         case .anyRegion(let r): return anyRegionHits.contains { $0.key == r }
                         case .pin(let id): return PinStore.shared.pin(id) != nil
                         case .set: return true
@@ -1161,9 +1189,11 @@ struct SearchResults: View {
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
                                 case .thing(let k): thingRow(thingHits.first { $0.key == k })
                                 case .item(let k): itemRow(itemHits.first { $0.key == k })
-                                case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil),
+                                case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil)
+                                                           ?? countryCities.first { $0.key == k },
                                                            note: townGuess?.key == k ? "Did you mean?" : nil)
-                                case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k })
+                                case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k },
+                                                                     twin: Self.twin(k, in: anyRegionHits))
                                 case .pin(let id): pinRow(PinStore.shared.pin(id))
                                 case .set(let p): setRow(p)
                                 }
@@ -1181,14 +1211,15 @@ struct SearchResults: View {
                     // never faded); its bottom edge is the slots' sum, so a change of rows grows or shrinks it with them
                     .frame(width: fullWidth > 0 ? w : nil, height: h, alignment: .topLeading)
                     .clipShape(RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
-                    // (frosted with a white tint over the map: its land and labels never read through the rows)
-                    .glassEffect(PageGlass.surface.tint(Palette.white.opacity(0.8)), in: .rect(cornerRadius: min(22, h / 2, w / 2)))
+                    // the sheet's own glass (the system's regular glass), the same frost all through: no fade from
+                    // glass to frost, nothing white laid on it
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: min(22, h / 2, w / 2), style: .continuous))
                 }
             }
         }
         .onChange(of: keys, initial: true) { old, new in update(to: new, first: old == new) }
-        // THE KEYBOARD'S SEARCH KEY: what the first row shown would do (its own rules had it open a town over the country
-        // leading the list, a country with settings open, and nothing for a region or a "Did you mean?")
+        // THE KEYBOARD'S SEARCH KEY: what the first row shown would do (its own rules had it open a town over the
+        // country leading the list, a country with settings open, and nothing for a region or a)
         .onChange(of: head.submitAsked) { _, _ in
             switch keys.first {
             case .place(let i): pick(i)
@@ -1196,7 +1227,7 @@ struct SearchResults: View {
             case .region(let k): regionAct(regionHits.first { $0.key == k })
             case .thing(let k): thingAct(thingHits.first { $0.key == k })
             case .item(let k): itemAct(itemHits.first { $0.key == k })
-            case .town(let k): townAct(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil))
+            case .town(let k): townAct(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil) ?? countryCities.first { $0.key == k })
             case .anyRegion(let k): anyRegionAct(anyRegionHits.first { $0.key == k })
             case .pin(let id): pinAct(PinStore.shared.pin(id))
             case .set(let p): setAct(p)
@@ -1206,13 +1237,13 @@ struct SearchResults: View {
         .task(id: head.query) { await askModel() }
     }
 
-    /// "DID YOU MEAN", STEP 2 (1.10): when the index finds nothing, Apple Intelligence on the phone picks one of the 20
-    /// nearest names; the row shows only once it has answered (nothing turns while waiting); without Apple
-    /// Intelligence, or past 1.5 s, the index alone
+    /// , STEP 2 (1.10): when the index finds nothing, Apple Intelligence on the phone picks one of the 20 nearest
+    /// names; the row shows only once it has answered (nothing turns while waiting); without Apple Intelligence, or
+    /// past 1.5 s, the index alone
     @State private var smart: (q: String, i: Int)?
     private func askModel() async {
         let q = head.query.trimmingCharacters(in: .whitespaces)
-        guard q.count >= 3, !head.settingsOpen, Self.matches(map: map, query: q).isEmpty,
+        guard q.count >= 3, q.count <= 60, !head.settingsOpen, Self.matches(map: map, query: q).isEmpty,
               Self.nearest(map: map, query: q) == nil, let w = map.world else { return }
         // a short wait so a word still being typed asks nothing
         try? await Task.sleep(for: .milliseconds(250))
@@ -1221,6 +1252,9 @@ struct SearchResults: View {
         guard !names.isEmpty, let pick = await SmartGuess.pick(typed: q, among: names.map { w.places[$0].n }) else { return }
         guard !Task.isCancelled, head.query.trimmingCharacters(in: .whitespaces) == q,
               let i = names.first(where: { w.places[$0].n == pick }) else { return }
+        // (only a pick that is still near what was typed: was offered Cameroon)
+        let typed = Array(Self.fold(q)), name = Array(Self.fold(w.places[i].n))
+        guard min(Self.distance(typed, name), Self.distance(typed, Array(name.prefix(typed.count)))) <= max(2, typed.count / 2) else { return }
         smart = (head.query, i)
     }
 
@@ -1294,24 +1328,24 @@ struct SearchResults: View {
         .buttonStyle(.plain)
     }
 
-    /// one row: the flag (round, the round set), the name, and what it is in the one low-opacity black (BUILD-BOOK
-    /// 1.10), in the borders view: on the ground a breakaway held on its own is a country (29 Oct 01:06
-    /// a place with no name on the de facto map is called a country); a guess says so in that place instead
+    /// one row: the flag, the name, and what it is in the one low-opacity black (BUILD-BOOK 1.10), in the borders
+    /// view: on the ground a breakaway held on its own is a country; a guess says so in that place instead
     private func row(_ i: Int, note: String?) -> some View {
         let pl = map.world?.places[i]
         return Button {
             pick(i)
         } label: {
             HStack(spacing: 12) {
-                // square detailed flags, never rounded (0.8.8)
+                // detailed flags, never rounded (0.8.8), at 4:3
                 Group {
-                    if let f = pl.flatMap({ Flags.square($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
+                    if let f = pl.flatMap({ Flags.row($0.id) }) { f.resizable().interpolation(.high) } else { Color.clear }
                 }
+                .frame(width: 22, height: 16.5)
                 .frame(width: 22, height: 22)
                 // (a hairline edge, so a flag with white in it keeps its shape on the white box)
                 .overlay { if pl != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) } }
-                // found by another of its names ("united": Mexico as United Mexican States): that name says why it is
-                // here; its kind when that does not fit
+                // found by another of its names (: Mexico as United Mexican States): that name says why it is here;
+                // its kind when that does not fit
                 ResultWords(name: pl?.n ?? "", notes: [note ?? map.world.flatMap { Self.otherName($0, i, head.query) } ?? "",
                                                        note ?? pl.map { p in map.world?.positions?.kindName(p.id) ?? Self.kind(p.k) } ?? ""])
                     .contentTransition(.identity)
@@ -1341,7 +1375,7 @@ struct SearchResults: View {
         }
     }
 
-    /// a region found on a region map: its name and what it is ("department"); a tap closes search and shows it there
+    /// a region found on a region map: its name and what it is; a tap closes search and shows it there
     private func regionAct(_ h: RegionSearch.Hit?) {
         Feel.tap()
         head.searching = false
@@ -1349,14 +1383,60 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
     }
+    /// the Countries map's rows in their order, eight at most (made in steps: one long sum of them took the
+    /// compiler minutes)
+    private static func countryKeys(starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
+                                    named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
+                                    small: [RegionIndex.Hit], rest: [RegionIndex.Hit]) -> [ResultKey] {
+        let town = { (t: TownIndex.Hit) -> ResultKey in ResultKey.town(t.key) }
+        let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
+        var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
+        out += cities.map(town)
+        out += towns.map(town)
+        out += exact.map(region)
+        // (a name typed whole and found: its sights before the other regions that only start with it)
+        if exact.isEmpty && towns.isEmpty { out += named.map(region); out += sights } else { out += sights; out += named.map(region) }
+        out += otherTowns.map(town)
+        out += others.map { (i: Int) -> ResultKey in ResultKey.place(i) }
+        out += small.map(region)
+        out += rest.map(region)
+        return Array(out.prefix(8))
+    }
+    /// a typed name with its short words in full: is,
+    static func spelledOut(_ q: String) -> String {
+        var w = q.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        let full = ["mt": "mount", "mt.": "mount", "st": "saint", "st.": "saint", "ft": "fort", "ft.": "fort"]
+        for i in w.indices where i < w.count - 1 {
+            if let f = full[w[i].lowercased()] { w[i] = f }
+        }
+        return w.joined(separator: " ")
+    }
+    /// the sights found, by the name as typed and by its short words in full (: as well as), the typed ones first;
+    /// one letter off only when neither finds anything
+    static func thingHits(_ q: String, spelled: String, open: String?, near: Bool) -> [ThingIndex.Hit] {
+        if spelled == q { return ThingIndex.shared.hits(q, open: open, near: near) }
+        let typed = ThingIndex.shared.hits(q, open: open, near: false)
+        let full = ThingIndex.shared.hits(spelled, open: open, near: false)
+        let both = Array((typed + full.filter { f in !typed.contains { $0.key == f.key } }).prefix(4))
+        return both.isEmpty && near ? ThingIndex.shared.hits(q, open: open, near: true) : both
+    }
+    /// a row's country words: the name people shorten it to where its whole name is long, in every row alike ( had no
+    /// country beside it: never fit, and one list had both forms)
+    private func countryNotes(_ id: String?) -> [String] {
+        guard let id, let w = map.world, let i = w.placeIndex[id] ?? w.placeIndex[id.lowercased()] ?? w.placeIndex[id.uppercased()] else { return [] }
+        return [Self.shortCountry[id.lowercased()] ?? w.places[i].n]
+    }
+    static let shortCountry: [String: String] = [
+        "us": "USA", "gb": "UK", "ae": "UAE", "cd": "DR Congo", "ba": "Bosnia", "va": "Vatican",
+    ]
     /// a row's leading flag (22 pt, square, as the country rows'), or its empty place
     private func rowFlag(_ id: String?) -> some View {
         Group {
-            if let f = id.flatMap({ Flags.square($0.lowercased()) }) { f.resizable().interpolation(.high) } else { Color.clear }
+            if let f = id.flatMap({ Flags.row($0.lowercased()) }) { f.resizable().interpolation(.high) } else { Color.clear }
         }
+        .frame(width: 22, height: 16.5)
+        .overlay { if id.flatMap({ Flags.row($0.lowercased()) }) != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.22), lineWidth: 0.75) } }
         .frame(width: 22, height: 22)
-        .overlay { if id.flatMap({ Flags.square($0.lowercased()) }) != nil { Rectangle().strokeBorder(Palette.ink.opacity(0.22), lineWidth: 0.75) } }
-        // (14 Nov: at 12% Japan's white flag on the white row read as a bare red dot)
     }
     private func regionRow(_ h: RegionSearch.Hit?) -> some View {
         Button { regionAct(h) } label: {
@@ -1364,7 +1444,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(map.regionScene.flatMap { sc in map.world.map { $0.places[sc.place].id } })
-                // (its kind with a capital, as the countries' "Country" and "Territory")
+                // (its kind with a capital, as the countries' and)
                 ResultWords(name: h?.name ?? "", notes: [(h?.word ?? "").prefix(1).uppercased() + (h?.word ?? "").dropFirst()])
             }
             .padding(.horizontal, 16)
@@ -1386,8 +1466,6 @@ struct SearchResults: View {
         for p in PinStore.shared.pins.reversed() {
             let words = [p.title, p.place, p.note ?? ""].map(fold)
             if words.contains(where: { $0.hasPrefix(q) || $0.contains(" " + q) }) { starts.append(p) }
-            // (a later word of its name or place starting with it, after a hyphen or the like; never the middle of a
-            // word: "ed" found "Verkhnedonskoy District", 8 Nov)
             else if words.contains(where: { w in SearchResults.words(w).contains { $0.hasPrefix(q) } }) { holds.append(p) }
         }
         return starts + holds
@@ -1417,7 +1495,11 @@ struct SearchResults: View {
                     }
                 }
                 .frame(width: 22, height: 22)
-                ResultWords(name: p?.title ?? "", notes: [p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? ""])
+                // (a pin named by its place,, says its country once: "Paris" and)
+                let country = p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? ""
+                let title = p?.title ?? ""
+                ResultWords(name: !country.isEmpty && title.hasSuffix(", " + country) ? String(title.dropLast(country.count + 2)) : title,
+                            notes: [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1435,15 +1517,24 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         if let h, let i = place { ContentView.openRegionMap(i, head: head, row: h.row, focus: h.id, map: map) }
     }
-    private func anyRegionRow(_ h: RegionIndex.Hit?) -> some View {
-        let place = h.flatMap { h in map.world?.placeIndex[h.place] }
-        let country = place.flatMap { map.world?.places[$0].n } ?? ""
+    /// whether another region found has the same name in the same country (: the state and the city)
+    static func twin(_ k: String, in hits: [RegionIndex.Hit]) -> Bool {
+        guard let h = hits.first(where: { $0.key == k }) else { return false }
+        return hits.contains { $0.key != k && $0.place == h.place && $0.row != h.row && $0.name.townFolded == h.name.townFolded }
+    }
+    private func anyRegionRow(_ h: RegionIndex.Hit?, twin: Bool = false) -> some View {
+        var country: [String] = countryNotes(h?.place)
+        // (two of one name in one country say which is which: and, else the level's word alone)
+        if twin, let h, let l = RegionCatalog.shared.levels[h.place.lowercased()], h.row >= 1, h.row <= l.count {
+            let one = RegionsMenuModel.label(l[h.row - 1].one)
+            country = country.map { one + " · " + $0 } + [one]
+        }
         return Button { anyRegionAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.place)
-                ResultWords(name: h?.name ?? "", notes: [country])
+                ResultWords(name: h?.name ?? "", notes: country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1476,21 +1567,21 @@ struct SearchResults: View {
         PinsMapState.shared.show(lat: lat, lon: lon, metres: metres)
     }
     private func setAct(_ p: MapController.PlacesPick) {
-        Feel.tap(); Sound.tap()
+        Feel.tap()
         head.searching = false
         PlacePageState.shared.closeAll()
         CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
         if case .collection(let id) = p {
-            // (a kind of a set, "seas|ocean": the set, cut down to it)
+            // (a kind of a set,: the set, cut down to it)
             let parts = id.split(separator: "|").map(String.init)
             map.showPlacesSet(parts[0])
             if parts.count > 1 { map.showPlacesType(parts[1]) }
-            // (as Places' menu does: a set with no kinds has nothing to pick in the water, so it stands at 25%)
-            head.water?.go(CollectionStore.shared.types(parts[0]).isEmpty ? .quarter : .half)
+            // (as Places' menu does: every set at 50%, its places listed under its caption, kinds or not)
+            head.water?.go(.half)
         } else { map.showPlacesMap(p); head.water?.go(.half) }
     }
-    /// a type of place (Places' menu, 9 Nov): its name alone, where a flag would be nothing (every row's name starts
-    /// on one line); a tap shows its places on the map with the menu at 50%
+    /// a type of place: its name alone, where a flag would be nothing (every row's name starts on one line); a tap
+    /// shows its places on the map with the menu at 50%
     private func setRow(_ p: MapController.PlacesPick) -> some View {
         let name: String = {
             guard case .collection(let id) = p else { return p.title }
@@ -1511,9 +1602,8 @@ struct SearchResults: View {
         .buttonStyle(.plain)
     }
 
-    /// THE SMART PART OF PLACES' SEARCH: the sets a
-    /// word typed names, by the set's own name or what people call it ("unesco" finds World Heritage, "cities" the
-    /// towns, "f1" and "grand prix" Formula 1)
+    /// THE SMART PART OF PLACES' SEARCH: the sets a word typed names, by the set's own name or what people call it (
+    /// finds World Heritage, the towns, "f1" and Formula 1)
     static let setWords: [String: [String]] = [
         "towns": ["town", "city", "cities", "village"],
         "capitals": ["capital"],
@@ -1530,12 +1620,12 @@ struct SearchResults: View {
     static func typeMatches(_ query: String) -> [String] {
         let q = fold(query.trimmingCharacters(in: .whitespaces))
         guard q.count >= 2 else { return [] }
-        // (a plural typed finds the word: "towns", "circuits")
+        // (a plural typed finds the word: "towns",)
         let stem = q.hasSuffix("s") && q.count > 3 ? String(q.dropLast()) : q
         let hit = { (w: String) in w.hasPrefix(q) || w.hasPrefix(stem) }
         let store = CollectionStore.shared
-        // (the menu's sets, the lists with no row of their own (a season), and a set's kinds: "oceans" finds Seas cut
-        // down to its oceans, "seas|ocean")
+        // (the menu's sets, the lists with no row of their own (a season), and a set's kinds: finds Seas cut down to
+        // its oceans,)
         let sets = (store.menu + store.all.filter { $0.menu == nil && $0.id != CollectionStore.capitals && $0.id != CollectionStore.famousCities }.map(\.id)).filter { id in
             let t = fold(store.title(id))
             return ([t] + words(t).map(String.init) + (setWords[id] ?? [])).contains(where: hit)
@@ -1550,16 +1640,15 @@ struct SearchResults: View {
     }
 
     private func townRow(_ h: TownIndex.Hit?, note: String? = nil) -> some View {
-        let country = note ?? h.flatMap { h in
-            h.file == map.placeOpenID && !h.region.isEmpty ? h.region
-                : map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } }
-        } ?? ""
+        var country: [String] = []
+        if let note { country = [note] }
+        else if let h { country = h.file == map.placeOpenID && !h.region.isEmpty ? [h.region] : countryNotes(h.file) }
         return Button { townAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.file)
-                ResultWords(name: h?.name ?? "", notes: [country])
+                ResultWords(name: h?.name ?? "", notes: country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1581,14 +1670,13 @@ struct SearchResults: View {
         else { map.showThing(file: h.file, id: h.id) }
     }
     private func thingRow(_ h: ThingIndex.Hit?) -> some View {
-        let country = h.flatMap { h in map.world.flatMap { w in w.placeIndex[h.file].map { w.places[$0].n } } } ?? ""
-        // (never our kind's word, 9 Nov 20:49: a thing's note is where it is)
+        let country: [String] = countryNotes(h?.file)
         return Button { thingAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.file)
-                ResultWords(name: h?.name ?? "", notes: h?.file == map.placeOpenID ? [] : [country])
+                ResultWords(name: h?.name ?? "", notes: h?.file == map.placeOpenID ? [] : country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1623,12 +1711,14 @@ struct SearchResults: View {
         let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
         let ccs = (h?.item.ccs ?? []).filter { named($0) != nil }
         let cc = ccs.count == 1 ? ccs[0] : nil
-        let two = ccs.count == 2 ? ccs.compactMap(named).sorted() : []
+        let two = ccs.count == 2 ? ccs.compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted() : []
         let country = two.count == 2 ? two.joined(separator: ", ") : cc.flatMap(named) ?? ""
+        var itemNotes: [String] = []
+        if !((cc != nil && cc == map.placeOpenID) || country.isEmpty) { itemNotes = cc != nil ? countryNotes(cc) : [country] }
         return Button { itemAct(h) } label: {
             HStack(spacing: 12) {
                 rowFlag(cc)
-                ResultWords(name: h?.item.short ?? "", notes: (cc != nil && cc == map.placeOpenID) || country.isEmpty ? [] : [country])
+                ResultWords(name: h?.item.short ?? "", notes: itemNotes)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1638,7 +1728,7 @@ struct SearchResults: View {
         .buttonStyle(.plain)
     }
 
-    /// no match and no near name: "No results", in the name's place
+    /// no match and no near name:, in the name's place
     private func missRow() -> some View {
         HStack(spacing: 12) {
             Color.clear.frame(width: 22, height: 22)
@@ -1652,12 +1742,13 @@ struct SearchResults: View {
         .frame(height: 44)
     }
 
-    /// the name closest to what was typed, by edit distance against each name's start of the same length (so "Shenzen"
-    /// still finds a longer name); at most a third of the letters wrong, never for under 3 letters
+    /// the name closest to what was typed, by edit distance against each name's start of the same length (so still
+    /// finds a longer name); at most a third of the letters wrong, never for under 3 letters
     static func nearest(map: MapController, query: String) -> Int? {
         guard let w = map.world else { return nil }
         let q = Array(fold(query.trimmingCharacters(in: .whitespaces)))
-        guard q.count >= 3 else { return nil }
+        // (longer than any place's name give or take a few: nothing near, and the pass held the screen)
+        guard q.count >= 3, q.count <= 60 else { return nil }
         var best: (Int, Int)?
         let names = w.searchNames
         for (pi, p) in w.places.enumerated() where !p.junk {
@@ -1688,11 +1779,10 @@ struct SearchResults: View {
         return best.sorted { $0.1 < $1.1 }.prefix(count).map(\.0)
     }
 
-    /// a name as search compares it: no case, no accents ("Curacao" finds Curaçao)
+    /// a name as search compares it: no case, no accents ( finds Curaçao)
     static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
 
-    /// edits between two names, two letters swapped counting as one (7 Nov, the friend's review board 10: "Japna" found
-    /// nothing, two edits from "japan" under plain edit distance; with swaps it is one, so "Did you mean?" offers Japan)
+    /// edits between two names, two letters swapped counting as one
     private static func distance(_ a: [Character], _ b: [Character]) -> Int {
         if a.isEmpty { return b.count }
         if b.isEmpty { return a.count }
@@ -1773,7 +1863,7 @@ struct SearchResults: View {
 
     static func kind(_ k: String?) -> String {
         switch k {
-        case "country": "Country"
+        case "country": ""
         case "territory": "Territory"
         case "antarctica": "Continent"
         default: ""
@@ -1788,8 +1878,8 @@ struct SearchResults: View {
         let q = fold(query.trimmingCharacters(in: .whitespaces))
         guard !q.isEmpty else { return [] }
         // in order: a name people type for it (UK, Britain), its own name starting with what was typed, another of
-        // its names starting with it ("Estados Unidos Mexicanos" is Mexico, after the United States for "united"),
-        // then a later word of any of its names starting with it
+        // its names starting with it ( is Mexico, after the United States for), then a later word of any of its names
+        // starting with it
         var alias: [Int] = [], own: [Int] = [], other: [Int] = [], contains: [Int] = []
         if let a = w.aliases[typedLower] ?? w.aliases[q], let i = w.placeIndex[a] { alias.append(i) }
         let names = w.searchNames
@@ -1797,14 +1887,11 @@ struct SearchResults: View {
             let n = names[i]
             if n[0].hasPrefix(q) { own.append(i) }
             else if n.dropFirst().contains(where: { $0.hasPrefix(q) }) { other.append(i) }
-            // (a word of a name starting with it: "ed" is not in the middle of "United" or "Federation")
             else if n.contains(where: { name in Self.words(name).contains { $0.hasPrefix(q) } }) { contains.append(i) }
         }
-        // its names in other languages ("Allemagne", "ドイツ") last, so they never push an English match down
+        // its names in other languages (, "ドイツ") last, so they never push an English match down
         var language: [Int] = []
         let picked = Set(alias + own + other + contains)
-        // (from four letters: at three, "ger" filled the list with Greenland, Greece, Grenada and Guernsey by names in
-        // languages nobody typing English meant, 8 Nov; a name in another script, "ドイツ", from its first letter)
         if q.count >= 4 || q.unicodeScalars.contains(where: { $0.value > 0x24F }), let more = w.otherLanguageNamesIfReady {
             for (i, p) in w.places.enumerated() where !p.junk && !picked.contains(i) && more[i].contains(where: { $0.hasPrefix(q) }) {
                 language.append(i)
@@ -1837,11 +1924,10 @@ struct ToolDots: View {
 /// too long for the row on its own is the only thing ever cut.
 private struct ResultWords: View {
     let name: String
-    /// the grey words, longest first ("Station · Germany", "Station")
+    /// the grey words, longest first
     let notes: [String]
 
     var body: some View {
-        // (never the name again: "Berlin  Berlin", a pin "Ed Al Fursan  Ed Al Fursan", 8 Nov)
         let n = notes.filter { !$0.isEmpty && $0.caseInsensitiveCompare(name) != .orderedSame }
         ViewThatFits(in: .horizontal) {
             if n.count > 0 { line(n[0]) }

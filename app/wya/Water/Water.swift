@@ -1,16 +1,5 @@
 import SwiftUI
 
-/// THE WATER: the tab capsule and the sheet are one body of glass; the sheet pours up out of the capsule and drains
-/// back into it.
-///
-/// The 02:32: So there is no surface simulation any more, nothing
-/// that keeps moving on its own and nothing that can build up: the glass is one shape worked out from two numbers
-/// (the droplet model of the old app's GlassForm): `level`, where the body's top edge is, and `drop`, how far a
-/// droplet reaches out of that edge towards your finger. The body follows the finger on a soft spring with no
-/// bounce; whatever it lags behind is the droplet, so a quick pull leads with a round drop and the body fills in
-/// behind it, and the moment you stop the body catches up and the drop goes back into it.
-///
-/// At full it is the page: the screen's own edges and corners, no droplet, no movement (the 02:32).
 @MainActor
 @Observable
 final class Water {
@@ -41,8 +30,6 @@ final class Water {
 
     /// MAP SETTINGS OPEN (A5.1): the water rises to 50% if it is lower (at 50% or full it stays), the caption's words
     /// roll out and the Cosmos moves down out of the water; then the rows' words roll in
-    // (8 Nov: each open and close is its own job: a close within the open's first 0.35 s used to let the open's
-    // words come in after the close had looked, so the close never finished and the sheet stayed with the gear gone)
     @ObservationIgnored private var settingsJob = 0
     @ObservationIgnored private var settingsClosing = false
     func openSettings() {
@@ -61,10 +48,8 @@ final class Water {
         settingsFrom = details && stop == .half ? .quarter : stop
         // over the menu (6.3): from the menu stop down to 50% while the rows leave; closing brings the menu back
         if regions { leaveMenuRows() }
-        // THE ROWS COME AND GO WITH THE WATER (12 Nov: words no longer roll, so nothing has to leave letter by letter
-        // first; the caption is cut as settings take the water and the solar system is simply not there (8 Nov), so
-        // the third of a second the rows used to wait was an empty sheet). The rows are in the water from the first
-        // frame and rise with it. Over Regions' list they still wait for its rows to leave.
+        // THE ROWS COME AND GO WITH THE WATER. The rows are in the water from the first frame and rise with it. Over
+        // Regions' list they still wait for its rows to leave.
         let atOnce = !regions
         settings = true
         if stop == .closed || stop == .quarter || regions { go(.half) }
@@ -94,8 +79,6 @@ final class Water {
             self.settings = false
         }
         if regions { done(); go(.half); return }
-        // (14 Nov: from full too: closed at full over Countries, the water stayed at full with the old full-screen
-        // solar system, a height Countries no longer has)
         if let back, stop == .half || stop == .full, back != stop, grab == nil { onLand = done; go(back) }
         else if stop == .full, grab == nil { onLand = done; go(.half) }
         else { done() }
@@ -123,17 +106,16 @@ final class Water {
     var menuShown: Bool { regions && !profile && !settings && !details && !upload && !pageUp }
     /// the head, for the menu's search (set once by the screen)
     @ObservationIgnored weak var head: HeadState?
-    /// the menu is the whole screen, as the old native app's Regions list was (clear glass with the world under
-    /// it); never a height between half and full (30 Oct 22:35:
-    ///)
+    /// the menu is the whole screen, as the old native app's Regions list was (, clear glass with the world under
+    /// it); never a height between half and full
     var menuTop: CGFloat { layout.top(.full) }
     /// where the water rests for a stop (the menu's own place while it shows)
     func restTop(_ s: Stop) -> CGFloat {
         if s == .half, let f = fitHalf, !(menuShown || lists) { return f }
-        return menuShown || lists ? menuTop : (historyUp && s == .quarter) ? layout.top(.quarter) - 56 : layout.top(s)
+        return menuShown || lists ? menuTop : layout.top(s)
     }
-    /// A SHEET AS HIGH AS WHAT IT HOLDS (14 Nov): a sheet shorter than 50% (a chosen pin's) sets its own top here; its
-    /// 50% stop is that height and it goes no higher, so no empty glass stands under its last row (Apple's sheets fit
+    /// A SHEET AS HIGH AS WHAT IT HOLDS: a sheet shorter than 50% (a chosen pin's) sets its own top here; its 50%
+    /// stop is that height and it goes no higher, so no empty glass stands under its last row (Apple's sheets fit
     /// their content the same way). nil: the ordinary stops.
     var fitHalf: CGFloat? {
         didSet {
@@ -141,7 +123,7 @@ final class Water {
             go(.half)
         }
     }
-    /// HISTORY (13.4): the 25% water risen 56 pt to hold the range bar ("history height")
+    /// HISTORY (13.4): the journey on the map; the water at 25% holds its dates and range bar
     var historyUp = false
     /// A6.5: the water goes to the menu stop from wherever it is (it is never a stop a drag can reach)
     /// Coming into Regions it is simply there, with no movement (a mode change has no motion);
@@ -259,7 +241,6 @@ final class Water {
     var mini: CGFloat = 0
     @ObservationIgnored var listFrom: Stop?
     func openList() {
-        // (never over Pins' own list: the two were drawn on top of each other, 14 Nov)
         guard !stampedList, head?.mode != .pins else { return }
         listFrom = stop
         stampedList = true
@@ -324,14 +305,14 @@ final class Water {
         let A = L.capsule(mini: mini)
         let Q = L.top(.quarter), Hf = L.top(.half)
         // out of the capsule: the top edge rises first, and the sides and the bottom widen to the sheet's in the
-        // second part of the way (the old sheetBase: it grows out, then widens to cover the whole side)
+        // second part of the way (the old sheetBase:)
         let q = Flow.clamp01((A.minY - lv) / max(1, A.minY - Q))
         let wide = Flow.smooth(0.3, 1, q)
         // past half it becomes the page: its edges go out to the screen's
         let pg = Flow.clamp01((Hf - lv) / max(1, Hf))
         let pageEase = pg * pg * (3 - 2 * pg)
-        // at full the glass has no edge anywhere on the screen: on the way there
-        // its sides, its bottom and its top go on out past the screen's own edges, so no rim or corner is ever seen
+        // at full the glass has no edge anywhere on the screen: on the way there its sides, its bottom and its top go
+        // on out past the screen's own edges, so no rim or corner is ever seen
         let past = Self.pastEdge * pageEase
         let inset = L.sheetInset * (1 - pageEase) - past
         let left = Flow.lerp(A.minX, inset, wide)
@@ -369,7 +350,7 @@ final class Water {
     @ObservationIgnored var onMapAgain: (() -> Void)?
     /// another tab chosen
     @ObservationIgnored var onTabChange: (() -> Void)?
-    /// a mode picked from the Map tab's hold menu (11.5): the mode, and the current one ("Countries")
+    /// a mode picked from the Map tab's hold menu (11.5): the mode, and the current one
     @ObservationIgnored var onModePick: ((Int) -> Void)?
     @ObservationIgnored var currentMode: (() -> Int)?
 
@@ -398,19 +379,18 @@ final class Water {
         // where the top edge would be if it were glued to the finger
         var t = g.level + (p.y - g.y)
         let lo = L.top(.full), hi = L.top(.closed)
-        // past full it does not go at all: no give and no spring back at the top 
+        // past full it does not go at all: no give and no spring back at the top
         if t < lo { t = lo }
-        // NO WATER PHYSICS: the sheet is
-        // a plain sheet under the finger, one to one, with hard ends: no give past a stop, no harder band above 50%,
-        // no ticks, no droplet, no lag behind the finger
-        // the upload sheet has no 50% while choosing (9.3), and at history height the line needs the map (13.4):
-        // pulled up, it stays at its own height
+        // NO WATER PHYSICS: the sheet is a plain sheet under the finger, one to one, with hard ends: no give past a
+        // stop, no harder band above 50%, no ticks, no droplet, no lag behind the finger the upload sheet has no 50%
+        // while choosing (9.3), and at history height the line needs the map (13.4): pulled up, it stays at its own
+        // height
         if upload, UploadState.shared.phase != .review { t = max(t, L.top(.quarter)) }
         if historyUp, !stampedList, !details { t = max(t, restTop(.quarter)) }
         // the Route row (Pins) is the caption's line at 25%: nothing above it to show (its 50% was empty glass)
         if PinRoutes.shared.open { t = max(t, L.top(.quarter)) }
-        // no full-screen solar system any more (8 Nov 20:09): over the plain Countries map the water goes no higher
-        // than 50%; full is for what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
+        // no full-screen solar system any more: over the plain Countries map the water goes no higher than 50%; full
+        // is for what fills it (a list, settings, Details, a page's sheet, the other modes' sheets)
         if !fullAllowed { t = max(t, L.top(.half)) }
         // a country's region map with nothing open: its levels line at 25% is all there is (50% was empty glass)
         if !halfAllowed { t = max(t, L.top(.quarter)) }
@@ -487,11 +467,10 @@ final class Water {
     /// itself; a finger takes it from wherever it is
     /// whether the water may be pulled to full: not over the plain Countries map (the full-screen solar system went)
     var fullAllowed: Bool {
-        // (nor over Places' map: its set's rows hold at 50%)
         // (nor over Pins' map: its toolkit, your list and a chosen pin's sheet hold at 50%; only typing a pin's name
-        // or note, and a route's colour, go to full, for the keyboard and the picker)
-        // (on the Profile: only while your nationalities' search is typed in, clear of the keyboard)
-        if profile { return ProfileEdit.shared.searching || ProfileEdit.shared.sheet == .stats || ProfileEdit.shared.sheet == .badges }
+        // or note, and a route's colour, go to full, for the keyboard and the picker) (on the Profile: only while
+        // your nationalities' search is typed in, clear of the keyboard)
+        if profile { return ProfileEdit.shared.searching }
         if stampedList || settings || details || upload || pageSheet || regions { return true }
         switch head?.mode ?? .countries {
         case .countries, .places: return false
@@ -503,7 +482,8 @@ final class Water {
     /// whether the water may rise above 25%: not over a country's bare region map, where nothing fills it
     var halfAllowed: Bool {
         // (on the Profile: only for its picture's and nationalities' sheets)
-        if profile { return ProfileEdit.shared.sheet != nil }
+        // (not under Stats or Badges: their own pages, the water closed under them)
+        if profile { let s = ProfileEdit.shared.sheet; return s != nil && s != .stats && s != .badges }
         // (Upload's two choices are all there is while you choose: the water stays at 25%, never an empty 50% or full)
         if upload, UploadState.shared.phase == .choosing { return false }
         return !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet
@@ -515,7 +495,6 @@ final class Water {
     @ObservationIgnored var placesMenuUp: () -> Bool = { false }
 
     func hint() {
-        // (no more: the water never moves by itself; its physics went, 8 Nov 20:12)
     }
 
     /// the water at a stop at once, no movement (a mode's own content swapped in, not moved)
@@ -560,7 +539,6 @@ final class Water {
         // Reduce Motion: the same settle, shorter (Part 19)
         // (0.42 s in real time: about 0.45 s to settle, Apple's sheet; 0.35 stepped once a frame was 0.7 s at 120 Hz)
         body.response = 0.42 * (Motion.reduce ? 0.65 : 1)
-        // (never past its stop: a fast fling at 0.9 let the sheet overshoot a little, 8 Nov)
         body.damping = 1
         // (no landing haptic: a plain sheet lands silently)
         landingSpeed = 0

@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// The water on screen: clear glass on the droplet outline, what rides inside it, and the tab capsule with its three
-/// tabs, which is its own glass the whole time (the 02:09). The sheet's glass and the capsule's glass are in one
-/// container, so out of the capsule
-/// they are one body of water and at rest they are the capsule.
+/// tabs, which is its own glass the whole time. The sheet's glass and the capsule's glass are in one container, so
+/// out of the capsule they are one body of water and at rest they are the capsule.
 struct WaterView: View {
     let water: Water
     let map: MapController
@@ -14,11 +13,9 @@ struct WaterView: View {
         let L = water.layout
         let shape = WaterShape(form: f)
         ZStack(alignment: .topLeading) {
-            // THE FROST (12 Nov: fading to none as it gets smaller): one shape, its frost
-            // under the clear glass, at the water's own width between capsule and sheet; none in the capsule, all of it
-            // once it is the sheet, frame by frame with the water (never a switch, never a second shape)
-            // (14 Nov: off. A material under the clear glass made every sheet more frosted than Apple's own sheets;
-            // the sheet is the system's regular glass now, the same frost as Apple's at every size)
+            // THE FROST: one shape, its frost under the clear glass, at the water's own width between capsule and
+            // sheet; none in the capsule, all of it once it is the sheet, frame by frame with the water (never a
+            // switch, never a second shape)
             if false, !Perf.shared.off.contains("sheetglass"), f.sheet > 0.001 {
                 shape.fill(.thinMaterial)
                     .opacity(Double(f.sheet))
@@ -49,9 +46,9 @@ struct WaterView: View {
                 // (the Profile's own water: its three numbers, in place of everything the map's water holds)
                 ProfileWater(water: water, form: f, map: map, openMap: {
                     water.onTabChange?()
+                    if let h = water.head, h.mode != .countries { h.mode = .countries }
                     tab = 0
                     Feel.tap()
-                    Sound.tap()
                 })
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
                     .mask(shape)
@@ -71,10 +68,10 @@ struct WaterView: View {
             // (not over Apple's map in Pins: Apple's own credit is on it)
             if !map.pinsMode, !water.profile, !water.lists { StartCredit(water: water, form: f) }
 
-            // the tabs sit on the water itself (one glass, the 02:45); at full the night leaves the capsule's place clear
-            // so they are still on that same glass
-            // ON LISTS the water is the whole screen, so the tabs get the capsule's own glass under them (on the Map
-            // and the Profile the water itself draws in to that capsule, or holds them at its foot): one tab bar shape
+            // the tabs sit on the water itself; at full the night leaves the capsule's place clear, so they are still
+            // on that same glass ON LISTS the water is the whole screen, so the tabs get the capsule's own glass
+            // under them (on the Map and the Profile the water itself draws in to that capsule, or holds them at its
+            // foot): one tab bar shape
             if water.lists {
                 let c = L.capsule(mini: water.mini)
                 Color.clear
@@ -124,7 +121,7 @@ struct WaterView: View {
     @AppStorage("tabIconsLogical2") private var logicalTabs = false
 
     private func tabs(_ L: Layout) -> some View {
-        // the logical icons while the owner tests them (TabIconsTest.swift); off = the circle, square and triangle
+        // the logical icons while he tests them (TabIconsTest.swift); off = the circle, square and triangle
         let keys = logicalTabs ? ["tab-map", "tab-lists-b", "tab-profile-b"] : ["tab-map", "tab-lists", "tab-profile"]
         let names = ["Map", "Lists", "Profile"]
         let spacing: CGFloat = (L.capsule.width - 8) / 3
@@ -136,14 +133,13 @@ struct WaterView: View {
                     // (drawn in: a tap opens the capsule again, nothing else)
                     if water.mini > 0.5 { Feel.tap(); withAnimation(Motion.chrome) { water.mini = 0 }; return }
                     if i == tab && i == 0 {
-                        // the Map tab again resets, in one tap (2.3): the water to 25% and the map home, and what a
-                        // reset closes (search, the tools, settings)
+                        // the Map tab again resets, in one tap: the water to 25% and the map home, and what a reset
+                        // closes (search, the tools, settings)
                         Self.mapAgain(water: water, map: map)
                     }
                     if i != tab { water.onTabChange?() }
                     tab = i
                     Feel.tap()
-                    Sound.tap()
                 } label: {
                     Icon5(key: keys[i], on: i == tab, ink: i == tab ? ink : ink.opacity(0.5), size: 24)
                         .frame(width: spacing, height: 54)
@@ -180,9 +176,9 @@ struct WaterView: View {
     }
 }
 
-/// THE FULL VIEW: at full the water is clear glass to
-/// the top with the map behind it, the solar system in the middle, the head and the tabs staying black, a light mist and
-/// stars. `light` is the switch the build book asks for (2.6): false brings back the dark night.
+/// THE FULL VIEW: at full the water is clear glass to the top with the map behind it, the solar system in the middle,
+/// the head and the tabs staying black, a light mist and stars. `light` is the switch the build book asks for (2.6:):
+/// false brings back the dark night.
 enum FullView {
     static let light = true
     /// whether the chrome turns white for the night at this point of the move to full
@@ -204,10 +200,9 @@ struct SheetContent: View {
             // the full view's space: the mist and the stars over the map (light), or the old night; either leaves the
             // capsule's place as the water's own clear glass
             Group {
-                // no stars under Regions' list (the whole screen is the list there)
-                // nor in Places or Pins (the stars are the countries you have left: they mean nothing there, 7 Nov)
-                // nor over a place's page and its sheet (the page is the screen there), nor behind Details, Map settings
-                // or Upload risen to full (they are the screen there too: the stars stood behind their words as specks)
+                // no stars under Regions' list (the whole screen is the list there) nor in Places or Pins nor over a
+                // place's page and its sheet (the page is the screen there), nor behind Details, Map settings or
+                // Upload risen to full (they are the screen there too: the stars stood behind their words as specks)
                 if Perf.shared.off.contains("stars") || water.regions || water.menuLeaving || map.placesMode || map.pinsMode || water.pageSheet
                     || water.details || water.settings || water.upload
                     // nor on a country's region map (the solar system is the Countries world's; it stood in France's sheet)
@@ -224,34 +219,30 @@ struct SheetContent: View {
             // THE SOLAR SYSTEM in the water (50%), the water's own content when nothing else is
             if !Perf.shared.off.contains("cosmos") {
                 CosmosView(water: water, map: map, form: form)
-                    // something else the water's content (settings, a list, Details, upload): the system is simply not
-                    // there, and simply there again when it goes; no sliding down out of the water and no rising back
-                    // up through its frosted bottom (8 Nov 20:42)
+                    // something else the water's content (settings, a list, Details, upload): the system is simply
+                    // not there, and simply there again when it goes; no sliding down out of the water and no rising
+                    // back up through its frosted bottom
                     .opacity(cosmosOut ? 0 : 1)
                     .animation(nil, value: cosmosOut)
-                    // (12 Nov: it comes up from the water's own bottom edge as the water rises, behind the tabs' glass,
-                    // never out of a soft band above the tabs; the water's outline is its only edge)
 
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
             // THE SHELF (7.5): Places' maps for where you look, one sideways row under the caption, riding the edge
-            // HISTORY'S RANGE BAR (13.4) on the water, its centre at the water's top + 156
-            // (not under the journey's rows at full: it rode up over the head, 31 Oct 11:32)
-            // (84 pt under the caption's middle, so at full it stays under the caption, never in the head's row; and not
-            // under settings, Details or the upload, which take the water)
-            // (and only once the water is at history height: switched on from 25%, the bar was drawn in the still
-            // short sheet on top of the tab icons for the frames the water took to rise its 56 pt)
+            // HISTORY'S RANGE BAR (13.4) on the water, its centre at the water's top + 156 (84 pt under the caption's
+            // middle, so at full it stays under the caption, never in the head's row; and not under settings, Details
+            // or the upload, which take the water) (and only once the water is at history height: switched on from
+            // 25%, the bar was drawn in the still short sheet on top of the tab icons for the frames the water took
+            // to rise its 56 pt)
             if water.historyUp, map.historyInfo != nil, !water.stampedList, !water.listLeaving, !water.settings, !water.details, !water.upload, !water.regions,
                form.top <= water.restTop(.quarter) + 6 {
                 HistoryBar(map: map, width: L.W - 2 * L.sheetInset - 32)
-                    .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72) + 84)
+                    .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72) + 30)
             }
             // THE PAGE'S OWN SHEET (16.6) over a place's page, in the water at 50%
             if water.pageSheet { PageSheet(water: water, map: map, form: form).transition(.identity) }
-            // (never under a place's page: the water there is only the tab capsule or the page's sheet)
-            // (nor at history height: the shelf's cards peeked behind the range bar there, 31 Oct 06:25)
-            // THE DRAW BAR (Map/DrawTool.swift) in the caption's place while a shape or line is drawn
-            // (in Pins its controls are the tools' own circles, changing in place: PinsDock)
+            // (never under a place's page: the water there is only the tab capsule or the page's sheet) THE DRAW BAR
+            // (Map/DrawTool.swift) in the caption's place while a shape or line is drawn (in Pins its controls are
+            // the tools' own circles, changing in place: PinsDock)
             if DrawTool.shared.on, !water.settings, !map.pinsMode { DrawBar(water: water).transition(.opacity.animation(Motion.quick)) }
             if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
                !water.historyUp, !PlacePageState.shared.isOpen, map.regionScene == nil, !DrawTool.shared.on {
@@ -278,11 +269,9 @@ struct SheetContent: View {
                 StampedList(water: water, map: map, form: form, top: captionY + 56).transition(.identity)
             }
 
-            // the name and number: at full they stay under the head (29 Oct 22:13, Q2.1)
-            // THE REGION MAP'S LINE fills the 25% water from the top where the Countries caption's name sits (its first
-            // line 28 pt under the water's edge), not a small block in its middle
-            // (history up on a region map: the journey's caption takes the level line's place, its dates and count as
-            // everywhere else, 8 Nov answer 15)
+            // the name and number: at full they stay under the head THE REGION MAP'S LINE fills the 25% water from
+            // the top where the Countries caption's name sits (its first line 28 pt under the water's edge), not a
+            // small block in its middle
             if !Perf.shared.off.contains("caption"), !(water.historyUp && map.historyInfo != nil),
                let rl = regionLevels(width: L.W - 2 * L.sheetInset - 32) {
                 rl
@@ -312,8 +301,8 @@ struct SheetContent: View {
                     PinsDock(water: water, top: dockTop)
                     if !PinRoutes.shared.open, !DrawTool.shared.on,
                        !PinStore.shared.pins.isEmpty || !PinRoutes.shared.routes.isEmpty || !PinDrawings.shared.all.isEmpty {
-                        // (how far the water is from 25% towards 50%: at 25% no row shows at all, no words poking
-                        // out of the bottom; by a third of the way they are whole)
+                        // (how far the water is from 25% towards 50%: at 25% no row shows at all, 17:52; by a third
+                        // of the way they are whole)
                         let up = (L.top(.quarter) - form.top) / max(1, L.top(.quarter) - L.top(.half))
                         PinsList(water: water, captionY: cy, top: PinsDock.bottom(dockTop), rest: abs(form.top - L.top(.half)) < 1.5)
                             .opacity(min(1, max(0, Double(up) * 3)))
@@ -335,28 +324,25 @@ struct SheetContent: View {
                 }
                 .animation(Motion.quick, value: kind)
             }
-            if !Perf.shared.off.contains("caption"), map.regionScene == nil || (water.historyUp && map.historyInfo != nil), !water.pageSheet, !map.pinsMode {
+            if !Perf.shared.off.contains("caption"), map.regionScene == nil || (water.historyUp && map.historyInfo != nil), !water.pageSheet, !map.pinsMode, !water.menuShown {
                     // 7.4: the Places caption: Everywhere's (every town you marked anywhere, no "of N"), or the open
                     // country's (its towns you marked, of its towns)
                     // (history up: the journey's range, its places and its length, 13.4)
                     let hc = water.historyUp ? map.historyInfo?.caption : nil
                     Caption(name: hc?.name ?? (map.placesMode ? (placesCaption?.name ?? "") : map.moonHeld ? CosmosView.stops[map.filter] : map.sunPicked ? "Streak" : (map.continent ?? "World")),
                             count: hc?.count ?? (map.placesMode ? (placesCaption?.count ?? map.stampedTowns(on: .everywhere)) : map.sunPicked ? map.streakWeeks : count),
-                            tail: hc?.tail ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
-                            // (Places before a set is picked: the menu alone, no count of "places" as a whole, 11 Nov 12:33)
+                            tail: hc.map { "\($0.count.formatted()) \($0.tail)" } ?? (map.placesMode ? (placesCaption?.tail ?? (map.stampedTowns(on: .everywhere) == 1 ? "place" : "places")) : map.sunPicked ? (map.streakWeeks == 1 ? "week" : "weeks") : "of \(total)"),
                             night: FullView.night(form.page), visible: captionShown && !(map.placesMode && hc == nil && placesCaption == nil),
                             quiet: water.modeSwitching,
                             // (Places: the name keeps clear of the back arrow on its line)
-                            maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + (map.placesMode ? 60 : 24)))
-                // (Places: a set picked or left is the water's content changing at once, the caption with it: its words
-                // rolled out over the menu's first rows, 11 Nov)
+                            maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + (map.placesMode ? 60 : 24)),
+                            compact: hc != nil)
                 .transaction(value: map.placesPicked) { $0.animation = nil; $0.disablesAnimations = true }
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so
                 // the edge never cuts a word and no word passes over the tabs. Past half it rides the edge up at its
-                // full size and stops under the head, where it stays at full (28 Oct 01:21: the edge must
-                // never cut it).
-                .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72))
+                // full size and stops under the head, where it stays at full.
+                .position(x: L.W / 2, y: max(L.headBottom + 12 + 52, form.top + 72) - (hc != nil ? 31 : 0))
                 // never drawn over the tabs: the water going down to the capsule moves faster than a roll, so the
                 // last of a roll out is under the capsule's top (author's call, A2.5)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
@@ -385,8 +371,6 @@ struct SheetContent: View {
                         Button("Copy") { UIPasteboard.general.string = "\(count) of \(total)" }
                     }
                     .position(x: L.W / 2, y: captionY + 4)
-                    // (a tap no longer opens the Stamped list: the list at full is not wanted, 12 Nov 14:16; the code
-                    // stays in Passport/StampedList.swift, reached only by the test driver's "list on")
             }
             // THE CAPTION'S NAME (11.5): the menu of the planet it names: on the world, Earth's (a continent by name); on
             // a continent, that planet's (Open it, here unavailable, · Its stamped list). The ring follows
@@ -400,7 +384,7 @@ struct SheetContent: View {
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 13))
                     .contextMenu {
                         ForEach(["Africa", "Antarctica", "Asia", "Europe", "North America", "Oceania", "South America"], id: \.self) { k in
-                            Button(k) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.show(continent: k) } }
+                            Button(k) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { map.pick(continent: k) } }
                         }
                     }
                     .position(x: L.W / 2, y: captionY - 44)
@@ -418,11 +402,7 @@ struct SheetContent: View {
             // in on the quick curve; out faster (0.15 s), so it has gone before the edge comes down to the tabs
             // (a mode change swaps the caption with no roll)
             if captionShown != fits {
-                // (a page coming or going is the screen changing at once: the caption with it, 8 Nov: it faded over
-                // the page's first frames)
                 // (and a tab coming back: the map's caption is there with the map)
-                // (and settings, Details or the upload taking the water or giving it back: rolled, the leaving letters
-                // stayed where the caption had stood while the water rose past them, 12 Nov)
                 let taken = water.settings || water.details || water.upload
                 if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || taken != takenWas { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
@@ -451,9 +431,9 @@ struct SheetContent: View {
     /// the towns level's row in the level line (no region level uses it)
     static let townsRow = 99
 
-    /// PLACES' CAPTION (9 Nov): the set looked at, your places of it, of how many it lists; narrowed to a country,
-    /// of how many it has there ("of 61 in Italy"). The towns' set says its total only
-    /// in a country (the world's towns are not a list anyone holds: "Towns 12").
+    /// PLACES' CAPTION: the set looked at, your places of it, of how many it lists; narrowed to a country, of how
+    /// many it has there. The towns' set says its total only in a country (the world's towns are not a list anyone
+    /// holds:).
     private var placesCaption: (name: String, count: Int, tail: String)? {
         _ = map.townsVersion; _ = MarkStore.shared.changes; _ = CollectionStore.shared.ready; _ = map.continent
         let place: String? = map.placeOpen.flatMap { i in map.world.map { $0.places[i].n } }
@@ -461,8 +441,8 @@ struct SheetContent: View {
         guard map.placesPicked else { return nil }
         if let c = map.setCollection {
             let n = c.items.filter { MarkStore.shared.state($0.key).stamped }.count
-            // (the set's own name whatever kind it is cut down to: the lime bar under it says the kind)
-            // (a continent picked: of how many it has there, "of 612 in Europe")
+            // (the set's own name whatever kind it is cut down to: the lime bar under it says the kind) (a continent
+            // picked: of how many it has there,)
             let area = place ?? (MapController.continents.contains(c.scope) ? c.scope : nil)
             return (CollectionStore.shared.title(map.placesSet), n, "of " + Self.number(c.total) + (area.map { " in " + $0 } ?? ""))
         }
@@ -476,7 +456,7 @@ struct SheetContent: View {
         return (cities, n, "")
     }
 
-    /// a count as people read it ("28,246")
+    /// a count as people read it
     static func number(_ n: Int) -> String {
         let nf = NumberFormatter(); nf.numberStyle = .decimal; nf.locale = Locale(identifier: "en_GB")
         return nf.string(from: NSNumber(value: n)) ?? "\(n)"
@@ -497,15 +477,15 @@ struct SheetContent: View {
     private var cosmosOut: Bool {
         water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
             || water.pageSheet
-            // and history's (9 Nov: the years sat on its orbit)
+            // and history's
             || water.historyUp
-            // Places' water holds your maps (7 Nov 16:37: the solar system means nothing in Places), and Pins' its pins
+            // Places' water holds your maps, and Pins' its pins
             || map.placesMode || map.pinsMode
             // and a region map's (the system is the Countries world's; it sat in France's sheet at 50%)
             || map.regionScene != nil
             // and the water on its way down to 25% by itself (settings, a list or Details closed, the Map tab): the
-            // system is not shown for a moment only to sink away under the caption (8 Nov burst: it came back at 50%
-            // and rode down for a second); under a finger it rises and sinks with the water as before
+            // system is not shown for a moment only to sink away under the caption; under a finger it rises and sinks
+            // with the water as before
             || (!water.held && (water.stop == .quarter || water.stop == .closed))
     }
     @State private var captionShown = false
@@ -515,19 +495,6 @@ struct SheetContent: View {
     @State private var takenWas = false
 }
 
-/// THE FULL VIEW IS CLEAR GLASS WITH STARS: no field, no mist,
-/// nothing spreading from the sun; the water stays the clear glass it is everywhere else, the map under it, the tabs on
-/// the same glass. Only the stars, one for each place you have left (8 Oct).
-///
-/// Each star is the sun's plasma and only that (the 10:47): white tongues of light round a soft bright middle, no
-/// disc, no rim,
-/// at full strength; small. White light can't be seen on the white land, so each
-/// star's light is darkened as much as the ground under it needs (the 13:58): white over the sea, darker over land.
-///
-/// They come with the water's top edge, never all at once and never from a point in the middle: past half, as the
-/// edge goes up over a star, that star grows out of its own middle to its size, and goes back into it as the edge
-/// comes down. Drawn from eight star pictures made once (each a moment of the plasma), so a moving sheet only places
-/// pictures; at rest nothing is drawn again.
 struct PlasmaStars: View {
     let page: CGFloat
     let top: CGFloat
@@ -601,8 +568,7 @@ struct PlasmaStars: View {
                 if hypot(x - Double(sun.x), y - Double(sun.y)) < 64 { continue }
                 let grow = Double(open) * min(1, max(0, (y - Double(top)) / 28))
                 guard grow > 0.01 else { continue }
-                // most small, a few bigger, as real brightness goes (the 11:39): seen by being full white light
-                // not by size
+                // most small, a few bigger, as real brightness goes: seen by being full white light, not by size
                 let scale = Self.scale(s) * grow
                 let w = Double(Self.sprite) * scale
                 // the same plasma, its light darkened as much as the ground under it needs (white over the sea): one of
@@ -687,9 +653,11 @@ struct Caption: View {
     var visible = true
     /// a mode change: the new name, number and tail are simply there (no roll)
     var quiet = false
-    /// the widest the name may be (inside the sheet's margins): a long one gets a little smaller to fit, never
-    /// runs off the sheet (8 Nov)
+    /// the widest the name may be (inside the sheet's margins): a long one  never runs off the sheet and never gets
+    /// smaller type
     var maxNameWidth: CGFloat = 360
+    /// history: the name and one plain line, no big number
+    var compact = false
     @ScaledMetric(relativeTo: .largeTitle) private var big: CGFloat = 64
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -697,17 +665,16 @@ struct Caption: View {
         let ink: Color = night ? Palette.white : Palette.ink
         let way = visible ? 1.0 : 0.0
         VStack(spacing: 0) {
-            // a new name rolls in letter by letter, the way the number does (Apple's text roll), never swapped in
-            // place
+            // a new name rolls in letter by letter, the way the number does, never swapped in place
             Text(visible ? name : Self.blank(name, "\u{2002}"))
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.6)
                 .contentTransition(.numericText(value: way))
                 .animation(quiet ? nil : Motion.quick, value: name)
                 .frame(width: min(Self.nameWidth(name, typeSize), maxNameWidth))
-            // with its thousands mark, as its tail is written ("15,229" over "of 15,229", never "15229")
+            // with its thousands mark, as its tail is written ( over, never "15229")
+            if !compact {
             Text(visible ? count.formatted() : Self.blank(count.formatted(), "\u{2007}"))
                 .font(.system(size: big, weight: .semibold, design: .rounded))
                 .monospacedDigit()
@@ -715,14 +682,15 @@ struct Caption: View {
                 .contentTransition(.numericText(value: visible ? Double(count) : -1))
                 .animation(quiet ? nil : Motion.quick, value: count)
                 .padding(.top, -6)
+                .transition(.identity)
+            }
             // an empty tail (Everywhere) keeps its line as a space, so the caption keeps its place and sizes
             Text(visible && !tail.isEmpty ? tail : Self.blank(tail, "\u{2002}"))
                 .font(.body.weight(.semibold))
                 .foregroundStyle(ink.opacity(0.5))
                 .contentTransition(.numericText(value: way))
-                // (rolled with the name and the number: changed at once, "World 39 of 58" stood for a frame, 12 Nov)
                 .animation(quiet ? nil : Motion.quick, value: tail)
-                .padding(.top, -8)
+                .padding(.top, compact ? 2 : -8)
         }
         .multilineTextAlignment(.center)
         .fixedSize()
@@ -744,9 +712,9 @@ struct Caption: View {
     static func blank(_ s: String, _ space: String) -> String { String(repeating: space, count: max(1, s.count)) }
 }
 
-/// THE START CREDIT (A1.20, on top of the sheet, on the left): plain words on the map
-/// just above the water's top edge, at the sheet's inner left, no box of its own; in and out by the text roll like every
-/// word; at each cold launch until 5 s or the first touch on the map, while the water is low enough for its caption.
+/// THE START CREDIT: plain words on the map just above the water's top edge, at the sheet's inner left, no box of its
+/// own; in and out by the text roll like every word; at each cold launch until 5 s or the first touch on the map,
+/// while the water is low enough for its caption.
 struct StartCredit: View {
     let water: Water
     let form: Water.Form
@@ -756,7 +724,7 @@ struct StartCredit: View {
         // (and not above 50%: higher, the water's top is under the head and the words would sit over the status bar)
         let fits = form.top <= L.capsule.minY - 134 && form.top >= L.top(.half) - 2 && !(water.stop == .closed && !water.held)
         Text(shown ? "© OpenStreetMap" : "\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}\u{2002}")
-            .font(.caption)
+            .font(.subheadline)
             .foregroundStyle(Palette.ink.opacity(0.5))
             .contentTransition(.identity)
             .fixedSize()

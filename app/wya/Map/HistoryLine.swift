@@ -2,11 +2,10 @@ import UIKit
 import SwiftUI
 import simd
 
-// HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web and no dots
-//. Your stops in date order, each leg straight (the same two places again bow a little, one side then the
-// other), 2.5 pt all along in screen points, black at the start to our blue at the end, no edge (31 Oct 11:47: the bows
-// and the edge are gone; Q13.1's white end with them, which needed the edge on white land). A small glass capsule names
-// the start and the end ("Lisbon · Mar 2024"), beside the line, never on it.
+// HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web and no dots.
+// Your stops in date order, each leg straight (the same two places again bow a little, one side then the other), 2.5
+// pt all along in screen points, black at the start to our blue at the end, no edge. A small glass capsule names the
+// start and the end, beside the line, never on it.
 
 /// THE JOURNEY: the stops of one mode in range, and the legs between them in map units (worked out once per range)
 struct HistoryTrack {
@@ -64,8 +63,7 @@ struct HistoryTrack {
             case .thing:
                 if let h = ThingIndex.shared.hit(e.key.id) { found = (h.file, h.name, h.lon, h.lat) }
                 else if let it = CollectionStore.shared.item(e.key) {
-                    // a collection's stop: its point is already in map units (its longitude and latitude worked back
-                    // from it for the km)
+                    // a collection's stop: its point is already in map units
                     if let i = w.placeIndex[it.cc] ?? w.placeIndex[it.cc.uppercased()], countries?.contains(it.cc.lowercased()) ?? true {
                         let at = SIMD2(Double(it.at.x), Double(it.at.y)), g = EqualEarth.unproject(at)
                         stops.append(Stop(key: e.key, place: i, at: at, from: e.from, name: it.name, ll: SIMD2(g.lon, g.lat)))
@@ -135,8 +133,8 @@ struct HistoryTrack {
             let pair = [stops[j].place, stops[j + 1].place].sorted().map(String.init).joined(separator: "-")
             let again = seen[pair, default: 0]
             seen[pair] = again + 1
-            // (31 Oct 11:47, the bows read as strange maths) a leg is straight; only the same two places again bow, a
-            // little, to one side and then the other, so two trips never draw on one another
+            // a leg is straight; only the same two places again bow, a little, to one side and then the other, so two
+            // trips never draw on one another
             let side: Double = again % 2 == 1 ? 1 : -1
             let bow: Double = again == 0 ? 0 : 0.12 * Double((again + 1) / 2)
             // right of travel on the map (y runs down): (-dy, dx)
@@ -173,9 +171,7 @@ struct HistoryTrack {
         breaks = jumps
     }
 
-    /// the line's colour at a share of its length: black to our blue (31 Oct 11:47: no edge any more, so it ends in
-    /// the blue, not white, which would vanish on white land)
-    /// (12 Nov: plain black all along, as Pins' journey; no more black to blue)
+    /// the line's colour at a share of its length: black to our blue
     static func colour(_ t: Double) -> UIColor { UIColor(Palette.ink) }
 }
 
@@ -192,7 +188,7 @@ final class HistoryLineView: UIView {
     /// what a tap on the journey found (13.4's table): a start or end capsule, or a leg within 12 pt
     enum Hit { case start, end, leg(Int), edge(Int) }
     /// THE EDGE CAPSULES (13.3, a leg over the date line): where each half meets the map's edge, a capsule names the
-    /// other end ("Honolulu ›" on the half leaving, "‹ Tokyo" on the half arriving); a tap flies to that end
+    /// other end ( on the half leaving, on the half arriving); a tap flies to that end
     private var edgeCaps: [HistoryCapsule] = []
     /// for each edge capsule shown, the stop it names
     private var edgeStop: [Int] = []
@@ -200,6 +196,10 @@ final class HistoryLineView: UIView {
     private var builtCount = -1
     private let holder = CALayer()
     private var pieces: [(line: CAShapeLayer, t: CGFloat, from: CGFloat, to: CGFloat)] = []
+    /// A DOT AT EVERY STOP: each stop a black dot on the line, there once the line has reached it; with its share of
+    /// the line (0 to 1) and its place in map units
+    private let dots = CAShapeLayer()
+    private var stopAt: [(share: CGFloat, at: SIMD2<Double>)] = []
 
     /// the one on screen (the test driver's `history tap`)
     nonisolated(unsafe) static weak var current: HistoryLineView?
@@ -211,6 +211,8 @@ final class HistoryLineView: UIView {
         backgroundColor = .clear
         isOpaque = false
         layer.addSublayer(holder)
+        dots.fillColor = UIColor(Palette.ink).cgColor
+        dots.strokeColor = nil
         addSubview(startCap); addSubview(endCap); addSubview(legCap)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -218,9 +220,14 @@ final class HistoryLineView: UIView {
     private func build(_ t: HistoryTrack) {
         holder.sublayers?.forEach { $0.removeFromSuperlayer() }
         pieces = []
+        stopAt = []
         let pts = t.points
         let segs = pts.count - 1
         guard segs > 0 else { return }
+        for j in t.stops.indices {
+            let i = j < t.legStart.count ? t.legStart[j] : segs
+            stopAt.append((CGFloat(min(i, segs)) / CGFloat(segs), pts[min(i, segs)]))
+        }
         let n = min(40, segs)
         for j in 0 ..< n {
             let a = j * segs / n, b = (j + 1) * segs / n
@@ -237,6 +244,7 @@ final class HistoryLineView: UIView {
             holder.addSublayer(l)
             pieces.append((l, share, CGFloat(a) / CGFloat(segs), CGFloat(b) / CGFloat(segs)))
         }
+        holder.addSublayer(dots)
     }
 
     func update(_ m: MapController) {
@@ -265,25 +273,27 @@ final class HistoryLineView: UIView {
         holder.position = .zero
         holder.sublayerTransform = tr
         for p in pieces {
-            // one width all along (31 Oct 11:47), 2.5 pt on the screen at every zoom
+            // one width all along, 2.5 pt on the screen at every zoom
             p.line.lineWidth = 2.5 / k
             // drawn along: each piece from 0 to 1 as the shown share passes over it
             let end = max(0, min(1, (shown - p.from) / max(0.0001, p.to - p.from)))
             p.line.strokeEnd = end
             p.line.isHidden = end <= 0
         }
+        // the dots, 7 pt across on the screen at every zoom, each once the drawn line has reached its stop
+        let r = 3.5 / k
+        let dp = CGMutablePath()
+        for s in stopAt where s.share <= shown + 0.0005 {
+            dp.addEllipse(in: CGRect(x: CGFloat(s.at.x) - r, y: CGFloat(s.at.y) - r, width: 2 * r, height: 2 * r))
+        }
+        dots.path = dp
         CATransaction.commit()
-        // the capsules ride the ends: the start one is up from the beginning, the end one once the head arrives (A13.2);
-        // kept in the room between the head and the water, and away while their stop is off the screen (31 Oct 07:30: the
-        // end's capsule stood over the head with Silverstone far off the top)
+        // the capsules ride the ends: the start one is up from the beginning, the end one once the head arrives
+        // (A13.2); kept in the room between the head and the water, and away while their stop is off the screen
         let rr = m.layout.room(sheetTop: m.sheetTop > 0 ? m.sheetTop : m.layout.top(.quarter))
-        // (and left of the zoom column, 31 Oct 11:55: a capsule ended against its plus and full screen mark)
         let room = CGRect(x: 0, y: rr.lowerBound, width: bounds.width - m.layout.side - 44, height: rr.upperBound - rr.lowerBound)
         let seen = room.insetBy(dx: -24, dy: -24)
         // the leg's capsule beside its middle, on the side its bow goes (the chord's middle is inside the bow)
-        // (first: a leg's capsule names both its ends, so a start or end capsule it would overlap steps back while it is
-        // up; 31 Oct 07:45, at world zoom the three crossed one another)
-        // (none while a stamping card is up over the journey: its name ran into "Poland · Oct 2026", 8 Nov)
         let cardUp = CardState.shared.isOpen || RegionCardState.shared.isOpen
         var legRect: CGRect?
         if let j = legShown, !cardUp, m.historyTrack != nil, shown > 0.999, j + 1 < track.stops.count, let r = Self.legRange(track, j) {
@@ -302,12 +312,12 @@ final class HistoryLineView: UIView {
         if let first = track.stops.first {
             let p0 = m.screenPoint(track.points.first ?? first.at)
             let dir = track.points.count > 1 ? m.screenPoint(track.points[1]) : CGPoint(x: p0.x + 1, y: p0.y)
-            startCap.set(Self.words(first), near: p0, awayFrom: dir, in: room, avoid: legRect, visible: !cardUp && shown > 0.001 && m.historyTrack != nil && seen.contains(p0))
+            startCap.set(Self.words(first), near: p0, awayFrom: dir, in: room, avoid: legRect, visible: false)
         }
         if let last = track.stops.last, track.stops.count > 1 {
             let pn = m.screenPoint(track.points.last ?? last.at)
             let prev = track.points.count > 1 ? m.screenPoint(track.points[track.points.count - 2]) : CGPoint(x: pn.x - 1, y: pn.y)
-            endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: !cardUp && shown > 0.999 && m.historyTrack != nil && seen.contains(pn))
+            endCap.set(Self.words(last), near: pn, awayFrom: prev, in: room, avoid: legRect, visible: false)
         } else { endCap.hide() }
         edges(track, m, room: room, on: !cardUp && shown > 0.999 && m.historyTrack != nil)
         if m.historyTrack == nil && shown <= 0.001 { self.track = nil; builtCount = -1; isHidden = true }
@@ -358,8 +368,7 @@ final class HistoryLineView: UIView {
         guard let map = superview, let track else { return }
         let rr = m.layout.room(sheetTop: m.sheetTop > 0 ? m.sheetTop : m.layout.top(.quarter))
         let side = min(map.bounds.width, rr.upperBound - rr.lowerBound)
-        // centred on the journey as it is on screen (31 Oct 10:58: centred on the room, it cut the line's top off), kept
-        // inside the map
+        // centred on the journey as it is on screen, kept inside the map
         let pts = track.points.map { m.screenPoint($0) }
         let lo = CGPoint(x: pts.map(\.x).min() ?? map.bounds.midX, y: pts.map(\.y).min() ?? map.bounds.midY)
         let hi = CGPoint(x: pts.map(\.x).max() ?? map.bounds.midX, y: pts.map(\.y).max() ?? map.bounds.midY)
@@ -406,7 +415,7 @@ final class HistoryLineView: UIView {
         case "units":
             if let sc = map?.regionScene { NSLog("wya region units %@", sc.unitIDs.prefix(6).joined(separator: " ")) }
         case "share":
-            // (the picture only, into the test folder; "share sheet" also opens the system sheet)
+            // (the picture only, into the test folder; also opens the system sheet)
             if let m = map, let v = current { v.shareJourney(m, present: p.count > 2 && p[2] == "sheet") }
         case "open":
             guard p.count > 2, let m = map, let t = m.historyTrack, let first = t.stops.first, let last = t.stops.last else { return }
@@ -502,7 +511,7 @@ final class HistoryLineView: UIView {
         let t: CGFloat = Swift.max(0, Swift.min(1, along))
         return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
     }
-    /// "Lisbon → Madrid · 3–9 Mar 2024" (13.4): the two stops' arrival days, the month and year said once where shared
+    /// (13.4): the two stops' arrival days, the month and year said once where shared
     static func legWords(_ a: HistoryTrack.Stop, _ b: HistoryTrack.Stop) -> String {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_GB")
         let mon = { (m: Int) in f.shortMonthSymbols[max(0, min(11, m - 1))] }
@@ -534,7 +543,7 @@ final class HistoryCapsule: UIView {
     private var showing = false
 
     init() {
-        // a word on the map: the system's frosted glass, as every surface (7 Nov 16:49)
+        // a word on the map: the system's frosted glass, as every surface
         glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
         super.init(frame: .zero)
         isUserInteractionEnabled = false
@@ -575,8 +584,7 @@ final class HistoryCapsule: UIView {
         // the side away from the line: from the line's next point back through the end, 8 pt past the capsule's half
         var dx = p.x - q.x, dy = p.y - q.y
         let len = max(0.001, hypot(dx, dy)); dx /= len; dy /= len
-        // its nearest edge 8 pt from the point along that way (31 Oct 07:27: the sum of both half sizes put a long
-        // capsule 40 pt and more away from its stop)
+        // its nearest edge 8 pt from the point along that way
         let ax = abs(dx), ay = abs(dy)
         let byWidth: CGFloat = ax > 0.001 ? w / 2 / ax : CGFloat.infinity
         let byHeight: CGFloat = ay > 0.001 ? h / 2 / ay : CGFloat.infinity
@@ -607,19 +615,18 @@ final class HistoryCapsule: UIView {
         label.frame = CGRect(x: 10, y: (h - label.bounds.height) / 2, width: label.bounds.width, height: label.bounds.height)
         if visible != showing {
             showing = visible
-            // (31 Oct: no growing and shrinking for its own sake: it is there, or not)
             isHidden = !visible
         }
         center = centre
     }
 }
 
-/// THE RANGE BAR (13.4; redrawn): an iOS slider with two thumbs, drawn on the
-/// water (no glass of its own), the water's width - 32. The track a 6 pt capsule of black 12% from your first dated stop
-/// to today; the range a 6 pt black capsule between the thumbs; the thumbs white 28 pt circles with Apple's soft
-/// shadow (44 pt to touch), as a UISlider's; the years under the track only when the track spans more than one, each
-/// centred under its own stretch (black inside the range, black 50% outside), every 2nd, 5th or 10th when crowded.
-/// The caption above says the range's dates, so nothing under the thumbs repeats it.
+/// THE RANGE BAR: an iOS slider with two thumbs, drawn on the water (no glass of its own), the water's width - 32.
+/// The track a 6 pt capsule of black 12% from your first dated stop to today; the range a 6 pt black capsule between
+/// the thumbs; the thumbs white 28 pt circles with Apple's soft shadow (44 pt to touch), as a UISlider's; the years
+/// under the track only when the track spans more than one, each centred under its own stretch (black inside the
+/// range, black 50% outside), every 2nd, 5th or 10th when crowded. The caption above says the range's dates, so
+/// nothing under the thumbs repeats it.
 struct HistoryBar: View {
     let map: MapController
     let width: CGFloat
@@ -635,10 +642,9 @@ struct HistoryBar: View {
             let lo = x(info.lo), hi = x(info.hi)
             let trackY: CGFloat = 16
             ZStack(alignment: .topLeading) {
-                // THE BAR'S MENU on the bar behind the thumbs only (8 Nov: on the whole bar, a press and pause on a thumb
-                // opened it and dropped the thumb)
+                // THE BAR'S MENU on the bar behind the thumbs only
                 Color.clear
-                    .frame(width: width, height: 50)
+                    .frame(width: width, height: 32)
                     .contentShape(Rectangle())
                     .contextMenu {
                         // LATEST TRIP (13.4): the latest run of days away from home; with no home yet (Profile), the
@@ -651,30 +657,12 @@ struct HistoryBar: View {
                     .frame(width: width - 2 * inset + 6, height: 6).position(x: width / 2, y: trackY)
                 Capsule().fill(Palette.ink)
                     .frame(width: max(6, hi - lo + 6), height: 6).position(x: (lo + hi) / 2, y: trackY)
-                ForEach(years(info), id: \.self) { y in
-                    let a = max(info.first, info.dayNumber(LocalDay(y: y, m: 1, d: 1)))
-                    let b = min(info.last, info.dayNumber(LocalDay(y: y, m: 12, d: 31)))
-                    let inside = b >= info.lo && a <= info.hi
-                    // the year's whole stretch of the track is its button, under the thumbs' band (8 Nov: a 31 x 16
-                    // word beside a thumb's touch, so a tap on it moved the thumb instead)
-                    Text(String(y)).font(.footnote.weight(.medium)).foregroundStyle(Palette.ink.opacity(inside ? 1 : 0.5))
-                        .fixedSize()
-                        .frame(width: max(30, x(b) - x(a)), height: 18)
-                        .contentShape(Rectangle())
-                        .position(x: (x(a) + x(b)) / 2, y: 41)
-                        .onTapGesture {
-                            Feel.tap()
-                            withAnimation(Motion.settle) { map.setHistoryRange(lo: a, hi: b) }
-                        }
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityLabel("\(y)")
-                }
                 thumb(lo, y: trackY)
                 thumb(hi, y: trackY)
-                // ONE TOUCH BAND FOR BOTH THUMBS (8 Nov): the nearer thumb is taken; when they meet, the first move
-                // says which (left the start, right the end), so the range can always be widened again
-                // (round each thumb only, 60 x 32: a hold anywhere else on the bar is still its menu)
-                // (fixed identities: a thumb's band is the same view all through its drag)
+                // ONE TOUCH BAND FOR BOTH THUMBS: the nearer thumb is taken; when they meet, the first move says
+                // which (left the start, right the end), so the range can always be widened again (round each thumb
+                // only, 60 x 32: a hold anywhere else on the bar is still its menu) (fixed identities: a thumb's band
+                // is the same view all through its drag)
                 ForEach(0 ..< 2, id: \.self) { k in
                     let at = k == 0 ? lo : hi
                     Color.clear
@@ -694,20 +682,11 @@ struct HistoryBar: View {
                 end(info, isLow: true, at: lo, y: trackY)
                 end(info, isLow: false, at: hi, y: trackY)
             }
-            .frame(width: width, height: 50)
+            .frame(width: width, height: 32)
             .coordinateSpace(.named("historybar"))
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Range")
         }
-    }
-
-    private func years(_ info: HistoryInfo) -> [Int] {
-        let first = info.firstYear, last = info.lastYear
-        guard last > first else { return [] }
-        let n = max(1, last - first + 1)
-        let each = (width - 2 * inset) / CGFloat(n)
-        let step = each >= 30 ? 1 : each * 2 >= 30 ? 2 : each * 5 >= 30 ? 5 : 10
-        return stride(from: first, through: last, by: 1).filter { ($0 - first) % step == 0 }
     }
 
     /// a thumb, drawn only (the band above takes the finger)
@@ -769,7 +748,6 @@ struct HistoryBar: View {
 /// what the caption and the bar show while history is up: the range (as day numbers from the first stop), the stops in
 /// it and the length
 struct HistoryInfo: Equatable {
-    /// day numbers: days since 1 Jan 1970 (so a range is two integers)
     var first: Int, last: Int, lo: Int, hi: Int
     var count: Int
     var km: Int
@@ -788,11 +766,11 @@ struct HistoryInfo: Equatable {
         var c = DateComponents(); c.year = d.y; c.month = d.m; c.day = d.d
         return Calendar(identifier: .gregorian).date(from: c).map { f.string(from: $0) } ?? ""
     }
-    /// the caption's three lines (13.4): "Mar 2024 – Oct 2026", 14, "places · 9,840 km"
+    /// the caption's three lines (13.4):, 14,
     var caption: (name: String, count: Int, tail: String) {
         let a = text(lo), b = text(hi)
         let nf = NumberFormatter(); nf.numberStyle = .decimal; nf.locale = Locale(identifier: "en_GB")
         let km = nf.string(from: NSNumber(value: km)) ?? "\(km)"
-        return (a == b ? a : "\(a) – \(b)", count, (count == 1 ? "place" : "places") + (count > 1 ? " · \(km) km" : ""))
+        return (a == b ? a : "\(a) – \(b)", count, (count == 1 ? "place" : "places") + (count > 1 ? ", \(km) km" : ""))
     }
 }

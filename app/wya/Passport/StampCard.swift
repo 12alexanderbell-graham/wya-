@@ -23,7 +23,7 @@ final class CardState {
     static var slow: Double = 1
     /// stamp it: the stamp travels from the button and presses onto the page; the stamp haptic on the real contact.
     /// The flying stamp is put in place at the button first and moves from the next frame: started in the same update
-    /// it was inserted in, SwiftUI drew it already landed and there was no flight at all (burst 30 Oct 12:28)
+    /// it was inserted in, SwiftUI drew it already landed and there was no flight at all
     func land() {
         flying = true
         travel = 0
@@ -61,7 +61,7 @@ final class CardState {
             }
         }
     }
-    /// A4.7 "STAMP GOES HERE": the outline of where this place's stamp would sit, drawn along its own length (0 to 1)
+    /// A4.7: the outline of where this place's stamp would sit, drawn along its own length (0 to 1)
     var ghost: CGFloat = 0
     @ObservationIgnored private var ghostHide: DispatchWorkItem?
     /// draw it (0.35 s), hold it 1.2 s after the tap, undraw it (0.3 s); a tap while it shows holds it again
@@ -80,14 +80,19 @@ final class CardState {
     var goingTop: CGFloat?
 
     var isOpen: Bool { place != nil }
+    /// the card is on the screen: from the frame it starts to grow (after the water has made room) until it has
+    /// folded away
+    private(set) var shown = false
     @ObservationIgnored private var closing = false
 
     func open(_ i: Int, at point: CGPoint, map: MapController, water: Water? = nil) {
         // one press, one job: the touch that closed a card never opens another (Appendix A.4)
         guard place == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
+        // (its Details' Provinces read now, so they are there when Details opens, D14)
+        if let w = map.world, i < w.places.count { DetailsRegions.prefetch(w.places[i].id.lowercased()) }
         // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water
         // goes to the highest stop that leaves it 300 or more, and the card starts 0.1 s after the water starts. The
-        // card never shrinks to fit a high sheet (30 Oct 12:37 on Sudan's small book over the 50% water)
+        // card never shrinks to fit a high sheet
         if let water {
             let L = water.layout
             let fits: (Water.Stop) -> Bool = { StampCard.Geometry(L: L, sheetTop: water.y($0)).bookH >= 300 }
@@ -99,8 +104,8 @@ final class CardState {
             }
         }
         place = i
-        // THE PASSPORT COMES FROM WHERE IT IS KEPT: it grows out of the
-        // plus, the passport tool's home, on the same arc, and goes back into it; the place keeps its darkening
+        // THE PASSPORT COMES FROM WHERE IT IS KEPT: it grows out of the plus, the passport tool's home, on the same
+        // arc, and goes back into it; the place keeps its darkening
         if let L = water?.layout { at = CGPoint(x: L.rightX, y: L.headY) } else { at = point }
         stampedHere = false
         landing = false
@@ -108,11 +113,10 @@ final class CardState {
         p = 0
         Task {
             order = await MarkStore.shared.passportOrder()
-            // NOTHING CLASHES: when the water has to
-            // go down first, the card only starts growing once the water's edge is below where the card will end, so
-            // the growing card and the falling water never cross (the book's 0.1 s overlap did exactly that)
-            // (the same when the water is still on its way to its stop for any other reason, e.g. the Stamped list
-            // closing into 25%: the card waits for it)
+            // NOTHING CLASHES: when the water has to go down first, the card only starts growing once the water's
+            // edge is below where the card will end, so the growing card and the falling water never cross (the
+            // book's 0.1 s overlap did exactly that) (the same when the water is still on its way to its stop for any
+            // other reason, e.g. the Stamped list closing into 25%: the card waits for it)
             if let water {
                 let to = goingTop ?? water.y(water.stop)
                 let start = CACurrentMediaTime()
@@ -122,6 +126,7 @@ final class CardState {
             }
             guard place == i else { return }
             Feel.tap()
+            shown = true
             withAnimation(.spring(response: 0.42 * Self.slow, dampingFraction: 1)) { p = 1 }
             // THE FIRST-TIME HINT (P01 §22): left open and untouched, the card starts back toward where it goes when
             // a tap outside closes it, and comes back, once; never words
@@ -136,7 +141,7 @@ final class CardState {
     }
 
     /// back into the point it came from, every change kept (no Save: closing keeps, the undo drop takes it back)
-    /// `instant`: gone in this frame, no fold (a mode change swaps the content and moves nothing, 8 Nov)
+    /// `instant`: gone in this frame, no fold
     func close(map: MapController, instant: Bool = false) {
         guard place != nil else { return }
         // (closed once by you: its hint has nothing to show)
@@ -146,14 +151,14 @@ final class CardState {
             closedAt = CACurrentMediaTime()
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) { p = 0 }
-            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil
+            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil; shown = false
             return
         }
         guard !closing else { return }
-        // (8 Nov) a card still waiting for the water to make room was never seen: it goes at once, and the touch that
-        // sent it away may open the next one (a second tap on a place had been eaten by the 0.4 s rule)
+        // a card still waiting for the water to make room was never seen: it goes at once, and the touch that sent it
+        // away may open the next one (a second tap on a place had been eaten by the 0.4 s rule)
         if p == 0 {
-            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil
+            place = nil; heldTop = nil; goingTop = nil; ghost = 0; map.kept = nil; shown = false
             return
         }
         // one close per card: a second touch while it folds no longer starts the 0.4 s over (that ate the tap after it)
@@ -163,6 +168,7 @@ final class CardState {
             guard let self else { return }
             self.closing = false
             guard self.closedAt > 0, self.p < 0.01 else { return }
+            self.shown = false
             self.place = nil
             self.heldTop = nil
             self.goingTop = nil
@@ -172,9 +178,9 @@ final class CardState {
     }
 }
 
-/// THE STAMPING CARD (Part 4.2): the place's name, Stamp | Wishlist, your passport open on the page where its stamp is
-/// (or would go), Details | Verify?, one straight mirror-symmetrical column in the open map; the map never moves.
-/// As built by 30 Oct rules: the glass tints change in one frame (no fronts); haptics only (no sounds).
+/// THE STAMPING CARD (Part 4.2): the place's name, Stamp | Wishlist, your passport open on the page where its stamp
+/// is (or would go), Details | Verify?, one straight mirror-symmetrical column in the open map; the map never moves.
+/// As built by rules: the glass tints change in one frame (no fronts); haptics only (no sounds).
 struct StampCard: View {
     let map: MapController
     let water: Water
@@ -182,6 +188,9 @@ struct StampCard: View {
     @State private var marks = MarkStore.shared
     @State private var details = DetailsState.shared
     @State private var verify = VerifyState.shared
+    /// the narrowest a button pair's capsule goes: and whole at any book size; the pair stands wider than the book
+    /// then
+    @ScaledMetric(relativeTo: .body) private var pillMin: CGFloat = 104
     @State private var wishTapAt: CFTimeInterval = 0
     @State private var stampTapAt: CFTimeInterval = 0
     /// what the Verify? button reads for this card's place (Verify? / In process / Verified)
@@ -197,9 +206,8 @@ struct StampCard: View {
             let bookBottom = g.mid.y + g.bookH / 2 + 28
             let r: CGFloat = card.heldTop.map { h in max(0, min(1, (h - waterTop) / max(1, h - bookBottom))) } ?? 0
             let detailsUp = details.isOpen || verify.isOpen
-            // THE CARD GOES BACK: once the bottom pair has
-            // gone, the name, Stamp | Wishlist and the book stay at their own size and the water rises over them; at
-            // full they have gone under it
+            // THE CARD GOES BACK: once the bottom pair has gone, the name, Stamp | Wishlist and the book stay at
+            // their own size and the water rises over them; at full they have gone under it
             let id = w.places[i].id
             let key = PlaceKey.country(id)
             let state = marks.state(key)
@@ -208,24 +216,25 @@ struct StampCard: View {
             // along the arc itself (ArcPlace), not on a straight line between the two ends
             let c = CGPoint(x: g.mid.x, y: g.mid.y)
             // from the plus the way is straight down and in: an arc bowed upward ran the growing card across the
-            // head's dot (burst 30 Oct 13:01), and nothing may cross anything (the 12:43)
+            // head's dot, and nothing may cross anything
             let ctrl = CGPoint(x: (card.at.x + c.x) / 2, y: (card.at.y + c.y) / 2)
-            let half = (g.bookW - 12) / 2
+            let half = max((g.bookW - 12) / 2, pillMin)
             VStack(spacing: 12) {
                 nameCapsule(w.places[i].n, width: g.bookW)
                 HStack(spacing: 12) {
-                    stampButton(state, key: key, name: w.places[i].n, w: (g.bookW - 12) / 2)
-                    wishButton(state, key: key, name: w.places[i].n, w: (g.bookW - 12) / 2)
+                    stampButton(state, key: key, name: w.places[i].n, w: half)
+                    wishButton(state, key: key, name: w.places[i].n, w: half)
                 }
+                .fixedSize()
                 PassportPage(id: id, order: card.order, hidden: card.flying ? id : nil,
                              size: CGSize(width: g.bookW, height: g.bookH))
+                    // (the passport book landed on it: the page under its glass is not drawn, so no stamp shows through)
+                    .opacity(BookState.shared.shown && BookState.shared.p > 0.95 ? 0 : 1)
                 HStack(spacing: 12) {
-                    // (their words go as the pair has shrunk part of the way into the book's edge, and are back at the
-                    // same point coming out; they are not blanked the moment Details opens: with no roll that left two
-                    // full-size empty capsules standing for a beat, 12 Nov)
                     detailsButton(state, key: key, name: w.places[i].n, w: half, words: r < 0.4)
                     verifyButton(state, key: key, name: w.places[i].n, place: i, w: half, words: r < 0.4)
                 }
+                .fixedSize()
                 .scaleEffect(max(0.001, 1 - r))
                 .offset(y: -34 * r)
                 .allowsHitTesting(r < 0.01 && !detailsUp)
@@ -285,6 +294,9 @@ struct StampCard: View {
             // (the card stays where it is at its own size, never shrinking: the rising water goes over it, its top,
             // the name and Stamped | Wishlist, still showing above the water at 50%; F50, F60)
             .modifier(ArcPlace(t: p, from: card.at, ctrl: ctrl, to: c))
+            // (in the screen's own space, after the card is placed: its wide button pairs never cut, and its fold away
+            // under a rising water cut too)
+            .mask(alignment: .top) { Rectangle().frame(height: max(0, waterTop)) }
             // (touchable while any of it shows above the water)
             .allowsHitTesting(p > 0.98 && waterTop - 12 > g.mid.y - (168 + g.bookH) / 2)
         }
@@ -297,26 +309,22 @@ struct StampCard: View {
             .font(.title2.weight(.semibold))
             .foregroundStyle(Palette.ink)
             .multilineTextAlignment(.center)
-            // one line, a little smaller for a long name: the card's rows are laid out for a 44 pt name, and a second
-            // line put the stamp's slot and its landing 12 pt off (8 Nov)
+            // one line: the card's rows are laid out for a 44 pt name, and a second line put the stamp's slot and its
+            // landing 12 pt off
             .lineLimit(1)
-            .minimumScaleFactor(0.55)
             .mapHalo(map.onApple)
-            // just the name: no glass box round it (30 Oct 10:34)
+            // just the name: no glass box round it
             .frame(minHeight: 44)
             .frame(maxWidth: width + 32)
     }
 
-    // (14 Nov: the card's buttons are the system's frosted glass, so their words read over any map; on clear glass the map
-    // lensed through and "Wishlist" could not be read)
     private func stampButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
         Button {
             stampTap(s, key: key, name: name)
         } label: {
             Text(s.stamped ? "Stamped" : "Stamp")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .frame(width: w, height: 44)
@@ -345,10 +353,8 @@ struct StampCard: View {
                 card.land()
             }
         } else {
-            // ONE MEANING EVERYWHERE (7 Nov, the friend's review boards 03 and 12: "Stamped" took the stamp off right
-            // after stamping, but did nothing on a card opened later): a tap on Stamped always takes the stamp off,
-            // its visits with it, and the undo drop puts all of it back
-            // the stamp still on its way down: felt as refused, not silently ignored
+            // ONE MEANING EVERYWHERE: a tap on Stamped always takes the stamp off, its visits with it, and the undo
+            // drop puts all of it back the stamp still on its way down: felt as refused, not silently ignored
             guard !card.flying else { Feel.refuse(); return }
             card.lift {
                 Task {
@@ -362,8 +368,7 @@ struct StampCard: View {
     }
 
     private func wishButton(_ s: MarkState, key: PlaceKey, name: String, w: CGFloat) -> some View {
-        // a place you have been is never on your wishlist (Q4.4)
-        // the same on every card (7 Nov: one meaning everywhere)
+        // a place you have been is never on your wishlist (Q4.4:), the same on every card
         let blocked = s.stamped
         return Button {
             if blocked { Feel.refuse(); return }
@@ -382,8 +387,7 @@ struct StampCard: View {
         } label: {
             Text("Wishlist")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .frame(width: w, height: 44)
                 .glassEffect(s.wished ? PageGlass.surface.tint(Palette.blue) : PageGlass.surface, in: .capsule)
@@ -391,13 +395,12 @@ struct StampCard: View {
         .buttonStyle(.plain)
     }
 
-    /// a button whose sheet is not built yet keeps its place in the "not yet" look and refuses
+    /// a button whose sheet is not built yet keeps its place in the look and refuses
     private func notYet(_ word: String, w: CGFloat, live: Bool, dim: Bool = true, words: Bool = true) -> some View {
         Button { Feel.refuse() } label: {
             Text(words ? word : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink.opacity(dim || !live ? 0.5 : 1))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
@@ -416,8 +419,7 @@ struct StampCard: View {
         } label: {
             Text(words ? proofWord : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink.opacity(s.stamped ? 1 : 0.5))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
@@ -442,8 +444,7 @@ struct StampCard: View {
         } label: {
             Text(words ? "Details" : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink.opacity(s.stamped || s.wished ? 1 : 0.5))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
@@ -484,6 +485,18 @@ struct StampCard: View {
     static func quad(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
         let u = 1 - t
         return CGPoint(x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y)
+    }
+}
+
+/// a stamp's tap, only where it has one (the book)
+struct StampTap: ViewModifier {
+    let act: (() -> Void)?
+    func body(content: Content) -> some View {
+        if let act {
+            content.contentShape(Rectangle()).onTapGesture(perform: act).accessibilityAddTraits(.isButton)
+        } else {
+            content
+        }
     }
 }
 
@@ -565,6 +578,8 @@ struct PassportPage: View {
     var menu: ((String) -> [StampMenuItem])? = nil
     /// a place's name as the map spells it (the hold menu's title)
     var name: ((String) -> String)? = nil
+    /// the book's stamps answer a tap too: the place on the map
+    var tap: ((String) -> Void)? = nil
 
     static let fill: [(col: Int, row: Int)] = [(0, 0), (1, 1), (0, 2), (1, 0), (0, 1), (1, 2)]
 
@@ -602,16 +617,16 @@ struct PassportPage: View {
                         .frame(width: at.size.width, height: at.size.height)
                         .rotationEffect(.degrees(at.turn))
                         .modifier(StampHold(items: menu?(pid), title: name?(pid) ?? pid.uppercased()))
+                        .modifier(StampTap(act: tap.map { t in { t(pid) } }))
                         .position(at.center)
                 }
             }
             Text("\(page + 1)")
-                .font(.caption2)
+                .font(.subheadline)
                 .foregroundStyle(Palette.ink.opacity(0.5))
                 .position(x: size.width / 2, y: size.height - 16)
         }
         .frame(width: size.width, height: size.height)
-        // (14 Nov: frosted, the system's regular glass like every other sheet, no longer clear)
         .glassEffect(PageGlass.surface, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
                                                          bottomTrailingRadius: corner, topTrailingRadius: corner,
                                                          style: .continuous))

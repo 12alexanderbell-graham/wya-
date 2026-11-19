@@ -10,6 +10,14 @@ struct wyaApp: App {
                 CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
             }
         }
+        // the stamps' type (Passport/RealStamps): Barlow Condensed, Caveat, Noto Serif, Noto Sans Arabic (SIL OFL 1.1, their
+        // licences beside them in Resources/Fonts)
+        for name in ["BarlowCondensed-Medium", "BarlowCondensed-SemiBold", "BarlowCondensed-Bold", "Caveat-SemiBold",
+                     "NotoSerif-SemiBold", "NotoSerif-Bold", "NotoSansArabic-Bold"] {
+            if let url = Bundle.main.url(forResource: name, withExtension: "ttf") {
+                CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            }
+        }
         // the loading screen's turning logo opened before any view is built (Design/LogoTurn.swift)
         LogoTurnUIView.warm()
         Snap.start()
@@ -25,6 +33,9 @@ struct wyaApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.light)
+                // the app's accent is its ink: the text caret, Apple's calendar's chosen day and the rest of the
+                // system's accents in black, never the system blue
+                .tint(Palette.ink)
                 // the app put away: a review or round up is kept on disk (iOS may end the app before it is back)
                 .onChange(of: phase) { _, p in if p == .background { UploadState.shared.backgrounded() } }
         }

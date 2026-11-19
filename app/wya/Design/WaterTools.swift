@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// TOOLS IN THE WATER (12 Nov): a row of 44 pt glass circles where every map's caption sits,
-/// one line of words under them in the caption's tail style (headline, the ink at 50%). A tool in use fills black,
-/// its icon white; one that can't be used yet has its icon at 50%. No bar behind them, no lime.
-/// Pins' tools (Add pin, Route, Draw) and the draw tool's Undo, Cancel, Done are both this row.
+/// TOOLS IN THE WATER: a row of 44 pt glass circles where every map's caption sits, one line of words under them in
+/// the caption's tail style (headline, the ink at 50%). A tool in use fills black, its icon white; one that can't be
+/// used yet has its icon at 50%. No bar behind them, no lime. Pins' tools (Add pin, Route, Draw) and the draw tool's
+/// Undo, Cancel, Done are both this row.
 struct WaterTools: View {
     struct Tool {
         /// an Icon5 key, or "pin" for the pins' own shape
@@ -24,8 +24,7 @@ struct WaterTools: View {
     var width: CGFloat? = nil
     /// where the circles and their words sit: together in the middle, or together from the leading edge (Pins)
     var align: HorizontalAlignment = .center
-    /// the tools as words in one glass capsule, each an equal part of it (14 Nov: one capsule, words not icons); the
-    /// one in use filled black, its word white
+    /// the tools as words in one glass capsule, each an equal part of it; the one in use filled black, its word white
     var capsule = false
 
     var body: some View {
@@ -58,7 +57,6 @@ struct WaterTools: View {
                     .foregroundStyle(Palette.ink.opacity(0.5))
                     .monospacedDigit()
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
                     .contentTransition(.numericText())
                     .id(words.filter { !$0.isNumber })
                     .transition(.blurReplace)
@@ -73,7 +71,7 @@ struct WaterTools: View {
         let label = Text(t.label)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(t.on ? Palette.white : Palette.ink.opacity(t.dim ? 0.5 : 1))
-            .lineLimit(1).minimumScaleFactor(0.8)
+            .lineLimit(1)
             .frame(width: w - 6, height: 38)
             .background { if t.on { Capsule().fill(Palette.ink) } }
             .contentShape(Capsule())

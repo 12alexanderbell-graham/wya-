@@ -8,8 +8,13 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     struct Went: Codable, Equatable, Sendable { var n: String; var k: String }
     var from: String?
     var to: String?
-    /// a visit's time in words when it isn't exact ("Summer 2019", 40 characters)
+    /// a visit's time in words when it isn't exact (, 40 characters)
     var whenRough: String?
+    /// the first visit's days, picked on our calendar (Trip.from / to); `from` / `to` above are the first lived time's
+    var visitFrom: String?
+    var visitTo: String?
+    /// the first visit's length when its days aren't known (Trip.long)
+    var long: String?
     var nights: Int?
     /// Visit / Airport / Through / Other
     var mode: String?
@@ -27,6 +32,11 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     /// the visits after the first (one row per trip), each with its own time in words, how and why;
     /// the first visit is the fields above, as the old app kept it
     struct Trip: Codable, Equatable, Sendable {
+        /// the visit's days, ("to" the last day there); picked on our own calendar in Details
+        var from: String?
+        var to: String?
+        /// how long, when the days aren't known: day / days / week / weeks / month / longer
+        var long: String?
         var whenRough: String?
         var mode: String?
         var modeOther: String?
@@ -37,12 +47,13 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     /// visit i as one Trip: 0 is the record's own fields, the others `trips` (setting past the end does nothing)
     subscript(trip i: Int) -> Trip {
         get {
-            if i == 0 { return Trip(whenRough: whenRough, mode: mode, modeOther: modeOther, purpose: purpose, purposeOther: purposeOther) }
+            if i == 0 { return Trip(from: visitFrom, to: visitTo, long: long, whenRough: whenRough, mode: mode, modeOther: modeOther, purpose: purpose, purposeOther: purposeOther) }
             let t = trips ?? []
             return i - 1 < t.count ? t[i - 1] : Trip()
         }
         set {
             if i == 0 {
+                visitFrom = newValue.from; visitTo = newValue.to; long = newValue.long
                 whenRough = newValue.whenRough; mode = newValue.mode; modeOther = newValue.modeOther
                 purpose = newValue.purpose; purposeOther = newValue.purposeOther
             } else if var t = trips, i - 1 < t.count {
@@ -59,6 +70,12 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     var stars: Int?
     /// who you were with, one 120-character line (new)
     var with: String?
+    /// web addresses kept with the place (a blog post, the hotel, a video), one to a line, 600 characters
+    var links: String?
+    /// photos added here (new; the book's Photo object): our own small copy's file (Passport/DetailPhotos) and Photos'
+    /// id when the picker gave one
+    struct Photo: Codable, Equatable, Sendable { var file: String; var asset: String? }
+    var photos: [Photo]?
 
     var isEmpty: Bool { self == StampDetails() }
 
@@ -74,14 +91,14 @@ nonisolated struct StampDetails: Codable, Equatable, Sendable {
     }
 }
 
-/// A STAMP'S PROOF (Part 4.5): the old app's Verification (how, state, at, when, file). States as built here:
-/// "waiting" (kept on the phone until it can be sent: there is no server yet), "checking", "verified", "notAccepted".
+/// A STAMP'S PROOF (Part 4.5): the old app's Verification (how, state, at, when, file). States as built here: (kept
+/// on the phone until it can be sent: there is no server yet),,,.
 nonisolated struct Verification: Codable, Equatable, Sendable {
     /// here / history / library / camera / documents / other
     var how: String
     var state: String
     var at: Date
-    /// the proving day, "YYYY-MM-DD"
+    /// the proving day,
     var when: String?
     var file: String?
 

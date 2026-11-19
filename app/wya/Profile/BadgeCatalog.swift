@@ -286,13 +286,13 @@ nonisolated extension Badges {
         add("whole-countries", "Whole countries", [1, 2, 5, 10, 25], "Places with every region marked.", family: "world")
         add("deep-in-one-country", "Deep in one country", [5, 10, 25, 50, 100], "The most regions you have marked in one place.", family: "world")
         let t = w.tables
-        if t != nil { now("zones", family: "world", what: "Time zones you have been in: the hours from UTC, in standard time.") }
+        if t != nil { now("zones", family: "world", what: "Time zones you went to: the hours from UTC, in standard time.") }
         else { keep("zones", family: "world") }
         now("languages", family: "world", what: "Official languages of the places you have stamped.")
         now("currencies", family: "world", what: "Currencies of the places you have stamped.")
         if t != nil { now("scripts", family: "world", what: "Writing systems of the official languages where you have stamped.") ; out[out.count - 1].steps = [2, 3, 5, 8, 12] }
         else { keep("scripts", family: "world") }
-        now("far", family: "world", what: "The farthest you are sure you have been from your home base, in km.")
+        now("far", family: "world", what: "The farthest you are sure you went from your home base, in km.")
         out[out.count - 1].unit = .km
         now("arctic", family: "world", what: "Places of yours north of the Arctic Circle.")
         add("the-antarctic-circle", "The Antarctic Circle", [1, 2, 3, 5, 10], "Places of yours south of the Antarctic Circle.", family: "world")
@@ -300,7 +300,7 @@ nonisolated extension Badges {
         now("equator", family: "world", what: "Places of yours on both sides of the equator: the side with fewer counts.")
         add("the-prime-meridian", "The prime meridian", [1, 2, 5, 10, 20], "Places of yours on both sides of the prime meridian, near it: the side with fewer counts.", family: "world")
         add("the-date-line", "The date line", [1, 2, 5, 10, 20], "Places of yours on both sides of the date line, near it: the side with fewer counts.", family: "world")
-        now("tripoints", family: "world", what: "Points where three countries meet that you have marked, or been within 2 km of.")
+        now("tripoints", family: "world", what: "Points where three countries meet that you have marked, or went within 2 km of.")
 
         add("places", "Places", [1, 10, 50, 150, 500], "Places you have added to your map.", family: "map")
         for (k, n) in placeKinds {
@@ -334,7 +334,7 @@ nonisolated extension Badges {
         keep("stamps", family: "passport")
         add("dated", "Dated", [1, 10, 25, 50, 100], "Places you have given the month you went.", family: "passport")
         add("with-a-photo", "With a photo", [1, 10, 25, 50, 100], "Stamps with a photo.", family: "passport", counted: false, from: "passport")
-        add("been-back", "Been back", [1, 3, 10, 25, 50], "Places you have been to more than once.", family: "passport")
+        add("been-back", "Back again", [1, 3, 10, 25, 50], "Places you went to more than once.", family: "passport")
         add("big-year", "Big year", [3, 5, 10, 20, 40], "The most new countries in one year, by the months you went.", family: "passport")
         now("rated", family: "passport", what: "Places you have given stars.")
 
@@ -396,7 +396,7 @@ nonisolated extension Badges {
         }
         for c in ["Europe", "Asia", "Africa", "North America", "South America", "Oceania"] {
             let n = countries { $0.cont == c && w.capitals.contains($0.id) }
-            add("capitals-" + slug(c), "Capitals of " + c, setSteps(n), "Capitals of \(c)'s countries you have been to, out of \(n).",
+            add("capitals-" + slug(c), "Capitals of " + c, setSteps(n), "Capitals of \(c)'s countries you went to, out of \(n).",
                 family: "capitals", place: c)
         }
         for (g, m) in groups {
@@ -419,18 +419,18 @@ nonisolated extension Badges {
             let set = w.tables?.sets.first { $0.id == slug(name) }
             let k = set.map { $0.by == "continent" ? Set($0.members.compactMap(\.cont)).count : $0.members.count } ?? n
             add(slug(name), name, increasing([1, max(2, k / 4), max(3, k / 2), max(4, 3 * k / 4), k]),
-                "\(name): those you have been to, out of \(k).", family: "famous", counted: set != nil, from: "data")
+                "\(name): those you went to, out of \(k).", family: "famous", counted: set != nil, from: "data")
         }
         add("every-month", "Every month", [2, 4, 6, 9, 12], "Months of the year you have gone somewhere in, by the months you gave.", family: "months")
         add("every-season", "Every season", [2, 3, 4], "Seasons you have gone somewhere in, as they are where you went.", family: "months")
         add("new-year-away", "New Year away", [1, 2, 3, 5, 10], "New Years spent away from home.", family: "months", counted: false, from: "trips")
         add("birthday-away", "Birthday away", [1, 2, 3, 5, 10], "Birthdays spent away from home.", family: "months", counted: false, from: "trips")
         add("two-winters", "Two winters in one year", [1, 2, 3, 5, 10], "Years with a winter each side of the equator.", family: "months", counted: false, from: "trips")
-        add("highest-place", "Highest place", [2000, 3000, 4000, 5000, 8000], "The highest you are known to have been: a town you stamped, a peak, volcano or lake you marked, a high point you reached.", family: "extremes", unit: .metres)
-        add("lowest-place", "Lowest place", [1, 50, 100, 200, 400], "The lowest you are known to have been below the sea: a town you stamped, a lake you marked.", family: "extremes", unit: .metres)
+        add("highest-place", "Highest place", [2000, 3000, 4000, 5000, 8000], "The highest you are known to have gone: a town you stamped, a peak, volcano or lake you marked, a high point you reached.", family: "extremes", unit: .metres)
+        add("lowest-place", "Lowest place", [1, 50, 100, 200, 400], "The lowest below the sea you are known to have gone: a town you stamped, a lake you marked.", family: "extremes", unit: .metres)
         add("furthest-north", "Furthest north", [500, 600, 666, 700, 780], "The furthest north you are sure you were.", family: "extremes", unit: .tenthDegrees)
         add("furthest-south", "Furthest south", [350, 450, 550, 600, 666], "The furthest south you are sure you were.", family: "extremes", unit: .tenthDegrees)
-        add("four-hemispheres", "Four hemispheres", [2, 3, 4], "Quarters of the world you have been in, north or south and east or west.", family: "extremes")
+        add("four-hemispheres", "Four hemispheres", [2, 3, 4], "Quarters of the world you went to, north or south and east or west.", family: "extremes")
         add("antipodes", "Antipodes", [1, 2, 3, 5, 10], "Pairs of your places on opposite sides of the Earth.", family: "extremes")
         add("continents-in-one-year", "Continents in one year", [2, 3, 4, 5, 6], "The most continents you went to in one year, by the months you gave.", family: "extremes")
         add("biggest-list", "Biggest list", [5, 10, 25, 50, 100], "Things in your biggest list.", family: "biggest")

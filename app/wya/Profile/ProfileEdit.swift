@@ -34,12 +34,15 @@ final class ProfileEdit {
     func open(_ s: Sheet, water: Water) {
         field = nil
         searching = false
+        if s == .stats || s == .badges {
+            withAnimation(Motion.chrome) { sheet = s }
+            water.go(.closed)
+            return
+        }
         sheet = s
-        // (your stats are a long list: the water at full)
-        let to: Water.Stop = s == .stats || s == .badges ? .full : .half
-        water.go(to)
+        water.go(.half)
         // (the water could not rise: no sheet left hidden under 25%)
-        if water.stop != to { sheet = nil }
+        if water.stop != .half { sheet = nil }
     }
     /// the sheet put away; `move: false` when the water has already gone down by itself
     func close(water: Water, move: Bool = true) {
@@ -184,47 +187,59 @@ struct ProfileGroundSheet: View {
     }
 }
 
-/// YOUR STATS (the stats number's tap; the water at full): each group's title, then its rows, the name on the left and
-/// the value on the right; in "21 of 58" the "of 58" at 50%. A pull down puts it away.
+/// YOUR STATS (the stats number's tap; the water at full): each group's title, then its rows, the name on the left
+/// and the value on the right; in the "of 58" at 50%. A pull down puts it away.
 struct ProfileStatsList: View {
     let width: CGFloat
     let room: CGFloat
     @State private var numbers = ProfileNumbers.shared
+    /// the gaps between the rows (EdgeRows): the list's visible height ends in one, whole rows only
+    @State private var cuts: [CGFloat] = []
 
     var body: some View {
         let all = numbers.groups.map { ($0.title, $0.rows) } + numbers.sections.map { ($0.name, $0.rows) }
+        let h = EdgeRows.fit(room, cuts: cuts)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(all.enumerated()), id: \.offset) { i, g in
                     Text(g.0).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
                         .padding(.top, i == 0 ? 8 : 28).padding(.bottom, 4)
+                        .edgeRow()
                         .accessibilityAddTraits(.isHeader)
                     ForEach(g.1) { r in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Text(r.label).font(.body).foregroundStyle(Palette.ink)
                                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 8)
-                            value(r.value).lineLimit(1).minimumScaleFactor(0.7)
+                            // (a long value goes onto a second line, never cut off:)
+                            value(r.value).lineLimit(3).multilineTextAlignment(.trailing)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .padding(.vertical, 10)
                         .frame(minHeight: 44)
+                        .edgeRow()
                         .accessibilityElement(children: .combine)
                     }
                 }
             }
             .frame(width: width, alignment: .leading)
             .padding(.bottom, 16)
+            .coordinateSpace(name: EdgeRows.space)
+            .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
         }
+        .scrollTargetBehavior(GapSnap(cuts: cuts))
+        .scrollBlur()
         .scrollIndicators(.hidden)
-        .frame(width: width, height: room)
-        // (rows go soft under the water's top edge, never cut by a straight line)
         .mask(alignment: .top) {
             VStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 8)
                 Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
         }
+        .frame(width: width, height: h, alignment: .top)
+        .frame(width: width, height: room, alignment: .top)
     }
-    /// "21 of 58": the count in black, "of 58" at 50%; anything else as it is
+    /// : the count in black, "of 58" at 50%; anything else as it is
     private func value(_ v: String) -> Text {
         if let r = v.range(of: " of "), v[..<r.lowerBound].allSatisfy({ $0.isNumber || $0 == "," }) {
             return Text(v[..<r.lowerBound]).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
@@ -256,13 +271,35 @@ struct ProfileBadgesList: View {
     let room: CGFloat
     @State private var numbers = ProfileNumbers.shared
     @State private var edit = ProfileEdit.shared
+    @State private var pos = ScrollPosition(edge: .top)
     private var open: String? {
         get { edit.badge }
         nonmutating set { edit.badge = newValue }
     }
 
-    private var all: [Badge] {
-        numbers.earned.sorted { $0.level != $1.level ? $0.level > $1.level : $0.name < $1.name }
+    private var all: [Badge] { Self.order(numbers.earned) }
+    static func order(_ earned: [Badge]) -> [Badge] {
+        earned.sorted { $0.level != $1.level ? $0.level > $1.level : $0.name < $1.name }
+    }
+    /// THE FIRST SCREEN OF BADGE PICTURES MADE AHEAD: each is made on the main thread (its solid, the studio's light
+    /// the first time, the render), 860 ms for the first and 40 to 80 ms for each after, so the Badges page froze for
+    /// up to 2 s as it slid in. Made one at a time while the Profile sits still, they are there when it is tapped.
+    @MainActor private static var warmed = false
+    @MainActor static func prewarm(width: CGFloat, scale: CGFloat) async {
+        guard !warmed else { return }
+        let numbers = ProfileNumbers.shared
+        for _ in 0 ..< 20 where !numbers.ready { try? await Task.sleep(for: .milliseconds(250)) }
+        guard numbers.ready, !Task.isCancelled else { return }
+        warmed = true
+        let cell = (width - 2 * 12) / 3
+        let px = Int((min(88, cell - 8) * scale).rounded())
+        for b in order(numbers.earned).prefix(18) {
+            guard !Task.isCancelled else { warmed = false; return }
+            let form = BadgeArt.shared.form(b), level = BadgeLevel.of(b)
+            if BadgeArt.shared.cached(form, level, px: px) == nil { _ = await BadgeArt.shared.image(form, level, px: px, scale: scale) }
+            // (a breath between them, so a touch or a frame never waits behind more than one)
+            try? await Task.sleep(for: .milliseconds(40))
+        }
     }
     static func value(_ b: Badge, _ n: Int) -> String {
         switch b.unit {
@@ -285,9 +322,9 @@ struct ProfileBadgesList: View {
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap, alignment: .top), count: cols), spacing: 20) {
                 ForEach(all) { b in
                     VStack(spacing: 8) {
-                        BadgeDisc(level: b.level, size: min(72, cell - 16))
+                        BadgeArtView(badge: b, size: min(88, cell - 8))
                         Text(b.name).font(.subheadline).foregroundStyle(Palette.ink)
-                            .multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.8)
+                            .multilineTextAlignment(.center).lineLimit(2)
                     }
                     .frame(width: cell)
                     .contentShape(Rectangle())
@@ -297,34 +334,29 @@ struct ProfileBadgesList: View {
                     .accessibilityAddTraits(.isButton)
                 }
             }
+            .scrollTargetLayout()
             .padding(.top, 8).padding(.bottom, 16)
         }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollBlur()
+        .scrollPosition($pos)
+        #if DEBUG
+        .onChange(of: ScrollTest.shared.y) { _, y in pos.scrollTo(y: y) }
+        #endif
         .scrollIndicators(.hidden)
         .frame(width: width, height: room)
-        .mask(alignment: .top) {
-            VStack(spacing: 0) {
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 8)
-                Color.black
-            }
-        }
     }
 
     private func one(_ b: Badge) -> some View {
         let next = b.steps.first { $0 > b.have }
         return VStack(spacing: 0) {
-            HStack {
-                Button { Feel.tap(); open = nil } label: {
-                    Icon5(key: "back", ink: Palette.ink, size: 22).frame(width: 44, height: 44).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-                Spacer()
-            }
-            BadgeDisc(level: b.level, size: 132)
-                .padding(.top, 8)
+            BadgeLiveView(badge: b, size: 220)
+                .padding(.top, 4)
             Text(b.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center).padding(.top, 16)
-            Text(Badges.levelName[min(b.level, 5)]).font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
+            // its level, and the day it was reached where the app saw it
+            Text(Badges.levelName[min(b.level, 5)] + (BadgeMoment.day(b.id, b.level).map { " on " + $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? ""))
+                .font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
             // what you have, and the next level's number at 50%
             (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
              + Text(next.map { " of " + Self.value(b, $0) } ?? "").font(.system(size: 22, weight: .semibold, design: .rounded))
@@ -368,9 +400,9 @@ struct ProfilePictureSheet: View {
     private var suggested: ColourPick? {
         (store.me.ground ?? ColourPick.field).max { $0.strength * (1 - abs($0.light - 0.6)) < $1.strength * (1 - abs($1.light - 0.6)) }
     }
-    /// the picker's spot before any colour is picked: the field at its full colour, the marker at its deepest (the
-    /// picture stays black until a colour is touched)
-    static let start = ColourPick(hue: 250, light: ColourPick.lightBottom, strength: 1)
+    /// the picker's spot before any colour is picked: the field at its full colour, the marker at its palest, where
+    /// the picture is
+    static let start = ColourPick(hue: 250, light: ColourPick.lightTop, strength: 1)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -428,8 +460,14 @@ struct NationalitiesSheet: View {
     private func name(_ cc: String) -> String { map.world.flatMap { w in w.placeIndex[cc].map { w.places[$0].n } } ?? cc.uppercased() }
     private var found: [(id: String, n: String)] {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
-        guard !q.isEmpty, let w = map.world else { return [] }
+        guard let w = map.world else { return [] }
         let have = Set(edit.nationalities)
+        // nothing typed: every country, A to Z, to pick from
+        if q.isEmpty {
+            return w.places.filter { !have.contains($0.id) && $0.id.count == 2 }
+                .sorted { $0.n.localizedStandardCompare($1.n) == .orderedAscending }
+                .map { (id: $0.id, n: $0.n) }
+        }
         var start: [(String, String)] = [], inside: [(String, String)] = []
         for p in w.places where !have.contains(p.id) {
             let f = p.n.townFolded
@@ -446,7 +484,7 @@ struct NationalitiesSheet: View {
                     HStack(spacing: 12) {
                         FlagCircle(cc: cc, size: 28)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(name(cc)).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                            Text(name(cc)).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                             if i == 0 { Text("Passport").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)) }
                         }
                         Spacer(minLength: 8)
@@ -475,7 +513,7 @@ struct NationalitiesSheet: View {
                         edit.setNationalities(n, map: map)
                     }
                 }
-                TextField("", text: Binding(get: { edit.query }, set: { edit.query = String($0.prefix(40)) }),
+                TextField("", text: Binding(get: { edit.query }, set: { edit.query = $0 }),
                           prompt: Text("Add a nationality").foregroundStyle(Palette.ink.opacity(0.5)))
                     .font(.body).foregroundStyle(Palette.ink)
                     .textInputAutocapitalization(.words)
@@ -487,7 +525,7 @@ struct NationalitiesSheet: View {
                 ForEach(found, id: \.id) { f in
                     HStack(spacing: 12) {
                         FlagCircle(cc: f.id, size: 28)
-                        Text(f.n).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                        Text(f.n).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                         Spacer(minLength: 0)
                     }
                     .frame(minHeight: Self.rowH)
@@ -497,8 +535,11 @@ struct NationalitiesSheet: View {
                     .accessibilityAddTraits(.isButton)
                 }
             }
+            .scrollTargetLayout()
             .frame(width: width)
         }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollBlur()
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: width, height: room)

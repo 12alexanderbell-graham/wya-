@@ -13,6 +13,8 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var id = UUID()
     /// the map of yours it is in (Map/PinMaps.swift); nil: none
     var map: UUID? = nil
+    /// the layer of its map it is in (PinMaps' layers); nil: the map's first
+    var layer: UUID? = nil
     var from: UUID
     var to: UUID
     /// the line, as [latitude, longitude] pairs
@@ -27,13 +29,14 @@ struct PinRoute: Codable, Identifiable, Hashable {
     var spots: [RouteSpot]? = nil
     /// the colour you gave it (the picker's own value); nil: black (8.3)
     var pick: ColourPick? = nil
-    /// a straight line between its ends (how a route starts, 14 Nov); nil: Apple's way by road or on foot
+    /// a straight line between its ends; nil: Apple's way by road or on foot
     var straight: Bool? = nil
-    /// its way as directions gave it, with the ends and travel asked for (its name and colour are not part of it)
-    struct Way: Equatable { var from: UUID; var to: UUID; var walk: Bool?; var spots: [RouteSpot]?; var points: [[Double]]; var distance: Double; var time: Double }
+    /// its way as directions gave it, with the ends and travel asked for, and whether it is a straight line; its name
+    /// and colour are not part of it
+    struct Way: Equatable { var from: UUID; var to: UUID; var walk: Bool?; var spots: [RouteSpot]?; var points: [[Double]]; var distance: Double; var time: Double; var straight: Bool? = nil }
     var way: Way {
-        get { Way(from: from, to: to, walk: walk, spots: spots, points: points, distance: distance, time: time) }
-        set { from = newValue.from; to = newValue.to; walk = newValue.walk; spots = newValue.spots; points = newValue.points; distance = newValue.distance; time = newValue.time }
+        get { Way(from: from, to: to, walk: walk, spots: spots, points: points, distance: distance, time: time, straight: straight) }
+        set { from = newValue.from; to = newValue.to; walk = newValue.walk; spots = newValue.spots; points = newValue.points; distance = newValue.distance; time = newValue.time; straight = newValue.straight }
     }
     /// its line's colour on the map
     var ink: UIColor { pick.map { UIColor($0.color) } ?? UIColor(Palette.ink) }
@@ -115,7 +118,8 @@ final class RouteLabelView: MKAnnotationView {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
         canShowCallout = false
         collisionMode = .rectangle
-        displayPriority = .required
+        // (under the pins: where it would cover one, MapKit leaves it out until there is room, never moves it)
+        displayPriority = .defaultHigh
         glass.layer.cornerRadius = 14
         glass.clipsToBounds = true
         addSubview(glass)
@@ -168,7 +172,7 @@ final class PinRoutes {
     private(set) var to: UUID?
     /// the chip a pin tap fills next
     private(set) var waiting: End?
-    /// "No route" in the To chip for a moment (Apple found none)
+    /// in the To chip for a moment (Apple found none)
     private(set) var noRoute = false
     /// the route the row is making (replaced when an end changes)
     @ObservationIgnored private var current: UUID?
@@ -191,7 +195,7 @@ final class PinRoutes {
         MarkStore.shared.did("Route colour changed", back: { [weak self] in self?.colour(id, was.pick) },
                              forth: { [weak self] in self?.colour(id, now) })
     }
-    /// words a route shows for 2 s in place of its distance ("No walking route"), on the map and in the list
+    /// words a route shows for 2 s in place of its distance, on the map and in the list
     private(set) var notes: [UUID: String] = [:]
     /// the newest re-ask of each route, and the way it was asked for (a second one starts from the first's ends)
     @ObservationIgnored private var asked: [UUID: (Int, PinRoute)] = [:]
@@ -219,7 +223,7 @@ final class PinRoutes {
         guard let u = url, let d = try? Data(contentsOf: u) else { return }
         if let r = try? JSONDecoder().decode([PinRoute].self, from: d) { routes = r } else { Self.putAside(u) }
     }
-    /// a file that can't be read is moved beside itself ("routes.json.unreadable-<time>"), never written over
+    /// a file that can't be read is moved beside itself, never written over
     nonisolated static func putAside(_ u: URL) {
         let to = u.appendingPathExtension("unreadable-\(Int(Date().timeIntervalSince1970))")
         try? FileManager.default.moveItem(at: u, to: to)
@@ -230,11 +234,6 @@ final class PinRoutes {
         if let d = try? JSONEncoder().encode(routes) { try? d.write(to: u, options: .atomic) }
     }
 
-    /// the dock's Route tool: the row opens with both ends empty, From waiting for a pin or a tap on the map
-    func openEmpty() {
-        if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1 }
-        waiting = .from
-    }
     /// Route from here / Route to here (the pin's menu): the row opens with that end set, the other waiting
     func start(_ end: End, at pin: UUID) {
         if !open { open = true; from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1 }
@@ -250,14 +249,13 @@ final class PinRoutes {
         return true
     }
     /// a tap on land while the row waits for an end: a spot there fills it, named after the nearest town within 15 km
-    /// ("Kreuzberg" in it, "Near Kreuzberg" outside it), else the country; no pin is made (true: the tap was the row's)
+    /// ( in it, outside it), else the country; no pin is made (true: the tap was the row's)
     func landTapped(_ c: CLLocationCoordinate2D, country: String) -> Bool {
         guard open else { return false }
         freshIfMade()
         guard let w = waiting else { return false }
         Feel.tap()
-        // in a town (within 3 km of its point) the town; anywhere else its country (12 Nov: no made-up names, no
-        // "Near ...")
+        // in a town (within 3 km of its point) the town; anywhere else its country
         let name = TownIndex.shared.nearest(lat: c.latitude, lon: c.longitude).flatMap { t in
             CLLocation(latitude: t.lat, longitude: t.lon).distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude)) < 3000
                 ? t.name : nil
@@ -267,7 +265,7 @@ final class PinRoutes {
         set(w, spot.id)
         return true
     }
-    /// TAP TWO PINS (12 Nov 17:08): with a route made (both ends set), the next tap starts another, from there
+    /// TAP TWO PINS: with a route made (both ends set), the next tap starts another, from there
     private func freshIfMade() {
         guard waiting == nil, from != nil, to != nil else { return }
         from = nil; to = nil; current = nil; others = []; noRoute = false; temp = [:]; asking += 1
@@ -314,7 +312,7 @@ final class PinRoutes {
         asking += 1
         let me = asking
         noRoute = false
-        // A ROUTE STARTS STRAIGHT (14 Nov): a line from one end to the other; its menu turns it to roads or paths
+        // A ROUTE STARTS STRAIGHT: a line from one end to the other; its menu turns it to roads or paths
         if current == nil, PinsDockState.shared.routeWay == "straight" { keepStraight(f, t, from: fid, to: tid); return }
         // a straight route whose end was moved stays straight: its line between the new ends
         if let id = current, let k = routes.firstIndex(where: { $0.id == id }), routes[k].straight == true {
@@ -332,7 +330,6 @@ final class PinRoutes {
         Task {
             let answer = try? await MKDirections(request: req).calculate()
             // still the row's question: open, the same two ends, both still there
-            // (and the ends still where they were asked from: an end pin dragged during the wait asks again, 8 Nov)
             guard me == asking, open, from == fid, to == tid, let f2 = end(fid), let t2 = end(tid) else { return }
             if Self.moved(f, f2) || Self.moved(t, t2) { ask(); return }
             guard let routes = answer?.routes, let best = routes.first else {
@@ -355,12 +352,102 @@ final class PinRoutes {
     }
 
     /// a straight route between two ends: kept at once (one undo takes it back), drawn in from its start
+    /// A ROUTE FROM A FILE OR DRAWN (GPX's routes, the routes the Files circle sends out, the Route tool's line): its
+    /// line as it came, its ends spots named by their country, in the map shown; kept as drawn (no Apple way, so its
+    /// words are its length only); one undo
+    /// (its length worked the way the drawing's own caption works it, so the number kept is the number seen)
+    @discardableResult func bring(_ line: [DrawTool.Geo], undoable: Bool = true, named: (DrawTool.Geo) -> String) -> UUID? {
+        guard let a = line.first, let b = line.last, line.count >= 2 else { return nil }
+        var d: CLLocationDistance = 0
+        for (p, q) in zip(line, line.dropFirst()) { d += DrawTool.km(p, q) * 1000 }
+        let s0 = RouteSpot(lat: a.lat, lon: a.lon, name: named(a)), s1 = RouteSpot(lat: b.lat, lon: b.lon, name: named(b))
+        var new = PinRoute(from: s0.id, to: s1.id, points: line.map { [$0.lat, $0.lon] }, distance: d, time: 0)
+        new.straight = true
+        new.map = PinMaps.shared.shown
+        new.layer = PinMaps.shared.takeLayer()
+        new.spots = [s0, s1]
+        routes.append(new)
+        save()
+        let id = new.id
+        guard undoable else { PinsMapState.shared.redrawRoutes(); return id }
+        let box = UndoBox<(PinRoute, Int)>()
+        MarkStore.shared.did("Route added", back: { [weak self] in
+            guard let self, let k = self.routes.firstIndex(where: { $0.id == id }) else { return }
+            box.value = (self.routes[k], k)
+            self.remove(id, undoable: false)
+        }, forth: { [weak self] in
+            guard let self, let (r, k) = box.value, !self.routes.contains(where: { $0.id == id }) else { return }
+            self.routes.insert(r, at: min(k, self.routes.count)); self.save(); PinsMapState.shared.redrawRoutes()
+        })
+        PinsMapState.shared.redrawRoutes()
+        return id
+    }
+
+    /// THE ROUTE TOOL: traced with a finger or tapped corner by corner, with Undo, the cross and the tick as Draw has
+    /// them; the tick makes it a route. Drive or Walk chosen, Apple's way between its two ends then replaces the
+    /// line.
+    func draw(on v: MKMapView, water: Water, way: String) {
+        DispatchQueue.main.async { if water.stop != .quarter { water.go(.quarter) } }
+        DrawTool.shared.start(.line,
+            toGeo: { [weak v] p in
+                guard let v else { return nil }
+                let c = v.convert(p, toCoordinateFrom: v)
+                return CLLocationCoordinate2DIsValid(c) ? DrawTool.Geo(lat: c.latitude, lon: c.longitude) : nil
+            },
+            toScreen: { [weak v] g in
+                guard let v else { return nil }
+                return v.convert(CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon), toPointTo: v)
+            },
+            finish: { [weak self] _, points in
+                guard let self, let map = PinsMapState.shared.map else { return }
+                let id = self.bring(points) { g in PinsMapView.Coordinator.country(map, CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon))?.name ?? "" }
+                // (the route just made, by its own id: never whichever route happens to be last); by road or on foot
+                // through the corners tapped, a traced line from its start to its end
+                if way != "straight", let id, let a = points.first, let b = points.last {
+                    self.roadThrough(id, points.count <= 10 ? points : [a, b], walk: way == "walk")
+                }
+            })
+    }
+
+    /// routes put in a layer of their map
+    func setLayer(_ ids: Set<UUID>, _ l: UUID?) {
+        guard !ids.isEmpty else { return }
+        for i in routes.indices where ids.contains(routes[i].id) { routes[i].layer = l }
+        save()
+        PinsMapState.shared.redrawRoutes()
+    }
+
+    /// DRIVE OR WALK FOR A DRAWN ROUTE: Apple's way leg by leg through its corners, joined into one line with its whole
+    /// distance and time; a leg Apple can't find leaves the route as drawn and says so on its label
+    private func roadThrough(_ id: UUID, _ corners: [DrawTool.Geo], walk: Bool) {
+        Task {
+            var pts: [[Double]] = []
+            var dist = 0.0, time = 0.0
+            for (a, b) in zip(corners, corners.dropFirst()) {
+                let req = Self.request(Place(lat: a.lat, lon: a.lon, title: "", pin: nil),
+                                       Place(lat: b.lat, lon: b.lon, title: "", pin: nil), walk: walk)
+                guard let r = try? await MKDirections(request: req).calculate().routes.first else {
+                    Feel.refuse(); note(id, walk ? "No walking route" : "No route"); return
+                }
+                let leg = Self.points(r.polyline)
+                pts += pts.isEmpty ? leg : Array(leg.dropFirst())
+                dist += r.distance; time += r.expectedTravelTime
+            }
+            guard let k = routes.firstIndex(where: { $0.id == id }), pts.count >= 2 else { return }
+            routes[k].points = pts; routes[k].distance = dist; routes[k].time = time
+            routes[k].walk = walk ? true : nil; routes[k].straight = nil
+            save()
+            PinsMapState.shared.redrawRoutes()
+        }
+    }
+
     private func keepStraight(_ a: Place, _ b: Place, from f: UUID, to t: UUID) {
         let d = CLLocation(latitude: a.lat, longitude: a.lon).distance(from: CLLocation(latitude: b.lat, longitude: b.lon))
         let spots = [f, t].compactMap { id in temp[id] ?? routes.lazy.compactMap { r in r.spots?.first { $0.id == id } }.first }
         var new = PinRoute(from: f, to: t, points: [[a.lat, a.lon], [b.lat, b.lon]], distance: d, time: 0)
         new.straight = true
         new.map = PinMaps.shared.shown
+        new.layer = PinMaps.shared.takeLayer()
         new.spots = spots.isEmpty ? nil : spots
         current = new.id
         routes.append(new)
@@ -390,7 +477,7 @@ final class PinRoutes {
             // the same way again (the route asked once more): nothing changed, so no undo and no word about it
             if was.from == f, was.to == t, was.distance == r.distance, was.time == r.expectedTravelTime { return }
             // the same ends asked again and Apple's way only a little different (its time moves with traffic): the
-            // line is kept up to date quietly, with no undo step and no "Route changed" (it said so with nothing done)
+            // line is kept up to date quietly, with no undo step and no (it said so with nothing done)
             if was.from == f, was.to == t, abs(was.distance - r.distance) <= max(50, was.distance * 0.01) {
                 routes[k].points = line; routes[k].distance = r.distance; routes[k].time = r.expectedTravelTime
                 save()
@@ -403,6 +490,7 @@ final class PinRoutes {
         } else {
             var new = PinRoute(from: f, to: t, points: line, distance: r.distance, time: r.expectedTravelTime)
             new.map = PinMaps.shared.shown
+            new.layer = PinMaps.shared.takeLayer()
             if PinsDockState.shared.routeWay == "walk" { new.walk = true }
             new.spots = kept
             current = new.id
@@ -535,8 +623,13 @@ final class PinRoutes {
             guard let f = end(r.from, r), let t = end(r.to, r) else { return }
             let was = routes[k].way
             routes[k].from = r.from; routes[k].to = r.to
-            routes[k].points = [[f.lat, f.lon], [t.lat, t.lon]]
-            routes[k].distance = CLLocation(latitude: f.lat, longitude: f.lon).distance(from: CLLocation(latitude: t.lat, longitude: t.lon))
+            // (a drawn line of more than its ends is turned round, never straightened)
+            if routes[k].points.count > 2 {
+                if reverse { routes[k].points.reverse() }
+            } else {
+                routes[k].points = [[f.lat, f.lon], [t.lat, t.lon]]
+                routes[k].distance = CLLocation(latitude: f.lat, longitude: f.lon).distance(from: CLLocation(latitude: t.lat, longitude: t.lon))
+            }
             save()
             PinsMapState.shared.redrawRoutes()
             if !quiet { changed(id, was: was) }
@@ -679,19 +772,17 @@ struct RouteColourSheet: View {
         return VStack(alignment: .leading, spacing: 16) {
             VStack(spacing: 4) {
                 Text(title)
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
-                    // (a route's two places a little smaller rather than cut through a word)
-                    .minimumScaleFactor(0.75).allowsTightening(true)
+                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                 Text(words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            // ONE COLOUR PICKER (12 Nov): as a pin's, at 50%: the colour and its name, Reset and Done on one line, the
-            // picker under it
+            // ONE COLOUR PICKER: as a pin's, at 50%: the colour and its name, Reset and Done on one line, the picker
+            // under it
             HStack(spacing: 16) {
                 Circle().fill(now?.color ?? Palette.ink).frame(width: 28, height: 28)
                 Text(now.map { ColourNames.name($0).firstUp } ?? "Black").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
                 if now != nil {
                     Button {

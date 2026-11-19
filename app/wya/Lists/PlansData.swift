@@ -95,6 +95,20 @@ nonisolated extension Plan {
         return .set
     }
 
+    /// A DAY JUST OUTSIDE THE PLAN TAPPED ON ITS CALENDAR: the plan reaches to it, the days between added empty, the
+    /// days already planned staying on their dates
+    mutating func reach(_ day: String) {
+        guard !start.isEmpty, !end.isEmpty, !day.isEmpty else { return }
+        if day < start {
+            let add = PlanDates.length(day, start) - 1
+            days.insert(contentsOf: Array(repeating: PlanDay(), count: max(0, add)), at: 0)
+            start = day
+        } else if day > end {
+            end = day
+            fitDays()
+        }
+    }
+
     mutating func sortDay(_ i: Int) {
         guard days.indices.contains(i) else { return }
         days[i].items = days[i].items.enumerated().sorted { a, b in

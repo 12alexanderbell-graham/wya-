@@ -2,11 +2,10 @@ import SwiftUI
 import MapKit
 import PhotosUI
 
-// PINS (Part 8; 7 Nov: Apple's map,; one plain black pin until its
-// colour is changed, the 16:37). First slice: Apple's map under the head and the water whenever Pins is the mode, the
-// camera taken over from our map; hold the map 0.4 s and a pin drops there, named after the finest place it is in;
-// tap a pin and the water shows its name and place; hold a pin for its menu. Pins are kept on the phone (pins.json).
-// Still to come (8.5 to 8.8): the dock's tools (they need the icons first), the pin's sheet at 50%, routes, drawing.
+// PINS. First slice: Apple's map under the head and the water whenever Pins is the mode, the camera taken over from
+// our map; hold the map 0.4 s and a pin drops there, named after the finest place it is in; tap a pin and the water
+// shows its name and place; hold a pin for its menu. Pins are kept on the phone (pins.json). Still to come (8.5 to
+// 8.8): the dock's tools, the pin's sheet at 50%, routes, drawing.
 
 /// ONE PIN
 struct Pin: Codable, Identifiable, Hashable {
@@ -15,7 +14,7 @@ struct Pin: Codable, Identifiable, Hashable {
     var lon: Double
     /// the name you gave it; empty: it reads its place
     var name = ""
-    /// the finest place it is in ("Kreuzberg, Berlin"), filled once the phone has named it
+    /// the finest place it is in, filled once the phone has named it
     var place = ""
     /// the colour you gave it (the picker's own value); nil: the plain black
     var pick: ColourPick? = nil
@@ -30,18 +29,19 @@ struct Pin: Codable, Identifiable, Hashable {
     var photo: String? = nil
     /// the map of yours it is in (Map/PinMaps.swift); nil: none (All pins only)
     var map: UUID? = nil
+    /// the layer of its map it is in (PinMaps' layers); nil: the map's first
+    var layer: UUID? = nil
     /// gamma-encoded P3, or nil for the plain black
     var colour: [Double]? { pick.map { let v = $0.p3; return [v.x, v.y, v.z] } }
 
-    /// A PIN HAS NO NAME UNLESS YOU GIVE IT ONE (12 Nov):
-    /// your name; else where it is, its region and country ("Bavaria, Germany"); else its coordinates
+    /// A PIN HAS NO NAME UNLESS YOU GIVE IT ONE: your name; else where it is, its region and country; else its
+    /// coordinates
     var title: String { !name.isEmpty ? name : !region.isEmpty ? region : coordinates }
-    /// its region and country from its place (a pin read before 12 Nov held its finest spot first, "Kreuzberg, Berlin,
-    /// Germany": that first word is left out; the pin itself is never rewritten)
+    /// its region and country from its place
     var region: String {
         var parts = place.components(separatedBy: ", ").filter { !$0.isEmpty }
         if parts.count >= 3 { parts = Array(parts.suffix(2)) }
-        // (its country as our map names it: Apple's "Türkiye" beside the map's "Turkey"; shown so, never rewritten)
+        // (its country as our map names it: Apple's beside the map's; shown so, never rewritten)
         if let cc, let ours = Self.countryNames[cc], let last = parts.last, last != ours, Self.appleNames[cc]?.contains(last) == true {
             parts[parts.count - 1] = ours
         }
@@ -52,9 +52,8 @@ struct Pin: Codable, Identifiable, Hashable {
     /// the country it is in, by our map's name for it (nil off land, or before the map has named countries)
     var countryName: String? { cc.flatMap { Self.countryNames[$0] } }
     /// the names Apple's naming may have given each country (in English and in the phone's language): only those are
-    /// swapped, so a place's last part that is a city ("Kreuzberg, Berlin") stays
+    /// swapped, so a place's last part that is a city  stays
     nonisolated(unsafe) static var appleNames: [String: Set<String>] = [:]
-    /// "48.8566° N, 2.3522° E"
     var coordinates: String {
         String(format: "%.4f° %@, %.4f° %@", abs(lat), lat >= 0 ? "N" : "S", abs(lon), lon >= 0 ? "E" : "W")
     }
@@ -71,7 +70,7 @@ struct Pin: Codable, Identifiable, Hashable {
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lon) }
 }
 
-/// YOUR PINS, kept in Application Support/pins.json (written on every change; no Save, 22 Oct 18:30)
+/// YOUR PINS, kept in Application Support/pins.json
 @MainActor
 @Observable
 final class PinStore {
@@ -110,6 +109,7 @@ final class PinStore {
         var p = Pin(lat: c.latitude, lon: c.longitude)
         p.cc = country?.id
         p.map = PinMaps.shared.shown
+        p.layer = PinMaps.shared.takeLayer()
         dropping = p.id
         Pin.naming.insert(p.id)
         pins.append(p)
@@ -126,6 +126,8 @@ final class PinStore {
         p.map = map
         p.kind = "tracked"
         p.made = when
+        // (into the map's layer for new things, a hidden one left hidden)
+        p.layer = PinMaps.shared.newLayer(in: map, show: false)
         // (its country from our own map when the map is there; else the map names it when it next loads)
         if let m = PinsMapState.shared.map { p.cc = PinsMapView.Coordinator.country(m, c)?.id }
         Pin.naming.insert(p.id)
@@ -134,8 +136,8 @@ final class PinStore {
         Task { await name(p.id, country: nil) }
     }
     /// A PIN NEAR A PLACE MARKS IT (Map settings, Off by default): a pin dropped within 200 m of a thing of the
-    /// country (a museum, a lake's point, a station) stamps that thing, the nearest one, as "a pin near a place"; the
-    /// pin itself is never stamped. One undo step of its own.
+    /// country (a museum, a lake's point, a station) stamps that thing, the nearest one, as; the pin itself is never
+    /// stamped. One undo step of its own.
     private func markNear(_ c: CLLocationCoordinate2D, cc: String) {
         let things = ThingStore.shared
         things.load(cc)
@@ -162,10 +164,45 @@ final class PinStore {
         var p = Pin(lat: c.latitude, lon: c.longitude)
         p.cc = country?.id
         p.map = PinMaps.shared.shown
+        p.layer = PinMaps.shared.takeLayer()
         p.place = [named, country?.name ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
         pins.append(p)
         save()
         undoableDrop(p.id)
+    }
+    /// A FILE'S POINTS as pins, all at once (Files' Import): one save and no undo step of their own (the import is one
+    /// step), never chosen
+    func bringIn(_ items: [(c: CLLocationCoordinate2D, named: String, country: (id: String, name: String)?)]) -> [Pin] {
+        let made = items.map { it -> Pin in
+            var p = Pin(lat: it.c.latitude, lon: it.c.longitude)
+            p.cc = it.country?.id
+            p.map = PinMaps.shared.shown
+            p.layer = PinMaps.shared.takeLayer()
+            p.place = [it.named, it.country?.name ?? ""].filter { !$0.isEmpty }.joined(separator: ", ")
+            return p
+        }
+        pins.append(contentsOf: made)
+        save()
+        return made
+    }
+    /// pins put in a layer of their map (a layer deleted, or brought back)
+    func setLayer(_ ids: Set<UUID>, _ l: UUID?) {
+        guard !ids.isEmpty else { return }
+        for i in pins.indices where ids.contains(pins[i].id) { pins[i].layer = l }
+        save()
+    }
+    /// pins taken away together (an import undone): one save
+    func takeAway(_ ids: Set<UUID>) {
+        if let s = selected, ids.contains(s) { selected = nil }
+        pins.removeAll { ids.contains($0.id) }
+        for id in ids { PinRoutes.shared.pinGone(id) }
+        save()
+    }
+    /// pins put back together (an import redone)
+    func putBack(_ ps: [Pin]) {
+        let have = Set(pins.map(\.id))
+        pins.append(contentsOf: ps.filter { !have.contains($0.id) })
+        save()
     }
     /// a dropped pin's undo takes it away; its redo puts it back as it was then (named, coloured, routes with it)
     private func undoableDrop(_ id: UUID) {
@@ -252,9 +289,9 @@ final class PinStore {
         pins[k].note = n.isEmpty ? nil : String(n.prefix(600))
         save()
     }
-    /// PINS NAMED BEFORE THE COUNTRY WAS KEPT (the first days' pins: "Bordj Omar Driss" alone, where a new pin there is
-    /// "Bordj Omar Driss, Algeria"): a pin on land whose place is one name gets the country our map has under it, so
-    /// every row of the list says where it is. A pin at sea, or one named as its country, stays as it is.
+    /// PINS NAMED BEFORE THE COUNTRY WAS KEPT (the first days' pins: alone, where a new pin there is): a pin on land
+    /// whose place is one name gets the country our map has under it, so every row of the list says where it is. A
+    /// pin at sea, or one named as its country, stays as it is.
     func nameCountries(_ country: (CLLocationCoordinate2D) -> (id: String, name: String)?) {
         var changed = false
         // (a pin with no country yet, a tracked one say, gets the one our map has under it)
@@ -271,14 +308,14 @@ final class PinStore {
         }
         if changed { save() }
     }
-    /// its category (3 Oct: a pin is filed under one of the twelve kinds, as a place of your own is); nil: none
+    /// its category; nil: none
     func kind(_ id: UUID, _ kind: String?) {
         guard let k = pins.firstIndex(where: { $0.id == id }) else { return }
         pins[k].kind = kind
         save()
     }
-    /// its photo (3 Oct): the picture kept beside pins.json, no bigger than 1,600 px on its longer side; nil takes it
-    /// away. A pin deleted keeps its file (its undo brings the pin back with it)
+    /// its photo: the picture kept beside pins.json, no bigger than 1,600 px on its longer side; nil takes it away. A
+    /// pin deleted keeps its file (its undo brings the pin back with it)
     func photo(_ id: UUID, _ data: Data?) {
         guard let k = pins.firstIndex(where: { $0.id == id }), let dir = Self.photos else { return }
         if let old = pins[k].photo {
@@ -339,8 +376,8 @@ final class PinStore {
     /// where a page opened from a pin grows from (the pin's box on screen, set as its menu opens)
     static var from = CGRect(x: 0, y: 0, width: 44, height: 44)
 
-    /// the finest place a pin is in, from Apple's reverse geocoding: "Kreuzberg, Berlin"; a town alone; a region and
-    /// its country; the sea's name at sea
+    /// the finest place a pin is in, from Apple's reverse geocoding:; a town alone; a region and its country; the
+    /// sea's name at sea
     private func name(_ id: UUID, country ours: String?, known: String? = nil) async {
         // (asked or not, answered or not: the pin has its name from here, "Pin" if nothing came)
         defer {
@@ -350,8 +387,6 @@ final class PinStore {
         guard let p = pin(id), let req = MKReverseGeocodingRequest(location: CLLocation(latitude: p.lat, longitude: p.lon)) else { return }
         let item = try? await req.mapItems.first
         let a = item?.addressRepresentations
-        // (its region: the city it is in, else the state or province; never the nearest landmark or street, which
-        // read as a name the pin never had, 12 Nov)
         let region = a?.cityName ?? ""
         // (the country as our map names it, where our map has one there; Apple's own name only at sea or past our map)
         let country = ours ?? a?.regionName.flatMap { $0.isEmpty ? nil : $0 } ?? ""
@@ -423,21 +458,21 @@ final class PinsMapState {
         let out = v.visibleMapRect.width >= MKMapSize.world.width * 0.98 || v.camera.centerCoordinateDistance >= Self.farthest * 0.98
         m.pinsLimits(out: out, close: v.camera.centerCoordinateDistance <= Self.closest * 1.05)
     }
-    /// our map's view of the world, on Apple's map: the same middle, the same span of latitude
-    /// HISTORY IN PINS (Part 13's table: your pins by their date): one line through them from the oldest to the newest,
-    /// as the journey on our own map: straight legs (a leg over 180 degrees goes the short way, across the date line),
-    /// 2.5 pt, round ends, no edge, one black (12 Nov 17:57; it was black at the first pin to blue at the last).
-    /// With fewer than two pins there is nothing to join and the tool refuses.
+    /// our map's view of the world, on Apple's map: the same middle, the same span of latitude HISTORY IN PINS (Part
+    /// 13's table: your pins by their date): one line through them from the oldest to the newest, as the journey on
+    /// our own map: straight legs (a leg over 180 degrees goes the short way, across the date line), 2.5 pt, round
+    /// ends, no edge, one black. With fewer than two pins there is nothing to join and the tool refuses.
     private(set) var historyOn = false
     private var journey: MKPolyline?
     /// the pins' order and places the line was drawn for (a pin moved, re-dated, made or deleted redraws it)
     private var journeyKey = ""
-    /// where the map was before history framed the journey (put back when history goes off; 9 Nov audit: the map
-    /// stayed on the journey's frame, the open Atlantic, after history closed)
+    /// where the map was before history framed the journey
     private var beforeHistory: MKMapCamera?
+    /// the pins a journey runs through: the shown map's, in its shown layers
+    static var journeyPins: [Pin] { PinStore.shared.pins.filter { PinMaps.shared.draws(pin: $0.map, layer: $0.layer) } }
     @discardableResult func history(_ on: Bool) -> Bool {
         let was = historyOn
-        historyOn = on && PinStore.shared.pins.count > 1
+        historyOn = on && Self.journeyPins.count > 1
         if !historyOn { stopPlay() }
         // turned off: the line draws itself back to the first pin (0.35 s) as the map goes back, then goes (at once,
         // it vanished in one frame, 17:50)
@@ -450,9 +485,8 @@ final class PinsMapState {
         if was, !historyOn, let v = view, let back = beforeHistory { v.setCamera(back, animated: true) }
         if !historyOn { beforeHistory = nil }
         if !was, historyOn, let v = view { beforeHistory = v.camera.copy() as? MKMapCamera }
-        // HISTORY ALONE (when history is shown, all else is clear): routes and drawings step off the map
-        // while it is on, and come back when it goes
-        // (turned off with the journey drawing itself back: they come back once it has gone, never over it)
+        // HISTORY ALONE: routes and drawings step off the map while it is on, and come back when it goes (turned off
+        // with the journey drawing itself back: they come back once it has gone, never over it)
         if was != historyOn, retracting == nil { redrawRoutes(); PinDrawings.shared.changed?() }
         // turned on: the journey played, stop to stop, then framed whole; given again (on while on): framed at once
         if historyOn, !was, view != nil, journey != nil, !UIAccessibility.isReduceMotionEnabled { play() } else if historyOn { frameJourney() }
@@ -467,14 +501,21 @@ final class PinsMapState {
         // was framed in a third of its room)
         // (Apple's flat map goes no further out than about 85 degrees across on this phone: a journey wider than
         // that is framed on its middle, as far out as the map goes)
-        v.setVisibleMapRect(j.boundingMapRect, edgePadding: Self.journeyPad, animated: true)
+        v.setVisibleMapRect(j.boundingMapRect, edgePadding: raised(Self.journeyPad), animated: true)
     }
     private static let journeyPad = UIEdgeInsets(top: 30 + 16, left: 32, bottom: 32, right: 60)
+    /// the map's margins end at the water's 25% stop; with the water higher, what is framed needs that much more room
+    /// at the bottom, so it stands above the water where it is
+    func raised(_ pad: UIEdgeInsets) -> UIEdgeInsets {
+        guard let w = water else { return pad }
+        var p = pad
+        p.bottom += max(0, w.layout.top(.quarter) - max(w.form().top, w.y(.half)))
+        return p
+    }
 
-    // THE JOURNEY PLAYED (every time history is
-    // switched on): the line draws itself from the oldest pin to the newest, the map following its end, easing into
-    // each pin and out of it again (one equal step of time per leg, about 3 s in all), then the whole journey framed.
-    // Any touch on the map ends it there: the line whole, the journey framed. Reduce Motion: framed at once.
+    // THE JOURNEY PLAYED: the line draws itself from the oldest pin to the newest, the map following its end, easing
+    // into each pin and out of it again (one equal step of time per leg, about 3 s in all), then the whole journey
+    // framed. Any touch on the map ends it there: the line whole, the journey framed. Reduce Motion: framed at once.
     private var playLink: CADisplayLink?
     private var playFrom: CFTimeInterval = 0
     private var playLength: CFTimeInterval = 3
@@ -541,7 +582,7 @@ final class PinsMapState {
         playWidth += (want - playWidth) * 0.08
         let h = playWidth * Double(v.bounds.height / max(1, v.bounds.width))
         v.setVisibleMapRect(MKMapRect(x: playCentre.x - playWidth / 2, y: playCentre.y - h / 2, width: playWidth, height: h),
-                            edgePadding: Self.journeyPad, animated: false)
+                            edgePadding: raised(Self.journeyPad), animated: false)
         if t >= 1 { stopPlay(); frameJourney() }
         updateCaps()
     }
@@ -585,7 +626,7 @@ final class PinsMapState {
         guard let v = view else { return }
         let old = journey
         journey = nil
-        let pins = PinStore.shared.pins.sorted { $0.made < $1.made }
+        let pins = Self.journeyPins.sorted { $0.made < $1.made }
         journeyKey = historyOn ? pins.map { "\($0.id)\($0.lat),\($0.lon)" }.joined(separator: "|") : ""
         if historyOn, pins.count > 1 {
             let W = MKMapSize.world.width
@@ -604,8 +645,8 @@ final class PinsMapState {
         }
         if let old { v.removeOverlay(old) }
     }
-    /// THE JOURNEY'S START AND END CAPSULES (12 Nov: the two histories the same, as on our map): the oldest pin's
-    /// "name · month year" from the first moment, the newest's once the line has arrived
+    /// THE JOURNEY'S START AND END CAPSULES: the oldest pin's from the first moment, the newest's once the line has
+    /// arrived
     private let caps = JourneyCaps()
     func updateCaps() {
         guard historyOn, let v = view, let j = journey, let w = water else { caps.hide(); return }
@@ -634,9 +675,9 @@ final class PinsMapState {
     func frameShownMap() {
         guard let v = view else { return }
         let maps = PinMaps.shared
-        var c: [CLLocationCoordinate2D] = PinStore.shared.pins.filter { maps.shows(pin: $0.map) }.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-        for r in PinRoutes.shared.routes where maps.shows(extra: r.map) { c += r.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) } }
-        for d in PinDrawings.shared.all where maps.shows(extra: d.map) { c += d.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) } }
+        var c: [CLLocationCoordinate2D] = PinStore.shared.pins.filter { maps.draws(pin: $0.map, layer: $0.layer) }.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        for r in PinRoutes.shared.routes where maps.draws(extra: r.map, layer: r.layer) { c += r.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) } }
+        for d in PinDrawings.shared.all where maps.draws(extra: d.map, layer: d.layer) { c += d.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) } }
         guard !c.isEmpty else { return }
         var r = MKMapRect.null
         for p in c { let q = MKMapPoint(p); r = r.union(MKMapRect(x: q.x, y: q.y, width: 0, height: 0)) }
@@ -655,14 +696,13 @@ final class PinsMapState {
         let b = v.bounds
         guard b.width > left + right + 40, b.height > top + bottom + 40 else { return }
         let seenW = Double(b.width - left - right), seenH = Double(b.height - top - bottom)
-        // Apple's flat map goes no further out than about 62 million map points across (a quarter of the world; read
-        // on the iPhone 18 Pro Max, 13 Nov): pins from Brazil to Iran asked for more, and Apple put the map on the
-        // open Atlantic. Pins that don't fit get that width, centred on their middle
+        // Apple's flat map goes no further out than about 62 million map points across: pins from Brazil to Iran
+        // asked for more, and Apple put the map on the open Atlantic. Pins that don't fit get that width, centred on
+        // their middle
         let per = min(max(r.width / seenW, r.height / seenH), 6.2e7 / Double(b.width))
         let midX = Double(left) + seenW / 2, midY = Double(top) + seenH / 2
         let whole = MKMapRect(x: r.midX - midX * per, y: r.midY - midY * per,
                               width: Double(b.width) * per, height: Double(b.height) * per)
-        // (14 Nov: one smooth glide, never Apple's zoom-out-and-back jump; no move at all when it is all in view)
         let cur = v.visibleMapRect
         let curPer = cur.width / Double(b.width)
         let curSeen = MKMapRect(x: cur.minX + Double(left) * curPer, y: cur.minY + Double(top) * curPer, width: seenW * curPer, height: seenH * curPer)
@@ -684,13 +724,13 @@ final class PinsMapState {
             l.other = true; l.index = n; l.distance = d; l.time = t
             lines.append(l)
         }
-        for route in r.routes where route.points.count > 1 && !historyOn && PinMaps.shared.shows(extra: route.map) {
+        for route in r.routes where route.points.count > 1 && !historyOn && PinMaps.shared.draws(extra: route.map, layer: route.layer) {
             let c = route.points.map { CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) }
             let l = PinRouteLine(coordinates: c, count: c.count)
             l.routeID = route.id
             if let seen = routesSeen, !seen.contains(route.id) { growing.insert(route.id) }
             lines.append(l)
-            labels.append(RouteLabel(id: route.id, at: c[c.count / 2], words: route.words))
+            labels.append(RouteLabel(id: route.id, at: Self.halfway(c), words: route.words))
         }
         routesSeen = (routesSeen ?? []).union(r.routes.map(\.id))
         // the new ones on before the old ones go (never a blink)
@@ -720,11 +760,29 @@ final class PinsMapState {
         r.setNeedsDisplay()
     }
     /// a kept route's capsule on the map, if it is drawn
+    /// the point half the line's length along it (on Apple's flat map, as the line is drawn), where its words sit; the
+    /// middle point in the list was the far end of a straight two-point route
+    static func halfway(_ c: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
+        guard c.count > 1 else { return c.first ?? kCLLocationCoordinate2DInvalid }
+        let m = c.map(MKMapPoint.init)
+        var steps: [Double] = [], total = 0.0
+        for i in 1 ..< m.count { let d = hypot(m[i].x - m[i - 1].x, m[i].y - m[i - 1].y); steps.append(d); total += d }
+        var left = total / 2
+        for i in 1 ..< m.count {
+            let d = steps[i - 1]
+            if left <= d, d > 0 {
+                let t = left / d
+                return MKMapPoint(x: m[i - 1].x + (m[i].x - m[i - 1].x) * t, y: m[i - 1].y + (m[i].y - m[i - 1].y) * t).coordinate
+            }
+            left -= d
+        }
+        return c[c.count / 2]
+    }
     func labelView(_ id: UUID) -> RouteLabelView? {
         guard let v = view, let l = routeLabels.first(where: { $0.id == id }) else { return nil }
         return v.view(for: l) as? RouteLabelView
     }
-    /// a word in a route's capsule for 2 s ("No walking route"), then its distance and time again
+    /// a word in a route's capsule for 2 s, then its distance and time again
     func note(_ id: UUID, _ words: String) {
         guard let v = view, let l = routeLabels.first(where: { $0.id == id }), let lv = v.view(for: l) as? RouteLabelView else { return }
         lv.show(words)
@@ -741,7 +799,7 @@ final class PinsMapState {
         // its room)
         let pad = UIEdgeInsets(top: 56, left: 68, bottom: 40, right: 76)
         let seen = v.visibleMapRect
-        if always || !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: pad, animated: true) }
+        if always || !seen.contains(l.boundingMapRect) { v.setVisibleMapRect(l.boundingMapRect, edgePadding: raised(pad), animated: true) }
     }
 
     /// Reset on Apple's map: the whole world, as Apple's own map shows it
@@ -767,7 +825,7 @@ final class PinsMapState {
         // (the map's own margins already are the head and the water where it stands, and a rect is fitted inside them:
         // the head and the water given again as padding left France a third of the room, up in its top half. The
         // padding is only the gap, and the zoom column's side)
-        v.setVisibleMapRect(r, edgePadding: UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 60), animated: true)
+        v.setVisibleMapRect(r, edgePadding: raised(UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 60)), animated: true)
     }
 
     /// Apple's map over a place found in search (a town, a sight): the spot in the middle of the map's room, between
@@ -850,8 +908,6 @@ struct PinsMapView: UIViewRepresentable {
         v.showsScale = false
         v.showsUserLocation = false
         v.isPitchEnabled = false
-        // (the margins set below are the whole inset: Apple's map added the home bar's safe area under them, so its
-        // credit stood some 40 pt above the water, 12 Nov)
         v.insetsLayoutMarginsFromSafeArea = false
         v.register(PinAnnotationView.self, forAnnotationViewWithReuseIdentifier: PinAnnotationView.id)
         v.setRegion(PinsMapState.region(from: map), animated: false)
@@ -901,7 +957,7 @@ struct PinsMapView: UIViewRepresentable {
         context.coordinator.drawGestures = [drawPan, drawTap]
         PinDrawings.shared.changed = { [weak v, weak c = context.coordinator] in
             guard let v, let c else { return }
-            c.syncDrawings(v, PinDrawings.shared.all.filter { PinMaps.shared.shows(extra: $0.map) })
+            c.syncDrawings(v, PinDrawings.shared.all.filter { PinMaps.shared.draws(extra: $0.map, layer: $0.layer) })
         }
         // a pin moved by a drag is set down on the map (8.4)
         v.addInteraction(UIDropInteraction(delegate: context.coordinator))
@@ -911,13 +967,13 @@ struct PinsMapView: UIViewRepresentable {
         PinsMapState.shared.water = water
         PinsMapState.shared.map = map
         // OUR MAP STAYS UNTIL APPLE'S FIRST VIEW IS DRAWN (12.5): Apple's map is there but unseen until its first
-        // picture is whole, then it is there at once (30 Oct: the two maps switch with no animation); never empty
-        // squares while its tiles come in. Three seconds at most (offline, or very slow), then it shows as it is.
+        // picture is whole, then it is there at once; never empty squares while its tiles come in. Three seconds at
+        // most (offline, or very slow), then it shows as it is.
         v.alpha = 0
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak v] in v?.alpha = 1 }
-        // its town found for "Open its place's page" (the index is read once, in the background)
+        // its town found for (the index is read once, in the background)
         TownIndex.shared.load()
-        context.coordinator.sync(v, store.pins.filter { PinMaps.shared.shows(pin: $0.map) })
+        context.coordinator.sync(v, store.pins.filter { PinMaps.shared.draws(pin: $0.map, layer: $0.layer) })
         // the journey asked for before this map was made (history turned on as Pins opened), and the kept routes
         PinsMapState.shared.redrawHistory()
         PinsMapState.shared.redrawRoutes()
@@ -926,7 +982,7 @@ struct PinsMapView: UIViewRepresentable {
     }
 
     func updateUIView(_ v: MKMapView, context: Context) {
-        // Apple's look from Settings in Pins (Standard, Satellite, Hybrid; 8 Nov: Pins' settings are its own rows)
+        // Apple's look from Settings in Pins
         let look = MapSettingsStore.shared.value.pinsMap
         if context.coordinator.look != look {
             context.coordinator.look = look
@@ -942,9 +998,9 @@ struct PinsMapView: UIViewRepresentable {
         }
         // (the map you picked: only what it holds; All pins: every pin)
         let maps = PinMaps.shared
-        context.coordinator.sync(v, store.pins.filter { maps.shows(pin: $0.map) })
+        context.coordinator.sync(v, store.pins.filter { maps.draws(pin: $0.map, layer: $0.layer) })
         context.coordinator.select(v, store.selected)
-        context.coordinator.syncDrawings(v, PinDrawings.shared.all.filter { maps.shows(extra: $0.map) })
+        context.coordinator.syncDrawings(v, PinDrawings.shared.all.filter { maps.draws(extra: $0.map, layer: $0.layer) })
         if context.coordinator.mapShown != maps.shown || !context.coordinator.mapSeen {
             let first = !context.coordinator.mapSeen
             context.coordinator.mapShown = maps.shown; context.coordinator.mapSeen = true
@@ -953,17 +1009,15 @@ struct PinsMapView: UIViewRepresentable {
         }
         // (while drawing, a finger draws: Apple's one-finger scroll waits)
         let drawing = DrawTool.shared.on
-        // (14 Nov: two fingers still move the map while drawing; one finger draws. Turning the map's scrolling off
-        // had stopped two-finger moves too, so the map could not be moved at all mid-drawing)
         if !v.isScrollEnabled { v.isScrollEnabled = true }
         context.coordinator.panWithTwo(v, drawing)
         let L = water.layout
-        // Apple's credit (Legal) on the map just above the water, at the sheet's inner left (Apple asks for it to be
-        // seen); at full nothing of the map is seen
+        // Apple's credit (Legal) on the map just above the water, at the sheet's inner left; at full nothing of the
+        // map is seen
         let top = water.y(water.stop == .full ? .half : water.stop)
-        // the credit follows the water's edge as it moves (read every frame the water moves), never above 50%
-        let edge = max(water.form().top, water.y(.half))
-        let margins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - edge), right: L.sheetInset)
+        // the credit at Apple's own place: just above the water's lowest resting stop (25%), fixed there; a higher
+        // water covers it, as Maps' card does
+        let margins = UIEdgeInsets(top: L.headBottom, left: L.sheetInset + 8, bottom: max(0, L.H - L.top(.quarter)), right: L.sheetInset)
         if v.layoutMargins != margins { v.layoutMargins = margins }
         context.coordinator.reveal(v, store.selected, top: top, L: L, stop: water.stop)
     }
@@ -1024,9 +1078,8 @@ struct PinsMapView: UIViewRepresentable {
 
         /// the camera is moving (a fling still gliding, a flight): a tap then only stops it
         private var moving = false
-        /// THE MAP TOUCHED (as our own map's touch-down does, 8 Nov: Apple's map took every touch, so search, settings
-        /// and the book stayed open under a pan or a tap, and the tap still acted): the app's map.onTouch runs at the
-        /// finger's first contact; if it closed something, this touch does nothing else
+        /// THE MAP TOUCHED: the app's map.onTouch runs at the finger's first contact; if it closed something, this
+        /// touch does nothing else
         private(set) var closedThisTouch = false
         @objc func down(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began else { return }
@@ -1039,8 +1092,15 @@ struct PinsMapView: UIViewRepresentable {
             if WhatsHere.shared.isOpen { WhatsHere.shared.close(); return }
             if closedThisTouch { return }
             if moving { return }
-            // a tap on the map off every pin lets the chosen pin go, however it was chosen (dropped, from the list, from
-            // search: MapKit had not selected it, so its own deselect never came and the pin stayed chosen, 8 Nov)
+            // the Pin tool waiting: the pin falls where the map was tapped (a tap on a pin or a route's label is that
+            // pin's or label's own, never a new pin on top of it)
+            if PinsDockState.shared.chosen == 0, let v = g.view as? MKMapView {
+                var hit = v.hitTest(g.location(in: v), with: nil)
+                while let h = hit, !(h is MKMapView) { if h is PinAnnotationView || h is RouteLabelView { return }; hit = h.superview }
+                PinsDockState.shared.place(at: g.location(in: v), in: v)
+                return
+            }
+            // a tap on the map off every pin lets the chosen pin go, however it was chosen
             if !PinRoutes.shared.open, PinStore.shared.selected != nil, let v = g.view as? MKMapView {
                 var hit = v.hitTest(g.location(in: v), with: nil)
                 var onPin = false
@@ -1202,18 +1262,32 @@ struct PinsMapView: UIViewRepresentable {
                 items.append((p, pv, v.convert(a.coordinate, toPointTo: v)))
             }
             items.sort { x, y in x.0.id == sel ? true : y.0.id == sel ? false : x.0.made > y.0.made }
-            // ZOOMED OUT, PINS GO SMALL (14 Nov, they were far too big zoomed out): as Apple Maps does, full size close in,
-            // smaller as more of the world shows, and a small dot once a whole continent is on screen
-            let span = v.region.span.longitudeDelta
-            let dot = span > 32
-            let scale = CGFloat(max(0.6, min(1, 1 - (span - 6) / 26 * 0.4)))
+            // ONE SIZE AT EVERY ZOOM, as Apple Maps' markers: a smaller marker that never changes; pins that meet
+            // stack, the newest in front, the rest behind it, so a zoomed-out world is a few markers, not a field
+            let dot = false
+            let scale: CGFloat = 0.75
             for (p, pv, _) in items { pv.setZoom(dot: dot && p.id != sel, scale: scale) }
             var fronts: [(CGPoint, Int)] = []
             var behindOf: [Int?] = []
+            // (the pins in front kept in a grid of cells their own size, so each pin looks only at its neighbours: every
+            // pin against every other on each camera frame would slow panning as tracked pins pile up; the earliest
+            // front in reach wins, as before)
+            let cw = 18 * scale, ch = 24 * scale
+            var grid: [SIMD2<Int>: [Int]] = [:]
             for (_, _, pt) in items {
-                if let f = fronts.firstIndex(where: { abs($0.0.x - pt.x) < 18 && abs($0.0.y - pt.y) < 24 }) {
-                    behindOf.append(f); fronts[f].1 += 1
-                } else { behindOf.append(nil); fronts.append((pt, 0)) }
+                let cx = Int((pt.x / cw).rounded(.down)), cy = Int((pt.y / ch).rounded(.down))
+                var best: Int?
+                for dx in -1 ... 1 {
+                    for dy in -1 ... 1 {
+                        for f in grid[SIMD2(cx + dx, cy + dy)] ?? []
+                            where abs(fronts[f].0.x - pt.x) < cw && abs(fronts[f].0.y - pt.y) < ch && (best == nil || f < best!) { best = f }
+                    }
+                }
+                if let f = best { behindOf.append(f); fronts[f].1 += 1 } else {
+                    behindOf.append(nil)
+                    grid[SIMD2(cx, cy), default: []].append(fronts.count)
+                    fronts.append((pt, 0))
+                }
             }
             var taken: [CGRect] = items.map { CGRect(x: $0.2.x - 12, y: $0.2.y - 30, width: 24, height: 30) }
             var frontIndex = 0
@@ -1224,7 +1298,6 @@ struct PinsMapView: UIViewRepresentable {
                     let stacked = fronts[frontIndex].1 > 0
                     frontIndex += 1
                     if !stacked {
-                        // (only a name you gave it is written on the map: a pin's place is not its name, 12 Nov)
                         let t = p.name
                         let s = PinAnnotationView.nameSize(t)
                         let r = CGRect(x: pt.x - s.width / 2, y: pt.y + 2, width: s.width, height: s.height)
@@ -1233,56 +1306,9 @@ struct PinsMapView: UIViewRepresentable {
                 }
                 pv.arrange(behind: back && p.id != sel, name: dot ? nil : name)
             }
-            // THE ROUTES' CAPSULES (8.3): each on its own line where the line is seen, clear of the pins, their names,
-            // the head, the water and each other; one stays where it is while its spot is still clear (no hopping)
-            // (from our own layout: the map's layout margins also hold the safe area, which would count it twice)
-            let L = water.layout
-            let room = CGRect(x: L.sheetInset + 8, y: L.headBottom + 8, width: L.W - 2 * L.sheetInset - 8 - 52,
-                              height: max(0, L.top(water.stop == .full ? .half : water.stop) - L.headBottom - 16))
-            var lines: [UUID: PinRouteLine] = [:]
-            for case let l as PinRouteLine in v.overlays where !l.other { if let id = l.routeID { lines[id] = l } }
-            for case let lab as RouteLabel in v.annotations {
-                guard let line = lines[lab.id] else { continue }
-                let size = (v.view(for: lab) as? RouteLabelView)?.bounds.size ?? CGSize(width: 140, height: 28)
-                func box(_ c: CGPoint) -> CGRect { CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2, width: size.width, height: size.height) }
-                func clear(_ c: CGPoint) -> Bool {
-                    let b = box(c)
-                    return room.contains(b) && !taken.contains { $0.intersects(b.insetBy(dx: -4, dy: -4)) }
-                }
-                let view = v.view(for: lab)
-                let now = v.convert(lab.coordinate, toPointTo: v)
-                // kept while clear and still by its line (a spot beside it drifts off as the map zooms in)
-                if clear(now), view?.isHidden != true, Self.near(now, line, in: v, within: 30) <= 26 { taken.append(box(now)); continue }
-                // the line's points in view (its seen stretch, every point of it up to about 200), tried from the middle
-                // of what is seen outwards; between points far apart on screen, points along the way too
-                let c0 = MKMapPoint(v.convert(CGPoint(x: room.minX, y: room.minY), toCoordinateFrom: v))
-                let c1 = MKMapPoint(v.convert(CGPoint(x: room.maxX, y: room.maxY), toCoordinateFrom: v))
-                let rect = MKMapRect(x: min(c0.x, c1.x), y: min(c0.y, c1.y), width: abs(c1.x - c0.x), height: abs(c1.y - c0.y))
-                let mp = line.points(), n = line.pointCount
-                var inView: [Int] = []
-                for i in 0 ..< n where rect.contains(mp[i]) || (i + 1 < n && rect.intersects(MKMapRect(x: min(mp[i].x, mp[i + 1].x), y: min(mp[i].y, mp[i + 1].y), width: abs(mp[i + 1].x - mp[i].x), height: abs(mp[i + 1].y - mp[i].y)))) { inView.append(i) }
-                let step = max(1, inView.count / 200)
-                var seen: [CGPoint] = []
-                for k in stride(from: 0, to: inView.count, by: step) {
-                    let i = inView[k]
-                    let a = v.convert(mp[i].coordinate, toPointTo: v)
-                    if room.contains(a) { seen.append(a) }
-                    if i + 1 < n {
-                        let b = v.convert(mp[i + 1].coordinate, toPointTo: v)
-                        let gap = hypot(b.x - a.x, b.y - a.y)
-                        if gap > 40 { for t in stride(from: 40.0, to: Double(gap), by: 40) { let f = CGFloat(t) / gap; let c = CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f); if room.contains(c) { seen.append(c) } } }
-                    }
-                }
-                let mid = seen.count / 2
-                let order = seen.indices.sorted { abs($0 - mid) < abs($1 - mid) }.map { seen[$0] }
-                // on the line, else just beside it (above, then below); with no clear spot it waits unseen until there
-                // is one (a capsule over a pin or a name is worse than none: the distance is in the route's menu)
-                let tries = order + order.map { CGPoint(x: $0.x, y: $0.y - 22) } + order.map { CGPoint(x: $0.x, y: $0.y + 22) }
-                guard let pick = tries.first(where: clear) else { view?.isHidden = true; continue }
-                view?.isHidden = false
-                lab.coordinate = v.convert(pick, toCoordinateFrom: v)
-                taken.append(box(pick))
-            }
+            // THE ROUTES' CAPSULES (8.3) stay where they were put, at their line's halfway point: re-seating them
+            // along the part of the line in sight on every zoom made them hop. One that would cover a pin is hidden
+            // by MapKit itself (its priority is under the pins'), never moved.
         }
 
         /// where a hold began, until the finger moves away or lifts
@@ -1439,13 +1465,13 @@ struct PinsMapView: UIViewRepresentable {
                 r.blendMode = .multiply
                 return r
             }
-            // A DRAWING: its colour (black unless given one), 3 pt as a route; a shape filled with it at 25%
+            // A DRAWING: its colour (black unless given one), 2 pt as a route; a shape filled with it at 25%
             if let l = o as? PinDrawingLine {
                 let r = MKPolylineRenderer(polyline: l)
                 let d = l.drawingID.flatMap { PinDrawings.shared.drawing($0) }
                 r.strokeColor = d?.ink ?? UIColor(Palette.ink)
-                r.lineWidth = d?.width ?? 3; r.lineCap = .round; r.lineJoin = .round
-                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 3) * 2.5), NSNumber(value: (d?.width ?? 3) * 2)] }
+                r.lineWidth = d?.width ?? 2; r.lineCap = .round; r.lineJoin = .round
+                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 2) * 2.5), NSNumber(value: (d?.width ?? 2) * 2)] }
                 return r
             }
             if let s = o as? PinDrawingShape {
@@ -1453,25 +1479,24 @@ struct PinsMapView: UIViewRepresentable {
                 let d = s.drawingID.flatMap { PinDrawings.shared.drawing($0) }
                 let ink = d?.ink ?? UIColor(Palette.ink)
                 r.strokeColor = ink; r.fillColor = ink.withAlphaComponent(0.25)
-                r.lineWidth = d?.width ?? 2.5; r.lineJoin = .round
-                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 2.5) * 2.5), NSNumber(value: (d?.width ?? 2.5) * 2)] }
+                r.lineWidth = d?.width ?? 2; r.lineJoin = .round
+                if d?.dash == true { r.lineDashPattern = [NSNumber(value: (d?.width ?? 2) * 2.5), NSNumber(value: (d?.width ?? 2) * 2)] }
                 return r
             }
-            // a route: 3 pt black, round ends and joins, no casing; another way 2 pt black 50% (8.3)
+            // a route: 2 pt black, round ends and joins, no casing; another way 1.5 pt black 50% (8.3; no thick lines)
             if let l = o as? PinRouteLine {
                 let r = MKPolylineRenderer(polyline: l)
                 // a kept route in its own colour (black unless you gave it one); another way always black 50%
                 let ink = l.routeID.flatMap { id in PinRoutes.shared.routes.first { $0.id == id }?.ink } ?? UIColor(Palette.ink)
                 r.strokeColor = l.other ? UIColor(Palette.ink).withAlphaComponent(0.5) : ink
-                r.lineWidth = l.other ? 2 : 3
+                r.lineWidth = l.other ? 1.5 : 2
                 r.lineCap = .round
                 r.lineJoin = .round
-                // A ROUTE JUST MADE travels from its start to its end (12 Nov 17:02), once
+                // A ROUTE JUST MADE travels from its start to its end, once
                 if let id = l.routeID, PinsMapState.shared.growing.remove(id) != nil { RouteGrow.run(r) }
                 return r
             }
             guard let p = o as? MKPolyline else { return MKOverlayRenderer(overlay: o) }
-            // (our own: Apple's gradient line was drawn thick and blurred zoomed far out)
             return JourneyRenderer(p)
         }
 
@@ -1487,6 +1512,10 @@ struct PinsMapView: UIViewRepresentable {
                 view.annotation = l
                 view.routeID = l.id
                 view.show(l.words)
+                // each its own priority, the newest route's highest (MapKit left two of the same priority both showing,
+                // one over the other): of two that meet, the older one steps out
+                let order = PinRoutes.shared.routes.firstIndex { $0.id == l.id } ?? 0
+                view.displayPriority = MKFeatureDisplayPriority(rawValue: 700 + Float(min(order, 49)))
                 return view
             }
             guard let a = a as? PinAnnotation else { return nil }
@@ -1495,8 +1524,8 @@ struct PinsMapView: UIViewRepresentable {
             view.setChosen(PinStore.shared.selected == a.id, animated: false)
             return view
         }
-        /// A8.2: a pin just dropped falls onto its spot from 57 pt above, at its own size (it never grows; 31 Oct: no
-        /// growing circles), on the settle, no overshoot; a notch as it lands
+        /// A8.2: a pin just dropped falls onto its spot from 57 pt above, at its own size, on the settle, no
+        /// overshoot; a notch as it lands
         func mapView(_ v: MKMapView, didAdd views: [MKAnnotationView]) {
             arrange(v)
             for view in views {
@@ -1538,10 +1567,12 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     private var marker: UIImage?
     private var dotImage: UIImage?
 
-    /// touched over 44 pt round the pin's head (the marker is drawn 24 x 30, smaller behind another pin, 8 Nov)
+    /// touched over 44 pt round the pin's head
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         let head = CGPoint(x: bounds.midX, y: bounds.minY + min(bounds.height, 30) * 0.4)
-        return abs(point.x - head.x) <= 22 && abs(point.y - head.y) <= 22
+        // (44 pt on the screen whatever the marker's drawn size: the view's own points are scaled with it)
+        let r = 22 / max(0.3, zoomScale)
+        return abs(point.x - head.x) <= r && abs(point.y - head.y) <= r
     }
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
@@ -1647,8 +1678,10 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
     private func look(animated: Bool) {
         let h = bounds.height
         if dot { transform = .identity; return }
-        let s: CGFloat = (chosen ? 1.2 : behind ? 0.8 : 1) * zoomScale
-        let lift: CGFloat = chosen ? 4 : behind ? -4 : 0
+        // (a pin behind another keeps its size and place: stepping back 0.8x and 4 pt down jumped every time two pins
+        // met or parted while zooming; the newest simply draws on top)
+        let s: CGFloat = (chosen ? 1.2 : 1) * zoomScale
+        let lift: CGFloat = chosen ? 4 : 0
         let t = CGAffineTransform(translationX: 0, y: h / 2 * (1 - s) - lift).scaledBy(x: s, y: s)
         if animated {
             UIView.animate(withDuration: Motion.reduce ? 0.2 : 0.26, delay: 0, usingSpringWithDamping: 1, initialSpringVelocity: 0) { self.transform = t }
@@ -1680,15 +1713,18 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         }
         if let name {
             if nameLabel.text != name { nameLabel.text = name; nameLabel.sizeToFit() }
-            // centred under the tip (the view's bottom middle), 2 pt below it
-            nameLabel.center = CGPoint(x: bounds.midX, y: bounds.maxY + 2 + nameLabel.bounds.height / 2)
+            // centred under the tip (the view's bottom middle), 2 pt below it on the screen, its words at their own
+            // size however small the marker is drawn (the label rides in the marker's scaled view)
+            let k = 1 / max(0.3, zoomScale)
+            nameLabel.transform = CGAffineTransform(scaleX: k, y: k)
+            nameLabel.center = CGPoint(x: bounds.midX, y: bounds.maxY + (2 + nameLabel.bounds.height / 2) * k)
             nameLabel.isHidden = false
         } else if nameLabel.superview != nil {
             nameLabel.isHidden = true
         }
     }
 
-    /// a pin dropped is simply there (no fall any more, 8 Nov answer), with the notch of setting it down
+    /// a pin dropped is simply there, with the notch of setting it down
     func fall() {
         transform = .identity
         Feel.notch()
@@ -1713,7 +1749,6 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         // each runs once the menu has gone (as every hold menu's rows)
         let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let state = PinsMapState.shared
-        // (the Route row goes first: the pin's sheet stood hidden behind it, and came up unasked later, 8 Nov)
         let edit = UIAction(title: "Edit") { _ in
             after { PinRoutes.shared.close(); PinStore.shared.selected = id; state.water?.go(.half) }
         }
@@ -1744,12 +1779,20 @@ final class PinAnnotationView: MKAnnotationView, UIContextMenuInteractionDelegat
         }
         let share = UIAction(title: "Share") { _ in after { PinStore.share(p) } }
         let delete = UIAction(title: "Delete", attributes: .destructive) { _ in after { Feel.lift(); PinStore.shared.remove(id) } }
+        // MOVE TO LAYER: the pin's map's other layers, once it has two or more (P04 layers)
+        var layered: [UIMenuElement] = []
+        if let m = p.map, let ls = PinMaps.shared.map(m)?.layers, ls.count > 1 {
+            let at = PinMaps.shared.layerOf(m, p.layer)?.id
+            layered = [UIMenu(title: "Move to layer", children: ls.filter { $0.id != at }.map { l in
+                UIAction(title: l.name) { _ in after { PinMaps.shared.move(pins: [id], to: l.id, in: m) } }
+            })]
+        }
         return UIMenu(title: p.title, children: [
             UIMenu(options: .displayInline, children: [edit]),
             UIMenu(options: .displayInline, children: [colour]),
             UIMenu(options: .displayInline, children: [routeFrom, routeTo, directions]),
             UIMenu(options: .displayInline, children: [here, page, copy]),
-            UIMenu(options: .displayInline, children: [share]),
+            UIMenu(options: .displayInline, children: [share] + layered),
             UIMenu(options: .displayInline, children: [delete]),
         ])
     }
@@ -1763,6 +1806,8 @@ struct PinsWater: View {
     let captionY: CGFloat
     var store = PinStore.shared
     @FocusState private var naming: Bool
+    /// the name as typed and whose it is, past its 60 while typing; what fits is kept
+    @State private var draft: (id: UUID, text: String)?
 
     var body: some View {
         let L = water.layout
@@ -1779,39 +1824,46 @@ struct PinsWater: View {
                         let name = p.shownTitle
                         ZStack {
                             if editable {
-                                // (14 Nov: the title IS the name: typed in place, the place's name standing in it until
-                                // you give it one; no second "Name" field under it)
-                                TextField("", text: Binding(get: { p.name }, set: { v in
-                                    if v.count > 60 { Feel.refuse() }
-                                    store.rename(p.id, v)
+                                TextField("", text: Binding(get: { draft?.id == p.id ? draft!.text : p.name }, set: { v in
+                                    draft = (p.id, v)
+                                    if v.count <= 60 { store.rename(p.id, v) }
                                 }), prompt: Text(p.region.isEmpty ? name : p.region).foregroundStyle(Palette.ink))
                                 .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                                 .multilineTextAlignment(.center).lineLimit(1)
                                 .focused($naming).submitLabel(.done)
                             } else {
-                                Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.6)
+                                Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                                     .id(name).transition(.blurReplace)
                             }
                         }
                         .animation(Motion.quick, value: name)
-                        Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                        if let d = draft, d.id == p.id, d.text.count > 60 {
+                            Text("\(d.text.count)/60").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
+                        } else {
+                            Text(p.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                        }
                     }
                 }
                 // (capped where the caption is, so the name stays on its line at the largest sizes)
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             } else {
-                // none chosen: the caption every map has (Places' "Everywhere 4"), how to drop one under a 0
+                // none chosen: the caption every map has (Places'), how to drop one under a 0
                 Text(PinMaps.shared.map(PinMaps.shared.shown)?.name ?? "All pins")
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
             }
         }
-        // (no fade between "Pins" and a pin's name: the words are simply there, 8 Nov; it crossfaded on every pin tap)
         // (clear of the Share circle on each side while the sheet is up, so the name stays centred)
         .frame(width: L.W - 2 * L.sheetInset - 32 - (store.selected != nil && water.stop != .quarter && water.stop != .closed ? 96 : 0))
         .position(x: L.W / 2, y: captionY)
         .allowsHitTesting(editable)
         // typing its name: the water to full for the keyboard, back to its own height after
+        // (another pin chosen, or none, while typing: what was typed stays the first pin's, cut to what fits)
+        .onChange(of: store.selected) { _, _ in
+            if let d = draft { if d.text.count > 60 { store.rename(d.id, d.text) }; draft = nil }
+        }
         .onChange(of: naming) { _, t in
+            // done typing: what fits of a name typed too long is kept
+            if !t, let d = draft { if d.text.count > 60 { store.rename(d.id, d.text) }; draft = nil }
             store.typing = t
             if t { water.fitHalf = nil; water.go(.full) } else if water.stop == .full { water.go(.half) }
         }
@@ -1835,11 +1887,13 @@ struct PinsList: View {
     /// the water is standing at 50%
     var rest = true
     var store = PinStore.shared
-    /// (the test driver's "pins end": the drawings brought up to the top of the list)
+    /// (the test driver's: the drawings brought up to the top of the list)
     @State private var pos = ScrollPosition(idType: UUID.self)
     /// the map whose name is being typed, and the words so far
     @State private var naming: UUID?
     @State private var name = ""
+    /// the layer whose name is being typed
+    @State private var namingLayer: UUID?
     @FocusState private var typing: Bool
 
     static let rowH: CGFloat = 72
@@ -1854,9 +1908,9 @@ struct PinsList: View {
         let restTop = self.top == nil ? rowsTop : PinsDock.bottom(max(L.top(.half), L.headBottom + 8))
         let n = max(0, Int(floor((L.capsule.minY - 16 - restTop) / Self.rowH)))
         let fade = restTop + CGFloat(n) * Self.rowH + 12
-        // THE WATER MOVING (the 25% to 50% change): the rows are always there and ride
-        // with the water's top, shown only in the band between the tools and the soft edge above the tabs, so they
-        // rise out of it with the water and sink back into it (as Places' maps do), never popping in at the end
+        // THE WATER MOVING: the rows are always there and ride with the water's top, shown only in the band between
+        // the tools and the soft edge above the tabs, so they rise out of it with the water and sink back into it (as
+        // Places' maps do), never popping in at the end
         if n > 0 {
             ScrollView(.vertical) {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -1868,24 +1922,43 @@ struct PinsList: View {
                         ForEach(maps.all.reversed()) { m in mapRow(m) }
                         newMapRow
                     } else {
-                    // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%
+                    let shownMap = maps.shown.flatMap { maps.map($0) }
+                    let layers = shownMap?.layers ?? []
                     let routes = PinRoutes.shared.routes.filter { maps.shows(extra: $0.map) }
-                    ForEach(store.pins.filter { maps.shows(pin: $0.map) }.reversed()) { p in row(p) }
+                    let drawings = PinDrawings.shared.all.filter { maps.shows(extra: $0.map) }
+                    let pins = store.pins.filter { maps.shows(pin: $0.map) }
+                    if let m = shownMap, layers.count > 1 {
+                        // LAYERS (Google Earth's folders, P04): with two or more, the map's list is in its layers, each
+                        // its name and under it what it holds; the layer new things go into is the black band
+                        ForEach(layers) { l in
+                            layerRow(l, in: m, first: l.id == layers.first?.id, last: l.id == layers.last?.id)
+                            let inIt = { (x: UUID?) in maps.layerOf(m.id, x)?.id == l.id }
+                            // (a hidden layer's things at 50%, as its name: in the list, not on the map)
+                            ForEach(pins.filter { inIt($0.layer) }.reversed()) { p in row(p).opacity(l.hidden ? 0.5 : 1) }
+                            ForEach(routes.filter { inIt($0.layer) }.reversed()) { r in routeRow(r).opacity(l.hidden ? 0.5 : 1) }
+                            ForEach(drawings.filter { inIt($0.layer) }.reversed()) { d in drawingRow(d).opacity(l.hidden ? 0.5 : 1) }
+                        }
+                    } else {
+                    // with routes kept, a Routes section under the pins (8.6's Saved), its name 15 pt semibold black 50%
+                    ForEach(pins.reversed()) { p in row(p) }
                     if !routes.isEmpty {
                         header("Routes").padding(.top, 12)
                         ForEach(routes.reversed()) { r in routeRow(r) }
                     }
                     // the lines and shapes drawn (Map/PinDrawings.swift)
-                    let drawings = PinDrawings.shared.all.filter { maps.shows(extra: $0.map) }
                     if !drawings.isEmpty {
                         header("Drawings").padding(.top, 12)
                         ForEach(drawings.reversed()) { d in drawingRow(d) }
                     }
                     }
+                    // a map you made can have layers; All pins is every map at once and has none
+                    if let m = shownMap { newLayerRow(m) }
+                    }
                     Color.clear.frame(height: max(0, L.H - fade))
                 }
                 .scrollTargetLayout()
             }
+            .scrollBlur()
             // (row by row, so whole rows are what it comes to rest on)
             .scrollTargetBehavior(.viewAligned)
             .scrollPosition($pos)
@@ -1948,11 +2021,10 @@ struct PinsList: View {
                     Text(m?.name ?? "All pins").font(.body.weight(.semibold)).foregroundStyle(ink).lineLimit(1)
                 }
                 if !places.isEmpty {
-                    Text(places).font(.subheadline).foregroundStyle(ink.opacity(on ? 0.7 : 0.5)).lineLimit(1)
+                    Text(places).font(.subheadline).foregroundStyle(ink.opacity(0.5)).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
-            // (the shown map: the black band side to side says it; no tick on top of it, 14 Nov)
         }
         .frame(minHeight: Self.rowH)
         .padding(.horizontal, 16)
@@ -1963,7 +2035,6 @@ struct PinsList: View {
             Feel.tap()
             store.selected = nil
             if on { maps.inside = true; return }
-            // (14 Nov: picking a map no longer sends the sheet down; it stays where it is and the map glides to it)
             maps.shown = m?.id
         }
         .contextMenu {
@@ -1996,13 +2067,92 @@ struct PinsList: View {
         .accessibilityAddTraits(.isButton)
     }
 
+    /// A LAYER'S NAME in the map's list: a tap makes it the layer new pins, routes and drawings go into (the black
+    /// band, as the map shown); a hidden one says so at the right, its name at 50%. A hold: Rename, Hide or Show,
+    /// Move up, Move down, Delete layer (what is in it goes to the layer next to it)
+    private func layerRow(_ l: PinLayer, in m: PinMap, first: Bool, last: Bool) -> some View {
+        let maps = PinMaps.shared
+        let on = maps.layerForNew == l.id
+        let ink = on ? Palette.white : Palette.ink
+        return HStack(spacing: 12) {
+            if namingLayer == l.id {
+                TextField("", text: $name)
+                    .font(.body.weight(.semibold)).foregroundStyle(ink).focused($typing)
+                    .submitLabel(.done)
+                    .onSubmit { maps.renameLayer(l.id, in: m.id, to: name); namingLayer = nil }
+            } else {
+                Text(l.name).font(.body.weight(.semibold)).foregroundStyle(ink.opacity(l.hidden ? 0.5 : 1)).lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            if l.hidden { Text("Hidden").font(.body).foregroundStyle(ink.opacity(0.5)).lineLimit(1) }
+        }
+        .frame(minHeight: 52)
+        .padding(.horizontal, 16)
+        .background { Rectangle().fill(on ? Palette.ink : .clear) }
+        .padding(.horizontal, -16)
+        .padding(.top, first ? 0 : 8)
+        .contentShape(Rectangle())
+        .onTapGesture { Feel.tap(); maps.pick(l.id, in: m.id) }
+        .contextMenu {
+            Button("Rename") { name = l.name; namingLayer = l.id; typing = true }
+            Button(l.hidden ? "Show" : "Hide") { Feel.tap(); maps.setHidden(l.id, in: m.id, !l.hidden) }
+            if !first || !last {
+                Section {
+                    if !first { Button("Move up") { moveLayer(l, in: m, by: -1) } }
+                    if !last { Button("Move down") { moveLayer(l, in: m, by: 1) } }
+                }
+            }
+            Button("Delete layer", role: .destructive) { Feel.lift(); maps.removeLayer(l.id, in: m.id) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(l.name + (l.hidden ? ", hidden" : ""))
+        .accessibilityAddTraits(on ? [.isButton, .isSelected, .isHeader] : [.isButton, .isHeader])
+    }
+    private func moveLayer(_ l: PinLayer, in m: PinMap, by d: Int) {
+        guard let ls = PinMaps.shared.map(m.id)?.layers, let i = ls.firstIndex(where: { $0.id == l.id }) else { return }
+        Feel.tap()
+        PinMaps.shared.moveLayer(l.id, in: m.id, to: i + d)
+    }
+    /// NEW LAYER: made at once and picked, its name typed in place on its own row (a map's first new layer also names
+    /// what it already held)
+    private func newLayerRow(_ m: PinMap) -> some View {
+        HStack(spacing: 14) {
+            Icon5(key: "plus", ink: Palette.ink, size: 17)
+                .frame(width: 28, height: 28)
+            Text("New layer").font(.body).foregroundStyle(Palette.ink)
+            Spacer(minLength: 0)
+        }
+        .frame(minHeight: 56)
+        .padding(.top, 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Feel.tap()
+            if let l = PinMaps.shared.addLayer(to: m.id, named: PinMaps.shared.freshName(in: m.id)) {
+                name = l.name; namingLayer = l.id; typing = true
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+    }
+    /// an item's hold menu row: Move to layer, with the map's other layers (only once it has two or more)
+    @ViewBuilder private func moveMenu(map: UUID?, layer: UUID?, pins: Set<UUID> = [], routes: Set<UUID> = [], drawings: Set<UUID> = []) -> some View {
+        let maps = PinMaps.shared
+        if let map, let ls = maps.map(map)?.layers, ls.count > 1 {
+            let at = maps.layerOf(map, layer)?.id
+            Menu("Move to layer") {
+                ForEach(ls.filter { $0.id != at }) { l in
+                    Button(l.name) { maps.move(pins: pins, routes: routes, drawings: drawings, to: l.id, in: map) }
+                }
+            }
+        }
+    }
+
     private func header(_ t: String) -> some View {
         Text(t).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
             .frame(minHeight: 32, alignment: .bottom)
             .accessibilityAddTraits(.isHeader)
     }
-    /// a kept route: its own line drawn small (the route icon is still to draw), "From to To", its distance and time;
-    /// a tap shows it on the map with the water at 25%; a hold, the route's menu (11.5)
+    /// a kept route: its own line drawn small (the route icon is still to draw),, its distance and time; a tap shows
+    /// it on the map with the water at 25%; a hold, the route's menu (11.5)
     private func routeRow(_ r: PinRoute) -> some View {
         let ends = PinRoutes.shared
         let name = "\(ends.end(r.from, r)?.title ?? "Pin") to \(ends.end(r.to, r)?.title ?? "Pin")"
@@ -2012,8 +2162,7 @@ struct PinsList: View {
                 .frame(width: 24, height: 24)
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).truncationMode(.middle)
-                    .minimumScaleFactor(0.85).allowsTightening(true)
+                Text(name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                 Text(PinRoutes.shared.notes[r.id] ?? r.words).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -2022,6 +2171,7 @@ struct PinsList: View {
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
+            PinMaps.shared.reveal(map: r.map, layer: r.layer)
             store.selected = nil
             water.go(.quarter)
             PinsMapState.shared.frame(route: r.id, always: true)
@@ -2040,6 +2190,7 @@ struct PinsList: View {
                 Button("Directions in Apple Maps") { PinRoutes.shared.directions(r.id) }
                 Button("Share") { PinRoutes.shared.share(r.id) }
             }
+            moveMenu(map: r.map, layer: r.layer, routes: [r.id])
             Button("Delete", role: .destructive) { Feel.lift(); PinRoutes.shared.remove(r.id) }
         }
         .accessibilityElement(children: .ignore)
@@ -2070,6 +2221,7 @@ struct PinsList: View {
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
+            PinMaps.shared.reveal(map: d.map, layer: d.layer)
             store.selected = nil
             water.go(.quarter)
             PinDrawings.shared.frame(d.id)
@@ -2081,6 +2233,7 @@ struct PinsList: View {
                 store.selected = nil; PinRoutes.shared.close(); PinDrawings.shared.colouring = d.id
                 if water.stop == .quarter || water.stop == .closed { water.go(.half) }
             }
+            moveMenu(map: d.map, layer: d.layer, drawings: [d.id])
             Button("Delete", role: .destructive) { Feel.lift(); PinDrawings.shared.remove(d.id) }
         }
         .accessibilityElement(children: .ignore)
@@ -2103,10 +2256,14 @@ struct PinsList: View {
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
+            PinMaps.shared.reveal(map: p.map, layer: p.layer)
             store.selected = p.id
             water.go(.quarter)
             PinsMapState.shared.go(to: p)
         }
+        // (the pin's own menu is on the map; here its row holds only what the list can do: Move to layer)
+        .contextMenu((p.map.flatMap { PinMaps.shared.map($0)?.layers?.count } ?? 0) > 1
+                     ? ContextMenu { moveMenu(map: p.map, layer: p.layer, pins: [p.id]) } : nil)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(p.title), \(p.line)")
         .accessibilityAddTraits(.isButton)
@@ -2171,13 +2328,13 @@ struct PinSheet: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 16) {
                   if picking {
-                    // CHOOSING ITS COLOUR: the sheet is the picker alone, at the height it is at (50% holds it): the colour's
-                    // name, Reset to black and Done on one line, the picker under it; nothing else is up meanwhile (the
-                    // pin's other rows, a full screen for one colour, a Share circle in the head's corner all went, 8 Nov)
+                    // CHOOSING ITS COLOUR: the sheet is the picker alone, at the height it is at (50% holds it): the
+                    // colour's name, Reset to black and Done on one line, the picker under it; nothing else is up
+                    // meanwhile
                     HStack(spacing: 16) {
                         Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 28, height: 28)
                         Text(p.pick.map { ColourNames.name($0).capitalizedFirst } ?? "Black").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .lineLimit(2)
                         Spacer(minLength: 8)
                         if p.pick != nil {
                             Button { Feel.tap(); store.colour(p.id, nil); pick = Self.nearBlack } label: {
@@ -2194,11 +2351,11 @@ struct PinSheet: View {
                     ColourPicker(colour: Binding(get: { pick }, set: { c in pick = c; store.colour(p.id, c) }),
                                  suggested: nil, width: L.W - 2 * L.sheetInset - 32) { c in ColourStore.shared.add(c) }
                   } else {
-                    // THE PIN'S SHEET (23 Oct, 3 Oct): what it does as glass circles in one even row (its colour, a
-                    // photo, share, delete in red); under it its name, its kind, its photo and its note, each only
-                    // the thing itself, no labels and no explaining
+                    // THE PIN'S SHEET: what it does in one row of words; under it its kind, its photo and its note,
+                    // each only the thing itself, no labels and no explaining
                     actions(p, width: L.W - 2 * L.sheetInset - 32)
-                    kinds(p)
+                    // (clear of the row above, so the kinds never read as its captions)
+                    kinds(p).padding(.top, 12)
                     if let img = PinStore.image(p) {
                         Menu {
                             Button("Choose another") { Feel.tap(); choosingPhoto = true }
@@ -2206,7 +2363,7 @@ struct PinSheet: View {
                         } label: {
                             Color.clear.frame(maxWidth: .infinity).frame(height: 200)
                                 .overlay { Image(uiImage: img).resizable().scaledToFill() }
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .clipped()   // (square: a photo is never curved)
                                 .contentShape(Rectangle())
                         }
                         .accessibilityLabel("Photo")
@@ -2224,12 +2381,12 @@ struct PinSheet: View {
                     Color.clear.frame(height: L.H - fade + 24)
                 }
                 .padding(.horizontal, 16)
-                // (14 Nov: the sheet stands as high as the pin's rows, never higher, so nothing empty is under them)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { _, h in
                     contentH = h - (L.H - fade + 24)
                     fit()
                 }
             }
+            .scrollBlur()
             .scrollIndicators(.hidden)
             .scrollPosition($rows)
             .onChange(of: store.endAsked) { _, _ in rows.scrollTo(edge: .bottom) }
@@ -2295,38 +2452,23 @@ struct PinSheet: View {
     }
 
     /// the pin's four circles, sharing the row evenly: its colour (the circle is the colour), a photo, share, delete
+    /// what the pin does, in words as the tools above are: its colour, a photo, share, and Delete in red
     private func actions(_ p: Pin, width: CGFloat) -> some View {
-        let part = width / 4
-        return GlassEffectContainer(spacing: 14) {
-            HStack(spacing: 0) {
-                Button {
-                    Feel.tap()
-                    pick = p.pick ?? Self.nearBlack
-                    picking = true
-                    if water.stop == .quarter || water.stop == .closed { water.go(.half) }
-                } label: {
-                    Circle().fill(p.pick?.color ?? Palette.ink).frame(width: 24, height: 24)
-                        .frame(width: 44, height: 44).contentShape(Circle())
-                }
-                .buttonStyle(.plain).glassEffect(PageGlass.head, in: .circle)
-                .accessibilityLabel("Colour, \(p.pick.map { ColourNames.name($0) } ?? "black")")
-                .frame(width: part)
-                circle("photo", "Photo", Palette.ink) { choosingPhoto = true }.frame(width: part)
-                circle("share", "Share", Palette.ink) { PinStore.share(p) }.frame(width: part)
-                circle("bin", "Delete pin", Palette.red) { Feel.lift(); store.remove(p.id); water.go(.quarter) }.frame(width: part)
-            }
-        }
+        ChipRow(width: width, items: [
+            .init(on: false, label: "Colour", act: {
+                pick = p.pick ?? Self.nearBlack
+                picking = true
+                if water.stop == .quarter || water.stop == .closed { water.go(.half) }
+            }) { _ in Text("Colour") },
+            .init(on: false, label: "Photo", act: { choosingPhoto = true }) { _ in Text("Photo") },
+            .init(on: false, label: "Share", act: { PinStore.share(p) }) { _ in Text("Share") },
+            .init(on: false, label: "Delete", act: { store.remove(p.id); water.go(.quarter) }) { _ in
+                Text("Delete").foregroundStyle(Palette.red)
+            },
+        ])
+        .font(.body.weight(.semibold))
         .frame(width: width)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-    }
-
-    private func circle(_ icon: String, _ label: String, _ ink: Color, _ act: @escaping () -> Void) -> some View {
-        Button { Feel.tap(); act() } label: {
-            Icon5(key: icon, ink: ink, size: 20).frame(width: 44, height: 44).contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .glassEffect(PageGlass.head, in: .circle)
-        .accessibilityLabel(label)
     }
 
     /// its kind, one of the twelve (7.3), in a row to slide through; the one chosen filled black, chosen again it
@@ -2344,14 +2486,12 @@ struct PinSheet: View {
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    // (no glass round the others: plain words, the chosen one a black chip, as Pins' tools, 14 Nov)
                     .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
                 }
             }
             .padding(.horizontal, 16)
         }
         .scrollIndicators(.hidden)
-        // (the ends go out softly, never cut by a hard line, 14 Nov)
         .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05),
                                      .init(color: .black, location: 0.95), .init(color: .clear, location: 1)],
                              startPoint: .leading, endPoint: .trailing))
@@ -2367,7 +2507,6 @@ struct PinSheet: View {
         }
     }
 
-    /// "29.12345° N, 6.54321° E"
     static func coordinates(_ p: Pin) -> String {
         String(format: "%.5f° %@, %.5f° %@", abs(p.lat), p.lat >= 0 ? "N" : "S", abs(p.lon), p.lon >= 0 ? "E" : "W")
     }
@@ -2405,8 +2544,8 @@ struct RouteShape: Shape {
     }
 }
 
-/// THE JOURNEY'S LINE on Apple's map: one black line (not black to blue), 2.5 pt at every zoom, round ends
-/// and joins; `progress` (0 to 1, of its length) is how much of it is drawn, for the play
+/// THE JOURNEY'S LINE on Apple's map: one black line, 2.5 pt at every zoom, round ends and joins; `progress` (0 to 1,
+/// of its length) is how much of it is drawn, for the play
 final class JourneyRenderer: MKOverlayRenderer {
     let line: MKPolyline
     var progress = 1.0
@@ -2436,6 +2575,17 @@ final class JourneyRenderer: MKOverlayRenderer {
         ctx.setStrokeColor(UIColor(Palette.ink).cgColor)
         ctx.addPath(path)
         ctx.strokePath()
+        // A DOT AT EVERY STOP the line has reached: 7 pt across at every zoom
+        let r = CGFloat(3.5 / Double(zoomScale))
+        var run = 0.0
+        let drawn = total * min(1, max(0, progress))
+        ctx.setFillColor(UIColor(Palette.ink).cgColor)
+        for k in 0 ..< n {
+            if k > 0 { run += hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y) }
+            guard run <= drawn + total * 0.0005 else { break }
+            let c = point(for: pts[k])
+            ctx.fillEllipse(in: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+        }
     }
 }
 
@@ -2472,8 +2622,8 @@ struct PinMapPicture: View {
     }
 }
 
-/// APPLE'S MAP, DEEPER (12 Nov 21:27: its green and blue were far too light): the whole earth under the roads' labels
-/// multiplied by a light grey, so land and sea come out a step deeper and the labels, pins and routes stay as they are
+/// APPLE'S MAP, DEEPER: the whole earth under the roads' labels multiplied by a light grey, so land and sea come out
+/// a step deeper and the labels, pins and routes stay as they are
 enum PinsDeepen {
     /// how much of each colour is kept (1 is Apple's own)
     static let white: CGFloat = 0.84

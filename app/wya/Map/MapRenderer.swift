@@ -57,6 +57,17 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var gridCount = 0
     private var reliefTex: MTLTexture?
     private var texel = SIMD2<Float>(0, 0)
+    /// A COUNTRY'S FINER RELIEF (Store/ReliefDetail.swift): the open country's own picture, eight times the world's
+    /// detail, laid over the world's inside its box (the hills stay sharp zoomed into a country); asked of the data
+    /// server when a country opens, kept for the session
+    private var detailTex: MTLTexture?
+    private var detailBox = SIMD4<Float>(0, 0, 0, 0)
+    private var detailTexel = SIMD2<Float>(0, 0)
+    private var detailFor: String?
+    /// the last two countries' pictures, made into textures off the main thread (a big country's is 32 MB: never
+    /// more than two kept, and none of the files' own bytes)
+    private var detailKept: [(cc: String, tex: MTLTexture, box: SIMD4<Float>, texel: SIMD2<Float>)] = []
+    private var detailAsked: Set<String> = []
 
     private var last: CFTimeInterval = 0
     private let start = CACurrentMediaTime()
@@ -83,11 +94,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         view.clearStencil = 0
         view.preferredFramesPerSecond = 120
         view.isOpaque = true
-        // ONE FRAME FOR THE MAP AND WHAT RIDES ON IT (31 Oct 11:47: the names, the history line and its capsules shook
-        // as the map moved). They are UIKit views moved in draw(in:) for this frame's camera, so they show in this
-        // run loop's Core Animation commit; a drawable presented on its own shows on its own schedule, a frame either
-        // side of them. Presented with the transaction (Apple's CAMetalLayer.presentsWithTransaction), the map's
-        // frame and the views' new places reach the screen together.
+        // ONE FRAME FOR THE MAP AND WHAT RIDES ON IT. They are UIKit views moved in draw(in:) for this frame's
+        // camera, so they show in this run loop's Core Animation commit; a drawable presented on its own shows on its
+        // own schedule, a frame either side of them. Presented with the transaction (Apple's
+        // CAMetalLayer.presentsWithTransaction), the map's frame and the views' new places reach the screen together.
         (view.layer as? CAMetalLayer)?.presentsWithTransaction = true
         buildPipelines(view)
     }
@@ -237,8 +247,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
 
         // the relief grid, one point a degree, laid in Equal Earth
         var g: [Float] = []
-        // past the date line the sea carries on as open ocean, so the
-        // curved edge of the projection is never seen; the grid runs 90° further each way
+        // past the date line the sea carries on as open ocean, so the curved edge of the projection is never seen;
+        // the grid runs 90° further each way
         let nx = 540, ny = 180
         for row in 0 ... ny {
             let lat = 90.0 - Double(row)
@@ -288,24 +298,79 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         controller.needsFrame = true
     }
 
+    /// the open country's finer relief: asked for when the country changes, laid in when it comes
+    private func wantDetail(_ w: World) {
+        let i = controller.focusPlace ?? controller.regionScene?.place ?? controller.placeOpen
+        let cc = i.flatMap { $0 >= 0 && $0 < w.places.count ? w.places[$0].id.lowercased() : nil }
+        guard cc != detailFor else { return }
+        detailFor = cc
+        detailTex = nil
+        guard let cc else { return }
+        if let k = detailKept.firstIndex(where: { $0.cc == cc }) {
+            let d = detailKept.remove(at: k)
+            detailKept.append(d)
+            (detailTex, detailBox, detailTexel) = (d.tex, d.box, d.texel)
+            return
+        }
+        // (one ask a country at a time: back and forth before it comes asks once)
+        guard !detailAsked.contains(cc) else { return }
+        detailAsked.insert(cc)
+        nonisolated(unsafe) let device = self.device
+        Task { [weak self] in
+            let got = await Self.detailTexture(cc, device: device)
+            // (no connection: asked again in a few seconds while the country is still open, never only on the next
+            // visit; the renderer not held through the wait)
+            if got.made == nil, got.offline { try? await Task.sleep(for: .seconds(5)) }
+            guard let self else { return }
+            self.detailAsked.remove(cc)
+            guard let made = got.made else {
+                if got.offline, self.detailFor == cc { self.detailFor = nil }
+                return
+            }
+            self.detailKept.append((cc, made.tex, made.box, made.texel))
+            if self.detailKept.count > 2 { self.detailKept.removeFirst() }
+            if self.detailFor == cc {
+                (self.detailTex, self.detailBox, self.detailTexel) = (made.tex, made.box, made.texel)
+                self.controller.needsFrame = true
+            }
+        }
+    }
+    /// a country's picture read and made into a texture away from the main thread
+    @concurrent nonisolated private static func detailTexture(_ cc: String, device: MTLDevice)
+        async -> (made: (tex: MTLTexture, box: SIMD4<Float>, texel: SIMD2<Float>)?, offline: Bool) {
+        let f = await ReliefDetail.fetch(cc)
+        guard let d = f.detail else { return (nil, f.offline) }
+        let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rg8Unorm, width: d.width, height: d.height, mipmapped: false)
+        td.usage = .shaderRead
+        guard let t = device.makeTexture(descriptor: td) else { return (nil, false) }
+        d.bytes.withUnsafeBytes { raw in
+            t.replace(region: MTLRegionMake2D(0, 0, d.width, d.height), mipmapLevel: 0, withBytes: raw.baseAddress!,
+                      bytesPerRow: d.width * 2)
+        }
+        // (the world picture's u runs west to east from -180, its v north to south from 90)
+        let box = SIMD4(Float((d.west + 180) / 360), Float((90 - d.north) / 180), Float((d.east + 180) / 360), Float((90 - d.south) / 180))
+        return ((t, box, SIMD2((box.z - box.x) / Float(d.width), (box.w - box.y) / Float(d.height))), false)
+    }
+
     struct Cam { var c: SIMD2<Float>; var k: Float; var time: Float; var view: SIMD2<Float>; var pad = SIMD2<Float>(0, 0) }
     struct Look { var tint: SIMD4<Float>; var kind: Float; var texelU: Float; var texelV: Float; var pad: Float = 0
-                  var clip = SIMD4<Float>(0, 0, 0, 0); var clip2 = SIMD4<Float>(1, 0, 0, 0) }
+                  var clip = SIMD4<Float>(0, 0, 0, 0); var clip2 = SIMD4<Float>(1, 0, 0, 0)
+                  /// the country's finer relief: its box in the world picture (u0 v0 u1 v1); its texel, and 1 when it is in
+                  var det = SIMD4<Float>(0, 0, 0, 0); var det2 = SIMD4<Float>(0, 0, 0, 0) }
     struct LineStyle { var colour: SIMD4<Float>; var width: Float; var feather: Float; var dash: Float; var gap: Float }
     struct AuroraU { var yNorth: Float; var ySouth: Float; var bottom: Float; var strength: Float; var pin: Float = 0; var away: Float = 0 }
 
-    /// THE CONTINENT'S FLAT BLUE (the old renderer's Slice 127v): on a
-    /// continent's map the sea and the rest of the world's land go into one flat blue, our blue 60% on cream (the old
-    /// flatP), over half a second on the old continent curve, cubic-bezier(.3, 0, .3, 1), and come back the same way.
-    /// What is away is worked out piece by piece: a country across two continents is drawn as its pieces, so on
-    /// Europe's map Russia is Russia to the Urals (the old pieceItems).
+    /// THE CONTINENT'S FLAT BLUE: on a continent's map the sea and the rest of the world's land go into one flat
+    /// blue, our blue 60% on cream (the old flatP), over half a second on the old continent curve, cubic-bezier(.3,
+    /// 0,.3, 1), and come back the same way. What is away is worked out piece by piece: a country across two
+    /// continents is drawn as its pieces, so on Europe's map Russia is Russia to the Urals (the old pieceItems).
     private var flatFrom: Float = 0, flatTo: Float = 0, flatAt: CFTimeInterval = -10
     private var awayKey: String?
     private func flatNow(_ now: CFTimeInterval) -> Float {
         flatFrom + (flatTo - flatFrom) * Float(Motion.blend((now - flatAt) / 0.5))
     }
-    /// REGIONS' SELECTION MENU (A6.5): the aurora's bands and the diamonds are away while the menu is up, and back when
-    /// it goes; at once, with no movement (7 Nov 19:22: going into Regions needs no animation)
+    /// REGIONS' SELECTION MENU (A6.5): the aurora's bands and the diamonds are away while the menu is up, and back
+    /// when it goes; at once, with no movement
     private var menuFrom: Float = 0, menuTo: Float = 0, menuAt: CFTimeInterval = -10
     private func menuNow(_ now: CFTimeInterval) -> Float {
         let x = max(0, now - menuAt) * 15.2
@@ -322,7 +387,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     /// the open country's plain towns and its dots, kept until the marks or the pressed town change
     private var plainCache: [String: (key: String, list: [Int])] = [:]
     private var dotCache: [String: (key: String, buffer: MTLBuffer?, count: Int)] = [:]
-    /// a focus key ("place:12", Regions) and its place
+    /// a focus key (, Regions) and its place
     static func focus(_ k: String) -> Int? { k.hasPrefix("place:") ? Int(k.dropFirst(6)) : nil }
 
     /// THE REGION MAP'S BUFFERS (6.5), made once per scene
@@ -419,8 +484,6 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // the history line (Part 13), drawn along for this frame
         controller.stepHistory(now)
         controller.onFrame?()
-        // (and once more after the line has gone back, so its capsules go with it: they stayed on the map after history
-        // was turned off, 7 Nov)
         if let mv = view as? MapMTKView, controller.historyTrack != nil || controller.historyShown > 0 || !mv.historyLine.isHidden {
             mv.historyLine.update(controller)
         }
@@ -433,6 +496,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         guard built, let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let cb = queue.makeCommandBuffer(), let w = controller.world else { return }
         if let sc = controller.regionScene, regionBuilt !== sc { buildRegion(sc) }
+        wantDetail(w)
         if let l = controller.regionLines, linesBuilt !== l { buildLines(l) }
 
         var cam = Cam(c: SIMD2(Float(controller.c.x), Float(controller.c.y)), k: Float(controller.k),
@@ -441,8 +505,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let tiles = detail?.visible(c: controller.c, k: controller.k, view: view.bounds.size)
         // a level that came in late settles over 0.35 s: drawn at the full rate until it has
         if detail?.settling == true { controller.needsFrame = true }
-        // borders and coasts: one thickness at every zoom (BUILD-BOOK 1.4), 50% black (29 Oct 01:13); with Increase
-        // Contrast the one darker step, full ink, at the same 0.5 pt (19.4)
+        // borders and coasts: one thickness at every zoom (BUILD-BOOK 1.4), 50% black; with Increase Contrast the one
+        // darker step, full ink, at the same 0.5 pt (19.4)
         let ink: Float = UIAccessibility.isDarkerSystemColorsEnabled ? 1 : 0.5
         var ls = LineStyle(colour: SIMD4(0, 0, 0, ink), width: 0.5, feather: 0.6, dash: 3, gap: 2)
         // 0. the lines' coverage first, in a pass of its own (see lineCoverage)
@@ -496,8 +560,6 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     ce.setFragmentBytes(&st, length: MemoryLayout<LineStyle>.stride, index: 0)
                     let dur = 0.4 * RegionLines.slow
                     let tIn = (now - l.start - l.delay * RegionLines.slow) / dur, tOut = (now - l.start) / dur
-                    // (no drawing along any more, 8 Nov answer: the new borders are there at once when they come
-                    // and the old ones go with them)
                     _ = tOut
                     if tIn < 0 { controller.needsFrame = true }
                     func set(_ b: MTLBuffer?, _ count: Int, _ q: Float) {
@@ -513,8 +575,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                     // (the level above's lines, darker and bolder, have a coverage of their own: below)
                     if tIn >= 0, let sc = controller.regionScene, regionBuilt === sc, regionBold != nil { boldOn = true }
                 }
-                // A SET'S BOUNDARIES: the
-                // parks' own boundaries drawn as the borders are, each once it is big enough to see as a shape (8 pt)
+                // A SET'S BOUNDARIES: the parks' own boundaries drawn as the borders are, each once it is big enough
+                // to see as a shape (8 pt)
                 if controller.placesMode, let sc = controller.setScene, sc.outlined, !sc.segs.isEmpty, let c = controller.markCollection {
                     if setSegs?.scene !== sc, let b = device.makeBuffer(bytes: sc.segs, length: sc.segs.count * 4) { setSegs = (sc, b) }
                     if let sb = setSegs, sb.scene === sc {
@@ -623,9 +685,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             if pattern > 0 { look.clip2.z = pattern; look.clip2.x = Float(view.contentScaleFactor) }
             // clip2.y: Map settings' Style Simple (flat cream land, blue 25% on cream sea)
             look.clip2.y = controller.simple ? 1 : 0
+            look.det = detailBox
+            look.det2 = SIMD4(detailTexel.x, detailTexel.y, detailTex == nil ? 0 : 1, 0)
             enc.setRenderPipelineState(reliefPipe)
             enc.setVertexBuffer(grid, offset: 0, index: 0)
             enc.setFragmentTexture(reliefTex, index: 0)
+            enc.setFragmentTexture(detailTex ?? reliefTex, index: 1)
             enc.setFragmentSamplerState(sampler, index: 0)
             enc.setFragmentBytes(&look, length: MemoryLayout<Look>.stride, index: 0)
             enc.drawIndexedPrimitives(type: .triangle, indexCount: gridCount, indexType: .uint32, indexBuffer: gridIndex!, indexBufferOffset: 0)
@@ -645,31 +710,30 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         let ck = controller.drawnContinent ?? controller.focusPlace.map { "place:\($0)" }
         if let ck { awayKey = ck }
         let goal: Float = ck == nil ? 0 : 1
-        // (at once, no fade any more: 8 Nov answer cut the continent fade)
         if goal != flatTo { flatFrom = goal; flatTo = goal; flatAt = now }
         let flat = flatNow(now)
         if now - flatAt < 0.55 { controller.needsFrame = true }
         let menuGoal: Float = controller.regionsMenu ? 1 : 0
-        // (at once: going into Regions moves nothing, 7 Nov 19:22)
         if menuGoal != menuTo { menuFrom = menuGoal; menuTo = menuGoal; menuAt = now }
         let menu = menuNow(now)
         if now - menuAt < 0.7 { controller.needsFrame = true }
 
-        // 1. the sea, and the lights over it (under the land, the 01:02); the sea keeps its relief on a continent too
-        // (the 03:50)
+        // 1. the sea, and the lights over it; the sea keeps its relief on a continent too
         enc.setDepthStencilState(noStencil)
         relief(0)
-        // the lights, on the real ovals
-        // big: from the top edge down to 56°N, from the bottom edge up to 50°S, so it is seen over the northern seas
-        // and all round the Southern Ocean (under the land, where there is land)
-        // ON A CONTINENT THE BANDS ARE PINNED TO THE SCREEN (A1.17): each
-        // band's outer end on the screen's edge and its inner end at 0.34 of the height from the top (north) and 0.27
-        // from the bottom (south), reached with the continent's blend; only the inner end moves, nothing flies across
+        // the lights, on the real ovals big: from the top edge down to 56°N, from the bottom edge up to 50°S, so it
+        // is seen over the northern seas and all round the Southern Ocean (under the land, where there is land) ON A
+        // CONTINENT THE BANDS ARE PINNED TO THE SCREEN: each band's outer end on the screen's edge and its inner end
+        // at 0.34 of the height from the top (north) and 0.27 from the bottom (south), reached with the continent's
+        // blend; only the inner end moves, nothing flies across
         let H = Double(view.bounds.height), k = controller.k, cy = controller.c.y
         let pinNorth = Float(cy + (0.34 * H - H / 2) / k), pinSouth = Float(cy + (0.73 * H - H / 2) / k)
         let worldNorth = EqualEarth.project(lon: 0, lat: 56).y, worldSouth = EqualEarth.project(lon: 0, lat: -50).y
+        // zoomed in past the continent's own framing the bands fade away, still pinned while they go, never flying
+        let zin = Float(k / max(1, controller.kMin))
+        let t = min(max((zin - 1.4) / 1.0, 0), 1), fade = t * t * (3 - 2 * t)
         var au = AuroraU(yNorth: worldNorth + (pinNorth - worldNorth) * flat, ySouth: worldSouth + (pinSouth - worldSouth) * flat,
-                         bottom: Float(controller.bottom), strength: 1.0, pin: flat, away: menu)
+                         bottom: Float(controller.bottom), strength: 1 - flat * fade, pin: flat, away: menu)
         enc.setRenderPipelineState(auroraPipe)
         enc.setFragmentBytes(&au, length: MemoryLayout<AuroraU>.stride, index: 2)
         enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
@@ -742,8 +806,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         } else if controller.showsWished {
             group(controller.wished.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.blueV, pattern: dots)
         }
-        // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade); a
-        // stamped place is never a find (its row reads "+n trips" instead)
+        // finds (9.4): darkened as a press darkens, over their own colour (a wished one stays blue under the shade);
+        // a stamped place is never a find (its row reads instead)
         if !controller.found.isEmpty, !drained {
             let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
             let f = controller.found.subtracting(controller.stamped).filter { $0 != pressed }
@@ -751,8 +815,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             group(f.subtracting(blue).sorted(), kind: 2, tint: Palette.whiteV * shade)
             group(blue.sorted(), kind: 2, tint: Palette.blueV * shade)
         }
-        // the press darkens the relief under your finger (the 01:02), keeping the country's own colour (A1.1): the
-        // whole place at once
+        // the press darkens the relief under your finger, keeping the country's own colour (A1.1): the whole place at
+        // once
         func mark(_ i: Int) -> Bool {
             if let tiles {
                 var any = false
@@ -859,15 +923,13 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             }
         }
 
-        // 3c. THE TOWNS (7.4, the old native app's encodeTownShapes): the open country's built-up shapes, every one at
-        // once, solid in our grey so neighbours are one colour; yours lime, wished blue; the one under the finger the
-        // darker grey (or its colour darkened). They just appear. No circles (30 Oct 23:38); dots only with Map
-        // settings' Town dots on
-        // (with no country open, the towns of the countries in view once the map is close enough: PlacesMap's
-        // townCountries; each country's towns drawn as the open one's are)
-        // 3c'. AN AREA SET'S SHAPES (9 Nov, SetScene): a sea, a range, a lake that is yours filled lime as a country is,
-        // wished blue; the one under the finger darkened (in its colour when it has one). One that is not yours is only
-        // its name, as on any map. They just appear.
+        // 3c. THE TOWNS (7.4, the old native app's encodeTownShapes): the open country's built-up shapes, every one
+        // at once, solid in our grey so neighbours are one colour; yours lime, wished blue; the one under the finger
+        // the darker grey (or its colour darkened). They just appear. No circles; dots only with Map settings' Town
+        // dots on (with no country open, the towns of the countries in view once the map is close enough: PlacesMap's
+        // townCountries; each country's towns drawn as the open one's are) 3c'. AN AREA SET'S SHAPES: a sea, a range,
+        // a lake that is yours filled lime as a country is, wished blue; the one under the finger darkened (in its
+        // colour when it has one). One that is not yours is only its name, as on any map. They just appear.
         if placesOn, let sc = controller.setScene, !sc.fans.isEmpty {
             if setBuffer?.scene !== sc,
                let pb = device.makeBuffer(bytes: sc.points, length: sc.points.count * MemoryLayout<SIMD2<Float>>.stride),
@@ -897,13 +959,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 let shade = SIMD4<Float>(0.80, 0.79, 0.77, 1)
                 // (under a finger a sea darkens as water, in the sea's own blue; land, an island or a range, as a country does)
                 let plain = sc.water ? Palette.blueV * SIMD4<Float>(0.82, 0.82, 0.82, 1) : Palette.whiteV * shade
-                // EVERY PLACE OF THE LIST IS ON THE MAP (11 Nov): one that is not yours a step deeper than what it lies in
-                // (a sea in the water's blue, a park or a range in the land's white), no line round it; an ocean is the open
-                // water itself and has no tint. Only those in sight and big enough to see as a shape (8 pt: under that a
-                // place is its mark, drawn with the marks below)
-                // (not the water's: a sea's limits are straight lines drawn across open water, and tinted they read as
-                // borders in the sea,; a sea that is not yours is its
-                // name, and its whole shape only under a finger or once it is yours)
+                // EVERY PLACE OF THE LIST IS ON THE MAP: one that is not yours a step deeper than what it lies in (a
+                // sea in the water's blue, a park or a range in the land's white), no line round it; an ocean is the
+                // open water itself and has no tint. Only those in sight and big enough to see as a shape (8 pt:
+                // under that a place is its mark, drawn with the marks below)
                 if let c = controller.markCollection, !sc.untinted {
                     let mine = Set(marks.stamped).union(marks.wished)
                     // (a park in the palette's teal, a range in its brown, each well mixed into the land's white: a grey
@@ -981,7 +1040,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             // dots only with Town dots on (every town, the old app's 2.5 to 6 points by its population in the country)
             if MapSettingsStore.shared.value.townDots, let dp = townDotPipe {
                 struct D { var p: SIMD2<Float>; var r: Float; var pad: Float; var colour: SIMD4<Float> }
-                // made again only when the marks or the pressed town change (review 31 Oct: not every frame)
+                // made again only when the marks or the pressed town change
                 let dotKey = "\(cc)|\(controller.townsVersion)|\(pressedTown ?? -1)"
                 if dotCache[cc]?.key != dotKey {
                     let lo = log(Float(max(1, sc.towns.last?.people ?? 1))), hi = log(Float(max(1, sc.towns.first?.people ?? 1)))
@@ -1067,9 +1126,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             }
         }
         enc.setDepthStencilState(noStencil)
-        // 6. the small places' diamonds, while they are too small to see (one zoom for all of them)
-        // (Places: borders only, 9 Nov 20:43: a country's diamond, lime or white, is the countries' map's)
-        // (Small places: Everywhere keeps them in Places too, plain: that map has no stamps)
+        // 6. the small places' diamonds, while they are too small to see (one zoom for all of them) (Small places:
+        // Everywhere keeps them in Places too, plain: that map has no stamps)
         let everywhere = controller.diamondsEverywhere
         if controller.anyDiamond, !controller.placesMode || everywhere, !controller.pinsDrained, let dp = diamondPipe {
             struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
@@ -1081,8 +1139,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 let plain = controller.placesMode || (controller.focusPlace != nil && controller.focusPlace != i)
                 var c = !plain && controller.stamped.contains(i) && controller.showsStamped ? Palette.limeV
                     : !plain && controller.wished.contains(i) && controller.showsWished ? Palette.blueV
-                    // unmarked: a territory pure white, everything else cream (the old MapStyle.fill, D106; 29 Oct
-                    // 01:06)
+                    // unmarked: a territory pure white, everything else cream
                     : pl.k == "territory" ? Palette.whiteV : Palette.creamV
                 if i == pressed || (controller.found.contains(i) && !controller.stamped.contains(i)) { c *= SIMD4<Float>(0.80, 0.79, 0.77, 1) }
                 // away from the continent you're on, the diamond shrinks into its own point at its own colour (A1.15:
@@ -1091,8 +1148,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 var size = Float(controller.diamondSize(i))
                 // (Everywhere: round an open country they stay; a continent's own rule, 1.12, still holds)
                 if flat > 0.001, let k = awayKey, !w.inCont(i, k), !(everywhere && k.hasPrefix("place:")) { size *= 1 - flat }
-                // under Regions' selection menu every diamond goes back into its point (A6.5: "no diamonds"), unless
-                // they are asked for everywhere
+                // under Regions' selection menu every diamond goes back into its point (A6.5:), unless they are asked
+                // for everywhere
                 if !everywhere { size *= 1 - menu }
                 if size < 0.01 { continue }
                 ds.append(D(p: SIMD2(Float(pl.c[0]), Float(pl.c[1])), pad: SIMD2(size, 0), colour: c))
@@ -1103,8 +1160,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
             }
         }
-        // 6''. REGIONS TOO SMALL TO SEE (12 Nov): on a region map, a region alone in the sea and under 6 pt across is
-        // the map's diamond: white, lime when stamped, blue when wished, darker under a finger
+        // 6''. REGIONS TOO SMALL TO SEE: on a region map, a region alone in the sea and under 6 pt across is the
+        // map's diamond: white, lime when stamped, blue when wished, darker under a finger
         if let sc = controller.regionScene, regionBuilt === sc, let dp = diamondPipe {
             struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
             var ds: [D] = []
@@ -1122,10 +1179,10 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: ds.count)
             }
         }
-        // 6'. A SET'S MARKS: a place with no shape to see
-        // (a World Heritage site, a peak, a park still under 8 pt across) is the map's diamond, smaller than a country's,
-        // the same for every place: cream, lime when stamped, blue when wished, darker under a finger. All of the list's
-        // places at every zoom; nothing comes or goes as the map moves.
+        // 6'. A SET'S MARKS: a place with no shape to see (a World Heritage site, a peak, a park still under 8 pt
+        // across) is the map's diamond, smaller than a country's, the same for every place: cream, lime when stamped,
+        // blue when wished, darker under a finger. All of the list's places at every zoom; nothing comes or goes as
+        // the map moves.
         if placesOn, let c = controller.markCollection, !(c.shapes != nil && controller.setScene == nil), let dp = diamondPipe {
             struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
             let scene = controller.setScene
@@ -1197,15 +1254,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     #endif
 }
 
-/// The Metal view owns the map's fingers itself, the old app's way (no gesture recognisers fighting over the camera,
-/// the 02:09)
-/// - one finger pans; two fingers zoom about their middle and pan with it, in the same event
-/// - when the number of fingers changes, the ones left carry on from where they are (nothing jumps)
-/// - a quick one-finger flick glides on; a pinch never flings
-/// - a touch stops anything moving where it is
-/// - a press darkens the place under the finger; locked, it does nothing but a soft knock (the lock stops stamping, it
-///   never stops looking)
-/// - a double tap zooms in about the finger
+/// The Metal view owns the map's fingers itself, the old app's way: - one finger pans; two fingers zoom about their
+/// middle and pan with it, in the same event - when the number of fingers changes, the ones left carry on from where
+/// they are (nothing jumps) - a quick one-finger flick glides on; a pinch never flings - a touch stops anything
+/// moving where it is - a press darkens the place under the finger; locked, it does nothing but a soft knock (the
+/// lock stops stamping, it never stops looking) - a double tap zooms in about the finger
 final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     weak var controller: MapController?
     /// the Places map's names, over the map (they take no touch)
@@ -1237,18 +1290,17 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     private var velocity = SIMD2<Double>(0, 0)
     private var lastMoveTime: CFTimeInterval = 0
     /// ONE-FINGER ZOOM (Part 1.3, Apple Maps' gesture): a second touch-down within the double-tap window, held and
-    /// dragged: up zooms in, down zooms out (as Apple Maps: "drag it up to zoom in and down to zoom out"), about the
-    /// first tap; let go without moving it is the double tap
+    /// dragged: up zooms in, down zooms out (as Apple Maps:), about the first tap; let go without moving it is the
+    /// double tap
     private var zoomAnchor: CGPoint?
     private var zoomStartY: CGFloat = 0
     private var zoomLast: Double = 1
 
     // MARK: VoiceOver (1.9's row, 19.4): the places on screen as elements, top to bottom and left to right within a
-    // row; each says its name and its state ("France, stamped, 3 times"); a double tap is a tap (its card); its hold
-    // menu's rows are its actions; rotors go through Stamped, Wishlist and Not stamped. Worked out again only once the
-    // camera has come to rest or a mark has changed, never while it moves. The Countries map, a region map's regions
-    // ("Bouches-du-Rhône, department, stamped", 6.5) and Places' town and thing names (Pins are Apple's map, whose pins
-    // say their own names).
+    // row; each says its name and its state; a double tap is a tap (its card); its hold menu's rows are its actions;
+    // rotors go through Stamped, Wishlist and Not stamped. Worked out again only once the camera has come to rest or
+    // a mark has changed, never while it moves. The Countries map, a region map's regions (, 6.5) and Places' town
+    // and thing names (Pins are Apple's map, whose pins say their own names).
     final class PlaceElement: UIAccessibilityElement {
         let place: Int
         var state = MarkState.none
@@ -1266,8 +1318,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
     private var axKey: [Int] = []
     private var axCache: [PlaceElement] = []
-    /// the elements by what they stand for ("c:fr", "u:FR-IDF", "t:…", "w:Q…"), kept from one rebuild to the next so the
-    /// one VoiceOver is on stays the same object (its focus never jumps when the map comes to rest or a mark changes)
+    /// the elements by what they stand for ("c:fr",, "t:…", "w:Q…"), kept from one rebuild to the next so the one
+    /// VoiceOver is on stays the same object (its focus never jumps when the map comes to rest or a mark changes)
     private var axPool: [String: PlaceElement] = [:]
 
     override var accessibilityElements: [Any]? {
@@ -1459,7 +1511,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         }
     }
 
-    /// "X, lived here", "X, stamped, N times", "X, stamped", "X, not stamped" (1.9)
+    /// ,,,, (1.9)
     static func label(_ name: String, _ s: MarkState) -> String {
         if s.lived { return "\(name), lived here" }
         if s.stamped { return s.visits > 1 ? "\(name), stamped, \(s.visits) times" : "\(name), stamped" }
@@ -1470,7 +1522,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     /// a hold menu's rows that can be chosen now, as VoiceOver actions (each acts as the row does)
     static func actions(_ m: UIMenu, _ prefix: String = "") -> [UIAccessibilityCustomAction] {
         m.children.flatMap { e -> [UIAccessibilityCustomAction] in
-            // a submenu's rows say whose they are ("Kind: Landmark"); an inline group's are plain rows
+            // a submenu's rows say whose they are; an inline group's are plain rows
             if let sub = e as? UIMenu {
                 return actions(sub, sub.options.contains(.displayInline) || sub.title.isEmpty ? prefix : "\(sub.title): ")
             }
@@ -1518,7 +1570,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
         #endif
         // locked: no menu; the lift refuses the hold (finish) (11.7)
         if c.locked { return nil }
-        // a tap then a hold is a one-finger zoom, never a hold (its menu opened over the zoom, 8 Nov)
+        // a tap then a hold is a one-finger zoom, never a hold
         if zoomAnchor != nil { return nil }
         // THE JOURNEY (13.4): held on its line, a leg or a capsule, the journey's own menu
         if c.historyTrack != nil, historyLine.hit(location, c) != nil, let menu = historyLine.menu(c) {
@@ -1584,8 +1636,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
     }
 
     private func active(_ event: UIEvent?) -> [UITouch] {
-        // the map's own fingers only: a thumb on the water, a tab or a card is not a second finger on the map (it made
-        // a lifted press stay dark and a tap read as a pinch, 8 Nov)
+        // the map's own fingers only: a thumb on the water, a tab or a card is not a second finger on the map
         (event?.allTouches ?? []).filter { $0.view === self && $0.phase != .ended && $0.phase != .cancelled }
             .sorted { $0.timestamp < $1.timestamp }
     }
@@ -1735,8 +1786,8 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
                 // passed, as a place's does); any other tap takes a leg's capsule away and goes on as always
                 let journey = c.historyTrack != nil ? historyLine.hit(d0, c) : nil
                 if journey == nil { historyLine.dismissLeg(c) }
-                // A NAME (31 Oct 10:52): a town's or thing's name on the map opens its page (its shape or mark still
-                // stamps or opens its card)
+                // A NAME: a town's or thing's name on the map opens its page (its shape or mark still stamps or opens
+                // its card)
                 let name = journey == nil ? townNames.nameHit(d0) : nil
                 if c.locked { Feel.refuse(); c.lockedPress(); c.dropSetPress() }
                 // (one press, one job: this touch closed a card, the book or Details; the journey's tap is not also made)

@@ -4,7 +4,8 @@ import UniformTypeIdentifiers
 
 /// PINS' FILES (the Files circle, Google Maps' and Google Earth's file tools): what the shown map holds goes out as
 /// GeoJSON, KML and GPX together (the share sheet offers all three), and a GeoJSON, KML or GPX file comes in: its points
-/// become pins, its lines and its shapes become drawings, all in the map shown.
+/// become pins, its routes routes (GPX's, and the ones this circle sent out), its other lines and its shapes drawings,
+/// all in the map shown. The file is read off the main thread; what is counted is what was added.
 @MainActor
 enum PinFiles {
     static let types: [UTType] = [
@@ -104,46 +105,73 @@ enum PinFiles {
 
     // MARK: in
 
-    struct Found { var points: [(name: String, lat: Double, lon: Double)] = []; var lines: [[DrawTool.Geo]] = []; var shapes: [[DrawTool.Geo]] = [] }
+    nonisolated struct Found: Sendable {
+        var points: [(name: String, lat: Double, lon: Double)] = []
+        var routes: [[DrawTool.Geo]] = []
+        var lines: [[DrawTool.Geo]] = []
+        var shapes: [[DrawTool.Geo]] = []
+    }
 
-    /// a file read into pins and drawings in the map shown; how many came in, or nil when nothing could be read
-    @discardableResult
-    static func bring(_ url: URL, country: (CLLocationCoordinate2D) -> (id: String, name: String)?) -> Int? {
-        let open = url.startAccessingSecurityScopedResource()
-        defer { if open { url.stopAccessingSecurityScopedResource() } }
-        guard let d = try? Data(contentsOf: url) else { return nil }
-        let f = read(d)
-        let n = f.points.count + f.lines.count + f.shapes.count
-        guard n > 0 else { return nil }
+    /// a file read into pins, routes and drawings in the map shown: how many came in (0: nothing could be used)
+    static func bring(_ url: URL, country: @escaping (CLLocationCoordinate2D) -> (id: String, name: String)?) async -> Int {
+        let f = await Task.detached { () -> Found? in
+            let open = url.startAccessingSecurityScopedResource()
+            defer { if open { url.stopAccessingSecurityScopedResource() } }
+            guard let d = try? Data(contentsOf: url) else { return nil }
+            return read(d)
+        }.value
+        guard let f else { return 0 }
+        // (all of it at once and one undo step for the whole file: a 500-point GPX made 500 steps and 500 saves)
+        var pts: [(c: CLLocationCoordinate2D, named: String, country: (id: String, name: String)?)] = []
         for p in f.points {
             let c = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
-            guard CLLocationCoordinate2DIsValid(c) else { continue }
-            PinStore.shared.drop(at: c, named: p.name, country: country(c))
+            if CLLocationCoordinate2DIsValid(c) { pts.append((c: c, named: p.name, country: country(c))) }
         }
-        for l in f.lines where l.count >= 2 { PinDrawings.shared.add(.line, l) }
-        for s in f.shapes where s.count >= 3 { PinDrawings.shared.add(.shape, s) }
+        let pins = PinStore.shared.bringIn(pts)
+        var routeIDs: [UUID] = []
+        for r in f.routes where r.count >= 2 {
+            if let id = PinRoutes.shared.bring(r, undoable: false, named: { g in
+                country(CLLocationCoordinate2D(latitude: g.lat, longitude: g.lon))?.name ?? "" }) { routeIDs.append(id) }
+        }
+        var drawings: [PinDrawing] = []
+        for l in f.lines where l.count >= 2 { drawings.append(PinDrawings.shared.add(.line, l, undoable: false)) }
+        for s in f.shapes where s.count >= 3 { drawings.append(PinDrawings.shared.add(.shape, s, undoable: false)) }
+        let routes = PinRoutes.shared.routes.filter { routeIDs.contains($0.id) }
+        let n = pins.count + routes.count + drawings.count
+        guard n > 0 else { return 0 }
+        MarkStore.shared.did("\(n) brought in", back: {
+            PinStore.shared.takeAway(Set(pins.map { (p: Pin) in p.id }))
+            for r in routes { PinRoutes.shared.remove(r.id, undoable: false) }
+            for d in drawings { PinDrawings.shared.remove(d.id, undoable: false) }
+        }, forth: {
+            PinStore.shared.putBack(pins)
+            PinRoutes.shared.restore(routes)
+            for d in drawings { PinDrawings.shared.put(d) }
+        })
         return n
     }
 
     /// a file's contents read: GeoJSON, else KML or GPX
-    static func read(_ d: Data) -> Found {
+    nonisolated static func read(_ d: Data) -> Found {
         if let j = try? JSONSerialization.jsonObject(with: d) { return fromGeoJSON(j) }
         return XMLRead.read(d)
     }
 
-    private static func geo(_ a: Any) -> DrawTool.Geo? {
+    nonisolated private static func geo(_ a: Any) -> DrawTool.Geo? {
         guard let c = a as? [Any], c.count >= 2, let lon = (c[0] as? NSNumber)?.doubleValue, let lat = (c[1] as? NSNumber)?.doubleValue else { return nil }
         return DrawTool.Geo(lat: lat, lon: lon)
     }
 
-    static func fromGeoJSON(_ j: Any) -> Found {
+    nonisolated static func fromGeoJSON(_ j: Any) -> Found {
         var f = Found()
-        func geometry(_ g: [String: Any], name: String) {
+        func geometry(_ g: [String: Any], name: String, route: Bool = false) {
             let c = g["coordinates"]
             switch g["type"] as? String {
             case "Point": if let p = c.flatMap(geo) { f.points.append((name, p.lat, p.lon)) }
             case "MultiPoint": for p in (c as? [Any] ?? []).compactMap(geo) { f.points.append((name, p.lat, p.lon)) }
-            case "LineString": f.lines.append((c as? [Any] ?? []).compactMap(geo))
+            case "LineString":
+                let l = (c as? [Any] ?? []).compactMap(geo)
+                if route { f.routes.append(l) } else { f.lines.append(l) }
             case "MultiLineString": for l in c as? [Any] ?? [] { f.lines.append((l as? [Any] ?? []).compactMap(geo)) }
             case "Polygon": if let r = (c as? [Any])?.first { f.shapes.append(Array((r as? [Any] ?? []).compactMap(geo).dropLast())) }
             case "MultiPolygon": for poly in c as? [Any] ?? [] { if let r = (poly as? [Any])?.first { f.shapes.append(Array((r as? [Any] ?? []).compactMap(geo).dropLast())) } }
@@ -154,8 +182,9 @@ enum PinFiles {
         guard let o = j as? [String: Any] else { return f }
         let features = (o["features"] as? [[String: Any]]) ?? (o["type"] as? String == "Feature" ? [o] : [])
         for ft in features {
-            let name = ((ft["properties"] as? [String: Any])?["name"] as? String) ?? ""
-            if let g = ft["geometry"] as? [String: Any] { geometry(g, name: name) }
+            let props = ft["properties"] as? [String: Any]
+            let name = (props?["name"] as? String) ?? ""
+            if let g = ft["geometry"] as? [String: Any] { geometry(g, name: name, route: props?["kind"] as? String == "route") }
         }
         if features.isEmpty, o["coordinates"] != nil { geometry(o, name: "") }
         return f
@@ -164,7 +193,7 @@ enum PinFiles {
 
 /// KML and GPX read with Apple's XML parser: KML's Placemarks (Point, LineString, Polygon's outer ring), GPX's
 /// waypoints, routes and tracks
-private final class XMLRead: NSObject, XMLParserDelegate {
+nonisolated private final class XMLRead: NSObject, XMLParserDelegate {
     var found = PinFiles.Found()
     private var text = ""
     private var name = ""
@@ -213,11 +242,13 @@ private final class XMLRead: NSObject, XMLParserDelegate {
             switch kind {
             case "Point": if let p = c.first { found.points.append((name, p.lat, p.lon)) }
             case "Polygon": found.shapes.append(c.count > 1 && c.first == c.last ? Array(c.dropLast()) : c)
-            default: found.lines.append(c)
+            // (a placemark named Route is one the Files circle sent out)
+            default: if name == "Route" { found.routes.append(c) } else { found.lines.append(c) }
             }
         case "Placemark": inPlacemark = false
         case "wpt": if let w = wpt { found.points.append((name, w.lat, w.lon)) }; wpt = nil
-        case "rte", "trkseg": if gpxPoints.count >= 2 { found.lines.append(gpxPoints) }; gpxPoints = []
+        case "rte": if gpxPoints.count >= 2 { found.routes.append(gpxPoints) }; gpxPoints = []
+        case "trkseg": if gpxPoints.count >= 2 { found.lines.append(gpxPoints) }; gpxPoints = []
         default: break
         }
         text = ""

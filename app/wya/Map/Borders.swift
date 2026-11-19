@@ -1,12 +1,5 @@
 import Foundation
 
-/// WHOSE EACH PIECE OF LAND IS, under the borders view you pick: the old app's WorldGeometry (positionSays, assign,
-/// pieceOwner, drawn, dotted, detailOwners), ported as it was, reading the old app's own disputes (world.json's
-/// `disputes`, carried over unchanged into disputes.json: each disputed piece's controller, its options, the UN's
-/// answer and every country's own map). The rule: - De facto: every place drawn as it is held (the controller of each
-/// piece); nothing is dotted. - United Nations / de jure: a breakaway the UN doesn't recognise is dotted. - A country's
-/// own view: a place that country doesn't recognise and gives to nobody is dotted; one it gives to another country is
-/// drawn as part of that country.
 enum Borders {
     enum View: Equatable, Sendable {
         case deFacto, unitedNations
@@ -16,7 +9,6 @@ enum Borders {
 
     /// the view the map is drawn in (Map settings will set it; De facto until then)
     nonisolated(unsafe) static var view: View = .deFacto
-    /// your own picks, dispute by dispute (piece id -> place id or "none"), and the "No stated position" view
     nonisolated(unsafe) static var picks: [String: String] = [:]
     nonisolated(unsafe) static var fallback: View = .deFacto
 
@@ -63,7 +55,7 @@ nonisolated final class Positions: @unchecked Sendable {
     let disputes: [Dispute]
     let unrecognised: [String: [String]]
     let jure: [String: String]
-    /// place id → kind ("country", "territory", "entity", "antarctica")
+    /// place id → kind (,,,)
     let kind: [String: String]
     /// a place's short name → its id (the UN field names places by it)
     let byShort: [String: String]
@@ -113,8 +105,8 @@ nonisolated final class Positions: @unchecked Sendable {
         }
     }
 
-    /// whose a disputed piece is: your own pick for it, else the view's answer, else the "No stated position" view's,
-    /// else the ground's, else the data's own default (the old WorldGeometry.assign/baseOf)
+    /// whose a disputed piece is: your own pick for it, else the view's answer, else the view's, else the ground's,
+    /// else the data's own default (the old WorldGeometry.assign/baseOf)
     func assign(_ d: Dispute) -> String {
         if let p = Self.some(picks[d.id]), p == "none" || d.options.contains(p) { return p }
         return says(d, view) ?? says(d, fallback) ?? says(d, .deFacto) ?? (Self.some(d.pref) ?? d.default)
@@ -177,17 +169,17 @@ nonisolated final class Positions: @unchecked Sendable {
     /// disputed where the view doesn't recognise it or gives its land to another
     func kindName(_ id: String) -> String {
         switch kind[id] {
-        case "country": return "Country"
+        case "country": return ""
         case "territory": return "Territory"
         case "antarctica": return "Continent"
-        case "entity": return drawn(id) && !dotted(id) && (view == .deFacto || recognised(id)) ? "Country" : "Disputed"
+        case "entity": return drawn(id) && !dotted(id) && (view == .deFacto || recognised(id)) ? "" : "Disputed"
         default: return ""
         }
     }
 
-    /// Whose each unit of the world file is ("ru|Europe", "piece:crimea"): a drawn place's own objects, a piece to
-    /// whom it is drawn with, and the whole of an entity assigned away to the place it is given to; nil: nobody's
-    /// (Bir Tawil). `objOwner` is the place each topology object belongs to.
+    /// Whose each unit of the world file is: a drawn place's own objects, a piece to whom it is drawn with, and the
+    /// whole of an entity assigned away to the place it is given to; nil: nobody's (Bir Tawil). `objOwner` is the
+    /// place each topology object belongs to.
     func unitOwner(_ key: String, objOwner: [String: String]) -> String? {
         if key.hasPrefix("piece:") {
             let id = String(key.dropFirst(6))
@@ -202,7 +194,7 @@ nonisolated final class Positions: @unchecked Sendable {
         return kind[o] != nil ? o : nil
     }
 
-    /// the detailed tiles' items ("o:<object>", "p:<piece>") with whose each is in this view (WorldGeometry.detailOwners)
+    /// the detailed tiles' items  with whose each is in this view (WorldGeometry.detailOwners)
     func detailOwners(objOwner: [String: String], pieces: [String]) -> [String: String] {
         var out: [String: String] = [:]
         for o in objOwner.keys { if let w = unitOwner(o, objOwner: objOwner) { out["o:" + o] = w } }

@@ -12,12 +12,15 @@ struct UndoDrop: View {
     @State private var up = false
     @State private var words = ""
     @State private var hide: DispatchWorkItem?
+    /// the drop carrying (a write the store refused): no undo in it, a tap only sinks it
+    @State private var notice = false
 
     var body: some View {
         let L = water.layout
         let atFull = form.page > 0.5
         let edge = water.stop == .closed && !water.held ? L.capsule.minY : form.top
         Button {
+            if notice { sink(); return }
             Feel.tap()
             Task { await MarkStore.shared.undo() }
             sink()
@@ -28,15 +31,13 @@ struct UndoDrop: View {
                 // the undo mark (never an SF Symbol): the set's share arrow turned to point back, on the 8 by 8 grid
                 // (IconsDrawn "undo"; the hand-drawn bow before it had a bent head)
                 Icon5Still(key: "undo", progress: 0, ink: Palette.ink, size: 15)
-                    .opacity(up ? 1 : 0)
+                    .opacity(up && !notice ? 1 : 0)
                     .transaction { $0.animation = nil }
                 Text(up ? words : String(repeating: "\u{2002}", count: max(1, words.count)))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                    // (8 Nov: nothing held it to the capsule, so a long town's words ran off both edges) a little
-                    // smaller first, then cut in the middle, the place's start and "stamped" kept
-                    .minimumScaleFactor(0.75)
+                    // cut in the middle, the place's start and kept
                     .truncationMode(.middle)
                     .contentTransition(.identity)
                     .frame(width: min(Self.width(words), L.capsule.width - 28 - 23))
@@ -47,29 +48,26 @@ struct UndoDrop: View {
             .fixedSize()
             // its words at the standard sizes only: the pill is 36 pt high
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            // the water's own kind of glass (regular, as the water is since 14 Nov), so inside the water it merges
-            // away (a different glass stood in the water as a second shape, 12 Nov and again 14 Nov)
+            // the water's own kind of glass, so inside the water it merges away
             .glassEffect(.regular, in: .capsule)
             // touched over 44 pt (the pill is drawn 36 pt high)
             .frame(minHeight: 44)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        // rises out of the edge: from wholly inside it (its 36 pt merged into the water's glass, so nothing shows; at
-        // edge + 4 its top stuck 14 pt out as a bump on every sheet, 30 Oct 10:59) to 30 pt above it
+        // rises out of the edge: from wholly inside it to 30 pt above it
         .position(x: L.W / 2, y: up ? edge - 30 : edge + 22)
-        // (not over a place's page: the page is the screen, 8 Nov: "Canada stamped" sat on France's page)
         .opacity(atFull || water.pageUp ? 0 : 1)
         .allowsHitTesting(up && !atFull && !water.pageUp)
-        .accessibilityLabel("Undo \(words)")
+        .accessibilityLabel(notice ? words : "Undo \(words)")
         .accessibilityHidden(!up)
-        // with a stamping card up the drop waits and rises as the card closes (4.2.3), so it never sits on the
-        // card's Details | Verify?
-        // (a region's, town's or thing's card the same: its Details | Verify? row is where the drop rises)
+        // with a stamping card up the drop waits and rises as the card closes (4.2.3:), so it never sits on the
+        // card's Details | Verify? (a region's, town's or thing's card the same: its Details | Verify? row is where
+        // the drop rises)
         .onChange(of: marks.changes) { _, _ in if card.isOpen || regionCard.isOpen { pending = true } else { rise() } }
+        .onChange(of: marks.notKept) { _, _ in rise(notice: "Not kept") }
         .onChange(of: card.isOpen || regionCard.isOpen) { _, open in if !open, pending { pending = false; rise() } }
-        // (14 Nov: a Pins map's "Map made" stayed up over Countries after a switch, a tap there undoing a Pins step
-        // from another map) a change of map or tab sinks it; the step stays, for a shake
+        // a change of map or tab sinks it; the step stays, for a shake
         .onChange(of: water.head?.mode) { _, _ in pending = false; if up { sink() } }
         .onChange(of: water.profile) { _, _ in pending = false; if up { sink() } }
     }
@@ -85,8 +83,9 @@ struct UndoDrop: View {
         return ceil((s as NSString).size(withAttributes: [.font: font]).width) + 2
     }
 
-    private func rise() {
-        words = marks.lastWords ?? ""
+    private func rise(notice say: String? = nil) {
+        notice = say != nil
+        words = say ?? marks.lastWords ?? ""
         if !up {
             Feel.pour()
             withAnimation(Motion.chrome) { up = true }

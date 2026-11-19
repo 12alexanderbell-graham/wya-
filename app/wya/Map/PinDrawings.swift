@@ -17,6 +17,8 @@ struct PinDrawing: Codable, Identifiable, Hashable {
     var made = Date()
     /// the map of yours it is in (Map/PinMaps.swift); nil: none
     var map: UUID? = nil
+    /// the layer of its map it is in (PinMaps' layers); nil: the map's first
+    var layer: UUID? = nil
     /// its line's thickness in points (2 thin, 4 medium, 7 thick) and whether it is dashed; nil: medium, solid
     var width: Double? = nil
     var dash: Bool? = nil
@@ -56,17 +58,22 @@ final class PinDrawings {
     }
 
     /// a drawing kept as it is finished; the undo drop takes it back
-    func add(_ kind: DrawTool.Kind, _ points: [DrawTool.Geo]) {
+    /// `undoable`: false inside an import (the import is one undo step)
+    @discardableResult func add(_ kind: DrawTool.Kind, _ points: [DrawTool.Geo], undoable: Bool = true) -> PinDrawing {
         var d = PinDrawing(kind: kind == .shape ? "shape" : "line", points: points.map { [$0.lat, $0.lon] })
         d.map = PinMaps.shared.shown
+        d.layer = PinMaps.shared.takeLayer()
         // the look chosen in Draw's row (thickness, dashes)
         d.width = PinsDockState.shared.drawWidth
         d.dash = PinsDockState.shared.drawDash ? true : nil
         all.append(d)
         save()
-        MarkStore.shared.did(d.isShape ? "Shape drawn" : "Line drawn",
-                             back: { [weak self] in self?.remove(d.id, undoable: false) },
-                             forth: { [weak self] in self?.put(d) })
+        if undoable {
+            MarkStore.shared.did(d.isShape ? "Shape drawn" : "Line drawn",
+                                 back: { [weak self] in self?.remove(d.id, undoable: false) },
+                                 forth: { [weak self] in self?.put(d) })
+        }
+        return d
     }
     func remove(_ id: UUID, undoable: Bool = true) {
         guard let k = all.firstIndex(where: { $0.id == id }) else { return }
@@ -77,12 +84,18 @@ final class PinDrawings {
                                  forth: { [weak self] in self?.remove(d.id, undoable: false) })
         }
     }
-    private func put(_ d: PinDrawing, at k: Int? = nil) {
+    func put(_ d: PinDrawing, at k: Int? = nil) {
         guard !all.contains(where: { $0.id == d.id }) else { return }
         all.insert(d, at: min(k ?? all.count, all.count))
         save()
     }
     func drawing(_ id: UUID) -> PinDrawing? { all.first { $0.id == id } }
+    /// drawings put in a layer of their map
+    func setLayer(_ ids: Set<UUID>, _ l: UUID?) {
+        guard !ids.isEmpty else { return }
+        for i in all.indices where ids.contains(all[i].id) { all[i].layer = l }
+        save()
+    }
 
     /// the map framed on it (its box, a little room round it)
     func frame(_ id: UUID) {

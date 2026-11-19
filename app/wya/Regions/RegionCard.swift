@@ -10,7 +10,7 @@ final class RegionCardState {
     private(set) var parents = ""
     /// the country it lies in (the map's place: Verify's shape test and the flag)
     private(set) var place: Int?
-    /// an event stop's day ("2026-07-05"), when the card is a collection's stop (D7)
+    /// an event stop's day, when the card is a collection's stop (D7)
     private(set) var day: String?
     /// 0 in the water to 1 out
     var p: CGFloat = 0
@@ -21,6 +21,8 @@ final class RegionCardState {
     /// the water the card stands on (set once by the screen)
     @ObservationIgnored weak var water: Water?
     var isOpen: Bool { key != nil }
+    /// the card is on the screen: from the frame it starts to come out of the water until it has gone back
+    private(set) var shown = false
 
     /// out of the water (A6.11): the map never moves; the region stays darkened while the card is up
     func open(_ key: PlaceKey, name: String, parents: String, place: Int?, map: MapController, day: String? = nil) {
@@ -30,13 +32,14 @@ final class RegionCardState {
         map.kept = place
         p = 0
         Feel.tap()
-        // THE WATER HIGHER THAN 25% (Places' menu at 50%; 11 Nov: a pressed sea): the
-        // card stands on the 25% water, so the water goes down first and the card comes out of it once it is there
-        // (0.3 s later; coming at once, its buttons showed through the glass on the way down)
+        // THE WATER HIGHER THAN 25%: the card stands on the 25% water, so the water goes down first and the card
+        // comes out of it once it is there (0.3 s later; coming at once, its buttons showed through the glass on the
+        // way down)
         var wait = 0.0
         if map.placesMode, let w = water, w.stop == .half || w.stop == .full { w.go(.quarter); wait = 0.3 }
         DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
             guard let self, self.key == key else { return }
+            self.shown = true
             withAnimation(Motion.reduce ? Motion.tight : .spring(response: 0.42, dampingFraction: 1)) { self.p = 1 }
         }
     }
@@ -52,7 +55,7 @@ final class RegionCardState {
             closedAt = CACurrentMediaTime()
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) { p = 0 }
-            key = nil; map.kept = nil
+            key = nil; map.kept = nil; shown = false
             return
         }
         // one close per card: a second touch while it folds no longer starts the 0.4 s over (that ate the next tap)
@@ -63,6 +66,7 @@ final class RegionCardState {
             guard let self else { return }
             self.closing = false
             guard self.closedAt > 0, self.p < 0.01 else { return }
+            self.shown = false
             self.key = nil
             map.kept = nil
         }
@@ -117,7 +121,7 @@ struct RegionCard: View {
                 // (two lines each at most, held by their bottom over Stamp | Wishlist: a big type size grows them up,
                 // never down over the buttons)
                 VStack(spacing: 2) {
-                    Text(card.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2).minimumScaleFactor(0.8)
+                    Text(card.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                     if !card.parents.isEmpty {
                         Text(card.parents).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
@@ -149,8 +153,7 @@ struct RegionCard: View {
         Button(action: act) {
             Text(words ? word : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
@@ -187,7 +190,7 @@ struct RegionCard: View {
                     card.stampedHere = true
                 }
             } else {
-                // one meaning everywhere, as the country card's (7 Nov): a tap on Stamped always takes the stamp off, the
+                // one meaning everywhere, as the country card's: a tap on Stamped always takes the stamp off, the
                 // undo drop puts it back
                 Feel.lift()
                 Task {
@@ -200,8 +203,7 @@ struct RegionCard: View {
         } label: {
             Text(words ? (s.stamped ? "Stamped" : "Stamp") : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
@@ -212,7 +214,7 @@ struct RegionCard: View {
     }
 
     private func wishButton(_ s: MarkState, key: PlaceKey, w: CGFloat, words: Bool) -> some View {
-        // a place you have been is never on your wishlist (Q4.4), the same on every card (7 Nov)
+        // a place you have been is never on your wishlist (Q4.4), the same on every card
         let blocked = s.stamped
         return Button {
             if blocked { Feel.refuse(); return }
@@ -230,8 +232,7 @@ struct RegionCard: View {
         } label: {
             Text(words ? "Wishlist" : " ")
                 .font(.body.weight(.semibold))
-                // (one line in the 44 pt capsule: a little smaller on a narrow card or a big type size, never broken mid-word)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)

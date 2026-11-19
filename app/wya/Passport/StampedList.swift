@@ -64,12 +64,12 @@ struct StampedList: View {
         var key: PlaceKey { journey?.key ?? (kind == .country ? .country(id) : PlaceKey(kind == .region ? .region : kind == .town ? .town : kind == .yours ? .yours : .thing, id)) }
     }
 
-    /// a row's words for how often: "Twice", "3 times" ("" for once)
+    /// a row's words for how often: "Twice", ("" for once)
     private static func often(_ s: MarkState) -> String {
         s.visits <= 1 ? "" : s.visits == 2 ? " · Twice" : " · \(s.visits) times"
     }
 
-    /// a row's line from its parts and how often ("Hessen · Twice"; "Twice" alone when it has no parts)
+    /// a row's line from its parts and how often (; "Twice" alone when it has no parts)
     private static func line(_ parts: [String], _ s: MarkState) -> String {
         let o = often(s)
         return (parts.filter { !$0.isEmpty } + (o.isEmpty ? [] : [String(o.dropFirst(3))])).joined(separator: " · ")
@@ -83,8 +83,7 @@ struct StampedList: View {
         if journeyOn { return journeyRows(w) }
         // PLACES (7.6): the Stamped list scoped to the current map, as the caption's number counts it
         if map.placesMode { return placesRows(w, index) }
-        // A COUNTRY'S REGION MAP (Regions, 4.6: "Regions' to the level"): its regions you stamped at the level on screen
-        // (9 Nov audit: the list showed your countries under France's level words)
+        // A COUNTRY'S REGION MAP (Regions, 4.6:): its regions you stamped at the level on screen
         if let sc = map.regionScene { return regionRows(sc, w) }
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .country, s.stamped, let i = index[k.id] else { return nil }
@@ -92,7 +91,6 @@ struct StampedList: View {
             // continent) never reflows the rows while they leave. Every stamp is a row; under Count = Countries the
             // caption's number leaves territories out
             if let c = scope, !w.inCont(i, c) { return nil }
-            // "Lived" / "Once" / "Twice" / "<n> times", " · " the latest visit's year, " · Verified" (no tick)
             var line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
             if let x = info[k.description] {
                 if let y = x.year { line += " · \(y)" }
@@ -116,8 +114,8 @@ struct StampedList: View {
 
     /// history is on: the list is the journey's
     private var journeyOn: Bool { water.historyUp && map.historyTrack != nil }
-    /// THE JOURNEY'S ROWS (13.4): the stops in range, in order, the same place again as its own row; each row's line is
-    /// the day it starts ("7 Jun 2026"); a tap flies to that stop and history stays on
+    /// THE JOURNEY'S ROWS (13.4): the stops in range, in order, the same place again as its own row; each row's line
+    /// is the day it starts; a tap flies to that stop and history stays on
     private func journeyRows(_ w: World) -> [Row] {
         guard let t = map.historyTrack else { return [] }
         let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "d MMM yyyy"
@@ -166,13 +164,12 @@ struct StampedList: View {
                 if let sc = map.townScenes[cc], let j = sc.index[k.id] { name = sc.towns[j].name; region = sc.towns[j].region }
                 else if let h = TownIndex.shared.hit(k.id) { name = h.name; region = h.region }
                 else { return nil }
-                // a region named in two languages ("Région de Bruxelles-Capitale/Brussels Hoofdstedelijk Gewest"): the first
+                // a region named in two languages: the first
                 region = String(region.prefix { $0 != "/" })
                 let wherePart = cc == open ? region : [region, w.places[i].n].filter { !$0.isEmpty }.joined(separator: ", ")
                 return Row(id: k.id, name: name, place: i, line: Self.line([wherePart], s),
                            kind: .town, flag: cc)
             case .thing:
-                // (never our kind's word, 9 Nov 20:49: the kinds file things, they are not shown; a thing's line is where it is)
                 let found: (cc: String, name: String, what: String)?
                 if let (cc, t) = ThingStore.shared.thing(k.id) { found = (cc, t.name, "") }
                 else if let h = ThingIndex.shared.hit(k.id) { found = (h.file, h.name, "") }
@@ -326,9 +323,7 @@ struct StampedList: View {
         return out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    /// A4.19: top down, 0.025 s apart, the first 15 animated and the rest simply there. (It used to wait 0.38 s for
-    /// the solar system to go down out of the water; since 8 Nov the system is simply not there while a list is the
-    /// water's content, so the wait was the sheet rising with no rows in it: none now, 12 Nov.)
+    /// A4.19: top down, 0.025 s apart, the first 15 animated and the rest simply there.
     private func arrive() {
         arrived = true
         if Self.backFromDetails { Self.backFromDetails = false; rise(); return }
@@ -341,8 +336,7 @@ struct StampedList: View {
     private func show(_ id: String, after d: Double) {
         DispatchQueue.main.asyncAfter(deadline: .now() + d) {
             withAnimation(.smooth(duration: Self.each)) { _ = flagOut.insert(id) }
-            // the words with the flag (the flag is just there now, so words waiting for it to grow left a column of
-            // flags with no names for 0.4 s, 8 Nov burst)
+            // the words with the flag
             withAnimation(Motion.quick) { _ = wordsOut.insert(id) }
         }
     }
@@ -351,8 +345,8 @@ struct StampedList: View {
         let ids = rows.map(\.id)
         let shown = ids.filter { onScreen.contains($0) }
         for id in ids where !onScreen.contains(id) { flagOut.remove(id); wordsOut.remove(id) }
-        // all at once, with no roll: the water starts down as the list closes, and rows still rolling out one by one rode down
-        // with it into the tabs (8 Nov burst: "stria" over the tab capsule)
+        // all at once, with no roll: the water starts down as the list closes, and rows still rolling out one by one
+        // rode down with it into the tabs
         var t = Transaction(); t.disablesAnimations = true
         withTransaction(t) {
             for id in shown { wordsOut.remove(id); flagOut.remove(id) }
@@ -369,20 +363,19 @@ struct StampedList: View {
     private func row(_ r: Row) -> some View {
         HStack(spacing: 12) {
             Group {
-                if let f = Flags.square(r.kind == .country ? r.placeID.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                if let f = Flags.row(r.kind == .country ? r.placeID.lowercased() : r.flag.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
             }
+            .frame(width: 28, height: 21)
             .frame(width: 28, height: 28)
-            .opacity(flagOut.contains(r.id) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }  // (just there, never grown from a point, 8 Nov)
+            .opacity(flagOut.contains(r.id) ? 1 : 0).transaction { $0.disablesAnimations = true; $0.animation = nil }
             // the words by the text roll (never scaled, never faded): a blank of the same length until they come
             let w = wordsOut.contains(r.id)
             VStack(alignment: .leading, spacing: 1) {
-                // (one line each, so every row is the list's 56 pt step and none is cut at rest; a long name or line
-                // gets a little smaller first)
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .lineLimit(1)
                     .contentTransition(.identity)
                 Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                    .lineLimit(1).minimumScaleFactor(0.75)
+                    .lineLimit(1)
                     .contentTransition(.identity)
             }
             Spacer(minLength: 0)

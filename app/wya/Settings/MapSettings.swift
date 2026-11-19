@@ -12,8 +12,8 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
     var townDots = false
     var labels = false
     // group 2: borders
-    /// nil until picked (the intro asks; there is no wya?! default); the map draws De facto until then.
-    /// "deFacto", "un", or a country's key ("US", "KO")
+    /// nil until picked (the intro asks; there is no wya?! default); the map draws De facto until then., "unUS",
+    /// "KO")
     var borders: String?
     /// your own side for single disputes: piece id -> place id or "none"
     var disputes: [String: String] = [:]
@@ -27,11 +27,16 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
     var pinMarksPlace = false
     var tracking = false
     // advanced
-    var placesMap = "same"          // same | native-detailed | native-simple | apple-standard | apple-satellite | apple-hybrid
+    var placesMap = "same"          // same | native | apple-standard | apple-satellite | apple-hybrid
     var pinsMap = "same"
-    /// Pins' tracking (8.x, 1 Oct, built 14 Nov): off | exact | city | region (about 100 km); where you go drawn as pins
+    /// Pins' tracking: off | exact | city | region (about 100 km); where you go drawn as pins
     var pinsTrack = "off"
     var afghanistanFlag = "tricolour" // tricolour | taliban
+    /// THE AI: on unless you turn it off
+    var ai = true
+    /// how long the AI's answers are: 0 the heart of it, 1 a sentence, 2 its normal answer, 3 the fuller one.
+    /// Directness is never a setting (audit D366, D491)
+    var aiLength = 2
     /// the moon's stop, set only by the moon (0 Both ... 4 Wishlist)
     var filter = 0
     /// the last 12 places opened from search, newest first (19.2; the empty field's suggestions show the first five)
@@ -51,7 +56,7 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
         count = v(.count, d.count); start = v(.start, d.start); foundPlaces = v(.foundPlaces, d.foundPlaces)
         pinMarksPlace = v(.pinMarksPlace, d.pinMarksPlace); tracking = v(.tracking, d.tracking)
         placesMap = v(.placesMap, d.placesMap); pinsMap = v(.pinsMap, d.pinsMap); pinsTrack = v(.pinsTrack, d.pinsTrack)
-        afghanistanFlag = v(.afghanistanFlag, d.afghanistanFlag); filter = v(.filter, d.filter)
+        afghanistanFlag = v(.afghanistanFlag, d.afghanistanFlag); filter = v(.filter, d.filter); ai = v(.ai, d.ai); aiLength = v(.aiLength, d.aiLength)
         recent = v(.recent, d.recent)
     }
 

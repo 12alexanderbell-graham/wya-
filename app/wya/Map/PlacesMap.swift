@@ -2,12 +2,10 @@ import Foundation
 import CoreGraphics
 import simd
 
-/// PLACES ON OUR MAP (7.4), the old native app's system (30 Oct 23:38: the old native app's system, followed;
-/// old MapPlaces.openPlaceCountry): the world plain in Places; a country tapped is opened, framed as
-/// a region map is (the rest of the world into its continent's blue) and its towns come in as their built-up shapes,
-/// every shape at once, solid in our grey (old encodeTownShapes: "solid, so neighbours are one colour"), yours lime,
-/// wished blue, the one under the finger the darker grey. No circles for towns with no shape (30 Oct 23:38: no circles
-/// on the towns map); dots only with Map settings' Town dots on.
+/// PLACES ON OUR MAP (7.4), the old native app's system: the world plain in Places; a country tapped is opened,
+/// framed as a region map is (the rest of the world into its continent's blue) and its towns come in as their
+/// built-up shapes, every shape at once, solid in our grey (old encodeTownShapes:), yours lime, wished blue, the one
+/// under the finger the darker grey. No circles for towns with no shape; dots only with Map settings' Town dots on.
 extension MapController {
     /// the open country's towns shown now (all of them: the old app showed every shape of the country at once)
     func townsShown(_ s: TownScene) -> Int { s.cc == placeOpenID ? s.towns.count : 0 }
@@ -19,15 +17,14 @@ extension MapController {
     func openPlace(_ i: Int) {
         guard placesMode, let w = world, i >= 0, i < w.places.count, placeOpen != i else { return }
         townPressed = nil
-        // (the set looked at stays: the country narrows it, national parks in one country)
+        // (the set looked at stays: the country narrows it,)
         placeOpen = i
         frameRegion(i)
         loadTowns(w.places[i].id.lowercased())
         ThingStore.shared.load(w.places[i].id.lowercased(), opened: true)
     }
     /// REGIONS' TOWNS LEVEL (6.6, the level line's last word "towns"): the level that was up kept, drawn as borders
-    /// only (the book's finest level was tried on 31 Oct: France's 35,000 communes' borders buried the towns), and the
-    /// country's towns as Places draws them (their names too); a tap is a town's
+    /// only, and the country's towns as Places draws them (their names too); a tap is a town's
     func showRegionTowns() {
         guard let sc = regionScene, let w = world else { return }
         regionTowns = true
@@ -205,9 +202,9 @@ extension MapController {
         }
         return best?.0
     }
-    /// A7.11 YOUR OWN PLACE MADE BY QUICK ADD: at the tapped point of the open country, named after the nearest town
-    /// ("Near Kyoto"), stamped as it is made (with its region chain and country). From the land's hold menu (Add a
-    /// place here) it is made unstamped, its card to follow.
+    /// A7.11 YOUR OWN PLACE MADE BY QUICK ADD: at the tapped point of the open country, named after the nearest town,
+    /// stamped as it is made (with its region chain and country). From the land's hold menu (Add a place here) it is
+    /// made unstamped, its card to follow.
     @discardableResult
     func makeOwnPlace(at p: CGPoint, stamp: Bool = true, ring: [DrawTool.Geo]? = nil) -> OwnPlaces.Place? {
         guard let open = placeOpen, let cc = placeOpenID else { return nil }
@@ -280,6 +277,13 @@ extension MapController {
             closePlace()
             goHome()
         case .country(let i):
+            // Antarctica on its own round map (Map/AntarcticaPolar.swift), never the world's bottom strip
+            if world?.places[i].id == "aq" {
+                closePlace()
+                placesArea = "Antarctica"
+                show(continent: "Antarctica")
+                return
+            }
             placesArea = nil
             if placeOpen == i { frameRegion(i) } else { openPlace(i) }
         case .continent(let k):
@@ -425,8 +429,7 @@ extension MapController {
         }
         return (st, wi)
     }
-    /// A SET'S PLACE IS ITS MARK (11 Nov: its own shape where it has one to see; otherwise the map's diamond, the same
-    /// for every place): no shape of its own, or one still under 8 pt across
+    /// A SET'S PLACE IS ITS MARK: no shape of its own, or one still under 8 pt across
     func setMarkShown(_ it: CollectionStore.Item, _ scene: SetScene?) -> Bool {
         guard let scene, let a = scene.across(it.id) else { return true }
         // (every park has the mark, its boundary or not: half the parks as shapes and half as marks read as two kinds
@@ -466,9 +469,9 @@ extension MapController {
         needsFrame = true
     }
 
-    /// A SET PICKED from Places' menu (9 Nov): its places on the map. The country open stays open (the set narrowed to
-    /// it); a short list with no country open is framed whole (a season's circuits); a long one comes onto the map where
-    /// it is.
+    /// A SET PICKED from Places' menu: its places on the map. The country open stays open (the set narrowed to it); a
+    /// short list with no country open is framed whole (a season's circuits); a long one comes onto the map where it
+    /// is.
     func showPlacesSet(_ id: String) {
         guard placesMode else { return }
         CardState.shared.close(map: self); RegionCardState.shared.close(map: self)
@@ -534,9 +537,9 @@ extension MapController {
         return nil
     }
 
-    // MARK: TOWNS EVERYWHERE (7.4): with no country open, once the map is close (about 1,000 km across the screen)
-    // the towns and things
-    // of the countries in view are read and drawn as an open country's are, the nearest six at most
+    // MARK: TOWNS EVERYWHERE (7.4:): with no country open, once the map is close (about 1,000 km across the screen)
+    // the towns and things of the countries in view are read and drawn as an open country's are, the nearest six at
+    // most
     /// the zoom from which they come
     var townsK: Double { Double(view.width) / 25 }
     /// the zoom from which a long list shows all of its places: half as near again as the whole world (Europe as a
@@ -546,8 +549,6 @@ extension MapController {
     var townCountries: [String] {
         // (Regions' towns level: the country's towns whatever Places looks at)
         if regionTowns, let cc = placeOpenID { return [cc] }
-        // (a collection's map shows its own places only: no towns under them; and with no set picked the map shows
-        // none: the menu is up and the map is its borders, 11 Nov)
         guard placesCollection == nil, placesPicked || !placesMode else { return [] }
         if let cc = placeOpenID { return [cc] }
         guard placesMode, regionScene == nil else { return [] }
@@ -597,11 +598,11 @@ extension MapController {
     }
 }
 
-/// STAMPING A TOWN STAMPS ITS COUNTRY (7.4's quick add: "stamped (with its region chain and country)"): the country is
-/// stamped too unless it already is, and remembered as stamped only through a town; unstamping the town takes the
-/// country back only when it was stamped through a town and no other stamped town of it holds it. THE REGION CHAIN
-/// (Part 6.7's rule, A6.12): the finest region level the country has, the region holding the town's point, stamped with
-/// every parent above it (regions already stamped left as they are). Unstamping a town leaves its regions stamped.
+/// STAMPING A TOWN STAMPS ITS COUNTRY (7.4's quick add:): the country is stamped too unless it already is, and
+/// remembered as stamped only through a town; unstamping the town takes the country back only when it was stamped
+/// through a town and no other stamped town of it holds it. THE REGION CHAIN (Part 6.7's rule, A6.12): the finest
+/// region level the country has, the region holding the town's point, stamped with every parent above it (regions
+/// already stamped left as they are). Unstamping a town leaves its regions stamped.
 enum TownStamps {
     @MainActor
     static func stamp(_ key: PlaceKey, name: String, cc: String, source: MarkSource, place: Int? = nil,

@@ -1,14 +1,5 @@
 import SwiftUI
 
-/// THE SYSTEM (the, decided in M8): the sun is your streak, the planets are the continents (Earth is the world), each
-/// planet's night side as wide as the share of that continent you've stamped. At 50% they sit on one ring under the
-/// name and the number; pulled to full the ring opens into eight orbits round the sun and they go round them.
-///
-/// The rules it keeps (02:09): nothing teleports, nothing flips places, nothing is cut. The ring is one body: the eight
-/// planets share one angle and keep their places on it, so choosing one turns the whole ring the short way on a
-/// spring with no bounce, every planet rolling as it travels (two turns a lap, so a full lap brings each back facing
-/// the same way, 8 Oct). The orbits are drawn from the very numbers the planets sit on, so the lines open with
-/// them. The moon sits where you leave it (the 02:32).
 struct CosmosView: View {
     let water: Water
     let map: MapController
@@ -58,7 +49,7 @@ struct CosmosView: View {
     }
 
     struct Planet { let k: String; let n: String; let size: CGFloat; let tex: String; let turn: Double; let au: Double; let yr: Double; let wide: Double }
-    ///, closest to furthest from the sun (the; old app Cosmos.swift)
+    /// , closest to furthest from the sun
     static let planets: [Planet] = [
         Planet(k: "Europe", n: "Mercury", size: 0.62, tex: "planet-mercury", turn: 62, au: 0.39, yr: 0.2408, wide: 0.383),
         Planet(k: "Africa", n: "Venus", size: 0.90, tex: "planet-venus", turn: 86, au: 0.72, yr: 0.6152, wide: 0.949),
@@ -134,8 +125,8 @@ struct CosmosView: View {
         let fullSize = CGFloat(13 * pow(pl.wide, 0.33))
         let boost: CGFloat = i == chosen ? 1 + 0.3 * CGFloat(1 - fk) : 1
         let size = Flow.lerp(ringSize, fullSize, CGFloat(fk)) * CGFloat(persp) * boost
-        // rolling as it travels: two turns a lap, the other way to its travel (8 Oct), and the chosen one turning
-        // by itself on top of that
+        // rolling as it travels: two turns a lap, the other way to its travel, and the chosen one turning by itself
+        // on top of that
         let own = ownSpin[i] + (i == chosen ? now.timeIntervalSince(spinSince) / pl.turn : 0)
         let face = -2 * (a / (2 * .pi)) + own
         return Item(i: i, pos: pos, size: size, depth: depth, face: face)
@@ -177,15 +168,14 @@ struct CosmosView: View {
             // whole on every frame: the ring's distance from where it is going (it goes in as the ring sets off and comes
             // out as it lands) and the move to full
             let settle = 1 - Flow.smooth(0.03, 0.30, CGFloat(abs(th - ringTo)))
-            // the chosen planet's moon stays with it when the sun is picked too 
+            // the chosen planet's moon stays with it when the sun is picked too
             let moonOut: CGFloat = settle * (1 - Flow.smooth(0, 0.25, form.page))
             let held = CGFloat(heldTween.at(now))
             ZStack(alignment: .topLeading) {
-                // the orbits, from the planets' own numbers: at 50% all eight lie on the ring (so they read as one line),
-                // at full each opens out to its own
-                // all eight in one path stroked once, so where they lie together (at 50%, and just as they part) they are
-                // one line, never eight lines stacking into a dark band (seen on the way to full, 28 Oct). The palette's
-                // dark grey, a hairline: never a new see-through black (22 Oct)
+                // the orbits, from the planets' own numbers: at 50% all eight lie on the ring (so they read as one
+                // line), at full each opens out to its own all eight in one path stroked once, so where they lie
+                // together (at 50%, and just as they part) they are one line, never eight lines stacking into a dark
+                // band. The palette's dark grey, a hairline: never a new see-through black
                 Path { p in
                     for i in 0 ..< 8 {
                         let (rx, ry) = orbitRadii(i, r)
@@ -196,9 +186,9 @@ struct CosmosView: View {
                 ForEach(items.filter { $0.depth < 0.5 }.sorted { $0.depth < $1.depth }, id: \.i) { it in
                     planetView(it, shares: shares, sun: sunC)
                 }
-                // THE SUN IS THE STREAK'S SIZE, always, and only that: picking it only shows the number. From 0.8 of its size with no streak to 1.3 at 8 weeks, then on far more slowly (a year 1.36,
-                // ten years 1.45, where it stops: past that its disc would reach the first orbit at full, seen 29 Oct
-                // 11:17 at 1.9), so two months, a year and ten years still differ
+                // THE SUN IS THE STREAK'S SIZE, always, and only that: picking it only shows the number. From 0.8 of
+                // its size with no streak to 1.3 at 8 weeks, then on far more slowly, so two months, a year and ten
+                // years still differ
                 let w = CGFloat(max(0, map.streakWeeks))
                 let g = w <= 8 ? log(1 + w) / log(9) : min(1.3, 1 + 0.3 * log(w / 8) / log(65))
                 // at 50% the ring is close round it: it grows no further than the 8-week size there, opening up to the
@@ -220,9 +210,9 @@ struct CosmosView: View {
                     .accessibilityElement()
                     .accessibilityLabel("Your streak")
                     .accessibilityAddTraits(.isButton)
-                // NO LINE FOR THE MOON'S PATH: while it
-                // moves, a short tail of the stops' colours follows it along its path, as long as it is fast, and draws
-                // back into the moon as it stops (it shortens, it never fades). Drawn just under the moon, in its depth.
+                // NO LINE FOR THE MOON'S PATH: while it moves, a short tail of the stops' colours follows it along
+                // its path, as long as it is fast, and draws back into the moon as it stops (it shortens, it never
+                // fades). Drawn just under the moon, in its depth.
                 let tail = trail.follow(moonAngle, at: now)
                 if moonAngle.sin < 0 {
                     moonTrail(host, from: tail, out: moonOut, disc: moonDisc(host, out: moonOut, held: held))
@@ -286,8 +276,7 @@ struct CosmosView: View {
             }
         }
         // THE STARS OF NEW STAMPS FALL (A2.20) the first time the full view is seen after them: once the water is 97%
-        // of the way there (the last 3% of its spring takes 1.6 s more, measured 30 Oct; waiting for all of it left
-        // the full view standing still for over a second first)
+        // of the way there
         .onChange(of: form.page >= 0.97) { _, there in
             if there { map.startFalls() }
         }
@@ -310,11 +299,10 @@ struct CosmosView: View {
     private func planetView(_ it: Item, shares: [CGFloat], sun: CGPoint) -> some View {
         let pl = Self.planets[it.i]
         let share = shares[it.i]
-        // the more of that continent you've stamped, the more of it is in night (the 01:02)
+        // the more of that continent you've stamped, the more of it is in night
         let lit = 1 - share
         let alpha = acos(Double(2 * lit - 1))
-        // the light comes from where the sun actually is on screen, a direction that only ever turns smoothly (the old
-        // left or right of the sun flipped Earth when it passed under the sun, 23 Oct 15:22)
+        // the light comes from where the sun actually is on screen, a direction that only ever turns smoothly
         let dx = Double(sun.x - it.pos.x), dy = Double(it.pos.y - sun.y)
         let len = max(1e-6, (dx * dx + dy * dy).squareRoot())
         let light = SIMD3<Float>(Float(dx / len * sin(alpha)), Float(dy / len * sin(alpha)), Float(cos(alpha)))
@@ -352,8 +340,8 @@ struct CosmosView: View {
     private func select(_ i: Int) {
         turnRing(to: i)
         map.sunPicked = false
-        Feel.tap(); Sound.tap()
-        map.show(continent: Self.planets[i].k)
+        Feel.tap()
+        map.pick(continent: Self.planets[i].k)
     }
 
     /// the ring turned so planet i is at the front (a pick here, or the map's continent changed elsewhere: the Map tab
@@ -418,13 +406,12 @@ struct CosmosView: View {
     @State private var pickJob = 0
 
     private func pickSun() {
-        Feel.tap(); Sound.tap()
+        Feel.tap()
         map.sunPicked.toggle()
     }
 
-    // MARK: THE MOON IS THE FILTER (17 Sep, 10 Oct, 02:09, 02:32): turned round its planet, never pressed; it stays
-    // where you leave it; its ring (lime on the stamped side, blue on the wishlist side) and the stop's name show while
-    // you hold it.
+    // MARK: THE MOON IS THE FILTER: turned round its planet, never pressed; it stays where you leave it; its ring
+    // (lime on the stamped side, blue on the wishlist side) and the stop's name show while you hold it.
     /// wide enough that the moon clears the planet even at the top and bottom of its tilted path (0.62 high)
     private func moonRadius(_ host: Item) -> CGFloat { host.size * 0.5 / 0.62 + 12 }
 
@@ -434,9 +421,8 @@ struct CosmosView: View {
     }
 
     /// The moon. Earth's is a real sphere wearing the Moon's own surface map (NASA, the maria and the craters), lit
-    /// from where the sun is and turning slowly (the old
-    /// picture was a near-white render with no maria). The other planets' moons have no surface maps in the bundle, so
-    /// they stay their small pictures (Phobos's lumpy shape for Mars and so on).
+    /// from where the sun is and turning slowly. The other planets' moons have no surface maps in the bundle, so they
+    /// stay their small pictures (Phobos's lumpy shape for Mars and so on).
     @ViewBuilder
     private func moon(_ host: Item, out: CGFloat, held: CGFloat, sun: CGPoint, now: Date) -> some View {
         let disc = moonDisc(host, out: out, held: held)
@@ -448,8 +434,8 @@ struct CosmosView: View {
             // three quarters lit, the night on the side away from the sun
             let a = 1.05
             // it turns as it goes round: like the real Moon it keeps one face to its planet, so as you take it round,
-            // the side you see turns with it; the angle is where it is on its path, so it follows the finger
-            // exactly, both ways
+            // the side you see turns with it; the angle is where it is on its path, so it follows the finger exactly,
+            // both ways
             PlanetBody(tex: "planet-moon", size: size, spin: Float(-(moonAngle - .pi / 2)),
                        light: SIMD3<Float>(Float(dx / len * sin(a)), Float(dy / len * sin(a)), Float(cos(a))),
                        ring: false, lights: false)
@@ -468,14 +454,13 @@ struct CosmosView: View {
         }
     }
 
-    /// the moon's ring while you hold it: one smooth gradient from lime to blue through the five stops (23 Oct 04:00
-    ///): lime at Stamped on the right, blue at
-    /// Wishlist on the left, the + stops on the way, Both at the top halfway between (and the bottom halfway too, so it
-    /// never jumps). Drawn as a circle squashed to the moon's path, so its angles are the moon's.
-    /// It comes out of the moon: drawn from the moon's place outward both ways round until it closes behind the
-    /// planet, and goes back into the moon the same way (no fade, no pop).
-    /// Where the moon is drawn and how big (before its shrink into the planet): held, it grows a little under the
-    /// finger so you can see what you hold; going back into the planet, it moves to the planet's middle as it shrinks.
+    /// the moon's ring while you hold it: one smooth gradient from lime to blue through the five stops: lime at
+    /// Stamped on the right, blue at Wishlist on the left, the + stops on the way, Both at the top halfway between
+    /// (and the bottom halfway too, so it never jumps). Drawn as a circle squashed to the moon's path, so its angles
+    /// are the moon's. It comes out of the moon: drawn from the moon's place outward both ways round until it closes
+    /// behind the planet, and goes back into the moon the same way (no fade, no pop). Where the moon is drawn and how
+    /// big (before its shrink into the planet): held, it grows a little under the finger so you can see what you
+    /// hold; going back into the planet, it moves to the planet's middle as it shrinks.
     private func moonDisc(_ host: Item, out: CGFloat, held: CGFloat) -> (at: CGPoint, size: CGFloat, shown: CGFloat) {
         let size = max(9, min(16, host.size * 0.32)) * (1 + 0.35 * held)
         let p = moonPos(host)
@@ -550,12 +535,12 @@ struct CosmosView: View {
                         let before = Self.nearestStop(moonAngle)
                         moonAngle = ang
                         let now = Self.nearestStop(ang)
-                        if now != before { Feel.tick(); Sound.tick(); withAnimation(Motion.quick) { map.filter = now }; moonStop = now }
+                        if now != before { Feel.tick(); withAnimation(Motion.quick) { map.filter = now }; moonStop = now }
                     }
                     .onEnded { _ in
-                        // it stays where you left it (the 02:32); the filter is the stop it is nearest
+                        // it stays where you left it; the filter is the stop it is nearest
                         moonHeld = false
-                        Feel.notch(); Sound.click()
+                        Feel.notch()
                     }
             )
             // cancelled with no end (the stops' hold menu took the touch mid drag): let go where it is
@@ -670,23 +655,22 @@ struct PlanetBody: View {
     }
 }
 
-/// THE SUN: the plasma shader (the 00:15, 01:02), always moving. It is your streak; never a number on it (28 Oct
-/// 01:04: no fire at the bottom of the sheet, the sun itself shows it): its prominences reach further the longer the
-/// streak, up to a cap at 8 weeks (`flare`), and picked it glows (`glow`, 0...1 from its tween). The disc itself stays
-/// the same size; the frame grows so the flares are never cut.
+/// THE SUN: the plasma shader, always moving. It is your streak; never a number on it: its prominences reach further
+/// the longer the streak, up to a cap at 8 weeks (`flare`), and picked it glows (`glow`, 0...1 from its tween). The
+/// disc itself stays the same size; the frame grows so the flares are never cut.
 struct SunView: View {
     let size: CGFloat
     let time: Double
     let flare: CGFloat
     let glow: CGFloat
-    /// the streak on a log scale to ten years (0...1): colour, boiling, corona and eruptions (29 Oct 18:35)
+    /// the streak on a log scale to ten years (0...1): colour, boiling, corona and eruptions
     var heat: CGFloat = 0.0
     /// how far the red giant may swell here (0...1): less at 50%, where Earth's moon is close below
     var swell: CGFloat = 1
-    /// THE STREAK AS THE STAR'S AGE: most of the life is
-    /// spent in the first ten weeks, every week a clear step on (1 week 0.11, 2 weeks 0.20, 4 weeks 0.34, 6 weeks 0.45,
-    /// 8 weeks 0.54, 10 weeks 0.62: our sun, then swelling and reddening into a giant by about ten weeks); after that it
-    /// turns white-hot slowly over the years, reaching 1 at ten years. Smooth in the weeks, no steps, no milestones.
+    /// THE STREAK AS THE STAR'S AGE: most of the life is spent in the first ten weeks, every week a clear step on (1
+    /// week 0.11, 2 weeks 0.20, 4 weeks 0.34, 6 weeks 0.45, 8 weeks 0.54, 10 weeks 0.62: our sun, then swelling and
+    /// reddening into a giant by about ten weeks); after that it turns white-hot slowly over the years, reaching 1 at
+    /// ten years. Smooth in the weeks, no steps, no milestones.
     static func heat(weeks w: CGFloat) -> CGFloat {
         let early = 0.62 * (1 - exp(-min(w, 10) / 5)) / (1 - exp(-2))
         let late = w > 10 ? 0.38 * log(1 + (w - 10)) / log(511) : 0

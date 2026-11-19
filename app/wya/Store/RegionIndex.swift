@@ -19,8 +19,13 @@ final class RegionIndex {
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, hit: Hit)] = []
     @ObservationIgnored private var last: (q: String, towns: Bool, hits: [Hit])?
+    /// the folded names as bytes, one after another, and where each row's starts (one more than rows): the search's
+    /// pass as strings took 15 to 20 ms a letter
+    @ObservationIgnored private var nameBytes: [UInt8] = []
+    @ObservationIgnored private var nameStart: [Int32] = []
 
     func load() {
+        if ready { buildPeople() }
         guard !ready, !loading else { return }
         loading = true
         Task.detached(priority: .userInitiated) {
@@ -33,9 +38,14 @@ final class RegionIndex {
                     out.append((n.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), h))
                 }
             }
+            var bytes: [UInt8] = [], start: [Int32] = [0]
+            bytes.reserveCapacity(out.reduce(0) { $0 + $1.0.utf8.count })
+            start.reserveCapacity(out.count + 1)
+            for r in out { bytes.append(contentsOf: r.0.utf8); start.append(Int32(bytes.count)) }
             await MainActor.run {
                 let me = RegionIndex.shared
                 me.rows = out
+                (me.nameBytes, me.nameStart) = (bytes, start)
                 me.loading = false
                 me.ready = !out.isEmpty
             }
@@ -46,45 +56,80 @@ final class RegionIndex {
     /// made once both indexes have come
     private func people() -> [String: Int] {
         if let p = peopleByID { return p }
-        let towns = TownIndex.shared.regionPeople()
-        guard !towns.isEmpty else { return [:] }
-        var out: [String: Int] = [:]
-        // (a second level by the town of its name there: York in the United Kingdom, 150,000, before York in Western
-        // Australia; with no number at all they stood by the alphabet)
-        let named = TownIndex.shared.townPeople()
-        for r in rows {
-            let k = r.hit.place + "|\(r.hit.row)|" + r.hit.id
-            if let n = (r.hit.row == 1 ? towns : named)[r.hit.place.lowercased() + "|" + r.folded] { out[k] = max(out[k] ?? 0, n) }
+        buildPeople()
+        return [:]
+    }
+    @ObservationIgnored private var peopleBuilding = false
+    /// the regions' people have come (read by the search, so its list is made again then)
+    private(set) var peopleReady = false
+    func buildPeople() {
+        guard peopleByID == nil, !peopleBuilding, ready, TownIndex.shared.ready else { return }
+        peopleBuilding = true
+        let towns = TownIndex.shared.peopleRows()
+        let regions = rows.map { (folded: $0.folded, place: $0.hit.place, row: $0.hit.row, id: $0.hit.id) }
+        Task.detached(priority: .utility) {
+            let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+            // each first-level division's people (the sum of its towns'), and each town's (the biggest of its name)
+            var byRegion: [String: Int] = [:], byTown: [String: Int] = [:]
+            for t in towns {
+                let c = t.file.lowercased()
+                if !t.region.isEmpty { byRegion[c + "|" + fold(t.region), default: 0] += t.people }
+                let k = c + "|" + fold(t.name)
+                if t.people > byTown[k] ?? 0 { byTown[k] = t.people }
+            }
+            // (a second level by the town of its name there: York in the United Kingdom, 150,000, before York in
+            // Western Australia; with no number at all they stood by the alphabet)
+            var out: [String: Int] = [:]
+            for r in regions {
+                let k = r.place + "|\(r.row)|" + r.id
+                if let n = (r.row == 1 ? byRegion : byTown)[r.place.lowercased() + "|" + r.folded] { out[k] = max(out[k] ?? 0, n) }
+            }
+            await MainActor.run {
+                let me = RegionIndex.shared
+                me.peopleByID = out
+                me.peopleBuilding = false
+                me.last = nil
+                me.peopleReady = true
+            }
         }
-        peopleByID = out
-        return out
     }
     @ObservationIgnored private var peopleByID: [String: Int]?
+    /// how many people live in a region found, where the towns' index tells (0: not known)
+    func people(_ h: Hit) -> Int { people()[h.place + "|\(h.row)|" + h.id] ?? 0 }
 
     func hits(_ query: String, limit: Int = 4) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         guard ready, q.count >= 2 else { return [] }
         // (read first, so the list is made again when the towns' index comes)
-        let townsIn = TownIndex.shared.ready
+        let townsIn = TownIndex.shared.ready && peopleReady
         if let l = last, l.q == q, l.towns == townsIn { return l.hits }
         let lives = people()
-        // every name starting with it, ranked (the file's order put "Texiguat" before Texas): the whole name typed
-        // first, then the first level before the second, then the shorter name (a state's "Texas" before a town's
-        // "Texcaltitlán"); then names with a later word starting with it
         var starts: [(f: String, h: Hit)] = [], inside: [Hit] = []
-        for r in rows {
-            if r.folded.hasPrefix(q) { starts.append((r.folded, r.hit)) }
-            // (a later word starting with it: "Saint-Denis" for "denis"; never the middle of a word)
-            else if q.count >= 3, inside.count < limit, r.folded.contains(q),
-                    r.folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) }) { inside.append(r.hit) }
+        guard nameStart.count == rows.count + 1 else { return [] }
+        let qb = Array(q.utf8), ql = qb.count, mid = q.count >= 3
+        nameBytes.withUnsafeBufferPointer { nb in
+            qb.withUnsafeBufferPointer { qp in
+                guard let base = nb.baseAddress, let qa = qp.baseAddress else { return }
+                for i in 0 ..< rows.count {
+                    let a = Int(nameStart[i]), n = Int(nameStart[i + 1]) - a
+                    if n >= ql, memcmp(base + a, qa, ql) == 0 { starts.append((rows[i].folded, rows[i].hit)) }
+                    // (a later word starting with it: for "denis"; never the middle of a word; the words looked at
+                    // only in a name that holds it at all)
+                    else if mid, inside.count < limit, n > ql, memmem(base + a, n, qa, ql) != nil,
+                            rows[i].folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) }) {
+                        inside.append(rows[i].hit)
+                    }
+                }
+            }
         }
-        starts.sort { a, b in
+        let pop = starts.map { lives[$0.h.place + "|\($0.h.row)|" + $0.h.id] ?? 0 }
+        let order = starts.indices.sorted { ia, ib in
+            let a = starts[ia], b = starts[ib]
             // (a district named Çal led California for "cal": what was typed as a whole name leads within its level,
             // not over the level above)
-            let pa = lives[a.h.place + "|\(a.h.row)|" + a.h.id] ?? 0, pb = lives[b.h.place + "|\(b.h.row)|" + b.h.id] ?? 0
+            let pa = pop[ia], pb = pop[ib]
             let ea = a.f == q, eb = b.f == q
-            // a country's first level (states, regions) before its second (the communes that filled "fra" with Fram,
-            // Frata and Frasin, 8 Nov)
+            // a country's first level (states, regions) before its second
             if a.h.row != b.h.row { return a.h.row < b.h.row }
             if ea != eb { return ea }
             // the region more people live in first ("cal" is California, 39 million, before Çal and Caldas: by the
@@ -93,6 +138,7 @@ final class RegionIndex {
             if a.f.count != b.f.count { return a.f.count < b.f.count }
             return a.f < b.f
         }
+        starts = order.map { starts[$0] }
         // (a region under two of its names, Caldas and Caldas Department, once)
         var seen = Set<String>()
         let h = Array((starts.map(\.h) + inside).filter { seen.insert($0.place + "|" + $0.id).inserted }.prefix(limit))

@@ -6,7 +6,7 @@ It is being rebuilt from scratch as a native iOS app in SwiftUI, with a Metal ma
 
 ## State of the build
 
-The map section is being built first: the world map with every border drawn the way the chosen point of view sees it (de facto, the UN's, or a country's own), the sheet that rises over it with the solar system at full height, search, the tools, the AI's pull-down and settings. The rest of the app (passport, lists, friends, profile) comes after it.
+The map is built: the world map with every border drawn the way the chosen point of view sees it (de facto, the UN's, or a country's own), the sheet that rises over it with the solar system at full height, search, the tools and settings, with place pages for every country, region and town. The passport, profile, lists and plans (a calendar of your days, an hour-by-hour day, calendar files in and out, your next trip on top) are being built now. The AI is reached through Siri: its answers, plans and suggestions come from the Claude API, with what it knows about your map, lists, plans and trip.
 
 ## Folders
 

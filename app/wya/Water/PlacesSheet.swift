@@ -1,17 +1,13 @@
 import SwiftUI
 
-/// PLACES' WATER: a menu of the types of place to look at; one picked, the map shows those places and the sheet
-/// becomes that set's. Never full screen.
-///
-/// Laid out as Pins' water is, so the two read as one app (13 Nov: Places and Pins replaced, never kept as they were):
-/// - THE MENU: "Places" on the name line, where Pins says its map's name; under it the sets as rows, one under the
-///   other: the set's name, and at its right yours of it ("12 of 59") once you have one, and the arrow that says it
-///   opens. No icons, no tiles, no capsules, no count of every place there is.
-/// - A SET (a row tapped): the caption says the set, yours of it and of how many; the back arrow at the sheet's top
-///   left brings the menu back. Under the caption the set's own kinds as rows (Seas and oceans: Oceans, Seas, Gulfs and
-///   bays, Straits), the one picked a black band edge to edge with white words, as the map shown in Pins; a second tap
-///   shows all of the set again.
-/// Our twelve kinds are never a row: they file things. Where is the map's job: a country tapped narrows the set to it.
+/// PLACES' WATER. Laid out as Pins' water is, so the two read as one app: - THE MENU: on the name line, where Pins
+/// says its map's name; under it the sets as rows, one under the other: the set's name, and at its right yours of it 
+/// once you have one, and the arrow that says it opens. No icons, no tiles, no capsules, no count of every place
+/// there is. - A SET (a row tapped): the caption says the set, yours of it and of how many; the back arrow at the
+/// sheet's top left brings the menu back. Under the caption the set's own kinds as rows (Seas and oceans: Oceans,
+/// Seas, Gulfs and bays, Straits), the one picked a black band edge to edge with white words, as the map shown in
+/// Pins; a second tap shows all of the set again. Our twelve kinds are never a row: they file things. Where is the
+/// map's job: a country tapped narrows the set to it.
 struct PlacesSheet: View {
     let water: Water
     let map: MapController
@@ -23,6 +19,8 @@ struct PlacesSheet: View {
     let captionUp: Bool
 
     static let rowH: CGFloat = 52
+    /// the gaps between the rows, measured (EdgeRows): the list's visible height ends in one
+    @State private var cuts: [CGFloat] = []
 
     var body: some View {
         let L = water.layout
@@ -30,53 +28,27 @@ struct PlacesSheet: View {
         let store = CollectionStore.shared
         // (the name line as Pins has it: the water's top, never under the head)
         let lineTop = max(top, L.headBottom + 8)
-        // (the menu's rows under "Places"; a set's kinds under its caption's count)
-        let from = picked ? captionY + 62 : lineTop + 58
+        // (the menu's rows under; a set's kinds under its caption's count)
+        let from = picked ? captionY + 62 : lineTop + 20
         let to = L.capsule.minY - 12
         let rows = PlacesRows.rows(map: map, water: water)
         ZStack(alignment: .topLeading) {
-            if !picked, store.ready {
-                Text("Places")
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                    .position(x: L.W / 2, y: lineTop + 31)
-                    // (14 Nov: closing, the word rode down into the capsule and stayed over the tab buttons) gone
-                    // before it reaches the capsule
-                    .opacity(Double(min(1, max(0, (L.capsule.minY - (lineTop + 31) - 24) / 40))))
-                    .allowsHitTesting(false)
-                    .accessibilityAddTraits(.isHeader)
-            }
             // (the rows are there once the sets have been read, and only with room for one whole row at least; the
             // rest scroll, going out softly at the foot)
-            // (14 Nov: the sets, and a set's kinds, as chips that wrap, the one chosen black: no settings-style rows
-            // with arrows; the same chips as Pins' tools and a pin's kinds)
             let places = picked ? Self.places(map: map) : []
             if store.ready, !rows.isEmpty || !places.isEmpty, to - from >= 44 {
                 ScrollView(.vertical) {
                   VStack(spacing: 8) {
                     if !rows.isEmpty {
-                    CentredFlow(spacing: 4, lineSpacing: 4) {
-                        ForEach(rows) { r in
-                            Button { Feel.tick(); r.act() } label: {
-                                Text(r.title)
-                                    .font(picked ? .subheadline.weight(.semibold) : .body.weight(.semibold))
-                                    .foregroundStyle(r.on ? Palette.white : Palette.ink)
-                                    .lineLimit(1).fixedSize()
-                                    .padding(.horizontal, 12).frame(height: 34)
-                                    .background { if r.on { Capsule().fill(Palette.ink) } }
-                                    .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(r.count.isEmpty ? r.title : r.title + ", " + r.count)
-                            .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
-                        }
-                    }
-                    .frame(width: L.W - 2 * L.sheetInset - 24)
+                    let w = L.W - 2 * L.sheetInset - 24
+                    setGrid(rows, columns: rows.contains { Self.wide($0.title, small: picked, part: w / 2) } ? 1 : 2, width: w, small: picked)
                     .padding(.vertical, 4)
+                    .edgeRow()
                     }
-                    // A SET'S PLACES (14 Nov: 50% was empty under the caption): the best known first, each its name and
-                    // its country; a tap shows it on the map, the water at 25%
-                    LazyVStack(spacing: 0) {
+                    // A SET'S PLACES: the best known first, each its name and its country; a tap shows it on the map,
+                    // the water at 25% (12 pt between rows: a gap for the list's end to fall in, so it ends on a
+                    // whole row, PL7)
+                    LazyVStack(spacing: 12) {
                         ForEach(places, id: \.id) { it in
                             Button {
                                 Feel.tick()
@@ -93,15 +65,26 @@ struct PlacesSheet: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .edgeRow()
                         }
                     }
                   }
+                  .coordinateSpace(name: EdgeRows.space)
+                  .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
                 }
+                // WHOLE ROWS ONLY: the visible height ends in the gap between two rows, as Details' does, its 16 pt
+                // soft foot over that gap, and a scroll stops on a gap (it ended part way through under a long fade)
+                .scrollBlur()
                 .scrollIndicators(.hidden)
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.88),
-                                             .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
-                .frame(width: L.W - 2 * L.sheetInset, height: to - from)
-                .position(x: L.W / 2, y: (from + to) / 2)
+                .mask(alignment: .top) {
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
+                    }
+                }
+                .scrollTargetBehavior(GapSnap(cuts: cuts))
+                .frame(width: L.W - 2 * L.sheetInset, height: EdgeRows.fit(to - from, cuts: cuts))
+                .position(x: L.W / 2, y: from + EdgeRows.fit(to - from, cuts: cuts) / 2)
                 .allowsHitTesting(water.stop == .half)
             }
             if picked, captionUp {
@@ -119,6 +102,41 @@ struct PlacesSheet: View {
         .transaction { $0.animation = nil }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .onAppear { ThingIndex.shared.load(); CollectionStore.shared.load() }
+    }
+
+    /// the sets (or a set's kinds) in rows of `columns` equal parts, each word whole in the middle of its part
+    @ViewBuilder private func setGrid(_ rows: [PlacesRows.Row], columns: Int, width: CGFloat, small: Bool) -> some View {
+        let lines = stride(from: 0, to: rows.count, by: columns).map { Array(rows[$0 ..< min($0 + columns, rows.count)]) }
+        VStack(spacing: 0) {
+            ForEach(lines.indices, id: \.self) { k in
+                HStack(spacing: 0) {
+                    ForEach(lines[k]) { r in
+                        Button { Feel.tick(); r.act() } label: {
+                            Text(r.title)
+                                .font(small ? .subheadline.weight(.semibold) : .body.weight(.semibold))
+                                .foregroundStyle(r.on ? Palette.white : Palette.ink)
+                                .lineLimit(1).fixedSize()
+                                .padding(.horizontal, 12).frame(height: 34)
+                                .background { if r.on { Capsule().fill(Palette.ink) } }
+                                .frame(width: width / CGFloat(columns), height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(r.count.isEmpty ? r.title : r.title + ", " + r.count)
+                        .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
+                    }
+                }
+            }
+        }
+        .frame(width: width)
+    }
+    private static func wide(_ t: String, small: Bool, part: CGFloat) -> Bool {
+        // (measured at the size the sheet draws: its type stops at xxxLarge)
+        let cat = UIApplication.shared.preferredContentSizeCategory
+        let f = UIFont.preferredFont(forTextStyle: small ? .subheadline : .body,
+                                     compatibleWith: UITraitCollection(preferredContentSizeCategory: cat > .extraExtraExtraLarge ? .extraExtraExtraLarge : cat))
+        let bold = UIFont.systemFont(ofSize: f.pointSize, weight: .semibold)
+        return (t as NSString).size(withAttributes: [.font: bold]).width + 24 > part
     }
 
     /// the picked set's places (its kind's, when one is picked), in the set's own order (best known first); 300 at most
@@ -141,7 +159,7 @@ struct PlacesRows: View {
     struct Row: Identifiable {
         let id: String
         let title: String
-        /// yours of it, "12 of 59" (empty until you have one)
+        /// yours of it, (empty until you have one)
         let count: String
         /// a set (opens) or a kind (narrows)
         let opens: Bool
@@ -154,12 +172,9 @@ struct PlacesRows: View {
     @MainActor static func rows(map: MapController, water: Water) -> [Row] {
         let store = CollectionStore.shared
         guard map.placesPicked else {
-            // (a set with kinds keeps the water at 50% for them; one with none has nothing more to pick here, so the
-            // water goes down to 25% and the map of its places has the screen)
             return store.menu.map { id in
                 Row(id: "set:" + id, title: store.title(id), count: Self.yours(id, map: map), opens: true, on: false) {
                     map.showPlacesSet(id)
-                    if store.types(id).isEmpty { water.go(.quarter) }
                 }
             }
         }
@@ -172,8 +187,8 @@ struct PlacesRows: View {
         }
     }
 
-    /// yours of a set and of how many it lists ("12 of 59"); the towns, yours only (no one holds a list of the
-    /// world's towns); nothing while you have none of it. Worked out once per change of your stamps
+    /// yours of a set and of how many it lists; the towns, yours only (no one holds a list of the world's towns);
+    /// nothing while you have none of it. Worked out once per change of your stamps
     @MainActor private static func yours(_ id: String, map: MapController) -> String {
         let changes = MarkStore.shared.changes
         if seen != changes { counts = [:]; seen = changes }
@@ -195,7 +210,6 @@ struct PlacesRows: View {
     @MainActor private static var seen = -1
 
     var body: some View {
-        // (the soft foot only when there is more under it)
         let more = CGFloat(rows.count) * PlacesSheet.rowH > height + 0.5
         ScrollView(.vertical) {
             LazyVStack(spacing: 0) {
@@ -203,15 +217,10 @@ struct PlacesRows: View {
             }
             .scrollTargetLayout()
         }
+        .scrollBlur()
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
         .scrollDisabled(!more)
-        .mask {
-            LinearGradient(stops: [.init(color: .black, location: 0),
-                                   .init(color: .black, location: more ? max(0, 1 - 28 / height) : 1),
-                                   .init(color: .clear, location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-        }
     }
 
     private func row(_ r: Row) -> some View {
@@ -227,7 +236,7 @@ struct PlacesRows: View {
                     Text(r.count).font(.body).foregroundStyle(ink.opacity(0.5)).lineLimit(1).monospacedDigit()
                 }
                 if r.opens {
-                    Icon5(key: "forward", ink: ink.opacity(0.35), size: 15)
+                    Icon5(key: "forward", ink: ink.opacity(0.5), size: 15)
                 }
             }
             .padding(.horizontal, 24)

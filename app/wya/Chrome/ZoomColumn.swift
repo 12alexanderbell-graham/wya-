@@ -17,9 +17,10 @@ struct ZoomColumn: View {
         let W = L.W
         let minTop = L.headBottom + 8
         // past half the column stays at its height and the rising sheet takes its buttons one by one from the bottom:
-        // each slides off the right edge, at its own size, as the edge comes from 60 to 10 pt below its centre, and is
-        // fully past the screen's edge before the glass reaches it. Nothing shrinks to nothing. It follows the finger,
-        // so it reverses exactly. centred in the room for the sheet's top, or its 50% top above that (Layout.room)
+        // each slides off the right edge, at its own size, as the edge comes from 60 to 10 pt below its centre, and
+        // is fully past the screen's edge before the glass reaches it. Nothing shrinks to nothing. It follows the
+        // finger, so it reverses exactly. centred in the room for the sheet's top, or its 50% top above that
+        // (Layout.room)
         let room = L.room(sheetTop: max(f.top, L.top(.half)))
         let centre = (room.lowerBound + room.upperBound) / 2
         let top = max(minTop, centre - 110)
@@ -74,7 +75,8 @@ struct ZoomColumn: View {
                 .accessibilityAddTraits(map.locked ? .isSelected : [])
                 .offset(x: slide(3))
                 .allowsHitTesting(slide(3) < 30)
-            cell("fullscreen", label: "Full screen", ink: ink, silent: true) { sideways() }
+            // (refused while an upload has the water: drawn at 50% then, so it never looks live and does nothing, UP9)
+            cell("fullscreen", label: "Full screen", ink: ink, dim: water.upload, silent: true) { sideways() }
                 .offset(x: slide(4))
                 .allowsHitTesting(slide(4) < 30)
         }
@@ -105,8 +107,8 @@ struct ZoomColumn: View {
                         Button(k) {
                             after {
                                 // (Apple's map under the world: the continent framed on it)
-                                if map.appleWorld { map.show(continent: k) }
-                                else { map.closePlace(); map.show(continent: k) }
+                                if map.appleWorld { map.pick(continent: k) }
+                                else { map.closePlace(); map.pick(continent: k) }
                             }
                         }
                     }
@@ -187,8 +189,7 @@ struct HoldButton<Label: View>: View {
                     .onEnded { g in
                         timer?.cancel(); timer = nil
                         defer { down = false }
-                        // a hold that ran into the limit ends here too (the button went off under the finger and the
-                        // hold was never let go, so the next tap on it ended that hold instead of zooming, 8 Nov)
+                        // a hold that ran into the limit ends here too
                         if holding { holding = false; onHold(false); return }
                         guard enabled else { return }
                         if hypot(g.translation.width, g.translation.height) < 22 { onTap() }
@@ -211,6 +212,10 @@ struct LimitIcon: View {
     var body: some View {
         // (its own ink at 50%: black by day, white over the night at full, where 50% black was a dark smudge)
         Icon5(key: key, on: on, ink: dim ? ink.opacity(0.5) : ink, size: 22)
+            // THE MAP'S OWN HALO: a soft pale glow round the black marks, as the map's own names have, so each reads
+            // on every fill; still no glass. None at night, where the marks are white.
+            .shadow(color: ink == Palette.ink ? Palette.white.opacity(0.9) : .clear, radius: 2.5)
+            .shadow(color: ink == Palette.ink ? Palette.white.opacity(0.9) : .clear, radius: 1)
             .transaction { $0.animation = nil }
     }
 }

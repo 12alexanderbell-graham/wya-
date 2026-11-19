@@ -52,6 +52,8 @@ struct Look {
     float pad;
     float4 clip;     // a fill front (Part 1.5): its origin (map units), its radius (map units), 1 when on
     float4 clip2;    // x pixels per point, y Style Simple, z the pattern for Differentiate Without Colour (1 hatch, 2 dots)
+    float4 det;      // the open country's finer relief: its box in the world picture (u0 v0 u1 v1)
+    float4 det2;     // its texel (u, v), z 1 when it is in
 };
 
 // DIFFERENTIATE WITHOUT COLOUR (Part 1.14): stamped land hatched (0.5 pt lines of 50% ink at 45 degrees, 4 pt apart),
@@ -85,6 +87,7 @@ inline float3 seaColour(float d) {
 
 fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> rel [[texture(0)]],
+                               texture2d<float> det [[texture(1)]],
                                sampler s [[sampler(0)]],
                                constant Look& look [[buffer(0)]],
                                constant Cam& cam [[buffer(1)]]) {
@@ -97,7 +100,26 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         front = clamp(r - d + 0.5, 0.0, 1.0);
     }
     int kind = int(look.kind + 0.5);
+    // (the screen's change of uv taken once, before any branch: a derivative inside one is undefined where a quad's
+    // pixels split)
+    float2 fw = fwidth(in.uv);
     float2 dh = rel.sample(s, in.uv).rg;
+    // THE OPEN COUNTRY'S FINER RELIEF: inside its box its own picture, eased in over the box's outer edge so no seam;
+    // its own land only (plain and coloured): the sea and the world round it keep the world's picture, so the box
+    // never shows as a patch on them
+    float wd = 0.0;
+    float2 du = float2(0.0);
+    if (look.det2.z > 0.5 && (kind == 1 || kind == 2)) {
+        float2 span = look.det.zw - look.det.xy;
+        du = (in.uv - look.det.xy) / span;
+        // (a country across the date line has its box past u = 1: its far side, drawn at u near 0, found a world
+        // over)
+        if (du.x < 0.0) { float x = (in.uv.x + 1.0 - look.det.x) / span.x; if (x <= 1.0) du.x = x; }
+        else if (du.x > 1.0) { float x = (in.uv.x - 1.0 - look.det.x) / span.x; if (x >= 0.0) du.x = x; }
+        float2 e = min(du, 1.0 - du);
+        wd = smoothstep(0.0, 0.04, min(e.x, e.y));
+        if (wd > 0.0) dh = mix(dh, det.sample(s, du).rg, wd);
+    }
     // MAP SETTINGS' STYLE SIMPLE (Part 1.4): no relief; the sea blue 25% on cream, unmarked land cream, your colours
     // on white as on Detailed (so lime and blue read the same in both styles)
     if (look.clip2.y > 0.5) {
@@ -120,20 +142,33 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         return float4(mix(seaColour(d), look.tint.rgb, look.tint.a), 1.0);
     }
     if (kind == 3) return float4(look.tint.rgb, 1.0);
-    // land: white to grey by height, with a soft light from the north-west so the mountains read the way Apple Maps' do
+    // land: white to grey by height, with a soft light from the north-west so the mountains read the way Apple Maps'
+    // do
     float h = dh.g;
     float hl = rel.sample(s, in.uv - float2(look.texelU, 0)).g;
     float hr = rel.sample(s, in.uv + float2(look.texelU, 0)).g;
     float hu = rel.sample(s, in.uv - float2(0, look.texelV)).g;
     float hd = rel.sample(s, in.uv + float2(0, look.texelV)).g;
-    float3 n = normalize(float3((hl - hr) * 7.0, (hu - hd) * 7.0, 1.0));
+    float2 grad = float2(hl - hr, hu - hd);
+    if (wd > 0.0) {
+        // the finer picture's slopes, across its own (smaller) texels, lifted part of the way back to the world's
+        // strength so the hills read alike in both
+        float2 dt = look.det2.xy / (look.det.zw - look.det.xy);
+        float2 g2 = float2(det.sample(s, du - float2(dt.x, 0)).g - det.sample(s, du + float2(dt.x, 0)).g,
+                           det.sample(s, du - float2(0, dt.y)).g - det.sample(s, du + float2(0, dt.y)).g);
+        g2 *= pow(max(look.texelU / max(look.det2.x, 1e-9), 1.0), 0.45);
+        grad = mix(grad, g2, wd);
+    }
+    float3 n = normalize(float3(grad.x * 7.0, grad.y * 7.0, 1.0));
     float3 L = normalize(float3(-1.0, -1.0, 1.6));
     float shade = dot(n, L) / L.z;
     // zoomed in past the relief's own detail (a texel bigger than a few pixels) the hills would turn into soft grey
     // blobs, so the relief eases out and the land goes calm and flat instead
     // measured along the meridian too: near the poles the texture's rows are stretched sideways on the map, so across
     // alone it overstated the detail and Chukotka's coarse heights came out as grey patches
-    float texelsPerPixel = min(fwidth(in.uv.x) / look.texelU, fwidth(in.uv.y) / look.texelV);
+    float texelsPerPixel = min(fw.x / look.texelU, fw.y / look.texelV);
+    // (inside the open country the finer picture's own texels)
+    if (wd > 0.0) texelsPerPixel = mix(texelsPerPixel, min(fw.x / look.det2.x, fw.y / look.det2.y), wd);
     float detail = smoothstep(0.15, 0.5, texelsPerPixel);
     // zoomed in, the heights go almost all the way to calm land: a third of the height colour left there drew the
     // coarse heights as grey blotches
@@ -144,8 +179,8 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // THE LAND ROUND A CONTINENT (the old fadedLand, Slice 127l): away from the continent you're on the land stays
     // land, its own relief, mixed halfway toward our blue, and the colours on it go (tint.a: how far it has gone)
     if (kind == 5) land = mix(land * look.tint.rgb, mix(land, BLUE, 0.5), look.tint.a);
-    // THE WORLD ROUND A COUNTRY'S OWN MAP (Regions, Places): its own relief kept, multiplied by the sea's
-    // lightest blue (the shallows' colour), its colours going (tint.a: how far it has gone)
+    // THE WORLD ROUND A COUNTRY'S OWN MAP: its own relief kept, multiplied by the sea's lightest blue (the shallows'
+    // colour), its colours going (tint.a: how far it has gone)
     if (kind == 6) land = mix(land * look.tint.rgb, land * mix(WHITE, BLUE, 0.20), look.tint.a);
     // pad > 0: laid over what is there at that strength (premultiplied), so the borders under it go with it
     if (look.pad > 0.0 || look.clip.w > 0.5) {
@@ -240,10 +275,10 @@ vertex LineV regionLineVertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     return o;
 }
 struct FullV { float4 position [[position]]; float2 s; };
-// ONE LINE, ONE STRENGTH: every segment was its own quad, laid over the last, so where a detailed coast has many short
-// segments their ends piled up into a darker, thicker line than a border of a few long ones. Now the lines' coverage is
-// drawn first into a texture of its own, taking the most of any segment at each pixel (max, never added), and laid over
-// the map once, in 50% black.
+// ONE LINE, ONE STRENGTH: every segment was its own quad, laid over the last, so where a detailed coast has many
+// short segments their ends piled up into a darker, thicker line than a border of a few long ones. Now the lines'
+// coverage is drawn first into a texture of its own, taking the most of any segment at each pixel (max, never added),
+// and laid over the map once, in 50% black.
 fragment float4 lineCoverage(LineV in [[stage_in]], constant LineStyle& ls [[buffer(0)]]) {
     float d = abs(in.across);
     float a = clamp((ls.width * 0.5 + ls.feather * 0.5 - d) / ls.feather, 0.0, 1.0);
@@ -257,9 +292,8 @@ fragment float4 lineComposite(FullV in [[stage_in]], texture2d<float> cov [[text
     if (c <= 0.002) discard_fragment();
     return float4(ls.colour.rgb * c, c);
 }
-// THE LINES ON A COUNTRY'S OWN MAP (Regions, Places): outside the open country (its mask grown by 2 pixels, so its
-// own coast keeps its whole
-// width) the lines go with the rest of the world, by `away`
+// THE LINES ON A COUNTRY'S OWN MAP: outside the open country (its mask grown by 2 pixels, so its own coast keeps its
+// whole width) the lines go with the rest of the world, by `away`
 fragment float4 lineCompositeFocus(FullV in [[stage_in]], texture2d<float> cov [[texture(0)]],
                                    texture2d<float> mask [[texture(1)]],
                                    constant LineStyle& ls [[buffer(0)]], constant float& away [[buffer(3)]]) {
@@ -284,8 +318,8 @@ fragment float4 lineFragment(LineV in [[stage_in]], constant LineStyle& ls [[buf
     return float4(ls.colour.rgb * a, a);
 }
 
-// MARK: the lights: two big bands of the living field, one glowing in from the top edge down to the Arctic Circle, one
-// from the bottom edge up to 60°S, under the land, always moving, in teal, lime and blue.
+// MARK: the lights: two big bands of the living field, one glowing in from the top edge down to the Arctic Circle,
+// one from the bottom edge up to 60°S, under the land, always moving, in teal, lime and blue.
 struct AuroraU {
     float yNorth;    // map y of 66.5°N, where the top band ends
     float ySouth;    // map y of 60°S, where the bottom band ends

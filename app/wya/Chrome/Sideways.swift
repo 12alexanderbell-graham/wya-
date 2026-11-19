@@ -159,7 +159,8 @@ final class Sideways {
             guard turned, let m = map, let w = water else {
                 stopTurn(); turnAt = nil
                 // a camera the turn left part way: back inside the world for portrait
-                if let m = map { if m.k < m.worldKMin { m.goHome() } else { m.holdInside() } }
+                // (the least zoom here is the country's own when one is open: Russia is seen from further out than the world)
+                if let m = map { if m.k < m.kMin { m.goHome() } else { m.holdInside() } }
                 withAnimation(Motion.chrome) { chromeOut = false }
                 water?.go(stopBefore)
                 done(); return
@@ -172,7 +173,7 @@ final class Sideways {
             let to = m.target(for: portrait) {
                 if let sc = m.regionScene { m.frameRegion(sc.place) }
                 else if let k = m.continent ?? m.drawnContinent, m.world?.contViews[k] != nil { m.show(continent: k) }
-                else if m.k < m.worldKMin { m.goHome() } else { m.holdInside() }
+                else if m.k < m.kMin { m.goHome() } else { m.holdInside() }
             } ?? from
             square = true
             turned = false

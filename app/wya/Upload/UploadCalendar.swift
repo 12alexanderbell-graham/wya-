@@ -2,8 +2,8 @@ import SwiftUI
 
 /// THE CALENDAR OF WHAT WAS FOUND (Part 9: the upload's second view of the same finds as the map's review). Full screen,
 /// a cell per day from the first found day's month to the last's:
-/// - a day with a find is that place's flag, cropped square, filling the cell; an empty day is a quiet cell with its
-///   number (numbers on empty days only);
+/// - a day with a find is that place's flag, cropped square, filling the cell; an empty day is just its number, no
+///   square behind it (numbers on empty days only);
 /// - a flag tapped is crossed out (you weren't there that day), tapped again it is back;
 /// - a flag held and dragged fills every day the finger passes over with that place, across months, over what was
 ///   there;
@@ -92,7 +92,7 @@ final class CalendarEdit {
     }
 
     /// the months as they are shown: a month on its own, or a run of folded months with no day found in them, which
-    /// show as one line ("June 2018 to April 2019")
+    /// show as one line
     var runs: [[LocalDay]] {
         let withDays = Set(days.keys.map { LocalDay(y: $0.y, m: $0.m, d: 1) })
         var out: [[LocalDay]] = []
@@ -126,34 +126,79 @@ struct UploadCalendar: View {
     let add: ([String: [LocalDay]]) -> Void
     /// where each day's cell is in the calendar's space (the fill finds the day under the finger)
     @State private var cells: [LocalDay: CGRect] = [:]
+    @State private var pos = ScrollPosition(edge: .top)
+    @State private var geo = Geo()
+    /// the finger while a flag is being dragged, and the edge scrolling that follows it
+    @State private var finger: CGPoint?
+    @State private var drift: Task<Void, Never>?
+    /// a flag held: false again however the hold ends, a cancelled one too (a held day's month scrolled away and
+    /// unloaded ends its gesture with no onEnded; the fill then stayed on and the edge scrolling ran on)
+    @GestureState private var holding = false
 
     private static let gap: CGFloat = 4
-    private static let monthName: DateFormatter = {
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.dateFormat = "LLLL yyyy"; return f
-    }()
 
     var body: some View {
         GeometryReader { g in
             let side = floor((g.size.width - 32 - 6 * Self.gap) / 7)
-            ZStack(alignment: .top) {
-                Palette.white.ignoresSafeArea()
-                ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
-                        ForEach(edit.runs, id: \.self) { run in
-                            if run.count == 1 { month(run[0], side: side) } else { emptyRun(run) }
-                        }
+            ScrollView(.vertical) {
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
+                    ForEach(edit.runs, id: \.self) { run in
+                        if run.count == 1 { month(run[0], side: side) } else { emptyRun(run) }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 72)
-                    .padding(.bottom, 120)
                 }
-                .scrollDisabled(edit.filling != nil)
-                .coordinateSpace(.named("calendar"))
-                bar
-                VStack { Spacer(); addButton }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
+            .scrollBlur()
+            .scrollDisabled(edit.filling != nil)
+            .scrollPosition($pos)
+            .onScrollGeometryChange(for: Geo.self) { s in
+                Geo(y: s.contentOffset.y + s.contentInsets.top,
+                    most: max(0, s.contentSize.height - (s.containerSize.height - s.contentInsets.top - s.contentInsets.bottom)),
+                    top: s.contentInsets.top, bottom: s.containerSize.height - s.contentInsets.bottom)
+            } action: { _, now in geo = now }
+            .coordinateSpace(.named("calendar"))
+            // the bars as Apple's bars: the list's own soft edge runs under them, no strip of white (one blur everywhere)
+            .safeAreaBar(edge: .top) { bar }
+            .safeAreaBar(edge: .bottom) { addButton }
+            .background { Palette.white.ignoresSafeArea() }
         }
         .onPreferenceChange(CellFrames.self) { cells = $0 }
+        .onChange(of: edit.filling) { _, now in if now == nil { finger = nil; drift?.cancel(); drift = nil } }
+        .onChange(of: holding) { _, h in if !h, edit.filling != nil { edit.endFill() } }
+        .onDisappear { drift?.cancel(); drift = nil; if edit.filling != nil { edit.endFill() } }
+    }
+
+    /// where the list is scrolled: how far down, how far it can go, and where the bars' edges are in its space
+    private struct Geo: Equatable { var y: CGFloat = 0; var most: CGFloat = 0; var top: CGFloat = 0; var bottom: CGFloat = 0 }
+
+    /// a fill held near the top or bottom edge scrolls the months under the finger, faster the nearer the edge, so a
+    /// stroke can run on into the next month (the list's own scrolling is off while a flag is held)
+    private func drifting() {
+        guard drift == nil else { return }
+        drift = Task { @MainActor in
+            while !Task.isCancelled, edit.filling != nil, holding, let f = finger {
+                let zone: CGFloat = 64
+                let up = (geo.top + zone - f.y) / zone, down = (f.y - (geo.bottom - zone)) / zone
+                let speed = up > 0 ? -14 * min(1, up) : down > 0 ? 14 * min(1, down) : 0
+                let to = min(max(geo.y + speed, 0), geo.most)
+                if speed != 0, to != geo.y {
+                    pos.scrollTo(y: to)
+                    try? await Task.sleep(for: .milliseconds(16))
+                    fillUnder(f)
+                } else {
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+            }
+            drift = nil
+        }
+    }
+
+    /// the day under the finger takes the flag being dragged
+    private func fillUnder(_ at: CGPoint) {
+        guard let p = edit.filling, let hit = cells.first(where: { $0.value.contains(at) })?.key, edit.days[hit] != p || edit.crossed.contains(hit) else { return }
+        Feel.tick()
+        edit.fill(hit)
     }
 
     // MARK: the top: ×, Undo (hold: Reset), Redo, and the days of the week
@@ -170,24 +215,16 @@ struct UploadCalendar: View {
                 circle("undo", "Redo", dim: !edit.canRedo, flip: true) { edit.redo() }
             }
             .padding(.horizontal, 16)
-            HStack(spacing: Self.gap) {
-                ForEach(["M", "T", "W", "T", "F", "S", "S"].indices, id: \.self) { i in
-                    Text(["M", "T", "W", "T", "F", "S", "S"][i])
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, 16)
-            .accessibilityHidden(true)
+            WeekLetters(spacing: Self.gap)
+                .padding(.horizontal, 16)
         }
         .padding(.top, 8)
         .padding(.bottom, 8)
-        .background { Palette.white.opacity(0.92).ignoresSafeArea(edges: .top) }
     }
 
     private func circle(_ icon: String, _ label: String, dim: Bool, flip: Bool = false, act: @escaping () -> Void) -> some View {
         Button { Feel.tap(); act() } label: {
-            Icon5(key: icon, ink: Palette.ink.opacity(dim ? 0.3 : 1), size: 20)
+            Icon5(key: icon, ink: Palette.ink.opacity(dim ? 0.5 : 1), size: 20)
                 .scaleEffect(x: flip ? -1 : 1, y: 1)
                 .frame(width: 44, height: 44)
                 .glassEffect(.regular.interactive(), in: .circle)
@@ -265,8 +302,8 @@ struct UploadCalendar: View {
         } label: {
             HStack(alignment: .firstTextBaseline) {
                 Text(Self.title(run[0]) + " to " + Self.title(run[run.count - 1]))
-                    .font(.title3.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.35))
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .font(.title3.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                    .lineLimit(1)
                 Spacer()
             }
             .frame(height: 52, alignment: .bottom)
@@ -277,13 +314,8 @@ struct UploadCalendar: View {
         .accessibilityHint("Nothing found in these months. Opens them")
     }
 
-    private static func title(_ m: LocalDay) -> String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let date = cal.date(from: DateComponents(year: m.y, month: m.m, day: 1)) ?? .now
-        monthName.timeZone = cal.timeZone
-        return monthName.string(from: date)
-    }
+    /// (month names and spoken days as Details' calendar has them: one calendar)
+    private static func title(_ m: LocalDay) -> String { VisitCalendar.title(m) }
 
     // MARK: a day
 
@@ -307,8 +339,10 @@ struct UploadCalendar: View {
                         .frame(width: side, height: side)
                 }
             } else {
-                shape.fill(Palette.grey.opacity(0.35))
-                Text("\(d.d)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.4)).monospacedDigit()
+                // (an empty day is its number alone, as on Details' calendar: no square behind it)
+                // (a fixed square: the number stops growing at the largest ordinary size, never shrinks to fit)
+                Text("\(d.d)").font(.body).foregroundStyle(Palette.ink.opacity(0.5)).monospacedDigit()
+                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             }
         }
         .frame(width: side, height: side)
@@ -329,15 +363,17 @@ struct UploadCalendar: View {
     private func fillGesture(from d: LocalDay, place: String) -> some Gesture {
         LongPressGesture(minimumDuration: 0.3)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named("calendar")))
+            .updating($holding) { v, held, _ in if case .second(true, _) = v { held = true } }
             .onChanged { v in
                 switch v {
                 case .first(true):
                     break
                 case .second(true, let drag):
                     if edit.filling == nil { Feel.lift(); edit.beginFill(place); edit.fill(d) }
-                    if let drag, let hit = cells.first(where: { $0.value.contains(drag.location) })?.key, edit.days[hit] != place {
-                        Feel.tick()
-                        edit.fill(hit)
+                    if let drag {
+                        finger = drag.location
+                        fillUnder(drag.location)
+                        drifting()
                     }
                 default: break
                 }
@@ -345,12 +381,7 @@ struct UploadCalendar: View {
             .onEnded { _ in edit.endFill() }
     }
 
-    private static func spoken(_ d: LocalDay) -> String {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let date = cal.date(from: DateComponents(year: d.y, month: d.m, day: d.d)) ?? .now
-        return date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "en_GB")))
-    }
+    private static func spoken(_ d: LocalDay) -> String { VisitCalendar.spoken(d) }
     private static func name(_ id: String) -> String { Pin.countryNames[id] ?? id.uppercased() }
 }
 

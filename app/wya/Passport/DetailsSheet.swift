@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 
 /// WHICH PLACE'S DETAILS ARE OPEN in the water (Part 4.4), and what is being edited; written once when they close
@@ -5,6 +6,9 @@ import SwiftUI
 @Observable
 final class DetailsState {
     static let shared = DetailsState()
+    /// each text field's limit, as its row was drawn: typing past it is never cut off, and what is kept is what fits,
+    /// when Details closes
+    @ObservationIgnored var limits: [WritableKeyPath<StampDetails, String?>: Int] = [:]
     private(set) var key: PlaceKey?
     private(set) var name = ""
     var d = StampDetails()
@@ -27,8 +31,14 @@ final class DetailsState {
         // one thing in the water at a time: not over Verify
         guard self.key == nil, !opening, !VerifyState.shared.isOpen, !VerifyState.shared.opening else { return }
         opening = true
+        #if DEBUG
+        let t0 = CACurrentMediaTime()
+        #endif
         Task {
             defer { opening = false }
+            #if DEBUG
+            defer { NSLog("wya details open %.0f ms", (CACurrentMediaTime() - t0) * 1000) }
+            #endif
             if let x = await MarkStore.shared.details(key) {
                 d = x.details; times = max(1, x.times); lived = x.lived
                 start = (d, times, lived)
@@ -77,6 +87,13 @@ final class DetailsState {
             return
         }
         var dd = d
+        for (k, m) in limits {
+            guard let v = dd[keyPath: k], v.count > m else { continue }
+            var cut = String(v.prefix(m))
+            // links keep their whole lines: an address cut in half is no link
+            if k == \StampDetails.links, let nl = cut.lastIndex(of: "\n") { cut = String(cut[..<nl]) }
+            dd[keyPath: k] = cut
+        }
         dd.lived = lived ? true : nil
         let changed = start.map { $0.0 != d || $0.1 != times || $0.2 != lived } ?? false
         let (t, l) = (times, lived)
@@ -130,6 +147,10 @@ struct DetailsSheet: View {
 
     static let modes = ["visit", "airport", "through", "other"]
     static let purposes = ["holiday", "work", "family", "study", "other"]
+    /// HOW LONG a visit was when its days aren't known: a number of days, never a range or a word; kept as the number
+    /// ("12"). A length picked before in words reads as its days until it is changed.
+    static let wordDays: [String: Int] = ["day": 1, "days": 3, "week": 7, "weeks": 14, "month": 30, "longer": 60]
+    static func lengthDays(_ v: String?) -> Int? { v.flatMap { Int($0) ?? wordDays[$0] } }
     static let whys = ["grew-up", "work", "study", "family", "partner", "other"]
     static let kinds = ["city", "area", "landmark", "mountain", "water", "nature", "spot", "stay", "station", "route", "event", "other"]
     static func word(_ k: String) -> String {
@@ -140,10 +161,10 @@ struct DetailsSheet: View {
         }
     }
 
-    /// A PLACE THAT IS NOT SOMEWHERE YOU STAY (a mountain, a museum, a park, a sea, a place of your own): nobody lives
-    /// on Mount Everest or is there "through the airport". Its Details are when you were there, how often, your notes,
-    /// your rating and who with: no Lived here, no How, no Trip, no places inside it. A country, a region and a town
-    /// keep them all.
+    /// A PLACE THAT IS NOT SOMEWHERE YOU STAY (a mountain, a museum, a park, a sea, a place of your own): nobody
+    /// lives on Mount Everest or is there. Its Details are when you were there, how often, your notes, your rating
+    /// and who with: no Lived here, no How, no Trip, no places inside it. A country, a region and a town keep them
+    /// all.
     private var aThing: Bool { s.key?.kind == .thing || s.key?.kind == .yours }
 
     var body: some View {
@@ -154,6 +175,7 @@ struct DetailsSheet: View {
         // whole rows only at rest (0.7): the visible height ends in the gap between two rows, the soft edge over that
         // gap, and a scroll stops where the bottom lands in a gap (the top passes under the water's soft edge, 4.4.2)
         let h = EdgeRows.fit(room, cuts: cuts)
+        let wide = water.stop == .full
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 28) {
@@ -167,30 +189,32 @@ struct DetailsSheet: View {
                     if s.wish {
                         wishBlock
                     } else {
+                        // YOUR VISITS ALWAYS, AND LIVED HERE AS ITS OWN PART UNDER THEM: Lived here was a black band
+                        // that swapped the visits out for the moved in / moved out rows, so saying you lived
+                        // somewhere hid every trip there, and the sheet opened on that band. Now the visits stay;
+                        // Lived here is a row with its plus (as Add a visit) that opens its own part, which its ×
+                        // closes (the dates are kept) (closed, Lived here is the row after Add a visit, no gap; open,
+                        // its own part a section away)
                         VStack(alignment: .leading, spacing: 0) {
-                            if !aThing {
-                                band("Lived here", on: s.lived, blank: sheetGone || s.rollingOut) { Feel.notch(); swapBlock() }
-                            }
-                            // A4.14's block swap, one thing at a time: the old block's words roll out and its shapes
-                            // shrink; then the rows below move to the new block's height; then its words roll in
-                            // (never a fade: both blocks come and go with no transition of their own)
-                            Group {
-                                if !aThing, shownLived ?? s.lived { livedBlock } else { visitsBlock }
-                            }
-                            .transition(.identity)
+                            visitsBlock
+                            if !aThing { livedSection.padding(.top, s.lived ? 28 : 0) }
                         }
+                        if !aThing, !regionUnits.isEmpty { regionsBlock }
                         if !aThing { placesBlock }
                         section("Notes", blank: out) {
                             if out || shownLived != nil {
                                 fieldWords("What you did", s.d.did, gone: out)
                                 fieldWords("Anything else", s.d.note, gone: out)
+                                fieldWords("Links", s.d.links, gone: out)
                             } else {
                                 field("What you did", id: "did", max: 600, lines: true, \.did)
                                 field("Anything else", id: "note", max: 600, lines: true, \.note)
+                                field("Links", id: "links", max: 600, lines: true, web: true, \.links)
                             }
                         }
+                        row("Rating", blank: out) { stars.opacity(out ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
+                        photosBlock
                         VStack(alignment: .leading, spacing: 0) {
-                            row("Rating", blank: out) { stars.opacity(out ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
                             row("With", blank: out) {
                                 if out { fieldWords("Names", s.d.with, gone: out, trailing: true) }
                                 else { field("Names", id: "with", max: 120, trailing: true, \.with) }
@@ -200,18 +224,19 @@ struct DetailsSheet: View {
                 }
                 // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
                 .background(WaterHandoff())
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 16 + (wide ? L.sheetInset : 0))
                 .padding(.top, 4)
                 .padding(.bottom, 24)
                 .coordinateSpace(name: EdgeRows.space)
                 .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
             }
+            .scrollBlur()
             .scrollIndicators(.hidden)
-            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+            // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets
+            // and the Places shelf; at full they scroll
             .scrollDisabled(water.stop != .full)
             .scrollDismissesKeyboard(.interactively)
             // the water's top blurs only once content scrolls under it (4.4.2); neither edge cuts a word sharply
-            .scrollEdgeEffectStyle(.soft, for: .top)
             .mask(alignment: .top) {
                 VStack(spacing: 0) {
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
@@ -222,19 +247,27 @@ struct DetailsSheet: View {
             }
             .scrollTargetBehavior(GapSnap(cuts: cuts))
             .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
+            .onChange(of: scrollAsk) { _, id in
+                guard let id else { return }
+                withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .top) }
+                scrollAsk = nil
+            }
             .onChange(of: typing) { _, id in
-                // typing takes Details to full, card or not (the card goes back as the water rises; 30 Oct
-                // 10:59); the field scrolls above the keyboard; keyboard down, back to 50%
+                // typing takes Details to full, card or not; the field scrolls above the keyboard; keyboard down,
+                // back to 50%
                 if let id {
                     if water.stop != .full { water.go(.full) }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { withAnimation(Motion.quick) { proxy.scrollTo(id, anchor: .center) } }
-                } else if water.details, water.stop == .full, !water.stampedList {
+                } else if water.details, water.stop == .full, !water.stampedList, calOpen == nil {
+                    // (not with a calendar open: below full it could not be scrolled to)
                     // (opened from the Stamped list it stays at full, the list's height: lower was the list's pull down)
                     water.go(.half)
                 }
             }
         }
-        .frame(width: L.W - 2 * L.sheetInset, height: h)
+        // at full the water meets the screen's edges, so the rows' area does too (a band or a calendar week runs
+        // edge to edge); below full it stops at the water's rounded sides
+        .frame(width: wide ? L.W : L.W - 2 * L.sheetInset, height: h)
         .position(x: L.W / 2, y: top + h / 2)
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { n in
             guard let f = n.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
@@ -250,6 +283,10 @@ struct DetailsSheet: View {
             if !still { s.close(water: water, now: true) }
         }
         .onAppear {
+            // (a country whose Provinces were read already, as its card opened: there from the first frame)
+            if regionUnits.isEmpty, let k = s.key, k.kind == .country, !s.wish, let e = DetailsRegions.cache[k.id.lowercased()] {
+                applyRegions(e, k.id.lowercased())
+            }
             // from the list: the words roll in once the list has gone (they start as blanks, see `sheetGone`)
             guard sheetGone else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -257,6 +294,7 @@ struct DetailsSheet: View {
             }
         }
         .onChange(of: 1 + (s.d.trips?.count ?? 0), initial: true) { _, n in tripIDs = Self.synced(tripIDs, n) }
+        .task(id: s.key) { await loadRegions() }
         .onAppear { Self.test = { driver($0) } }
         .onChange(of: s.d.places?.count ?? 0, initial: true) { _, n in placeIDs = Self.synced(placeIDs, n) }
     }
@@ -283,7 +321,7 @@ struct DetailsSheet: View {
     private var wishStars: some View {
         HStack(spacing: 0) {
             ForEach(1 ... 5, id: \.self) { n in
-                Star().fill(n <= s.want ? Palette.ink : Palette.ink.opacity(0.15))
+                RatingStar(on: n <= s.want)
                     .frame(width: 24, height: 24)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -314,6 +352,8 @@ struct DetailsSheet: View {
         .id(id)
     }
 
+    /// the visit whose calendar is open under its When row
+    @State private var calOpen: Int?
     private var visitsBlock: some View {
         let n = 1 + (s.d.trips?.count ?? 0)
         return VStack(alignment: .leading, spacing: 0) {
@@ -324,7 +364,7 @@ struct DetailsSheet: View {
                 visitRows(i, key: Self.key(tripIDs, i, "trip"), count: n)
                     .padding(.top, i == 0 ? 0 : 12)   // a little air between one trip and the next
             }
-            row("Add a visit", blank: out) { EmptyView() }
+            row("Add a visit", blank: out) { Icon5(key: "plus", ink: Palette.ink, size: 17).frame(width: 28, height: 28).opacity(out ? 0 : 1) }
                 .contentShape(Rectangle())
                 .onTapGesture { addTrip() }
                 .accessibilityAddTraits(.isButton)
@@ -356,32 +396,66 @@ struct DetailsSheet: View {
                         }
                     }
                 Spacer(minLength: 8)
-                if plain {
-                    let v = s.d[keyPath: rough] ?? ""
-                    let w = v.isEmpty ? "Add" : v
+                // the visit's days (our own calendar, under this row), else its time in words, else "Add"; a tap opens
+                // or closes the calendar
+                let days = VisitCalendar.range(s.d[keyPath: tk(i, \.from)], s.d[keyPath: tk(i, \.to)])
+                let v = days ?? s.d[keyPath: rough] ?? ""
+                let w = v.isEmpty ? "Add" : v
+                HStack(spacing: 8) {
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body)
                         .foregroundStyle(v.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
                         .contentTransition(.identity)
-                        .frame(minHeight: 44).edgeRow()
-                } else {
-                    // a visit's time in words until our own calendar exists (40 characters); the empty field says only
-                    // "Add", never a made-up example
-                    field("Add", id: "rough\(i)", max: 40, trailing: true, rough)
+                    if let n = VisitCalendar.days(s.d[keyPath: tk(i, \.from)], s.d[keyPath: tk(i, \.to)]), !gone {
+                        Text(n).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    }
                 }
+                .lineLimit(2)
+                .frame(minHeight: 44).edgeRow()
+                .contentShape(Rectangle())
+                .onTapGesture { guard !plain else { return }; Feel.tap(); typing = nil; toggleCal(i) }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("When")
+                .accessibilityValue(v.isEmpty ? "Not set" : v)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Opens the calendar")
                 if n > 1 {
-                    xCircle { removeTrip(k) }
+                    xCircle("visit \(i + 1)") { removeTrip(k) }
                         .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                         .transition(.identity)
                 }
             }
             .frame(minHeight: 52).edgeRow()
+            if calOpen == i, !plain {
+                VStack(alignment: .leading, spacing: 0) {
+                    VisitCalendar(from: Binding(get: { s.d[keyPath: tk(i, \.from)] }, set: { s.d[keyPath: tk(i, \.from)] = $0 }),
+                                  to: Binding(get: { s.d[keyPath: tk(i, \.to)] }, set: { s.d[keyPath: tk(i, \.to)] = $0 }))
+                    HStack(spacing: 12) {
+                        Text("In words").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                        Spacer(minLength: 8)
+                        // when the days aren't known: the time in words (40 characters); the empty field says only "Add"
+                        field("Add", id: "rough\(i)", max: 40, trailing: true, rough)
+                    }
+                    .frame(minHeight: 52).edgeRow()
+                    if s.d[keyPath: tk(i, \.from)] != nil {
+                        row("Clear the days", blank: false) { EmptyView() }
+                            .contentShape(Rectangle())
+                            .onTapGesture { Feel.tap(); s.d[keyPath: tk(i, \.from)] = nil; s.d[keyPath: tk(i, \.to)] = nil }
+                            .accessibilityAddTraits(.isButton)
+                    }
+                }
+                .padding(.bottom, 8)
+                .transition(.identity)
+            }
+            // how long: the days counted when they're known (on the When row), else picked in words
+            if VisitCalendar.days(s.d[keyPath: tk(i, \.from)], s.d[keyPath: tk(i, \.to)]) == nil {
+                row("How long", blank: gone) { longStepper(i, blank: gone) }
+            }
             if !aThing {
             choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
             if s.d[keyPath: mode] == "other" {
                 if plain { fieldWords("How, in your words", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
                 else { field("How, in your words", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
             }
-            // ("Why", not the old field's name "Trip": the row asks why you went, after When and How)
             choice("Why", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
             }
             if !aThing, s.d[keyPath: purpose] == "other" {
@@ -389,6 +463,13 @@ struct DetailsSheet: View {
                 else { field("Why, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
             }
         }
+    }
+    /// visit i's calendar opened or closed; opening it below full takes the water to full, as typing does (below
+    /// full the rows don't scroll, and a month is taller than the room there)
+    private func toggleCal(_ i: Int) {
+        let opening = calOpen != i
+        withAnimation(Motion.quick) { calOpen = opening ? i : nil }
+        if opening, water.stop != .full { water.go(.full) }
     }
     /// Lived here tapped: Lived changes now (the band in one frame); the blocks swap in three steps of 0.26 s
     private func swapBlock() {
@@ -430,7 +511,7 @@ struct DetailsSheet: View {
         arriving.insert(k); rolling.insert(k)
         withAnimation(Motion.quick) {
             tripIDs.append(k)
-            s.d.trips = (s.d.trips ?? []) + [copy.map { s.d[trip: $0] } ?? StampDetails.Trip()]
+            s.d.trips = (s.d.trips ?? []) + [copy.map { var t = s.d[trip: $0]; t.from = nil; t.to = nil; return t } ?? StampDetails.Trip()]
         }
         if s.times < n + 1 { s.times = n + 1 }
         arrive(k)
@@ -441,6 +522,8 @@ struct DetailsSheet: View {
         let n = 1 + (s.d.trips?.count ?? 0)
         tripIDs = Self.synced(tripIDs, n)
         guard n > 1, tripIDs.contains(k) else { return }
+        // an open calendar closes: the visits after the removed one move up a place
+        calOpen = nil
         removeRow(k, index: { tripIDs.firstIndex(of: k) }) { j in
             var all = [s.d[trip: 0]] + (s.d.trips ?? [])
             guard j < all.count else { return }
@@ -462,6 +545,36 @@ struct DetailsSheet: View {
         s.d.to = first.to.isEmpty ? nil : first.to
         let rest = Array(t.dropFirst())
         s.d.stays = rest.isEmpty ? nil : rest
+    }
+
+    @ViewBuilder private var livedSection: some View {
+        if s.lived {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 12) {
+                    Text(out ? Caption.blank("Lived here", "\u{2002}") : "Lived here").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .contentTransition(.identity)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    xCircle("Lived here") {
+                        Feel.lift()
+                        typing = nil
+                        withAnimation(Motion.quick) { s.lived = false }
+                    }
+                    .opacity(out ? 0 : 1)
+                    // (its circle's middle under the plus of Add a visit above: the 44 pt touch reaches 8 pt past)
+                    .padding(.trailing, -8)
+                }
+                .frame(minHeight: 44).edgeRow()
+                livedBlock
+            }
+            .transition(.identity)
+        } else {
+            row("Lived here", blank: out) { Icon5(key: "plus", ink: Palette.ink, size: 17).frame(width: 28, height: 28).opacity(out ? 0 : 1) }
+                .contentShape(Rectangle())
+                .onTapGesture { Feel.notch(); withAnimation(Motion.quick) { s.lived = true } }
+                .accessibilityAddTraits(.isButton)
+                .transition(.identity)
+        }
     }
 
     private var livedBlock: some View {
@@ -498,7 +611,7 @@ struct DetailsSheet: View {
                             .contentTransition(.identity)
                     }
                     if t.count > 1 {
-                        xCircle { removeLived(i) }
+                        xCircle("lived time \(i + 1)") { removeLived(i) }
                             .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                             // the first row's × comes and goes with the second row: about its own centre, never a fade
                             .transition(.identity)
@@ -516,7 +629,7 @@ struct DetailsSheet: View {
                     .onTapGesture { addLived() }
                     .accessibilityAddTraits(.isButton)
             }
-            // (here "family" is Family, not the trip's "Family and friends")
+            // (here is Family, not the trip's)
             choiceWords("Why", Self.whys.map { ($0, $0 == "family" ? "Family" : Self.word($0)) }, chosen: s.d.livedWhy,
                         blank: out) {
                 s.d.livedWhy = $0
@@ -525,6 +638,129 @@ struct DetailsSheet: View {
                 if out || shownLived != nil { fieldWords("Why, in your words", s.d.livedWhyOther, gone: out) }
                 else { field("Why, in your words", id: "whyOther", max: 60, \.livedWhyOther) }
             }
+        }
+    }
+
+    /// REGIONS YOU WENT TO (the web's): the country's first level of regions as choices, one tap stamping or
+    /// unstamping it as the Regions map does (its parents too), so the chips and the map always agree
+    struct RegionChoice: Sendable { let id: String; let name: String; let parent: String? }
+    @State private var regionUnits: [RegionChoice] = []
+    /// the test driver's: a row brought to the top
+    @State private var scrollAsk: String?
+    @State private var regionLevel: (row: Int, name: String)?
+    @State private var regionCC: String?
+    private var regionsBlock: some View {
+        let on = Set(regionUnits.map(\.id).filter { marks.state(PlaceKey(.region, $0)).stamped })
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(out ? Caption.blank(regionLevel?.name ?? "", "\u{2002}") : regionLevel?.name ?? "")
+                    .font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .contentTransition(.identity)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                let n = "\(on.count) of \(regionUnits.count)"
+                Text(out ? Caption.blank(n, "\u{2002}") : n).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    .contentTransition(.numericText(value: Double(on.count)))
+            }
+            .frame(minHeight: 32, alignment: .bottom).edgeRow()
+            .id("regions")
+            chips(regionUnits.map { ($0.id, $0.name) }, chosen: nil, on: on, blank: out) { toggleRegion($0) }
+                .padding(.top, 4)
+        }
+    }
+    private func toggleRegion(_ id: String) {
+        guard let u = regionUnits.first(where: { $0.id == id }), let lv = regionLevel, let cc = regionCC,
+              cc == s.key?.id.lowercased() else { return }
+        Task {
+            if marks.state(PlaceKey(.region, id)).stamped {
+                await RegionStamps.unstamp(id: u.id, name: u.name, parent: u.parent, cc: cc, row: lv.row)
+            } else {
+                await RegionStamps.stamp(id: u.id, name: u.name, parent: u.parent, cc: cc, row: lv.row, source: .hand)
+            }
+        }
+    }
+    /// the country's bundled first level, read off the main thread (the biggest is 1 MB), names in order
+    private func loadRegions() async {
+        guard let k = s.key, k.kind == .country, !s.wish else { regionUnits = []; regionLevel = nil; regionCC = nil; return }
+        let cc = k.id.lowercased()
+        if let e = DetailsRegions.cache[cc] { applyRegions(e, cc); return }
+        regionUnits = []; regionLevel = nil; regionCC = nil
+        let e = await DetailsRegions.read(cc)
+        // (another place opened while this one was read: its own read decides)
+        guard !Task.isCancelled, s.key == k, let e else { return }
+        applyRegions(e, cc)
+    }
+    /// what was read, kept read (one region is the country itself: nothing to choose)
+    private func applyRegions(_ e: DetailsRegions.Entry, _ cc: String) {
+        regionUnits = e.units.count > 1 ? e.units : []
+        regionLevel = (e.row, e.name)
+        regionCC = cc
+    }
+
+    /// PHOTOS (4.4.3): the plus circle (44 pt, solid black, white plus) opens Apple's picker (no permission asked);
+    /// each photo a 72 pt postage stamp after it; hold one for Remove. (The camera, and in the hold menu, are not
+    /// built yet.)
+    @State private var photoPicking = false
+    @State private var picked: [PhotosPickerItem] = []
+    private var photosBlock: some View {
+        section("Photos", blank: out) {
+            FlowLayout(spacing: 8) {
+                Button { Feel.tap(); typing = nil; photoPicking = true } label: {
+                    Icon5Still(key: "plus", progress: 0, ink: Palette.white, size: 17)
+                        .frame(width: 44, height: 44).background(Palette.ink, in: .circle)
+                        .opacity(out ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
+                        // its left edge under the group's name, its middle on the tiles' middle
+                        .frame(width: 44, height: 72)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add photos")
+                ForEach(Array((s.d.photos ?? []).enumerated()), id: \.element.file) { i, ph in
+                    PhotoStampTile(file: ph.file)
+                        .opacity(out ? 0 : 1)
+                        .contextMenu {
+                            Button("Remove", role: .destructive) { removePhoto(ph.file) }
+                        }
+                        .accessibilityLabel("Photo \(i + 1)")
+                        .transition(.scale(scale: 0, anchor: .leading))
+                }
+            }
+            .padding(.vertical, 4)
+            .edgeRow()
+        }
+        .id("photos")
+        .photosPicker(isPresented: $photoPicking, selection: $picked, maxSelectionCount: 20, matching: .images,
+                      photoLibrary: .shared())
+        .onChange(of: picked) { _, items in
+            guard !items.isEmpty else { return }
+            // the place they were picked for: Details closed or opened on another place meanwhile, they are not added
+            // (to the wrong place, or to a record already written)
+            let forKey = s.key
+            Task {
+                var add: [StampDetails.Photo] = []
+                for it in items {
+                    guard let d = try? await it.loadTransferable(type: Data.self) else { continue }
+                    // (decoded, shrunk and written off the main thread: twenty photos made the sheet stutter)
+                    if let f = await Task.detached(priority: .userInitiated, operation: { DetailPhotos.keep(d) }).value {
+                        add.append(StampDetails.Photo(file: f, asset: it.itemIdentifier))
+                    }
+                }
+                picked = []
+                guard s.key == forKey, s.key != nil else { return }
+                guard !add.isEmpty else { Feel.refuse(); return }
+                addPhotos(add)
+            }
+        }
+    }
+    private func addPhotos(_ add: [StampDetails.Photo]) {
+        Feel.tap()
+        withAnimation(Motion.quick) { s.d.photos = (s.d.photos ?? []) + add }
+    }
+    private func removePhoto(_ file: String) {
+        Feel.lift()
+        withAnimation(Motion.quick) {
+            let rest = (s.d.photos ?? []).filter { $0.file != file }
+            s.d.photos = rest.isEmpty ? nil : rest
         }
     }
 
@@ -539,7 +775,7 @@ struct DetailsSheet: View {
                     let w = Self.word(p.k)
                     Text(gone ? Caption.blank(w, "\u{2002}") : w).font(.body).foregroundStyle(Palette.ink)
                         .contentTransition(.identity)
-                    xCircle { removePlace(Int(placeIDs.firstIndex(of: k) ?? 0)) }
+                    xCircle(p.n) { if let j = placeIDs.firstIndex(of: k) { removePlace(j) } }
                     .opacity(gone ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
                 }
                 .frame(minHeight: 52).edgeRow()
@@ -547,14 +783,16 @@ struct DetailsSheet: View {
             HStack(spacing: 12) {
                 if out { fieldWords("Add a place", placeName, gone: true) } else {
                 TextField("", text: Binding(get: { placeName }, set: { v in
-                    if v.count > 60 { Feel.refuse() }
-                    placeName = String(v.prefix(60))
+                    placeName = v
                 }), prompt: Text("Add a place").foregroundStyle(Palette.ink.opacity(0.5)))
                 .font(.body).foregroundStyle(Palette.ink)
                 .focused($typing, equals: "place").id("place")
                 .submitLabel(.done)
                 .onAppear { if s.key?.kind == .country { TownIndex.shared.load() } }
                 .onSubmit { addPlace() }
+                if placeName.count > 60 {
+                    Text("\(placeName.count)/60").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
+                }
                 }
                 // Add only once there is something to add (a name and its kind); no greyed-out button
                 if canAdd {
@@ -579,7 +817,7 @@ struct DetailsSheet: View {
         let id = UUID().uuidString
         placeIDs = Self.synced(placeIDs, s.d.places?.count ?? 0)
         arriving.insert(id)
-        let went = StampDetails.Went(n: placeName.trimmingCharacters(in: .whitespaces), k: k)
+        let went = StampDetails.Went(n: String(placeName.trimmingCharacters(in: .whitespaces).prefix(60)), k: k)
         withAnimation(Motion.quick) { placeIDs.append(id); s.d.places = (s.d.places ?? []) + [went] }
         arrive(id)
         placeName = ""
@@ -630,7 +868,9 @@ struct DetailsSheet: View {
         guard i < livedIDs.count, livedTimes.count > 1 else { return }
         let k = livedIDs[i]
         removeRow(k, index: { livedIDs.firstIndex(of: k) }) { j in
-            var x = livedTimes; x.remove(at: j); setLived(x); livedIDs.remove(at: j)
+            var x = livedTimes; x.remove(at: j)
+            if s.d.livesNow == true, j == x.count, !x.isEmpty { x[x.count - 1].to = "" }
+            setLived(x); livedIDs.remove(at: j)
         }
     }
     private func removePlace(_ i: Int) {
@@ -648,7 +888,31 @@ struct DetailsSheet: View {
         switch p.first {
         case "lived": swapBlock()
         case "addvisit": addTrip()
+        // cal [i]: visit i's calendar opened or closed (its When value tapped); calday i yyyy-mm-dd: that day tapped on it;
+        // calback / calnext: the month arrows
+        case "cal": toggleCal(Int(p.count > 1 ? p[1] : "0") ?? 0)
+        case "calday":
+            if p.count > 2, let i = Int(p[1]), let d = LocalDay(p[2]) {
+                let f = tk(i, \.from), t = tk(i, \.to)
+                if let lo = s.d[keyPath: f].flatMap(LocalDay.init), s.d[keyPath: t] == nil {
+                    if d < lo { s.d[keyPath: f] = d.description; s.d[keyPath: t] = lo.description } else { s.d[keyPath: t] = d.description }
+                } else { s.d[keyPath: f] = d.description; s.d[keyPath: t] = nil }
+            }
         case "removevisit": tripIDs = Self.synced(tripIDs, 1 + (s.d.trips?.count ?? 0)); if let i = Int(p.count > 1 ? p[1] : "1"), i < tripIDs.count { removeTrip(tripIDs[i]) }
+        // photo test: a made-up picture added as if picked (the picker can't be driven); photo remove N
+        case "photo":
+            if p.count > 1, p[1] == "remove", let i = Int(p.count > 2 ? p[2] : "0"), let all = s.d.photos, i < all.count { removePhoto(all[i].file) }
+            else if p.count > 1, p[1] == "test" {
+                let img = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600)).image { c in
+                    UIColor(red: 0.35, green: 0.6, blue: 0.85, alpha: 1).setFill(); c.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
+                    UIColor(red: 0.85, green: 0.9, blue: 0.4, alpha: 1).setFill(); c.cgContext.fillEllipse(in: CGRect(x: 300, y: 150, width: 300, height: 300))
+                }
+                if let d = img.jpegData(compressionQuality: 0.9), let f = DetailPhotos.keep(d) { addPhotos([StampDetails.Photo(file: f, asset: nil)]) }
+            }
+        // scroll <id>: that row to the top (regions, place, did, with)
+        case "scroll": scrollAsk = p.count > 1 ? p[1] : nil
+        // region <name>: that region's chip tapped
+        case "region": if let u = regionUnits.first(where: { $0.name == p.dropFirst().joined(separator: " ") }) { toggleRegion(u.id) }
         case "addtime": addLived()
         case "removelived": removeLived(Int(p.count > 1 ? p[1] : "0") ?? 0)
         case "addplace": kind = p.count > 1 ? p[1] : "city"; placeName = p.dropFirst(2).joined(separator: " "); addPlace()
@@ -708,17 +972,26 @@ struct DetailsSheet: View {
 
     /// a two-state row as Map settings' current choice: on = a black band the water's width with white words,
     /// appearing in one frame
-    private func band(_ name: String, on: Bool, blank: Bool = false, tap: @escaping () -> Void) -> some View {
-        Text(blank ? Caption.blank(name, "\u{2002}") : name)
-            .contentTransition(.identity)
-            .font(.body)
+    private func band(_ name: String, sub: String? = nil, on: Bool, blank: Bool = false, tap: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(blank ? Caption.blank(name, "\u{2002}") : name)
+                .contentTransition(.identity)
+                .font(.body)
+            // what it does, under it (the old app said what Lived here does)
+            if let sub {
+                Text(blank ? Caption.blank(sub, "\u{2002}") : sub).font(.subheadline)
+                    .contentTransition(.identity)
+                    .opacity(0.5)
+            }
+        }
             .foregroundStyle(on ? .white : Palette.ink)
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).edgeRow()
+            .frame(maxWidth: .infinity, minHeight: sub == nil ? 52 : 60, alignment: .leading).edgeRow()
             .padding(.horizontal, 16)
             // on: a plain black band edge to edge, square-ended, as Map settings' current choice (no oval); it shrinks
             // about its centre while the band's block goes (and grows as it comes)
-            .background { Rectangle().fill(on ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
             .padding(.horizontal, -16)
+            // edge to edge of the screen, no gap at the sides
+            .screenWide(on && !blank ? Palette.ink : .clear)
             .contentShape(Rectangle())
             .onTapGesture(perform: tap)
             .accessibilityAddTraits(.isButton)
@@ -745,33 +1018,81 @@ struct DetailsSheet: View {
         .edgeRow()
     }
     /// 17 pt words, 36 pt capsules with 44 pt touch areas, 8 pt apart; the first word lines up with the names above
-    private func chips(_ items: [(String, String)], chosen: String?, blank: Bool = false, tap: @escaping (String) -> Void) -> some View {
-        FlowLayout(spacing: 4) {
-            ForEach(items, id: \.0) { id, word in
-                Text(blank ? Caption.blank(word, "\u{2002}") : word)
-                    .contentTransition(.identity)
-                    .font(.body)
-                    .foregroundStyle(chosen == id ? .white : Palette.ink)
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
-                    .background { Capsule().fill(chosen == id ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
-                    // the others are clear glass capsules, so every choice reads as a control (F46, F54)
-                    .glassEffect(chosen == id || blank ? .identity : .clear, in: .capsule)
-                    .padding(.vertical, 4)
-                    .edgeRow()
-                    .contentShape(Rectangle())
-                    .onTapGesture { Feel.tap(); tap(id) }
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAddTraits(chosen == id ? .isSelected : [])
+    /// `on`: more than one chosen (the regions)
+    private func chips(_ items: [(String, String)], chosen: String?, on: Set<String> = [], blank: Bool = false,
+                       tap: @escaping (String) -> Void) -> some View {
+        // four or fewer: equal capsules across the water's width (nothing sized by its words; How's four left ~90 pt
+        // bare at the right); where the words don't fit a quarter (the largest type), they wrap as before
+        ViewThatFits(in: .horizontal) {
+            if items.count <= 4 {
+                HStack(spacing: 8) {
+                    ForEach(items, id: \.0) { id, word in
+                        chip(id, word, picked: chosen == id || on.contains(id), blank: blank, fill: true, tap: tap)
+                    }
+                }
+            }
+            FlowLayout(spacing: 4) {
+                ForEach(items, id: \.0) { id, word in
+                    chip(id, word, picked: chosen == id || on.contains(id), blank: blank, fill: false, tap: tap)
+                }
             }
         }
         // (no pull to the left: with every choice a visible capsule, the capsules' edge lines up with the names above)
+    }
+    private func chip(_ id: String, _ word: String, picked: Bool, blank: Bool, fill: Bool, tap: @escaping (String) -> Void) -> some View {
+        Text(blank ? Caption.blank(word, "\u{2002}") : word)
+            .contentTransition(.identity)
+            .font(.body)
+            .lineLimit(fill ? 1 : nil)
+            // (across: one line each, or the row is not taken; wrapping: a long name wraps inside its capsule, never
+            // past the screen's edge)
+            .fixedSize(horizontal: fill, vertical: true)
+            .foregroundStyle(picked ? .white : Palette.ink)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: fill ? .infinity : nil)
+            .frame(minHeight: 36)
+            .background { Capsule().fill(picked ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
+            // the others are clear glass capsules, so every choice reads as a control (F46, F54)
+            .glassEffect(picked || blank ? .identity : .clear, in: .capsule)
+            .padding(.vertical, 4)
+            .edgeRow()
+            .contentShape(Rectangle())
+            .onTapGesture { Feel.tap(); tap(id) }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(picked ? .isSelected : [])
     }
 
     /// Times: an exact number from 1; drag on the number or its − / + circles (36 pt drawn, 44 pt touch, solid black,
     /// white glyphs); the number rolls; refuse at the floor
     @State private var dragFrom: Int?
     @State private var atFloor = false
+    /// the visit's length in days: minus, the number, plus; minus at one day clears it (nothing picked)
+    private func longStepper(_ i: Int, blank: Bool) -> some View {
+        let k = tk(i, \.long)
+        let n = Self.lengthDays(s.d[keyPath: k])
+        return HStack(spacing: 4) {
+            circle("minus", blank: blank, dim: n == nil) {
+                guard let n else { Feel.refuse(); return }
+                Feel.tap(); s.d[keyPath: k] = n > 1 ? String(n - 1) : nil
+            }
+            // (no length yet: at 50%, as the stepper it is, not "Add" between its circles)
+            Text(blank ? Caption.blank("0 days", "\u{2002}") : n.map { $0 == 1 ? "1 day" : "\($0) days" } ?? "0 days")
+                .font(.body.weight(n == nil ? .regular : .semibold))
+                .foregroundStyle(Palette.ink.opacity(n == nil ? 0.5 : 1))
+                .contentTransition(.numericText(value: Double(n ?? 0)))
+                .animation(Motion.quick, value: n)
+                .frame(minWidth: 64, minHeight: 44)
+            circle("plus", blank: blank) { Feel.tap(); s.d[keyPath: k] = String((n ?? 0) + 1) }
+        }
+        .padding(.trailing, -4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("How long")
+        .accessibilityValue(n.map { "\($0) days" } ?? "Not set")
+        .accessibilityAdjustableAction { dir in
+            if dir == .increment { s.d[keyPath: k] = String((n ?? 0) + 1) } else if let n { s.d[keyPath: k] = n > 1 ? String(n - 1) : nil }
+        }
+    }
+
     private var stepper: some View {
         HStack(spacing: 4) {
             // the floor is the number of visit rows
@@ -818,8 +1139,9 @@ struct DetailsSheet: View {
         }
         .buttonStyle(.plain)
     }
-    /// × on a row (only where there is more than one): solid black, white ×, 24 pt drawn, 44 pt touch
-    private func xCircle(_ act: @escaping () -> Void) -> some View {
+    /// × on a row (only where there is more than one): solid black, white ×, 24 pt drawn, 44 pt touch `what`: what it
+    /// takes away, as VoiceOver says it
+    private func xCircle(_ what: String, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
                 .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
@@ -828,15 +1150,15 @@ struct DetailsSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Remove")
+        .accessibilityLabel("Remove \(what)")
     }
 
-    /// 5 stars, a normal five-pointed star, 28 pt; filled black up to the rating, the rest black at 15%; the same star
-    /// again clears
+    /// 5 stars, a normal five-pointed star, 24 pt; yellow up to the rating, the rest clear glass; the same star again
+    /// clears
     private var stars: some View {
         HStack(spacing: 0) {
             ForEach(1 ... 5, id: \.self) { n in
-                Star().fill(n <= (s.d.stars ?? 0) ? Palette.ink : Palette.ink.opacity(0.15))
+                RatingStar(on: n <= (s.d.stars ?? 0))
                     .frame(width: 24, height: 24)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -854,24 +1176,34 @@ struct DetailsSheet: View {
     }
 
     /// a field: text on the water, its empty word in black 50% (the system's own placeholder), no box, no line;
-    /// past the limit the text stops and refuse plays
+    /// past the limit the words go on, the count under them in red; what fits is kept when Details closes
     private func field(_ empty: String, id: String, max: Int, lines: Bool = false, trailing: Bool = false,
-                       _ k: WritableKeyPath<StampDetails, String?>) -> some View {
-        TextField("", text: Binding(get: { s.d[keyPath: k] ?? "" }, set: { v in
-            if v.count > max { Feel.refuse() }
-            let c = String(v.prefix(max))
-            s.d[keyPath: k] = c.isEmpty ? nil : c
-        }), prompt: Text(empty).foregroundStyle(Palette.ink.opacity(0.5)), axis: lines ? .vertical : .horizontal)
-        .font(.body)
-        .foregroundStyle(Palette.ink)
-        .multilineTextAlignment(trailing ? .trailing : .leading)
-        .lineLimit(lines ? 1 ... 12 : 1 ... 1)
-        .frame(minHeight: lines ? 52 : 44).edgeRow()
+                       web: Bool = false, _ k: WritableKeyPath<StampDetails, String?>) -> some View {
+        s.limits[k] = max
+        let n = (s.d[keyPath: k] ?? "").count
+        return VStack(alignment: trailing ? .trailing : .leading, spacing: 0) {
+            TextField("", text: Binding(get: { s.d[keyPath: k] ?? "" }, set: { v in
+                if v.count > max, (s.d[keyPath: k] ?? "").count <= max { Feel.refuse() }
+                s.d[keyPath: k] = v.isEmpty ? nil : v
+            }), prompt: Text(empty).foregroundStyle(Palette.ink.opacity(0.5)), axis: lines ? .vertical : .horizontal)
+            .font(.body)
+            .foregroundStyle(Palette.ink)
+            .multilineTextAlignment(trailing ? .trailing : .leading)
+            .lineLimit(lines ? 1 ... 12 : 1 ... 1)
+            .keyboardType(web ? .URL : .default)
+            .textInputAutocapitalization(web ? .never : .sentences)
+            .autocorrectionDisabled(web)
+            .frame(minHeight: lines ? 52 : 44)
+            if n > max {
+                Text("\(n)/\(max)").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red).padding(.bottom, 6)
+            }
+        }
+        .edgeRow()
         .focused($typing, equals: id)
         .id(id)
     }
 
-    /// "2 years, 3 months" between two "YYYY-MM" (or to now)
+    /// between two (or to now)
     static func length(_ a: String, _ b: String?, toNow: Bool) -> String? {
         func months(_ s: String) -> Int? {
             let p = s.split(separator: "-")
@@ -898,7 +1230,7 @@ struct DetailsSheet: View {
     }
 }
 
-/// MM / YYYY typed on the number pad; a bad month turns red (d94f3d) and only the year is kept ("YYYY-MM" or "YYYY")
+/// MM / YYYY typed on the number pad; a bad month turns red (d94f3d) and only the year is kept ( or "YYYY")
 struct MonthField: View {
     let empty: String
     let value: String
@@ -909,7 +1241,8 @@ struct MonthField: View {
     @State private var bad = false
 
     var body: some View {
-        TextField(empty, text: Binding(get: { Self.show(digits) }, set: { v in
+        // (the empty words in the one soft ink, 50% black: the system's placeholder grey was paler than any we use)
+        TextField("", text: Binding(get: { Self.show(digits) }, set: { v in
             let d = String(v.filter(\.isNumber).prefix(6))
             digits = d
             guard d.count == 6, let m = Int(d.prefix(2)) else { bad = false; if d.isEmpty { set("") }; return }
@@ -917,7 +1250,7 @@ struct MonthField: View {
             bad = !(1 ... 12).contains(m)
             set(bad ? y : "\(y)-\(d.prefix(2))")
             if bad { Feel.refuse() }
-        }))
+        }), prompt: Text(empty).foregroundStyle(Palette.ink.opacity(0.5)))
         .keyboardType(.numberPad)
         .font(.body)
         .foregroundStyle(bad ? Palette.red : Palette.ink)
@@ -932,6 +1265,18 @@ struct MonthField: View {
     }
     static func show(_ d: String) -> String {
         d.count <= 2 ? d : d.prefix(2) + " / " + d.dropFirst(2)
+    }
+}
+
+/// A RATING STAR: a full star always, never an outline; clear Liquid Glass until it is picked, then yellow
+struct RatingStar: View {
+    var on: Bool
+    var body: some View {
+        ZStack {
+            Color.clear.glassEffect(.regular, in: Star()).opacity(on ? 0 : 1)
+            Star().fill(Palette.yellow).opacity(on ? 1 : 0)
+        }
+        .animation(.easeOut(duration: 0.15), value: on)
     }
 }
 
@@ -1018,4 +1363,31 @@ struct GapSnap: ScrollTargetBehavior {
         guard let c = cuts.min(by: { abs($0 - want) < abs($1 - want) }) else { return }
         target.rect.origin.y = min(max(0, c - H + 8), top)
     }
+}
+
+
+/// A COUNTRY'S FIRST-LEVEL REGIONS FOR DETAILS, read once and kept, begun as its card opens
+@MainActor
+enum DetailsRegions {
+    struct Entry: Sendable { let units: [DetailsSheet.RegionChoice]; let row: Int; let name: String }
+    static private(set) var cache: [String: Entry] = [:]
+    private static var reading: [String: Task<Entry?, Never>] = [:]
+    static func read(_ cc: String) async -> Entry? {
+        if let e = cache[cc] { return e }
+        if let t = reading[cc] { return await t.value }
+        guard let first = RegionCatalog.shared.first(cc) else { return nil }
+        let row = first.row, name = first.level.many
+        let t = Task.detached(priority: .userInitiated) { () -> Entry? in
+            guard let f = RegionCatalog.shared.file(cc, row: row) else { return nil }
+            var seen = Set<String>(), out: [DetailsSheet.RegionChoice] = []
+            for u in f.units where seen.insert(u.id).inserted { out.append(DetailsSheet.RegionChoice(id: u.id, name: u.name, parent: u.parent)) }
+            return Entry(units: out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }, row: row, name: name)
+        }
+        reading[cc] = t
+        let e = await t.value
+        reading[cc] = nil
+        if let e { cache[cc] = e }
+        return e
+    }
+    static func prefetch(_ cc: String) { Task { _ = await read(cc) } }
 }

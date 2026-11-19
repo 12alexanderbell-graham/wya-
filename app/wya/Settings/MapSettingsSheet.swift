@@ -1,11 +1,5 @@
 import SwiftUI
 
-/// MAP SETTINGS IN THE WATER (Part 5.3, 5.4): the rows of MapSettingsRows in the water while the gear is out, with no
-/// title, no grabber and no words under any row; Borders, Disputes and Advanced pushed Apple's way with the back arrow.
-///
-/// The rules as built (30 Oct): black and white only; the current choice is a black band the water's width with white
-/// words, and it just appears (no front, no circle); values change by Apple's text roll; a row's words are there only
-/// while the whole row is inside the list, so the list's edges never cut a word (they roll out before it).
 struct MapSettingsSheet: View {
     let water: Water
     let map: MapController
@@ -28,8 +22,8 @@ struct MapSettingsSheet: View {
         .frame(width: width, height: max(48, bottom - top))
         .position(x: L.W / 2, y: top + max(48, bottom - top) / 2)
         .environment(\.settingsWordsOn, water.settingsWords)
-        // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and the
-        // Places shelf; at full they scroll (8 Nov: the rows took every drag, so the sheet could not be pulled)
+        // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and
+        // the Places shelf; at full they scroll
         .scrollDisabled(water.stop != .full)
     }
 }
@@ -42,7 +36,6 @@ extension EnvironmentValues {
 /// a line's placeholder for the text roll (en spaces), as the caption does it
 private func blank(_ s: String) -> String { String(repeating: "\u{2002}", count: max(1, s.count)) }
 
-/// ONE ROW: its name on the left, its value on the right (50% black), the chevron after a page's value
 private struct RowWords: View {
     let name: String
     let value: String
@@ -59,17 +52,15 @@ private struct RowWords: View {
         let shown = inList && wordsOn
         let ink = band ? Color.white : Palette.ink
         HStack(spacing: 8) {
-            if let flag, let img = Flags.square(flag) {
+            if let flag, let img = Flags.row(flag) {
                 // shown with the row's words (in one frame: a flag is not a word to roll)
-                img.resizable().frame(width: 28, height: 28).opacity(shown ? 1 : 0)
+                img.resizable().frame(width: 28, height: 21).frame(width: 28, height: 28).opacity(shown ? 1 : 0)
                     .transaction { $0.disablesAnimations = true; $0.animation = nil }
                     .padding(.trailing, 4)
             }
-            // (one line in the 48 pt row: a long name gets a little smaller rather than wrap or be cut)
             Text(shown ? name : blank(name))
                 .foregroundStyle(dim ? Palette.ink.opacity(0.5) : ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.75)
             Spacer(minLength: 12)
             if !value.isEmpty {
                 Text(shown ? value : blank(value))
@@ -77,8 +68,6 @@ private struct RowWords: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            // (with the row's words, in the same frame: it faded in after them and stood on for two frames after the
-            // rows had gone, over the planets, 12 Nov strips)
             if chevron {
                 Icon5(key: "forward", ink: Palette.ink, size: 15).opacity(shown ? 1 : 0)
                     .transaction { $0.disablesAnimations = true; $0.animation = nil }
@@ -90,8 +79,7 @@ private struct RowWords: View {
         .frame(height: height)
         .frame(maxWidth: .infinity)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        // the current choice: the black band, the water's width; it just appears (30 Oct 02:25)
-        // (in its own transaction: it faded in with the words' roll, 8 Nov)
+        // the current choice: the black band, the water's width; it just appears
         .background { (band && shown ? Palette.ink : Color.clear).transaction { $0.disablesAnimations = true; $0.animation = nil } }
         .contentShape(Rectangle())
         // words only while the whole row is inside the list: they roll out before an edge could cut them
@@ -107,7 +95,6 @@ private struct SettingsList: View {
     let width: CGFloat
     @State private var nav = SettingsNav.shared
     @State private var settings = MapSettingsStore.shared
-    @State private var scrolled = false
     private var open: String? {
         get { nav.open }
         nonmutating set { nav.open = newValue }
@@ -117,14 +104,13 @@ private struct SettingsList: View {
         if map.pinsMode { pinsRows(settings.value) } else { mainList }
     }
 
-    /// SETTINGS IN PINS (8 Nov): Pins is Apple's map, so its settings are Apple's look only (our map's rows did nothing
+    /// SETTINGS IN PINS: Pins is Apple's map, so its settings are Apple's look only (our map's rows did nothing
     /// there): Map, Standard, Satellite or Hybrid
     @ViewBuilder private func pinsRows(_ s: MapSettings) -> some View {
         let looks: [(String, String)] = [("apple-standard", "Standard"), ("apple-satellite", "Satellite"), ("apple-hybrid", "Hybrid")]
         let now = looks.first { $0.0 == s.pinsMap }?.1 ?? "Standard"
-        // (in a scroll view as the main list: a row's words show once it is wholly in the list)
-        // its one setting's three choices are out at once (behind a row of its own they left the 50% water all but
-        // empty, 8 Nov), the current one on the black band as every choice
+        // (in a scroll view as the main list: a row's words show once it is wholly in the list) its one setting's
+        // three choices are out at once, the current one on the black band as every choice
         ScrollView(.vertical) {
         VStack(spacing: 0) {
             RowWords(name: "Map", value: "")
@@ -138,6 +124,7 @@ private struct SettingsList: View {
             }
         }
         }
+        .scrollBlur()
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
@@ -173,6 +160,7 @@ private struct SettingsList: View {
                 .background(WaterHandoff())
                 .scrollTargetLayout()
             }
+            .scrollBlur()
             // a search result: the row brought into view (its choices already open)
             .onChange(of: nav.show, initial: true) { _, id in
                 guard let id, rows.contains(where: { $0.id == id }) else { return }
@@ -182,13 +170,6 @@ private struct SettingsList: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
-        // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
-        // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
-        // (and not at the end either, where the last row is at rest above the edge)
-        .onScrollGeometryChange(for: Bool.self) { g in
-            g.contentOffset.y + g.contentInsets.top > 1 && g.contentOffset.y + g.containerSize.height < g.contentSize.height + g.contentInsets.bottom - 1
-        } action: { _, now in scrolled = now }
-        .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
     }
@@ -198,8 +179,8 @@ private struct SettingsList: View {
         VStack(spacing: 0) {
             if let page = row.page {
                 if page == "all" {
-                    // the app's Settings comes with its own book: until then the row keeps its place in its "not yet"
-                    // look and refuses (A.1.5: never a pressable-looking control that silently does nothing)
+                    // the app's Settings comes with its own book: until then the row keeps its place in its look and
+                    // refuses (A.1.5: never a pressable-looking control that silently does nothing)
                     RowWords(name: row.name, value: "", dim: true)
                         .onTapGesture { Feel.refuse() }
                 } else {
@@ -227,9 +208,7 @@ private struct SettingsList: View {
                     }
                 }
             } else if MapSettingsRows.notYet.contains(row.id) {
-                // (saved but not followed by the map yet: its "not yet" look, as All settings, and a refused tap)
-                RowWords(name: row.name, value: "", dim: true)
-                    .onTapGesture { Feel.refuse() }
+                EmptyView()
             } else {
                 RowWords(name: row.name, value: row.valueName(s))
                     .onTapGesture { tap(row, choices, s) }
@@ -248,7 +227,6 @@ private struct SettingsList: View {
                         ChoiceRow(name: c.name, picked: row.get(s) == c.id, delay: Double(j) * 0.05) {
                             pick(row, c.id)
                         }
-                        // (no fade in or out: the rows open the space and their words roll, 8 Nov)
                         .transition(.identity)
                     }
                 }
@@ -264,6 +242,7 @@ private struct SettingsList: View {
             case "un": return "United Nations"
             case let k?: return BordersNames.name(k, map)
             }
+        case "aiNotes": let n = AINotes.all.count; return n == 0 ? "" : "\(n)"
         default: return ""
         }
     }
@@ -273,7 +252,7 @@ private struct SettingsList: View {
         if choices.count == 2, open != row.id {
             // two choices: one tap switches; the value rolls; the map changes behind (notch + click: a two-state switch)
             let next = choices.first { $0.id != row.get(s) }?.id ?? choices[0].id
-            // haptics only: no sound is added anywhere unless the owner asks (30 Oct 02:57)
+            // haptics only: no sound is added anywhere unless he asks
             Feel.notch()
             Task { await MapSettingsRows.set(row.id, next, map: map) }
         } else {
@@ -316,7 +295,7 @@ private struct ChoiceRow: View {
     }
 }
 
-/// a country's name from a borders key ("KO" is South Korea, "kr" in the map's data)
+/// a country's name from a borders key ("KOkr" in the map's data)
 @MainActor
 enum BordersNames {
     static func placeId(_ key: String) -> String { key == "KO" ? "kr" : key.lowercased() }
@@ -326,7 +305,6 @@ enum BordersNames {
     }
 }
 
-/// A PAGE (Borders, Disputes, Advanced), pushed Apple's way inside the water, the back arrow on its top row
 private struct SettingsPage: View {
     let page: String
     let map: MapController
@@ -335,7 +313,6 @@ private struct SettingsPage: View {
     @State private var settings = MapSettingsStore.shared
     @State private var open: String?
     @State private var nav = SettingsNav.shared
-    @State private var scrolled = false
 
     var body: some View {
         let s = settings.value
@@ -355,6 +332,7 @@ private struct SettingsPage: View {
                 switch page {
                 case "borders": borders(s)
                 case "disputes": disputes(s)
+                case "aiNotes": AINotesPage()
                 default: advanced(s)
                 }
             }
@@ -362,6 +340,7 @@ private struct SettingsPage: View {
             .background(WaterHandoff())
             .scrollTargetLayout()
         }
+        .scrollBlur()
         // a search result: its row brought into view (a dispute's sides open)
         .onChange(of: nav.show, initial: true) { _, id in
             guard let id, id.hasPrefix("view:") || id.hasPrefix("dispute:") else { return }
@@ -374,13 +353,6 @@ private struct SettingsPage: View {
         }
         .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
-        // the bottom's soft edge only once the list has been scrolled: at rest its last row is whole and sharp (it read
-        // as half faded under the edge, 7 Nov's second pass); scrolled, rows pass under the soft edge as in iOS
-        // (and not at the end either, where the last row is at rest above the edge)
-        .onScrollGeometryChange(for: Bool.self) { g in
-            g.contentOffset.y + g.contentInsets.top > 1 && g.contentOffset.y + g.containerSize.height < g.contentSize.height + g.contentInsets.bottom - 1
-        } action: { _, now in scrolled = now }
-        .scrollEdgeEffectHidden(!scrolled, for: .bottom)
         .toolbar(.hidden, for: .navigationBar)
         .containerBackground(.clear, for: .navigation)
     }
@@ -443,18 +415,14 @@ private struct SettingsPage: View {
 
     // 5.8: Places map, Pins map, Afghanistan's flag
     @ViewBuilder private func advanced(_ s: MapSettings) -> some View {
-        // (Pins is Apple's map: our map's looks did nothing there; Places map and Afghanistan's flag are saved but not
-        // followed yet, so they are in their "not yet" look and refuse, as All settings)
+        // (Pins is Apple's map: our map's looks did nothing there. Places can have ours or any of Apple's.
+        // Afghanistan's flag is saved but not followed yet, so it is in its look and refuses, as All settings)
         let maps: [(String, String)] = [("same", "Same as Map"), ("apple-standard", "Apple, Standard"),
                                         ("apple-satellite", "Apple, Satellite"), ("apple-hybrid", "Apple, Hybrid")]
-        RowWords(name: "Places map", value: "", dim: true).onTapGesture { Feel.refuse() }
-        advancedRow("pinsMap", "Pins map", maps, s.pinsMap) { v in MapSettingsStore.shared.change { $0.pinsMap = v } }
-        // PINS' TRACKING: where you go, drawn as pins at the precision you pick (Map/PinTracker.swift)
-        advancedRow("pinsTrack", "Track where I go", [("off", "Off"), ("exact", "Exact"), ("city", "City"), ("region", "About 100 km")],
-                    s.pinsTrack) { v in
-            MapSettingsStore.shared.change { $0.pinsTrack = v }
-            PinTracker.shared.follow(v)
+        advancedRow("placesMap", "Places map", [maps[0], ("native", "Native")] + maps.dropFirst(), s.placesMap) { v in
+            MapSettingsStore.shared.change { $0.placesMap = v }
         }
+        advancedRow("pinsMap", "Pins map", maps, s.pinsMap) { v in MapSettingsStore.shared.change { $0.pinsMap = v } }
         RowWords(name: "Afghanistan's flag", value: "", dim: true).onTapGesture { Feel.refuse() }
     }
     @ViewBuilder private func advancedRow(_ id: String, _ name: String, _ choices: [(String, String)], _ current: String,
@@ -475,6 +443,50 @@ private struct SettingsPage: View {
                     .transition(.identity)
                 }
             }
+        }
+    }
+}
+
+
+/// WHAT THE AI KNOWS ABOUT YOU (AINotes): the notes you told it to remember, in your words; held, Forget; typed at the
+/// foot, a new one. Besides these it knows only your map, lists and plans, and says so.
+private struct AINotesPage: View {
+    @State private var notes = AINotes.all
+    @State private var adding = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Besides your map, lists and plans, the AI keeps these in mind. Hold one to forget it.")
+                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16).padding(.bottom, 12)
+            ForEach(notes, id: \.self) { n in
+                // (a note may be a sentence: it wraps, where a setting's row is one line)
+                Text(n).font(.body).foregroundStyle(Palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        Button("Forget", role: .destructive) {
+                            Feel.lift()
+                            AINotes.forget(n)
+                            withAnimation(Motion.quick) { notes = AINotes.all }
+                        }
+                    }
+            }
+            TextField("", text: $adding, prompt: Text("Add").foregroundStyle(Palette.ink.opacity(0.5)))
+                .font(.body).foregroundStyle(Palette.ink)
+                .submitLabel(.done)
+                .onSubmit {
+                    let t = adding.trimmingCharacters(in: .whitespaces)
+                    guard !t.isEmpty else { return }
+                    Feel.tap()
+                    AINotes.add(t)
+                    adding = ""
+                    withAnimation(Motion.quick) { notes = AINotes.all }
+                }
+                .frame(height: 48)
+                .padding(.horizontal, 16)
         }
     }
 }

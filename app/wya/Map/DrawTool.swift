@@ -14,7 +14,7 @@ final class DrawTool {
 
     /// a line, a shape, or either (Pins: a stroke back to its start closes a shape, Done keeps a line)
     enum Kind { case line, shape, any }
-    struct Geo: Hashable, Codable { var lat: Double; var lon: Double }
+    nonisolated struct Geo: Hashable, Codable, Sendable { var lat: Double; var lon: Double }
 
     private(set) var on = false
     private(set) var kind: Kind = .shape
@@ -162,7 +162,7 @@ final class DrawTool {
         return abs(s * r * r / 2)
     }
 
-    /// the words for a measure ("850 m", "2.4 km", "12 km²", "0.3 ha")
+    /// the words for a measure ("850 m",,,)
     static func words(km d: Double) -> String {
         d < 1 ? "\(Int((d * 1000 / 10).rounded()) * 10) m" : d < 10 ? String(format: "%.1f km", d) : "\(Int(d.rounded()).formatted()) km"
     }
@@ -201,9 +201,6 @@ struct DrawLayer: View {
         if tool.on {
             TimelineView(.animation) { t in
                 Canvas { ctx, _ in
-                    // (14 Nov: the frame's time is read here, so the drawing is worked out again every frame and stays
-                    // on its places while the map moves and zooms; without it the line stood still on the glass while
-                    // the map zoomed under it, then jumped to its real place on Done)
                     _ = t.date
                     guard let to = tool.toScreen else { return }
                     let pts = tool.points.compactMap(to)
@@ -217,9 +214,11 @@ struct DrawLayer: View {
                         for p in tool.live.dropFirst() { line.addLine(to: p) }
                     }
                     // drawn exactly as it will be kept: the same width, colour and dashes, no white edge, no corner
-                    // marks, no ring (14 Nov)
-                    let w = CGFloat(PinsDockState.shared.drawWidth)
-                    let dash: [CGFloat] = PinsDockState.shared.drawDash ? [w * 2.5, w * 2] : []
+                    // marks, no ring (a route being drawn as a route is kept: 2 pt, solid; Draw's own thickness and
+                    // dashes are Draw's)
+                    let route = PinsDockState.shared.chosen == 1
+                    let w = route ? 2 : CGFloat(PinsDockState.shared.drawWidth)
+                    let dash: [CGFloat] = !route && PinsDockState.shared.drawDash ? [w * 2.5, w * 2] : []
                     ctx.stroke(line, with: .color(Palette.ink), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round, dash: dash))
                 }
             }
@@ -229,9 +228,9 @@ struct DrawLayer: View {
     }
 }
 
-/// THE DRAW TOOL'S CONTROLS, in the water where a map's caption sits (12 Nov 17:12: glass circles, as Pins' tools):
-/// Undo, Cancel, Done, and under them its measure (the line's length, or the shape's area once it has three corners);
-/// Undo and Done at 50% until there is something to take back or enough to make
+/// THE DRAW TOOL'S CONTROLS, in the water where a map's caption sits: Undo, Cancel, Done, and under them its measure
+/// (the line's length, or the shape's area once it has three corners); Undo and Done at 50% until there is something
+/// to take back or enough to make
 struct DrawBar: View {
     let water: Water
     var tool = DrawTool.shared
@@ -247,12 +246,10 @@ struct DrawBar: View {
     static func tools(_ tool: DrawTool) -> [WaterTools.Tool] {
         [.init(icon: "undo", label: "Undo", dim: tool.marks.isEmpty) { tool.undo() },
          .init(icon: "cross", label: "Cancel") { tool.cancel() },
-         // (a plain tick of two bars; never the tapered one)
          .init(icon: "done", label: "Done", dim: !tool.canFinish) { tool.done() }]
     }
 
     static func caption(_ tool: DrawTool) -> String {
-        // (no instructions; the line is empty until there is something to measure)
         if tool.points.count < 2 { return "" }
         if tool.kind == .shape, tool.points.count >= 3 { return DrawTool.words(km2: tool.areaKm2) }
         return DrawTool.words(km: tool.lengthKm)

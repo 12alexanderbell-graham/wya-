@@ -3,9 +3,9 @@ import simd
 import MapKit
 
 /// A PLACE'S PAGE (Part 16), first build: a country's page from the data server's country facts (D9 as it is on the
-/// server: `country/<cc>.json`), any other place with what the app carries (16.2 "No page yet": the top, the marking
-/// block, your record). It grows out of what opened it (A16.1: one rounded rectangle from the origin's frame to the
-/// screen, its corners always rounded, nothing fading) under the head, and goes back into it by a drag down on its top.
+/// server: `country/<cc>.json`), any other place with what the app carries (16.2: the top, the marking block, your
+/// record). It grows out of what opened it (A16.1: one rounded rectangle from the origin's frame to the screen, its
+/// corners always rounded, nothing fading) under the head, and goes back into it by a drag down on its top.
 @MainActor
 @Observable
 final class PlacePageState {
@@ -44,7 +44,7 @@ final class PlacePageState {
     final class OnePage: Identifiable {
         let key: PlaceKey
         let name: String
-        /// one line of what it is ("City in Hessen, Germany"); empty for a country
+        /// one line of what it is; empty for a country
         let what: String
         /// the country it is in (its flag and colours)
         let country: String
@@ -53,6 +53,9 @@ final class PlacePageState {
         /// what it grew from (closing goes back into it)
         let origin: CGRect
         var facts: Facts?
+        /// everything it asks for has come (or given up): the page shows only then, so nothing arrives after it and
+        /// moves what is already there
+        var settled = false
         /// a photo it came with (a highlight's), for a thing the data has no row for
         var photo: String?
         /// 0 at the origin to 1 full screen
@@ -60,23 +63,23 @@ final class PlacePageState {
         var drag: CGFloat = 0
         /// on its way back into its origin (the stack is not "up" for the water once every page is)
         var closing = false
-        /// a line that names the place itself again ("Town in Tokyo, Japan" under Tokyo) skips it: "Town in Japan"
+        /// a line that names the place itself again ( under Tokyo) skips it:
         static func trim(_ what: String, _ name: String, country: String = "") -> String {
             for lead in ["Town in ", "City in "] where what.hasPrefix(lead) {
                 var parts = what.dropFirst(lead.count).components(separatedBy: ", ")
                 if parts[0].caseInsensitiveCompare(name) == .orderedSame {
-                    // ("Town in Tokyo" under Tokyo: its region has its name; its country instead)
+                    // ( under Tokyo: its region has its name; its country instead)
                     if parts.count > 1 { parts.removeFirst() }
                     else if let land = Locale(identifier: "en_GB").localizedString(forRegionCode: country.uppercased()) { parts = [land] }
                 }
-                // ("Town in Île-de-France" under Paris, 2.1 million: a place of 100,000 people and more is a city, as
-                // the menu's own word for them; the towns' index says how many, once it is read)
+                // ( under Paris, 2.1 million: a place of 100,000 people and more is a city, as the menu's own word
+                // for them; the towns' index says how many, once it is read)
                 var word = lead
                 if lead == "Town in ", (TownIndex.shared.townPeople()[country.lowercased() + "|"
                         + name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)] ?? 0) >= 100_000 { word = "City in " }
                 return word + parts.joined(separator: ", ")
             }
-            // (a thing's own line from its data starts lower case: "ancient Roman amphitheatre, ...")
+            // (a thing's own line from its data starts lower case:)
             return what.prefix(1).uppercased() + what.dropFirst()
         }
         init(key: PlaceKey, name: String, what: String, country: String, code: String?, origin: CGRect) {
@@ -84,10 +87,11 @@ final class PlacePageState {
             self.origin = origin
         }
         func load() {
-            if key.kind == .country { Task { await loadCountry(key.id.lowercased()) } }
-            if key.kind == .town { Task { await loadTown(country, id: key.id) } }
-            if key.kind == .region, let code { Task { await loadRegion(country, code: code) } }
-            if key.kind == .thing { loadThing() }
+            if key.kind == .country { Task { await loadCountry(key.id.lowercased()); settled = true } }
+            else if key.kind == .town { Task { await loadTown(country, id: key.id); settled = true } }
+            else if key.kind == .region, let code { Task { await loadRegion(country, code: code); settled = true } }
+            else if key.kind == .thing { loadThing() }
+            else { settled = true }
         }
     }
     private(set) var pages: [OnePage] = []
@@ -118,8 +122,6 @@ final class PlacePageState {
 
     /// the first page, grown from what opened it on the map, the card or the list (A16.1)
     func open(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect) {
-        // (a page still sinking away is gone already for the new one: a town picked a moment after a page was closed
-        // opened nothing, 14 Nov)
         if !pages.isEmpty, pages.allSatisfy(\.closing) { pages.removeAll() }
         guard pages.isEmpty else { return }
         push(key, name: name, what: what, country: country, code: code, from: origin)
@@ -132,7 +134,7 @@ final class PlacePageState {
         reportAsked = "Wrong place"
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.sheetAsked += 1 }
     }
-    /// a page pushed on top of the one up, grown from the row or card tapped on it (16.7: "its page, pushed on top")
+    /// a page pushed on top of the one up, grown from the row or card tapped on it (16.7:)
     func push(_ key: PlaceKey, name: String, what: String = "", country: String, code: String? = nil, from origin: CGRect,
               photo: String? = nil) {
         guard key != self.key else { return }
@@ -196,12 +198,12 @@ extension PlacePageState.OnePage {
             TownIndex.shared.load()
             Task { @MainActor in
                 for _ in 0 ..< 150 where !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
-                if TownIndex.shared.ready, self.key.kind == .thing { self.loadThing() }
+                if TownIndex.shared.ready, self.key.kind == .thing { self.loadThing() } else { self.settled = true }
             }
         }
         let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
         if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
-            // (the town, then its country unless they are one: "Himeji, Japan", "Monaco")
+            // (the town, then its country unless they are one:,)
             out.rows.append(("Where", land.isEmpty || land == town.name ? town.name : town.name + ", " + land))
         } else {
             out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
@@ -211,22 +213,30 @@ extension PlacePageState.OnePage {
         // name), so a castle's page says what the castle is
         let id = key.id, name = self.name, wd = t.id
         Task { @MainActor in
-            guard let d = await PlacePageState.listingText(cc, wd: wd, name: name),
-                  self.key.id == id, self.facts?.prose.isEmpty == true else { return }
-            self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
-            self.facts?.proseWikivoyage = true
+            let d = await PlacePageState.listingText(cc, wd: wd, name: name)
+            if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
+                self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
+                self.facts?.proseWikivoyage = true
+            }
+            // (its town still to come: the page waits for that answer too)
+            if TownIndex.shared.ready { self.settled = true }
         }
     }
     private func seedOnly() {
         var out = PlacePageState.Facts()
         out.photo = photo.flatMap { PlacePageState.photo($0) }
         facts = out
+        settled = true
     }
     fileprivate func loadCountry(_ cc: String) async {
         // (the things' index: the checked spelling of an activity's name, F147)
         ThingIndex.shared.load()
-        // (14 Nov: asked again twice when the answer does not come: the first page after a launch, asked while the data
-        // server was still busy, stayed empty below its buttons for good)
+        let nats0 = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).filter { $0 != cc }
+        let paths = ["country/\(cc).json", "regions/\(cc).json", "cities/\(cc).json", "heritage.json",
+                     "native/things/things-\(cc)-3.wyth", "native/activities/\(cc).json"] + nats0.map { "country/\($0).json" }
+        await withTaskGroup(of: Void.self) { g in
+            for p in paths { g.addTask { _ = await Servers.data.file(p) } }
+        }
         var got: Data?
         for attempt in 0 ..< 3 {
             let answer = await Servers.data.file("country/\(cc).json")
@@ -240,12 +250,12 @@ extension PlacePageState.OnePage {
         var out = PlacePageState.Facts()
         if let g = j["guide"] as? [String: Any], let intro = g["intro"] as? String { out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: name), 620); out.proseWikivoyage = true }
         else if let desc = f["desc"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
-        // its photo (Wikidata's image of the country), at the top as every page's (12 Nov 14:10)
+        // its photo (Wikidata's image of the country), at the top as every page's
         out.photo = PlacePageState.photo(f["image"])
         func s(_ k: String) -> String? {
             switch f[k] {
             case let v as String: return v
-            // (each once: Germany's capital came as "Berlin, Berlin", the city and the state)
+            // (each once: Germany's capital came as, the city and the state)
             case let v as [String]: var seen = Set<String>(); return v.filter { seen.insert($0).inserted }.prefix(3).joined(separator: ", ")
             case let v as NSNumber: return v.stringValue
             default: return nil
@@ -289,18 +299,27 @@ extension PlacePageState.OnePage {
             }
             var seen = Set<String>()
             let word = RegionsMenuModel.word(first.level.one)
-            out.regions = file.units.filter { seen.insert($0.id).inserted }
-                .sorted { (pop[$0.code ?? ""] ?? 0) > (pop[$1.code ?? ""] ?? 0) }
-                .map { u in PlacePageState.Inside(key: PlaceKey(.region, u.id), name: u.name,
-                                   line: pop[u.code ?? ""].map { "\(word.prefix(1).uppercased() + word.dropFirst()) · \(PlacePageState.big($0)) people" }
-                                       ?? word.prefix(1).uppercased() + word.dropFirst(),
-                                   code: u.code) }
+            let units = file.units.filter { seen.insert($0.id).inserted }
+            let ranked = units.sorted { a, b in (pop[a.code ?? ""] ?? 0) > (pop[b.code ?? ""] ?? 0) }
+            let level: String = String(word.prefix(1)).uppercased() + String(word.dropFirst())
+            var rows: [PlacePageState.Inside] = []
+            for u in ranked {
+                // (the level's word once: over is "Osaka")
+                var line: String = level
+                if let n = pop[u.code ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
+                rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(u.name, word),
+                                                  line: line, code: u.code))
+            }
+            out.regions = rows
         }
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
             out.cities = all.compactMap { t in
                 guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue else { return nil }
-                let r = t["r"] as? String ?? ""
+                // (its region, unless that is its own name again:, on Japan's page)
+                let r0 = t["r"] as? String ?? ""
+                let r = r0.compare(n, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+                    || r0.localizedCaseInsensitiveContains(n) && r0.count <= n.count + 12 ? "" : r0
                 let ll = t["ll"] as? [NSNumber]
                 return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil })
@@ -332,8 +351,6 @@ extension PlacePageState.OnePage {
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
         out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
         // a country whose own picture is a map (most are): its first sight's photo at the top instead
-        // (14 Nov: Switzerland's top was a river in Ukraine, the photo of a forest site eighteen countries share: a site
-        // that is this country's alone first)
         if out.photo == nil { out.photo = out.highlights.lazy.filter { !$0.shared }.compactMap { PlacePageState.photo($0.photo) }.first }
         // (a page opened since this one began loading keeps its own facts)
         guard key.id.lowercased() == cc else { return }
@@ -351,13 +368,14 @@ extension PlacePageState.OnePage {
         }
         guard key.id.lowercased() == cc else { return }
         facts?.visa = visa
+        settled = true
     }
 
     /// A TOWN'S FACTS (16.4.5: People, Height, Local time, Climate) from the server's cities (D9 as it is), by its
     /// GeoNames id
     fileprivate func loadTown(_ cc: String, id: String) async {
-        // (a town with no GeoNames id is keyed by its name, "gb/London": found by it, the most peopled of that name;
-        // London's and New York's pages had no facts at all)
+        // (a town with no GeoNames id is keyed by its name,: found by it, the most peopled of that name; London's and
+        // New York's pages had no facts at all)
         let last = String(id.split(separator: "/", maxSplits: 1).last ?? "")
         var all: [[String: Any]] = []
         if case .ok(let d) = await Servers.data.file("cities/\(cc).json") { all = (try? JSONSerialization.jsonObject(with: d) as? [[String: Any]]) ?? [] }
@@ -382,7 +400,7 @@ extension PlacePageState.OnePage {
         }
         if let n = t["n"] as? String { out.activities = await PlacePageState.activities(cc, town: n) }
         // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
-        // article's), as a country's page has them (12 Nov 14:10: every page the same)
+        // article's), as a country's page has them
         out.photo = PlacePageState.photo(t["img"])
         if let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue,
@@ -391,10 +409,10 @@ extension PlacePageState.OnePage {
         }
         guard key.id == id else { return }
         facts = out
+        settled = true
     }
 
-    /// A POINT'S CLOCK from Apple's maps, where the data has none (14 Nov: the cities of 20 countries, the United States,
-    /// the United Kingdom and South Korea among them, carry no time zone, so their pages had no local time); nil offline
+    /// A POINT'S CLOCK from Apple's maps, where the data has none; nil offline
     static func zone(lat: Double, lon: Double) async -> TimeZone? {
         guard let r = MKReverseGeocodingRequest(location: CLLocation(latitude: lat, longitude: lon)) else { return nil }
         return await withCheckedContinuation { (c: CheckedContinuation<TimeZone?, Never>) in
@@ -402,10 +420,9 @@ extension PlacePageState.OnePage {
         }
     }
 
-    /// A TOWN THE CITIES' FILE DOES NOT HAVE (14 Nov: Lucerne Valley's page was its name and two buttons over an empty
-    /// screen): what the towns' index knows of it (its people; its region is already under its name), and its guide's opening words where
-    /// Wikivoyage has an article near it
-    /// (its local time from the nearest town the cities' file has, which shares its clock)
+    /// A TOWN THE CITIES' FILE DOES NOT HAVE: what the towns' index knows of it (its people; its region is already
+    /// under its name), and its guide's opening words where Wikivoyage has an article near it (its local time from
+    /// the nearest town the cities' file has, which shares its clock)
     fileprivate func loadSmallTown(_ cc: String, id: String, near all: [[String: Any]]) async {
         guard let t = TownIndex.shared.hit(id), key.id == id else { return }
         var out = PlacePageState.Facts()
@@ -430,6 +447,7 @@ extension PlacePageState.OnePage {
         }
         guard key.id == id, !out.rows.isEmpty || !out.prose.isEmpty else { return }
         facts = out
+        settled = true
     }
 
     /// A REGION'S FACTS (16.4.5: People, Area, Capital, its parent) from the server's regions (level 1, by ISO code)
@@ -439,8 +457,8 @@ extension PlacePageState.OnePage {
               let r = all[code] as? [String: Any], self.code == code else { return }
         var out = PlacePageState.Facts()
         if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
-        // its photo (Wikidata's) and, where Wikivoyage has an article for it, that article's opening words in place of the
-        // one-line description (12 Nov 14:10: every page the same)
+        // its photo (Wikidata's) and, where Wikivoyage has an article for it, that article's opening words in place
+        // of the one-line description
         out.photo = PlacePageState.photo(r["img"])
         if let n = r["n"] as? String, let ll = r["ll"] as? [NSNumber], ll.count == 2,
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: 150) {
@@ -450,15 +468,16 @@ extension PlacePageState.OnePage {
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
         facts = out
+        settled = true
     }
 
 }
 
 extension PlacePageState {
-    /// A PLACE'S OPENING WORDS: its own Wikivoyage article, found in the country's index by its title (the place's name,
-    /// or its name with a bracket after it, "Albert (France)") and lying within `within` km of it (25 for a town, more for
-    /// a region, whose point is its middle); the nearest if several. Nil when it has none, or the article has no intro.
-    /// `others`: its other names, folded (a guide filed under the English name: Luzern's is "Lucerne", 14 Nov)
+    /// A PLACE'S OPENING WORDS: its own Wikivoyage article, found in the country's index by its title (the place's
+    /// name, or its name with a bracket after it,) and lying within `within` km of it (25 for a town, more for a
+    /// region, whose point is its middle); the nearest if several. Nil when it has none, or the article has no intro.
+    /// `others`: its other names, folded
     static func guideIntro(_ cc: String, name: String, lat: Double, lon: Double, within: Double = 25, others: [String] = []) async -> String? {
         let wanted = Set(others)
         func km(_ a: Double, _ b: Double) -> Double {
@@ -489,25 +508,79 @@ extension PlacePageState {
         return intro
     }
 
-    /// THE ACTIVITIES (16.4.7), Wikivoyage's "see" and "do" listings as rows, the best known first. One rule for every
-    /// town and every country (12 Nov: France's list opened with a scooter hire, New York's with a discount pass):
-    /// - a big city's guide is split into districts ("Rome/Colosseo"): they are the city's own listings;
-    /// - how well known a listing is comes from the country's things (ThingStore's file: fame 3 World Heritage or in 40+
-    ///   Wikipedias, then 2, 1, 0), found by the listing's Wikidata id; a listing the guide links to Wikidata or Wikipedia
-    ///   without being one of the things comes next; one with no link at all (a tour firm, a pass) last;
-    /// - at each fame, sights before things to do; within a city, the things' own order (the most famous first);
-    /// - a country's: one from each city in turn at each rank, the guide's main cities first. A guide that is not one
-    ///   place (its listings lie more than 400 km apart: a region, an itinerary, a topic) comes after the towns and
-    ///   does not put its title on its rows.
     static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
+        // (kept once worked out, beside the listings file's own size: the same file gives the same rows)
+        let key = firstKey(first)
+        let keep = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("activities").appendingPathComponent("\(cc)-\(key).json")
+        // a country's rows ready-made by the data server (its file a few hundred rows, not the whole guide: the United
+        // States' guide is 11.5 MB and took 2.5 s to read and rank the first time): taken when it was made for the
+        // same main cities
+        if town == nil, case .ok(let pd) = await Servers.data.file("native/activities/\(cc).json"),
+           let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any], j["first"] as? String == key,
+           let rows = j["rows"] as? [[String]] {
+            return rows.compactMap { $0.count == 3 ? Activity(name: corrected($0[0], wd: $0[1].isEmpty ? nil : $0[1]), line: $0[2]) : nil }
+        }
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
+        // (a town's rows are never kept: its file name has no town in it, and a town's few rows come fast)
+        if town == nil, let k = try? Data(contentsOf: keep), let j = try? JSONSerialization.jsonObject(with: k) as? [String: Any],
+           (j["bytes"] as? NSNumber)?.intValue == d.count, let rows = j["rows"] as? [[String]] {
+            return rows.compactMap { $0.count == 2 ? Activity(name: $0[0], line: $0[1]) : nil }
+        }
         var things: Data?
         if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
-        // (14 Nov: worked out away from the screen: a big country's thousands of listings, read and cleaned on the main
-        // thread, held the whole app still for seconds and some pages never opened)
         let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first) }.value
-        return rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line) }
+        let out = rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line) }
+        // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
+        // them was kept for good)
+        if town == nil, out.count > 50, things != nil, ThingIndex.shared.ready,
+           let j = try? JSONSerialization.data(withJSONObject: ["bytes": d.count, "rows": out.map { [$0.name, $0.line] }] as [String: Any]) {
+            try? FileManager.default.createDirectory(at: keep.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? j.write(to: keep, options: .atomic)
+        }
+        return out
     }
+
+    /// the main cities' mark (FNV-1a of their names, in order): a list made for other cities is not this one
+    nonisolated static func firstKey(_ first: [String]) -> String {
+        var h: UInt64 = 14695981039346656037
+        for b in first.joined(separator: ",").utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+        return String(h, radix: 16)
+    }
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// THE DATA SERVER'S READY-MADE ACTIVITIES (debug, Simulator: the test driver's `action build.activities`): every
+    /// country's rows worked out by the same code the page uses, written into the server folder on the Mac
+    /// (native/activities/<cc>.json, gzipped there after, as the server's files are)
+    nonisolated static func buildActivitiesFiles() async {
+        guard let home = ProcessInfo.processInfo.environment["SIMULATOR_HOST_HOME"],
+              case .ok(let cd) = await Servers.data.file("countries.json"),
+              let cs = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] else { return }
+        let dir = URL(fileURLWithPath: home + "/Library/Mobile Documents/com~apple~CloudDocs/wya?!/server/public.nosync/v1/native/activities")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var made = 0
+        for c in cs {
+            guard let cc = c["cc"] as? String, case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { continue }
+            var first: [String] = []
+            if case .ok(let jd) = await Servers.data.file("country/\(cc).json"),
+               let j = try? JSONSerialization.jsonObject(with: jd) as? [String: Any] {
+                first = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
+            }
+            var things: Data?
+            if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
+            // (only a list ranked by the things file and long enough to be the country's, as the page itself keeps)
+            guard things != nil else { continue }
+            let rows = activityRows(d, things, town: nil, first: first)
+            guard rows.count > 50 else { continue }
+            let j: [String: Any] = ["first": firstKey(first), "rows": rows.map { [$0.name, $0.wd ?? "", $0.line] }]
+            if let out = try? JSONSerialization.data(withJSONObject: j) {
+                try? out.write(to: dir.appendingPathComponent("\(cc).json"))
+                made += 1
+            }
+        }
+        NSLog("wya activities built: %d countries", made)
+    }
+    #endif
 
     /// the activities' rows (name as the source writes it, cleaned; its Wikidata id; its line), in their order
     nonisolated static func activityRows(_ d: Data, _ things: Data?, town: String?, first: [String]) -> [(name: String, wd: String?, line: String)] {
@@ -540,6 +613,7 @@ extension PlacePageState {
         // ranks[r][c]: city c's rows of rank r with their place in the things' file
         typealias Row = (name: String, wd: String?, line: String)
         var ranks = [[[(at: Int, row: Row)]]](repeating: [[(at: Int, row: Row)]](repeating: [], count: cities.count), count: 10)
+        var raw: [String: (desc: String, city: String)] = [:]
         for (ci, c) in cities.enumerated() {
             for l in byCity[c] ?? [] {
                 guard let k = l["k"] as? String, k == "see" || k == "do", let n = l["n"] as? String else { continue }
@@ -554,9 +628,8 @@ extension PlacePageState {
                 if let known { r = (known.fame >= 3 ? 0 : known.fame == 2 ? 2 : 4) + (k == "see" ? 0 : 1) }
                 else if q != nil || l["wp"] != nil { r = k == "see" ? 6 : 7 }
                 else { r = k == "see" ? 8 : 9 }
-                let desc = (l["d"] as? String).map { plain($0) } ?? ""
-                let line = brief(town != nil || wideOnes.contains(c) ? desc : (desc.isEmpty ? c : "\(c) · \(desc)"), 112)
-                ranks[r][ci].append((known?.at ?? Int.max, (name: name, wd: q, line: line)))
+                raw[name.lowercased()] = ((l["d"] as? String) ?? "", c)
+                ranks[r][ci].append((known?.at ?? Int.max, (name: name, wd: q, line: "")))
             }
         }
         var out: [Row] = []
@@ -569,15 +642,21 @@ extension PlacePageState {
                 i += 1
             }
         }
-        return out
+        // the best 400 (five show, ten more a tap, the page's search goes through them), each line cleaned now
+        return out.prefix(400).map { r in
+            let w = raw[r.name.lowercased()] ?? ("", "")
+            let desc = w.desc.isEmpty ? "" : plain(w.desc)
+            let line = brief(town != nil || wideOnes.contains(w.city) ? desc : (desc.isEmpty ? w.city : "\(w.city) · \(desc)"), 112)
+            return (name: r.name, wd: r.wd, line: line)
+        }
     }
 
-    /// "90" -> "visa free for 90 days"; the rest as they are written
+    /// "90" ->; the rest as they are written
     static func visa(_ v: String) -> String {
         if let d = Int(v) { return d < 0 ? "no entry" : "visa free for \(d) days" }
         return v.prefix(1).uppercased() + v.dropFirst()
     }
-    /// a checked date as "21 Sep 2026" where it can be read, else as it is
+    /// a checked date as where it can be read, else as it is
     static func day(_ s: String?) -> String {
         guard let s, !s.isEmpty else { return "" }
         for f in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", "EEE, dd MMM yyyy"] {
@@ -589,17 +668,17 @@ extension PlacePageState {
         return s
     }
 
-    /// the source's HTML entities as the characters they stand for
-    /// THE SOURCE'S SPELLING CORRECTED, never simplified (F147, his data rule): Wikivoyage writes "Théatre" where the
-    /// name is Théâtre. A name with a Wikidata id takes the label our things carry for it when the two differ only in
-    /// accents and case (Wikidata's is the checked spelling); others go through the table of corrections made by hand
+    /// the source's HTML entities as the characters they stand for THE SOURCE'S SPELLING CORRECTED, never simplified
+    /// (F147, the data rule): Wikivoyage writes where the name is Théâtre. A name with a Wikidata id takes the label
+    /// our things carry for it when the two differ only in accents and case (Wikidata's is the checked spelling);
+    /// others go through the table of corrections made by hand
     static func corrected(_ name: String, wd: String?) -> String {
         let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
         if let wd, let label = ThingIndex.shared.hit(wd)?.name, label != name, fold(label) == fold(name) { return label }
         var t = name
         for (wrong, right) in fixes where t.contains(wrong) { t = t.replacingOccurrences(of: wrong, with: right) }
-        // a name the source began in small letters ("théâtre La Coupole") begins with its capital, as a name does;
-        // never an article's elision ("l'Arc de Triomphe" is how the French write it)
+        // a name the source began in small letters  begins with its capital, as a name does; never an article's
+        // elision ( is how the French write it)
         if let c = t.first, c.isLowercase, !t.hasPrefix("l'"), !t.hasPrefix("l\u{2019}"), !t.hasPrefix("d'") {
             t = c.uppercased() + t.dropFirst()
         }
@@ -607,31 +686,48 @@ extension PlacePageState {
     }
     /// our corrections over the source's text, word for word (added as they are found)
     static let fixes: [(String, String)] = [
-        // (only whole spellings that are wrong wherever they appear: "Chateau Marmont" is that hotel's own name)
+        // (only whole spellings that are wrong wherever they appear: is that hotel's own name)
         ("Théatre", "Théâtre"),
     ]
 
-    /// (made once: compiled again for every listing that held an "&", they held the screen still for seconds, 14 Nov)
     nonisolated(unsafe) static let namedMark = try? NSRegularExpression(pattern: "&([A-Za-z][A-Za-z0-9]{1,7});")
     nonisolated(unsafe) static let numberedMark = try? NSRegularExpression(pattern: "&#(x?)([0-9A-Fa-f]+);")
 
-    /// `name`: the place the text is about, so a picture's caption left in front of it can be told from its first words
+    /// `name`: the place the text is about, so a picture's caption left in front of it can be told from its first
+    /// words THE GUIDES' DISAMBIGUATION LINES OFF THE FRONT:,,, at the start of the text are dropped
+    nonisolated static func withoutHatnote(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        let heads = [#"^If you (were|are) looking for [^,.]*, (look|go|see) (here|there)[:.]?\s*"#,
+                     #"^(For|For the|For other) [^.]{0,120}?, see [^.]*\.\s*"#,
+                     #"^Not to be confused with [^.]*\.\s*"#,
+                     #"^This (article|page) is about [^.]*\.\s*"#]
+        var changed = true
+        while changed {
+            changed = false
+            for h in heads {
+                if let r = t.range(of: h, options: [.regularExpression, .caseInsensitive]), r.lowerBound == t.startIndex {
+                    t.removeSubrange(r); changed = true
+                }
+            }
+        }
+        return t.isEmpty ? s : t
+    }
+
     nonisolated static func plain(_ s: String, name: String? = nil) -> String {
-        var t = s
-        // ("&amp;" first: the source writes some marks twice over, "&amp;ndash;", and Australia's page read)
+        var t = Self.withoutHatnote(s)
         for (e, c) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
                        ("&mdash;", "\u{2014}"), ("&ndash;", "\u{2013}"), ("&hellip;", "\u{2026}"), ("&rsquo;", "\u{2019}"),
                        ("&lsquo;", "\u{2018}"), ("&ldquo;", "\u{201C}"), ("&rdquo;", "\u{201D}"), ("&eacute;", "é")] {
             t = t.replacingOccurrences(of: e, with: c)
         }
-        // every other named mark HTML has ("Faun&iacute;tica", "N&uuml;rnberg"; "&lrm;" is nothing seen)
+        // every other named mark HTML has (,; "&lrm;" is nothing seen)
         if t.contains("&"), let re = Self.namedMark {
             for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
                 guard let r = Range(m.range, in: t), let n = Range(m.range(at: 1), in: t), let c = HTMLEntities.character(String(t[n])) else { continue }
                 t.replaceSubrange(r, with: c)
             }
         }
-        // numbered ones ("&#8212;", "&#x2014;")
+        // numbered ones
         if t.contains("&#"), let re = Self.numberedMark {
             for m in re.matches(in: t, range: NSRange(t.startIndex..., in: t)).reversed() {
                 guard let r = Range(m.range, in: t), let hx = Range(m.range(at: 1), in: t), let num = Range(m.range(at: 2), in: t),
@@ -639,33 +735,29 @@ extension PlacePageState {
                 t.replaceSubrange(r, with: String(Character(u)))
             }
         }
-        // a page's own marks that a decoded "&lt;big&gt;" turns back into ("Dzongkha: <big>…</big>"): never words
+        // a page's own marks that a decoded turns back into: never words
         if t.contains("<") {
             t = t.replacingOccurrences(of: "</?(?:big|small|span|b|i|u|em|strong|sup|sub|br|div|p|font|abbr)\\b[^>]*>", with: "",
                                        options: [.regularExpression, .caseInsensitive])
         }
-        // editors' notes left in the source ("<!-- ... -->") are not text: taken out, and one left open runs to the end
+        // editors' notes left in the source  are not text: taken out, and one left open runs to the end
         if t.contains("<!--") {
             t = t.replacingOccurrences(of: "(?s)<!--.*?-->", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "(?s)<!--.*$", with: "", options: .regularExpression)
             t = t.trimmingCharacters(in: .whitespaces)
         }
-        // what the source's dropped marks leave behind: an empty bracket ("Germany (German: ) is"), a picture's tail
-        // ("|310x310px]]"), a bracket opening on a comma, a space before a comma
+        // what the source's dropped marks leave behind: an empty bracket, a picture's tail, a bracket opening on a
+        // comma, a space before a comma
         if t.contains(" )") || t.contains("( ") || t.contains(" ,") || t.contains("px]]") {
             t = t.replacingOccurrences(of: "\\s*\\((?:\\p{Lu}[\\p{L} ]{1,24}:)?[\\s,;]*\\)", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\s*\\|?\\d+(?:x\\d+)?px\\]\\]", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\(\\s*,\\s*", with: "(", options: .regularExpression)
             t = t.replacingOccurrences(of: "(\\w) ,", with: "$1,", options: .regularExpression)
         }
-        // A PICTURE'S MARKS LEFT IN THE TEXT. At the start ("thumb|400px|The Great Church of Debrecen in winter
-        // Debrecen is ..."): its options go, and its caption goes up to where the text starts with its own name
-        // ("Debrecen is", "São Paulo, or"); with no such start the caption stays, so it never takes a real sentence with
-        // it. Anywhere else ("... Central New York. 250px|thumb|View of the Salmon River"): from its options to the end of
-        // its caption's sentence. A template ("{{pagebanner|{ }}}") is never words.
+        // A PICTURE'S MARKS LEFT IN THE TEXT. At the start: its options go, and its caption goes up to where the text
+        // starts with its own name; with no such start the caption stays, so it never takes a real sentence with it.
+        // Anywhere else: from its options to the end of its caption's sentence. A template  is never words.
         let o = "(?:thumb|thumbnail|frame|frameless|border|left|right|center|none|upright(?:=[0-9.]+)?|[0-9]+(?:x[0-9]+)?px)"
-        // (14 Nov: each of these runs only when its marks are there; run on every one of a big country's thousands
-        // of listings, the regular expressions held the screen still for seconds and pages never opened)
         let firstWord = String(t.drop(while: \.isWhitespace).prefix { $0 != " " && $0 != "|" })
         let pictureFirst = ["thumb", "thumbnail", "frame", "frameless", "border", "left", "right", "center", "none"].contains(firstWord)
             || firstWord.hasPrefix("upright") || firstWord.hasSuffix("px")
@@ -680,16 +772,11 @@ extension PlacePageState {
         if t.contains("{{") {
             t = t.replacingOccurrences(of: "\\{\\{[^}]*\\}+\\s*", with: "", options: .regularExpression)
         }
-        // A LINK OUT ("[http://www.cocoskeelingislands.com.au Cocos (Keeling) Islands]"): its words, never its address
+        // A LINK OUT: its words, never its address
         if t.contains("[http") {
             t = t.replacingOccurrences(of: "\\[https?://\\S+\\s+([^\\]]+)\\]", with: "$1", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\[https?://\\S+\\]", with: "", options: .regularExpression)
         }
-        // THE SOURCE'S NOTES TO ITS READERS ("\"AL\" redirects here. For the Brazilian state ..., see Alagoas; ...";
-        // "This article is about the 23 special wards ... For information on Tokyo as a prefecture, ..., see Tokyo
-        // Metropolis."): never the text. "Redirects here" and "this article is about" are notes wherever they stand in
-        // the opening, and what leads into them goes with them; a "For ..., see ..." only at the start. A "see" with
-        // no full stop ("see Benin City Benin is a country") ends where the text starts with its own name.
         let lead = String(t.prefix(450))
         let notes = lead.contains("redirects here") || lead.contains("This article") || lead.contains("This page")
             || t.drop(while: \.isWhitespace).hasPrefix("For ")
@@ -703,7 +790,7 @@ extension PlacePageState {
                 ?? t.range(of: "^This (?:article|page) is about[^.]*\\.\\s*", options: .regularExpression) {
                 t.removeSubrange(r); continue
             }
-            // (a full stop after a lone capital, "the U.S. state", ends no sentence)
+            // (a full stop after a lone capital,, ends no sentence)
             if let r = t.range(of: "^For (?:the|a|an|other|information|more|details)\\b(?:[^.]|(?<=\\b[A-Z])\\.)*?\\bsee\\b(?:[^.]|(?<=\\b[A-Z])\\.)*(?<!\\b[A-Z])\\.\\s*",
                                 options: .regularExpression) {
                 if let name, let see = t.range(of: " see "), let st = Self.articleStart(t, name), st > see.lowerBound, st < r.upperBound {
@@ -715,22 +802,20 @@ extension PlacePageState {
             }
             break
         }
-        // a bracket opening on nothing ("Hong Kong ( Hēunggóng", "Kyzylorda ( ; also"), or closing on a space
+        // a bracket opening on nothing, or closing on a space
         if t.contains("( ") || t.contains(" )") {
             t = t.replacingOccurrences(of: "\\(\\s*[;,]?\\s+", with: "(", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\s+\\)", with: ")", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\s*\\(\\)", with: "", options: .regularExpression)
         }
-        // a picture's or link's closing marks left with nothing before them ("]] Île-de-France is ..."), and a link's
-        // opening ones with nothing after: never words
+        // a picture's or link's closing marks left with nothing before them, and a link's opening ones with nothing
+        // after: never words
         if t.contains("]]") || t.contains("[[") {
             t = t.replacingOccurrences(of: "^[\\s\\]|]+", with: "", options: .regularExpression)
             t = t.replacingOccurrences(of: "\\[\\[|\\]\\]", with: "", options: .regularExpression)
         }
-        // ITS NAME IN OTHER LANGUAGES before it says what it is (14 Nov: "Nigeria (Hausa: Najeriya, Igbo: Naíjíríà,
-        // Nigerian Pidgin: Naijá, ...) is a large country"; "Thailand (Thai: ประเทศไทย Prathet Thai or ...) is"): a
-        // bracket in the opening words that names a language ("Hausa:") or is written in another script goes; one in
-        // plain English stays ("Japan, known as Nihon or Nippon")
+        // ITS NAME IN OTHER LANGUAGES before it says what it is (:;): a bracket in the opening words that names a
+        // language  or is written in another script goes; one in plain English stays
         if let open = t.prefix(240).firstIndex(of: "(") {
             var out = String(t[..<open]), rest = Substring(t[open...]), cut = false
             while let o = rest.firstIndex(of: "("), rest.distance(from: rest.startIndex, to: o) < 240 - out.count,
@@ -752,8 +837,8 @@ extension PlacePageState {
             }
             if cut { t = out + rest }
         }
-        // A NOTE'S NUMBER LEFT STANDING ("² Florence (Italian: Firenze) is", 14 Nov): a raised figure that follows no
-        // word or number is the source's footnote mark, never text ("km²" keeps its own)
+        // A NOTE'S NUMBER LEFT STANDING: a raised figure that follows no word or number is the source's footnote
+        // mark, never text ("km²" keeps its own)
         if t.unicodeScalars.contains(where: { "\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".unicodeScalars.contains($0) }) {
             t = t.replacingOccurrences(of: "(^|(?<=[\\s(]))[\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}-\u{2079}]+\\s*", with: "", options: .regularExpression)
         }
@@ -789,8 +874,8 @@ extension PlacePageState {
         }
     }
 
-    /// where a text starts with its own name and then says what it is ("Debrecen is", "São Paulo, or", "Ségou (")
-    /// in its first 220 characters, any case and accents; nil when it never does
+    /// where a text starts with its own name and then says what it is (,,) in its first 220 characters, any case and
+    /// accents; nil when it never does
     nonisolated static func articleStart(_ t: String, _ name: String) -> String.Index? {
         let head = t.prefix(220)
         var from = head.startIndex
@@ -804,8 +889,8 @@ extension PlacePageState {
         return nil
     }
 
-    /// a text that stops mid-sentence (a listing kept to its first few hundred characters: "... and firebombings.
-    /// The") back to its last whole sentence; one with no whole sentence stays as it is
+    /// a text that stops mid-sentence (a listing kept to its first few hundred characters:) back to its last whole
+    /// sentence; one with no whole sentence stays as it is
     static func whole(_ s: String) -> String {
         let t = s.trimmingCharacters(in: .whitespaces)
         guard let last = t.last, !".!?\"\u{201D})".contains(last),
@@ -821,8 +906,8 @@ extension PlacePageState {
         return head
     }
     /// A ROW'S LINE CUT TO WHAT TWO LINES HOLD, AT A SENTENCE OR A WORD (the row cut it itself, in the middle of a
-    /// word: "Staff assist if yo…"): whole sentences while they fit; a first sentence too long is cut at its last
-    /// whole word, with the mark of more
+    /// word:): whole sentences while they fit; a first sentence too long is cut at its last whole word, with the mark
+    /// of more
     nonisolated static func brief(_ s: String, _ n: Int) -> String {
         guard s.count > n else { return s }
         let head = String(s.prefix(n))
@@ -832,16 +917,17 @@ extension PlacePageState {
         guard let sp = head.lastIndex(of: " ") else { return head }
         return String(head[..<sp]).trimmingCharacters(in: CharacterSet(charactersIn: " ,;:\u{2013}\u{2014}-(")) + "\u{2026}"
     }
+    /// a region's name without its level's word at its end, when that leaves a name
+    nonisolated static func withoutLevel(_ name: String, _ word: String) -> String {
+        let w = " " + word
+        guard name.count > w.count + 1, name.lowercased().hasSuffix(w.lowercased()) else { return name }
+        return String(name.dropLast(w.count))
+    }
     static func big(_ v: Double) -> String {
         if v >= 1_000_000_000 { return String(format: "%.1f billion", v / 1e9) }
         if v >= 1_000_000 { return String(format: "%.1f million", v / 1e6) }
         return Int(v).formatted()
     }
-    /// A PLACE'S AREA as the page writes it. The server's figure is Wikidata's: where it gives several (Bosnia: 10,
-    /// 51,187 and 51,209.2; the page read "10 km²") the largest is the place's. Two are another thing's and are
-    /// given here: France's 643,801 is the Republic with its overseas regions, which are places of their own in the
-    /// app (metropolitan France: 543,940, the land register's figure); Macau's 115.3 counts its sea (its land: 33.3 in
-    /// 2024, the government's yearbook). Under 10 km² one decimal ("2.1", "0.5"; the Vatican read "0 km²").
     static func area(_ v: Any?, cc: String) -> String? {
         // (Norway without Svalbard and Jan Mayen, each a place of its own here: the Nordic Council's figure; the
         // Netherlands in Europe with its lakes and rivers, without the sea: Wikidata's gave its waters too)
@@ -850,14 +936,13 @@ extension PlacePageState {
         guard let a = own[cc] ?? all.max(), a > 0 else { return nil }
         return a < 10 ? String(format: "%.1f", a) : big(a)
     }
-    /// THE TIME ZONES ROW: offsets only ("UTC+01:00"), each once, in order; more than three as a span. A place's
-    /// zones are the time zone database's own for it (zone.tab, bundled as place-zones.json: 247
-    /// places, 417 zones; public domain), each as its clock stands now, so the row is right through summer time and
-    /// when a country changes its clocks. The server's list is Wikidata's and was wrong where it mattered most: Russia
-    /// read "UTC+02:00", Australia "UTC+10:00", the United States, India and Chile nothing, Bosnia its winter and
-    /// summer offsets as two zones. It answers only for a place
-    /// the database does not list (Kosovo, the parts of the United Kingdom): where that place's own zones are named
-    /// by id, theirs; else the offsets written.
+    /// THE TIME ZONES ROW: offsets only, each once, in order; more than three as a span. A place's zones are the time
+    /// zone database's own for it (zone.tab, bundled as place-zones.json: 247 places, 417 zones; public domain), each
+    /// as its clock stands now, so the row is right through summer time and when a country changes its clocks. The
+    /// server's list is Wikidata's and was wrong where it mattered most: Russia read, Australia, the United States,
+    /// India and Chile nothing, Bosnia its winter and summer offsets as two zones. It answers only for a place the
+    /// database does not list (Kosovo, the parts of the United Kingdom): where that place's own zones are named by
+    /// id, theirs; else the offsets written.
     private static let placeZones: [String: [String]] = {
         guard let u = Bundle.main.url(forResource: "place-zones", withExtension: "json"), let d = try? Data(contentsOf: u),
               let j = try? JSONSerialization.jsonObject(with: d) as? [String: [String]] else { return [:] }
@@ -886,11 +971,10 @@ extension PlacePageState {
         if m.count == 1 { return ("Time zone", text(first)) }
         return ("Time zones", m.count <= 3 ? m.map(text).joined(separator: ", ") : "\(text(first)) to \(text(last))")
     }
-    /// THE PLUGS BY THEIR LETTERS ("Type C, E, F"), as travellers and adapters name them. The server's words are
-    /// Wikidata's labels, a mix of trade names and standards ( on Monaco's page). The British family's label alone
-    /// is the old round-pin D (Monaco,
-    /// Senegal, Madagascar, Chad: C, D, E ... in the published lists); beside a British standard of its own it adds
-    /// nothing.
+    /// THE PLUGS BY THEIR LETTERS, as travellers and adapters name them. The server's words are Wikidata's labels, a
+    /// mix of trade names and standards ( on Monaco's page). The British family's label alone is the old round-pin D
+    /// (Monaco, Senegal, Madagascar, Chad: C, D, E... in the published lists); beside a British standard of its own
+    /// it adds nothing.
     static func plugs(_ v: Any?) -> String? {
         let names = (v as? [String]) ?? (v as? String).map { [$0] } ?? []
         let british = names.contains("BS 1363") || names.contains("BS 546")
@@ -965,10 +1049,16 @@ private struct PageLayer: View {
     let water: Water
     let page: PlacePageState.OnePage
     let top: Bool
+    init(map: MapController, water: Water, page: PlacePageState.OnePage, top: Bool) {
+        self.map = map; self.water = water; self.page = page; self.top = top
+        let c = Self.rgb(page.country)
+        _groundRGB = State(initialValue: c)
+        _ground = State(initialValue: c.map(Self.color))
+    }
     @State private var ground: [Color] = []
-    /// the same colours as numbers, for the living field behind the page
+    /// the same colours as the shader takes them (sRGB, 0 to 1)
     @State private var groundRGB: [SIMD3<Double>] = []
-    /// how far the page is pulled down past its top (the photo grows into it)
+    /// how far the page is pulled down past its top: the top photo grows into it, so above the page is always the photo
     @State private var pull: CGFloat = 0
     /// how far the page's end is below the screen's bottom (the white under the capsule gives way to the ground there)
     @State private var endBelow: CGFloat = .infinity
@@ -978,6 +1068,11 @@ private struct PageLayer: View {
     @State private var spot = ScrollPosition(edge: .top)
     /// words have gone up under the head (the top edge's blur is on)
     @State private var under = false
+    /// THE PAGE'S LOADING: the page shows once its facts and its top photo are both in (the facts waited for up to 8
+    /// s, the photo up to 2.5 s after them), all at once; until then the ground and the logo. The logo only after a
+    /// quarter second, so a quick page never flashes it.
+    @State private var shown = false
+    @State private var waited = false
 
     var body: some View { pageBody }
 
@@ -993,16 +1088,16 @@ private struct PageLayer: View {
                            height: page.origin.height + (full.height - page.origin.height) * p)
             // (at full, the screen's own corner: a fixed 55 left triangles of map at the corners of phones rounded less)
             let corner = min(page.origin.height / 2, 22) + (L.screenCorner - min(page.origin.height / 2, 22)) * p
-            // (31 Oct 03:07: opening and leaving "strange"; the way Apple's zoom does it) what is under the page dims a
-            // little as it grows, and the page itself fades over its first and last stretch, so it never lands as a small
-            // card on the map where it opened from (the camera may have moved since)
+            // what is under the page dims a little as it grows, and the page itself fades over its first and last
+            // stretch, so it never lands as a small card on the map where it opened from (the camera may have moved
+            // since)
             Color.black.opacity(0.12 * Double(p))
                 .frame(width: L.W, height: L.H)
                 .allowsHitTesting(false)
             content(key, L: L)
                 .frame(width: L.W, height: L.H)
-                // one scale for both sides (the way Apple's zoom grows a view): the page is never squeezed or stretched on
-                // the way; the rounded rectangle growing from what opened it shows as much of it as fits (31 Oct 03:07)
+                // one scale for both sides (the way Apple's zoom grows a view): the page is never squeezed or
+                // stretched on the way; the rounded rectangle growing from what opened it shows as much of it as fits
                 .scaleEffect(r.width / L.W, anchor: .topLeading)
                 .offset(x: r.minX, y: r.minY)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
@@ -1019,9 +1114,9 @@ private struct PageLayer: View {
         ScrollViewReader { reader in
         ScrollView {
             VStack(spacing: 32) {
-                // THE PHOTO AT THE TOP (13 Nov 22:30, 23:04): the screen's whole width, from its top edge under the head,
-                // no box; its lower part dissolves into the page's gradient (a gradient edge, never a cut), and the name
-                // stands on that dissolve with the buttons straight under it. No flag over a photo.
+                // THE PHOTO AT THE TOP: the screen's whole width, from its top edge under the head, no box; its lower
+                // part dissolves into the page's gradient (a gradient edge, never a cut), and the name stands on that
+                // dissolve with the buttons straight under it. No flag over a photo.
                 let hero = page.facts?.photo.flatMap { Self.commons($0, width: 1400) }
                 if let u = hero {
                     // (wider than the page's margins by drawing past them: the margins of everything under it stay)
@@ -1067,36 +1162,31 @@ private struct PageLayer: View {
                         }
                 }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
-                // (Suggestions stays away until it has something in it: a title over nothing was useless words, 12 Nov)
+                if MapSettingsStore.shared.value.ai { suggestions() }
                 if MarkStore.shared.state(key).stamped { record(key) }
                 if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
                 Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
             .coordinateSpace(.named("page"))
-            // the ground scrolls with the page (one layer behind the whole scroll, 16.3)
-            // (under a photo the gradient starts where the photo starts to dissolve, so its colour is what it dissolves into)
-            .background(alignment: .top) { groundView(L: L, from: page.facts?.photo.flatMap { Self.commons($0, width: 1400) } != nil ? Self.heroH(L) * 0.5 : 0) }
-            // and the same ground again at the page's end, going on below it, so pulling past the end shows it too,
-            // never plain white: top and bottom alike
-            .background(alignment: .bottom) { endGround(L: L) }
         }
+        .scrollBlur()
         .scrollIndicators(.hidden)
         .scrollPosition($spot)
-        // the one blur under the head, only once words scroll under it (16.3)
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        // and at the bottom, under the tabs' capsule, so a row there fades instead of being cut by it
-        .scrollEdgeEffectStyle(.soft, for: .bottom)
-        // (the system's edge never reached it here: the page is laid out over the whole screen) the page's own white
-        // coming up under the capsule, so rows fade into it and are never cut by its edge
-        .overlay(alignment: .bottom) {
-            // (solid white by the capsule's top, so no line of words reads through or round its glass)
-            LinearGradient(stops: [.init(color: Palette.white.opacity(0), location: 0), .init(color: Palette.white.opacity(0.92), location: 0.42),
-                                   .init(color: Palette.white, location: 0.55), .init(color: Palette.white, location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: L.H - L.capsule.minY + 64)
-                .opacity(Double(min(1, max(0, (endBelow - 40) / 220))))
-                .allowsHitTesting(false)
+        #if DEBUG
+        // (the test driver's `scrolltest <y>`: the page that far down)
+        .onChange(of: ScrollTest.shared.y) { _, y in spot.scrollTo(y: y) }
+        #endif
+        .opacity(shown ? 1 : 0)
+        // at the bottom, under the tabs' capsule, the rows fade out over the ground; none at the end
+        .mask {
+            let f = Double(min(1, max(0, (endBelow - 40) / 220)))
+            VStack(spacing: 0) {
+                Color.black
+                LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(1 - f), location: 0.55),
+                                       .init(color: .black.opacity(1 - f), location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: L.H - L.capsule.minY + 64)
+            }
         }
         .onChange(of: PlacePageState.shared.toEnd) { _, n in reader.scrollTo(n == 1 ? "highlights" : "end", anchor: .top) }
         // what is typed in the head's field narrows the long lists: the page goes to them as the first letter comes
@@ -1126,17 +1216,50 @@ private struct PageLayer: View {
         .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y + $0.contentInsets.top > 4 }) { _, u in
             if u != under { withAnimation(Motion.quick) { under = u } }
         }
-        .overlay(alignment: .top) {
-            Rectangle().fill(.ultraThinMaterial)
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.6),
-                                             .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
-                .frame(height: L.safeTop + 84)
-                .opacity(under ? 1 : 0)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
         }
+        .overlay {
+            if !shown {
+                // (the logo's own animation: its light turning round the line, a turn in 2.4 s; still with Reduce Motion)
+                TimelineView(.animation(paused: Motion.reduce || !waited)) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    LogoMark(phase: LogoMark.rest + (Motion.reduce ? 0 : t.truncatingRemainder(dividingBy: 2.4) / 2.4 * 2 * .pi))
+                }
+                    .frame(width: 88, height: 88)
+                    .opacity(waited ? 1 : 0)
+                    .transition(.identity)
+                    .animation(Motion.quick, value: waited)
+                    .accessibilityLabel("Loading")
+            }
         }
-        .background(Palette.white)
+        // (the facts' photo fetched before the page shows, so it never pops in over a page already laid out)
+        .task(id: page.settled) {
+            guard !shown, page.settled else { return }
+            if let u = page.facts?.photo.flatMap({ Self.commons($0, width: 1400) }) {
+                await withTaskGroup(of: Void.self) { g in
+                    g.addTask { await PagePhoto.prefetch(u) }
+                    g.addTask { try? await Task.sleep(for: .seconds(2.5)) }
+                    await g.next()
+                    g.cancelAll()
+                }
+            }
+            withAnimation(Motion.chrome) { shown = true }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(250))
+            waited = true
+            try? await Task.sleep(for: .milliseconds(7750))
+            if !shown { withAnimation(Motion.chrome) { shown = true } }
+        }
+        // THE GROUND: the app's moving gradient behind the whole page, in the flag's or the photo's colours, still
+        // while the page scrolls over it; under it white, so the colours stay light behind the words
+        .background {
+            ZStack {
+                Palette.white
+                // (only the page on top moves: those under it are still, never running unseen)
+                LivingField(custom: groundFour, paused: !top, saturation: 1.16, power: 2.0).opacity(0.7)
+            }
+            .ignoresSafeArea()
+        }
     }
 
     /// THE TOP (16.4.1): a country's flag (4:3, 64 pt tall) centred 24 pt under the head's foot, its name under it; any
@@ -1175,8 +1298,6 @@ private struct PageLayer: View {
         .frame(maxWidth: .infinity)
         .padding(.top, under ? 0 : L.headBottom + 24)
         .contentShape(Rectangle())
-        // (in the screen's space: the header moves and shrinks with the drag, so measured in its own space the page
-        // followed at two thirds of the finger and shook, 8 Nov; a cancelled drag springs the page back)
         .gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .updating($headerLive) { _, live, _ in live = true }
             .onChanged { v in page.drag = max(0, v.translation.height) }
@@ -1192,14 +1313,17 @@ private struct PageLayer: View {
     /// THE MARKING BLOCK (16.4.2): the stamping card's own buttons
     private func marking(_ key: PlaceKey) -> some View {
         let s = MarkStore.shared.state(key)
+        // a place in a country stamps its country too; a country's own page leaves it to the store (its territories'
+        // sovereign rule)
+        let cc = key.kind == .country ? "" : page.country
         return HStack(spacing: 12) {
             Button {
                 Task {
                     if s.stamped { Feel.lift(); await MarkStore.shared.unstamp(key, name: page.name) }
-                    else { Feel.stamp(); await MarkStore.shared.stamp(key, name: page.name) }
+                    else { Feel.stamp(); await MarkStore.shared.stamp(key, name: page.name, cc: cc) }
                 }
             } label: {
-                Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
+                Text(s.stamped ? "Stamped" : "Stamp").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                     .frame(maxWidth: .infinity).frame(height: 44)
                     .glassEffect(s.stamped ? PageGlass.control.tint(Palette.lime) : PageGlass.control, in: .capsule)
             }
@@ -1208,10 +1332,10 @@ private struct PageLayer: View {
                 Feel.tap()
                 Task {
                     if s.wished { await MarkStore.shared.unwish(key, name: page.name) }
-                    else { await MarkStore.shared.wish(key, name: page.name) }
+                    else { await MarkStore.shared.wish(key, name: page.name, cc: cc) }
                 }
             } label: {
-                Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(s.stamped ? 0.5 : 1)).lineLimit(1).minimumScaleFactor(0.7)
+                Text("Wishlist").font(.body.weight(.semibold)).foregroundStyle(s.wished ? Palette.white : Palette.ink.opacity(s.stamped ? 0.5 : 1)).lineLimit(1)
                     .frame(maxWidth: .infinity).frame(height: 44)
                     .glassEffect(s.wished ? PageGlass.control.tint(Palette.blue) : PageGlass.control, in: .capsule)
             }
@@ -1249,8 +1373,7 @@ private struct PageLayer: View {
                     } else { Palette.cream }
                 }
                 .frame(width: w, height: w * 10 / 16)
-                // (the page's photo corner, as a thing's page: these were cut square)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .clipped()
                 Button {
                     Feel.tap()
                     Task {
@@ -1296,8 +1419,8 @@ private struct PageLayer: View {
         InsideList(title: title, all: all, country: page.country, countryName: page.key.kind == .country ? page.name : (map.world?.placeIndex[page.country].map { map.world!.places[$0].n } ?? ""), map: map)
     }
 
-    /// YOUR RECORD (16.4.10, only when stamped): big numbers in the Profile's style (64 pt rounded over 15 pt labels):
-    /// the times; on a country its regions ("12 of 16") and cities. The month waits for the visits' dates (Part 9.9)
+    /// YOUR RECORD (16.4.10, only when stamped): big numbers in the Profile's style (64 pt rounded over 15 pt
+    /// labels): the times; on a country its regions  and cities. The month waits for the visits' dates (Part 9.9)
     private func record(_ key: PlaceKey) -> some View {
         let st = MarkStore.shared.state(key)
         var items: [(String, String)] = []
@@ -1327,15 +1450,11 @@ private struct PageLayer: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// SUGGESTIONS (16.4.9, renamed): only its title and what it will be made from, nothing
-    /// in it yet: the suggestions come with Profile and the AI. The visa and advice data
-    /// stay in Facts for then.
+    /// SUGGESTIONS: PageSuggestions
     private func suggestions() -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        let all = (page.facts?.regions ?? []) + (page.facts?.cities ?? [])
+        return PageSuggestions(place: page.name, pageKey: page.key.description, all: all, country: page.country,
+                               countryName: page.key.kind == .country ? page.name : (map.world?.placeIndex[page.country].map { map.world!.places[$0].n } ?? ""))
     }
 
     /// FACTS (16.4.5): two columns, each value 17 pt semibold over its label 15 pt black 50%, a thin line between rows
@@ -1374,50 +1493,13 @@ private struct PageLayer: View {
         }
     }
 
-    /// THE GROUND (16.3): the flag's colours, each the nearest of the palette's, strong at the top and gentle further
-    /// down, one layer behind the whole top
     /// the top photo's height: three quarters of the screen's width
     static func heroH(_ L: Layout) -> CGFloat { (L.W * 0.75).rounded() }
 
-    /// `from`: how far down the page the gradient's strongest colour starts (under a photo, where it dissolves)
-    private func groundView(L: Layout, from: CGFloat = 0) -> some View {
-        // THE GROUND is the app's living gradient (the shader, never a plain linear ramp), in the flag's or the
-        // photo's own colours. It goes on above the page's top at full strength, so pulling the page down shows more
-        // of it, never white, and it settles into the page's white further down along the field's own soft edge.
+    /// the ground's four colours: the flag's or the photo's (cream with neither)
+    private var groundFour: [SIMD3<Double>] {
         let c = groundRGB.isEmpty ? [Palette.named["cream"] ?? SIMD3(0.98, 0.96, 0.94)] : groundRGB
-        let four = (0 ..< 4).map { c[$0 % c.count] }
-        return LivingField(custom: four, saturation: 1.16, power: 2.0)
-            .frame(height: L.H + L.H * 0.95)
-            .mask {
-                VStack(spacing: 0) {
-                    Rectangle().frame(height: L.H + L.H * 0.25)
-                    // (the mask's edge is the only ramp: the colours are the shader's own)
-                    Rectangle().fill(.linearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom))
-                        .frame(height: L.H * 0.7)
-                }
-            }
-            .opacity(0.85)
-            .offset(y: -L.H + from)
-            .allowsHitTesting(false)
-    }
-
-    /// the ground at the page's end: the same living field, coming in over the last part of the page and going on a
-    /// screen below its end
-    private func endGround(L: Layout) -> some View {
-        let c = groundRGB.isEmpty ? [Palette.named["cream"] ?? SIMD3(0.98, 0.96, 0.94)] : groundRGB
-        let four = (0 ..< 4).map { c[(c.count - 1 - $0 % c.count + c.count) % c.count] }
-        return LivingField(custom: four, saturation: 1.16, power: 2.0)
-            .frame(height: L.H * 1.6)
-            .mask {
-                VStack(spacing: 0) {
-                    Rectangle().fill(.linearGradient(colors: [.black.opacity(0), .black], startPoint: .top, endPoint: .bottom))
-                        .frame(height: L.H * 0.6)
-                    Rectangle().frame(height: L.H)
-                }
-            }
-            .opacity(0.85)
-            .offset(y: L.H)
-            .allowsHitTesting(false)
+        return (0 ..< 4).map { c[$0 % c.count] }
     }
 
     /// a flag's colours: drawn small, each pixel the nearest of the twelve, the commonest first (white and ink left
@@ -1428,33 +1510,59 @@ private struct PageLayer: View {
         return rgb(cg)
     }
     static func color(_ v: SIMD3<Double>) -> Color { Color(red: v.x, green: v.y, blue: v.z) }
+    /// a colour's hue in degrees (0 red, 120 green, 240 blue)
+    static func hue(_ c: SIMD3<Double>) -> Double {
+        let mx = c.max(), mn = c.min(), d = mx - mn
+        guard d > 0.0001 else { return 0 }
+        var h: Double
+        if mx == c.x { h = (c.y - c.z) / d } else if mx == c.y { h = (c.z - c.x) / d + 2 } else { h = (c.x - c.y) / d + 4 }
+        h *= 60
+        return h < 0 ? h + 360 : h
+    }
     static func colours(_ cg: CGImage, photo: Bool = false) -> [Color] { rgb(cg, photo: photo).map(color) }
     /// a picture's colours the same way: a flag's, or (a town's or a thing's page, P05 §2) its photo's
     /// `photo`: a photo's greys and beiges (stone, concrete, haze) are not its colour either
     static func rgb(_ cg: CGImage, photo: Bool = false) -> [SIMD3<Double>] {
         let entries = Array(Palette.named)
         let names: [(Color, SIMD3<Double>)] = entries.map { (Color(red: $0.value.x, green: $0.value.y, blue: $0.value.z), $0.value) }
-        let w = 16, h = 12
+        let w = photo ? 16 : 48, h = photo ? 12 : 32
         var px = [UInt8](repeating: 0, count: w * h * 4)
         guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return [] }
+        ctx.interpolationQuality = .none
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let neutral: Set<String> = ["white", "ink", "cream", "grey", "beige-dark"]
         var count = [Int](repeating: 0, count: names.count)
         for i in 0 ..< w * h {
             let c = SIMD3(Double(px[i * 4]), Double(px[i * 4 + 1]), Double(px[i * 4 + 2])) / 255
             var best = 0, bd = Double.infinity
             for (n, v) in names.enumerated() { let d = simd_length_squared(v.1 - c); if d < bd { bd = d; best = n } }
+            // a flag's deep colour (navy, forest green, maroon) is a colour, not black or grey: the coloured one
+            // nearest by hue angle
+            if !photo, neutral.contains(entries[best].key), (c.max() - c.min()) > 0.18 {
+                let hc = Self.hue(c)
+                var hb = Double.infinity
+                for (n, v) in names.enumerated() where !neutral.contains(entries[n].key) {
+                    let d = abs(Self.hue(v.1) - hc), a = min(d, 360 - d)
+                    if a < hb { hb = a; best = n }
+                }
+            }
             count[best] += 1
         }
-        let order = count.indices.filter { count[$0] > 0 }.sorted { count[$0] > count[$1] }
-        let plain: Set<String> = photo ? ["white", "ink", "cream", "grey", "beige-dark"] : ["white", "ink", "cream"]
+        // (a flag's colour is one that covers at least a fortieth of it: an emblem's edge pixels are not)
+        let least = photo ? 1 : max(1, w * h / 40)
+        let order = count.indices.filter { count[$0] >= least }.sorted { count[$0] > count[$1] }
+        let plain: Set<String> = photo ? neutral : ["white", "ink", "cream"]
         let coloured = order.filter { !plain.contains(entries[$0].key) }
-        let use = coloured.isEmpty ? order : coloured
+        var use = coloured.isEmpty ? order : coloured
+        // a flag of one colour and white (Switzerland, Japan, Canada): its white stays in, so the ground flows
+        // between the two and is never one plain colour
+        if !photo, coloured.count == 1, let w = order.first(where: { plain.contains(entries[$0].key) }) { use.append(w) }
         return use.prefix(3).map { names[$0].1 }
     }
 }
 
-/// one of a page's "What is in it" lists (16.4.8)
+/// one of a page's lists (16.4.8)
 private struct InsideList: View {
     let title: String
     let all: [PlacePageState.Inside]
@@ -1477,7 +1585,7 @@ private struct InsideList: View {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             ForEach(rows.prefix(limit), id: \.self) { r in row(r) }
             if rows.count > limit {
-                Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
+                Button { shown += 10 } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1490,9 +1598,8 @@ private struct InsideList: View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                // (a long commune, "Saint-Remy-en-Bouzemont-...", gets a little smaller before it is ever cut)
-                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1).minimumScaleFactor(0.7)
-                if !r.line.isEmpty { Text(r.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1).minimumScaleFactor(0.8) }
+                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                if !r.line.isEmpty { Text(r.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
             }
             Spacer(minLength: 8)
             Button {
@@ -1509,11 +1616,11 @@ private struct InsideList: View {
                     else { Feel.stamp(); await MarkStore.shared.stamp(r.key, name: r.name, cc: country) }
                 }
             } label: {
-                // the plus; stamped, the card's own "Stamped" capsule (no tick, 0.8.4; no lone lime circle, 30 Oct 21:42)
+                // the plus; stamped, the same 44 pt circle filled lime
                 if s.stamped {
-                    Text("Stamped").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 14).frame(height: 44)
-                        .glassEffect(PageGlass.control.tint(Palette.lime), in: .capsule)
+                    Color.clear
+                        .frame(width: 44, height: 44)
+                        .glassEffect(PageGlass.control.tint(Palette.lime), in: .circle)
                 } else {
                     Icon5(key: "plus", ink: Palette.ink, size: 22)
                         .frame(width: 44, height: 44)
@@ -1531,16 +1638,16 @@ private struct InsideList: View {
         .onTapGesture {
             // its page, pushed on top, growing out of this row (16.7); closing it goes back into the row
             let page = PlacePageState.shared
-            page.push(r.key, name: r.name, what: r.key.kind == .town ? "Town in \(r.line), \(countryName)" : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
+            page.push(r.key, name: r.name, what: r.key.kind == .town ? (r.line.isEmpty ? "Town in \(countryName)" : "Town in \(r.line), \(countryName)") : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
                          country: country, code: r.code, from: frames.at[r.key] ?? .zero)
         }
     }
 }
 
-/// SOURCES (16.4.11, 16.6): a row "Sources" at the page's foot; a tap raises the page's own sheet (16.6) to 50%, which
-/// lists the sources the page drew on: Wikivoyage's text (CC BY-SA), Wikidata's and GeoNames' facts, each photo with
-/// its author and licence from the server's Commons credits, and the governments whose advice is shown. (The visa
-/// rules' and the climate figures' own sources are not recorded in the server's data yet, so they are not named.)
+/// SOURCES (16.4.11, 16.6): a row at the page's foot; a tap raises the page's own sheet (16.6) to 50%, which lists
+/// the sources the page drew on: Wikivoyage's text (CC BY-SA), Wikidata's and GeoNames' facts, each photo with its
+/// author and licence from the server's Commons credits, and the governments whose advice is shown. (The visa rules'
+/// and the climate figures' own sources are not recorded in the server's data yet, so they are not named.)
 struct SourcesRow: View {
     let facts: PlacePageState.Facts
     let kind: PlaceKey.Kind
@@ -1608,7 +1715,7 @@ struct SourcesRow: View {
                 func v(_ k: String) -> String? { ((meta[k] as? [String: Any])?["value"] as? String).map(Self.text) }
                 let file = String(title.dropFirst(5))
                 let key = batch.first { $0.replacingOccurrences(of: "_", with: " ") == file } ?? file
-                // (an artist's wiki signature keeps its time stamp, "historicair 11:41, 15 October 2006 (UTC)": the name alone)
+                // (an artist's wiki signature keeps its time stamp,: the name alone)
                 let artist = v("Artist")?.replacingOccurrences(of: #"\s*\d{1,2}:\d{2},\s*\d{1,2}\s+\p{L}+\s+\d{4}\s*\(UTC\)"#,
                                                                with: "", options: .regularExpression)
                 out[key] = [artist, v("LicenseShortName")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
@@ -1629,12 +1736,12 @@ struct SourcesRow: View {
     }
 }
 
-/// ONE GLASS ON A PAGE (16.3, Part 0.7): everything glass
-/// on a place's page (the head's circles and search the whole time the page is up, the marking block, the lists'
-/// fields and buttons) is the logically frosted glass, and never changes kind while it moves
+/// ONE GLASS ON A PAGE: everything glass on a place's page (the head's circles and search the whole time the page is
+/// up, the marking block, the lists' fields and buttons) is the logically frosted glass, and never changes kind while
+/// it moves
 enum PageGlass {
-    /// TRIAL (31 Oct 11:47, may be reversed): Apple's split as asked for, the navigation and the small controls clear,
-    /// the rest frosted. Set to false and every glass is as before (all of it frosted while a page is up).
+    /// TRIAL: Apple's split as asked for, the navigation and the small controls clear, the rest frosted. Set to false
+    /// and every glass is as before (all of it frosted while a page is up).
     static let clearControls = true
     /// a page's surfaces and its text fields (frosted, so typed words read over the page)
     static let on: SwiftUI.Glass = .regular
@@ -1643,14 +1750,13 @@ enum PageGlass {
     /// the head's circles (search, the plus and its tools): navigation, clear on the map and over a page
     @MainActor static var head: SwiftUI.Glass { clearControls ? .clear : surface }
     /// the water and what rises out of it, search's results box, the map's word capsules: the system's own frosted
-    /// glass everywhere, so it follows iOS 27's Liquid Glass slider
-    /// and its legibility. (The passport's pages stay clear:.)
+    /// glass everywhere, so it follows iOS 27's Liquid Glass slider and its legibility.
     @MainActor static var surface: SwiftUI.Glass { .regular }
 }
 
 
-/// ACTIVITIES (16.4.7; the word chosen, never "See and do"): its own search field, the first five rows, then Show more; each
-/// row its name and one line (Wikivoyage's words, credited in Sources)
+/// ACTIVITIES (16.4.7; the word chosen, never): its own search field, the first five rows, then Show more; each row
+/// its name and one line (Wikivoyage's words, credited in Sources)
 private struct ActivitiesList: View {
     let all: [PlacePageState.Activity]
     @State private var shown = 5
@@ -1678,7 +1784,7 @@ private struct ActivitiesList: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             if rows.count > limit {
-                Button { shown += 10 } label: {  // (the next rows are simply there, no fade, 8 Nov)
+                Button { shown += 10 } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1689,7 +1795,7 @@ private struct ActivitiesList: View {
 }
 
 /// A PAGE'S PHOTO, fetched once and kept: scrolling a row of them back and forth shows each as it was, never blank
-/// again while it reloads (AsyncImage keeps nothing)
+/// again while it reloads
 struct PagePhoto: View {
     let url: URL
     /// told the picture once it is there (the page takes its colours from it)
@@ -1704,20 +1810,50 @@ struct PagePhoto: View {
                 .onAppear { onImage?(i) }
         } else {
             Palette.cream.task(id: url) {
-                guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
-                let i = Self.upper(i0)
-                let ready = await i.byPreparingForDisplay() ?? i
-                Self.kept.setObject(ready, forKey: url as NSURL)
-                image = ready
+                await Self.prefetch(url)
+                image = Self.kept.object(forKey: url as NSURL)
             }
         }
+    }
+
+    /// the photo fetched, its upper part taken (a standing photo) and made ready to draw, kept for the page; one fetch
+    /// per photo at a time (the page's wait and the photo itself asked for it together and it came down twice)
+    private static var fetching: [URL: Task<Void, Never>] = [:]
+    static func prefetch(_ url: URL) async {
+        guard kept.object(forKey: url as NSURL) == nil else { return }
+        if let t = fetching[url] { await t.value; return }
+        let t = Task {
+            let file = disk(url)
+            if let d = try? Data(contentsOf: file), let i = UIImage(data: d) {
+                kept.setObject(await i.byPreparingForDisplay() ?? i, forKey: url as NSURL)
+                return
+            }
+            guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
+            let i = upper(i0)
+            let ready = await i.byPreparingForDisplay() ?? i
+            kept.setObject(ready, forKey: url as NSURL)
+            if let jpg = i.jpegData(compressionQuality: 0.85) {
+                try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? jpg.write(to: file, options: .atomic)
+            }
+        }
+        fetching[url] = t
+        await t.value
+        fetching[url] = nil
     }
 }
 
 extension PagePhoto {
-    /// A STANDING PHOTO'S UPPER PART (14 Nov: the Matterhorn's page showed only the lake it stands over; a wide frame
-    /// filled from a tall photo keeps its middle): a square from just under its top, where a mountain, a tower or a
-    /// face is; a lying photo as it is
+    /// where a page photo is kept on the phone (Caches: the system may clear it, and it is fetched again)
+    static func disk(_ url: URL) -> URL {
+        var h: UInt64 = 14695981039346656037
+        for b in url.absoluteString.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("page-photos")
+        return dir.appendingPathComponent(String(h, radix: 16) + ".jpg")
+    }
+
+    /// A STANDING PHOTO'S UPPER PART: a square from just under its top, where a mountain, a tower or a face is; a
+    /// lying photo as it is
     static func upper(_ i: UIImage) -> UIImage {
         guard i.imageOrientation == .up, let cg = i.cgImage, cg.height > cg.width else { return i }
         let w = cg.width, top = cg.height / 20
@@ -1754,5 +1890,108 @@ struct PhotoDissolve: View {
             .fill(.black)
             .blur(radius: h * 0.09)
         }
+    }
+}
+
+
+/// SUGGESTIONS ON A PLACE'S PAGE. When the section comes into view, the AI picks up to three of the page's own
+/// regions and cities you haven't stamped, each with one line on why it suits you; a pick opens its page as its row
+/// does. Nothing it can't stand behind: fewer picks, or none, and the section stays as it was. Kept for a week per
+/// page, asked again once your stamps change.
+private struct PageSuggestions: View {
+    let place: String
+    let pageKey: String
+    let all: [PlacePageState.Inside]
+    let country: String
+    let countryName: String
+    @State private var picks: [(PlacePageState.Inside, String)] = []
+    @State private var asked = false
+    @State private var seen = false
+    @State private var frame: CGRect = .zero
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            if !picks.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(picks, id: \.0.key) { r, why in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                            Text(why).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
+                        .onTapGesture { open(r) }
+                        .accessibilityAddTraits(.isButton)
+                    }
+                }
+                .padding(.top, 8)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // asked once it is on screen (and again if the page's places come after it was first seen)
+        .onGeometryChange(for: Bool.self) { g in
+            let f = g.frame(in: .global)
+            return f.minY < UIScreen.main.bounds.height && f.maxY > 0
+        } action: { on in seen = on; if on { load() } }
+        .onChange(of: all.count) { _, _ in if seen { load() } }
+    }
+
+    private func open(_ r: PlacePageState.Inside) {
+        Feel.tap()
+        PlacePageState.shared.push(r.key, name: r.name,
+            what: r.key.kind == .town ? (r.line.isEmpty ? "Town in \(countryName)" : "Town in \(r.line), \(countryName)")
+                : "\(r.line.components(separatedBy: " · ").first ?? "Region") of \(countryName)",
+            country: country, code: r.code, from: frame)
+    }
+
+    private func load() {
+        guard !asked else { return }
+        let open = all.filter { !MarkStore.shared.state($0.key).stamped }
+        #if DEBUG
+        NSLog("wya suggestions load %@ all %d open %d", pageKey, all.count, open.count)
+        #endif
+        guard open.count >= 2 else { return }
+        asked = true
+        let stampedN = MarkStore.shared.marks.values.filter(\.stamped).count
+        let byName = Dictionary(open.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })
+        func show(_ ps: [AIService.Pick]) {
+            let rows = ps.compactMap { p in byName[p.name.lowercased()].map { ($0, p.why) } }
+            withAnimation(Motion.chrome) { picks = rows }
+        }
+        if let kept = SuggestionsCache.get(pageKey, stamped: stampedN) { show(kept); return }
+        let names = Array(open.prefix(60).map(\.name))
+        Task {
+            let r = await AIService.suggest(place: place, from: names, context: AIContext.current())
+            if case .success(let ps) = r {
+                SuggestionsCache.put(pageKey, stamped: stampedN, ps)
+                show(ps)
+            }
+        }
+    }
+}
+
+/// what a page's suggestions were, kept on the phone for a week (asked again when your stamps change)
+@MainActor
+enum SuggestionsCache {
+    struct Entry: Codable { var stamped: Int; var at: Date; var picks: [AIService.Pick] }
+    private static var url: URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("suggestions.json")
+    }
+    private static var all: [String: Entry] = {
+        guard let u = url, let d = try? Data(contentsOf: u) else { return [:] }
+        return (try? JSONDecoder().decode([String: Entry].self, from: d)) ?? [:]
+    }()
+    static func get(_ key: String, stamped: Int) -> [AIService.Pick]? {
+        guard let e = all[key], e.stamped == stamped, Date().timeIntervalSince(e.at) < 7 * 86400 else { return nil }
+        return e.picks
+    }
+    static func put(_ key: String, stamped: Int, _ picks: [AIService.Pick]) {
+        all[key] = Entry(stamped: stamped, at: Date(), picks: picks)
+        if let u = url, let d = try? JSONEncoder().encode(all) { try? d.write(to: u, options: .atomic) }
     }
 }

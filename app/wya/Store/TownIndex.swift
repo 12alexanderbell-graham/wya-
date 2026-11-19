@@ -17,19 +17,33 @@ final class TownIndex {
         let people: Int
         let lat: Double
         let lon: Double
-        /// its first-level division's name ("Hessen"), or ""
+        /// its first-level division's name, or ""
         let region: String
         var key: String { "t:" + id }
     }
     private(set) var ready = false
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, hit: Hit)] = []
-    /// each row's other names folded, "|a|b|c" ("" for none), read after the index
+    /// each row's other names folded, ("" for none), read after the index
     @ObservationIgnored private var alt: [String] = []
     @ObservationIgnored private var last: (q: String, open: String?, hits: [Hit])?
+    /// THE NAMES AS BYTES, for the search's pass over every town (a pass over the names as strings held the screen a
+    /// quarter of a second a letter): each row's folded name, and its other names as, one after another, with where
+    /// each row's starts (one more entry than rows, the end)
+    @ObservationIgnored private var ownBytes: [UInt8] = []
+    @ObservationIgnored private var ownStart: [Int32] = []
+    @ObservationIgnored private var altBytes: [UInt8] = []
+    @ObservationIgnored private var altStart: [Int32] = []
+    nonisolated private static func pack(_ names: [String]) -> ([UInt8], [Int32]) {
+        var bytes: [UInt8] = [], start: [Int32] = [0]
+        bytes.reserveCapacity(names.reduce(0) { $0 + $1.utf8.count })
+        start.reserveCapacity(names.count + 1)
+        for n in names { bytes.append(contentsOf: n.utf8); start.append(Int32(bytes.count)) }
+        return (bytes, start)
+    }
 
-    /// EACH FIRST-LEVEL DIVISION'S PEOPLE, the sum of its towns' ("us|california": 39 million), by country and the
-    /// division's folded name: how the regions' search tells California from Çal. Made once.
+    /// EACH FIRST-LEVEL DIVISION'S PEOPLE, the sum of its towns' (: 39 million), by country and the division's folded
+    /// name: how the regions' search tells California from Çal. Made once.
     func regionPeople() -> [String: Int] {
         if let p = peopleByRegion { return p }
         guard ready else { return [:] }
@@ -41,9 +55,14 @@ final class TownIndex {
         return out
     }
     @ObservationIgnored private var peopleByRegion: [String: Int]?
+    /// every town's country, folded name, division and people, for the regions' search to make its numbers off the main
+    /// thread (an array, handed over without copying)
+    func peopleRows() -> [(file: String, name: String, region: String, people: Int)] {
+        rows.map { (file: $0.hit.file, name: $0.hit.name, region: $0.hit.region, people: $0.hit.people) }
+    }
 
-    /// EACH TOWN'S PEOPLE by country and folded name ("gb|york": 150,000; the biggest of that name there): what the
-    /// regions' search goes by for a second-level division, which is most often its town's name. Made once.
+    /// EACH TOWN'S PEOPLE by country and folded name (: 150,000; the biggest of that name there): what the regions'
+    /// search goes by for a second-level division, which is most often its town's name. Made once.
     func townPeople() -> [String: Int] {
         if let p = peopleByTown { return p }
         guard ready else { return [:] }
@@ -85,10 +104,14 @@ final class TownIndex {
                     if let a = all[String(g)] { alt[i] = "|" + a.townFolded }
                 }
             }
+            let own = Self.pack(out.map(\.0))
+            let others = Self.pack(alt.map { $0.isEmpty ? "" : $0 + "|" })
             await MainActor.run {
                 let me = TownIndex.shared
                 me.rows = out
                 me.alt = alt
+                (me.ownBytes, me.ownStart) = own
+                (me.altBytes, me.altStart) = others
                 me.loading = false
                 me.ready = !out.isEmpty
                 #if DEBUG
@@ -98,16 +121,30 @@ final class TownIndex {
         }
     }
 
-    /// one town by its key's id ("de/2925533"), if the index has come
-    /// a town's other names, folded ("lucerne" for Luzern), for finding its guide under the name English uses
+    /// one town by its key's id, if the index has come a town's other names, folded ( for Luzern), for finding its
+    /// guide under the name English uses
     func otherNames(_ id: String) -> [String] {
         _ = hit(id)
         guard let i = byID?[id], i < alt.count else { return [] }
         return alt[i].split(separator: "|").map(String.init)
     }
+    /// A COUNTRY'S BIGGEST TOWNS (the index is biggest first): what "japan" typed whole also lists (Tokyo, Yokohama,
+    /// Osaka), made once per country
+    func biggest(in cc: String, count: Int) -> [Hit] {
+        let c = cc.lowercased()
+        if let b = biggestBy[c] { return Array(b.prefix(count)) }
+        guard ready else { return [] }
+        var out: [Hit] = []
+        for r in rows where r.hit.file.lowercased() == c {
+            out.append(r.hit)
+            if out.count == 3 { break }
+        }
+        biggestBy[c] = out
+        return Array(out.prefix(count))
+    }
+    @ObservationIgnored private var biggestBy: [String: [Hit]] = [:]
     func hit(_ id: String) -> Hit? {
         if byID == nil, ready { byID = Dictionary(rows.enumerated().map { ($1.hit.id, $0) }, uniquingKeysWith: { a, _ in a }) }
-        // (14 Nov: once the table is made, a miss is a miss, never a walk through every row)
         if let byID { return byID[id].map { rows[$0].hit } }
         return rows.first { $0.hit.id == id }?.hit
     }
@@ -129,17 +166,18 @@ final class TownIndex {
     @ObservationIgnored private var byID: [String: Int]?
 
     /// DID YOU MEAN (1.10's rule for a typo, D12): nothing found, the biggest of the 40,000 most peopled towns within
-    /// two letters' change of what was typed (its whole name or its first word; from four letters; "Frankfrut" is
-    /// Frankfurt am Main), or nil
+    /// two letters' change of what was typed (its whole name or its first word; from four letters; is Frankfurt am
+    /// Main), or nil
     @ObservationIgnored private var lastGuess: (q: String, hit: Hit?)?
     func guess(_ query: String) -> Hit? {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
-        guard ready, q.count >= 4 else { return nil }
+        // (longer than any town's name give or take two: nothing to guess, and the guess's pass held the screen)
+        guard ready, q.count >= 4, q.count <= 60 else { return nil }
         if let g = lastGuess, g.q == q { return g.hit }
         let a = Array(q.unicodeScalars)
         var best: (Hit, Int)?
         for r in rows.prefix(40_000) {
-            // its whole name, or its first word when what was typed is one ("Frankfrut" for Frankfurt am Main)
+            // its whole name, or its first word when what was typed is one ( for Frankfurt am Main)
             let whole = Array(r.folded.unicodeScalars)
             let first = q.contains(" ") ? whole : Array((r.folded.split(separator: " ").first.map(String.init) ?? r.folded).unicodeScalars)
             let b = abs(a.count - first.count) < abs(a.count - whole.count) ? first : whole
@@ -168,7 +206,7 @@ final class TownIndex {
         return p[m]
     }
 
-    /// the town nearest a spot within `km`, or nil (a pin's own place, 11.5's "Open its place's page"); nil until loaded
+    /// the town nearest a spot within `km`, or nil (a pin's own place, 11.5's); nil until loaded
     func nearest(lat: Double, lon: Double, km: Double = 15) -> Hit? {
         guard ready else { return nil }
         let reach = km / 111.2, k = cos(lat * .pi / 180)
@@ -212,32 +250,52 @@ final class TownIndex {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, !q.isEmpty else { return [] }
         if let l = last, l.q == q, l.open == open { return l.hits }
-        // (14 Nov: a town whose name is exactly what was typed, in its own name or one of its other names, comes first:
-        // "lucerne" is Lucerne (Luzern) before Lucerne Valley; the other names are looked at every time, not only when
-        // the own names left room)
+        // (: a town whose name is exactly what was typed, in its own name or one of its other names, comes first: is
+        // Lucerne (Luzern) before Lucerne Valley; the other names are looked at every time, not only when the own
+        // names left room)
         var exact: [Hit] = []
         var home: [Hit] = [], away: [Hit] = [], homeIn: [Hit] = [], awayIn: [Hit] = []
-        for r in rows {
-            let mine = r.hit.file == open
-            if r.folded == q {
-                if exact.count < limit { exact.append(r.hit) }
-            } else if r.folded.hasPrefix(q) {
-                if mine { home.append(r.hit) } else if away.count < limit { away.append(r.hit) }
-            } else if q.count >= 3, r.folded.contains(q) {
-                if mine { if homeIn.count < limit { homeIn.append(r.hit) } } else if awayIn.count < limit { awayIn.append(r.hit) }
+        let qb = Array(q.utf8), ql = qb.count, inside = q.count >= 3
+        guard ownStart.count == rows.count + 1 else { return [] }
+        ownBytes.withUnsafeBufferPointer { nb in
+            qb.withUnsafeBufferPointer { qp in
+                guard let base = nb.baseAddress, let qa = qp.baseAddress else { return }
+                for i in 0 ..< rows.count {
+                    let a = Int(ownStart[i]), n = Int(ownStart[i + 1]) - a
+                    // (the same tests as the names as strings: all of it, its start, anywhere in it from three letters)
+                    let starts = n >= ql && memcmp(base + a, qa, ql) == 0
+                    if starts && n == ql {
+                        if exact.count < limit { exact.append(rows[i].hit) }
+                    } else if starts {
+                        if rows[i].hit.file == open { home.append(rows[i].hit) } else if away.count < limit { away.append(rows[i].hit) }
+                    } else if inside, n > ql, memmem(base + a, n, qa, ql) != nil {
+                        if rows[i].hit.file == open { if homeIn.count < limit { homeIn.append(rows[i].hit) } }
+                        else if awayIn.count < limit { awayIn.append(rows[i].hit) }
+                    }
+                    // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
+                    if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { break }
+                }
             }
-            // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
-            if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { break }
         }
         var exactAlt: [Hit] = [], homeAlt: [Hit] = [], awayAlt: [Hit] = []
-        if q.count >= 2, alt.count == rows.count {
-            let bar = "|" + q
-            for (i, a) in alt.enumerated() where !a.isEmpty && a.contains(bar) {
-                let hit = rows[i].hit
-                if (a + "|").contains(bar + "|") {
-                    if exactAlt.count < limit { exactAlt.append(hit) }
-                } else if hit.file == open { if homeAlt.count < limit { homeAlt.append(hit) } } else if awayAlt.count < limit { awayAlt.append(hit) }
-                if exactAlt.count >= limit { break }
+        if q.count >= 2, !q.contains("|"), altStart.count == rows.count + 1 {
+            // (each row's other names are: one starting with it holds "|q|q|")
+            let bar = Array(("|" + q).utf8), whole = Array(("|" + q + "|").utf8)
+            altBytes.withUnsafeBufferPointer { ab in
+                bar.withUnsafeBufferPointer { bp in
+                    whole.withUnsafeBufferPointer { wp in
+                        guard let base = ab.baseAddress, let b = bp.baseAddress, let w = wp.baseAddress else { return }
+                        for i in 0 ..< rows.count {
+                            let a = Int(altStart[i]), n = Int(altStart[i + 1]) - a
+                            guard n > bar.count, memmem(base + a, n, b, bar.count) != nil else { continue }
+                            let hit = rows[i].hit
+                            if memmem(base + a, n, w, whole.count) != nil {
+                                if exactAlt.count < limit { exactAlt.append(hit) }
+                            } else if hit.file == open { if homeAlt.count < limit { homeAlt.append(hit) } } else if awayAlt.count < limit { awayAlt.append(hit) }
+                            if exactAlt.count >= limit { break }
+                        }
+                    }
+                }
             }
         }
         // exact names, biggest first (the rows are in order of size)
@@ -251,10 +309,12 @@ final class TownIndex {
 
 extension String {
     /// a name as search compares it: case and accents gone, and German's written-out umlauts read as the plain vowel
-    /// on both sides ("Zuerich" finds Zürich, "Muenster" Münster)
+    /// on both sides ( finds Zürich, Münster)
     nonisolated var townFolded: String {
         folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
             .replacingOccurrences(of: "ae", with: "a").replacingOccurrences(of: "oe", with: "o")
             .replacingOccurrences(of: "ue", with: "u")
+            // (one form of every letter, so names and what was typed compare as bytes as they did as strings)
+            .precomposedStringWithCanonicalMapping
     }
 }

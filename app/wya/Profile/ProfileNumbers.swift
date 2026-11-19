@@ -33,6 +33,7 @@ final class ProfileNumbers {
 
     func count(map: MapController) async {
         guard map.ready, MarkStore.shared.loaded, let w = map.world else { return }
+        BadgeArt.shared.world = w
         // (the capitals' own list, the badges' pack and the towns' index: the count is made again as each comes)
         CollectionStore.shared.load()
         BadgeStore.shared.load()
@@ -83,7 +84,7 @@ final class ProfileNumbers {
             y.regions = regionRows.filter { !$0.cc.isEmpty && $0.level > 0 }.map { (cc: $0.cc, lvl: $0.level) }
             let capitalKeys = Set(capitals.map(\.key.description))
             for t in townRows {
-                // (a town's key is its country's file and its GeoNames id, "fr/2988507")
+                // (a town's key is its country's file and its GeoNames id,)
                 let id = String(t.key.dropFirst(2))
                 let cc = String(id.prefix { $0 != "/" }).lowercased()
                 y.towns[cc, default: 0] += 1
@@ -138,6 +139,12 @@ final class ProfileNumbers {
 
         let have = Badges.earned(c, catalog: catalog)
         let levels = Badges.levels(have)
+        // a badge at a new level shows its moment: only on a full count (before the pack most badges are not there, and
+        // before the towns' index and the sets the counts are short: the first launch would have noted short levels and
+        // then shown every badge the late data raised)
+        if world != nil, TownIndex.shared.ready, CollectionStore.shared.ready {
+            BadgeMoment.shared.counted(have, catalog: catalog.map(\.id))
+        }
         #if DEBUG
         NSLog("wya profile counted: job %d, catalog %d, tally %d numbers (%d above 0), earned %d, levels %d", me, catalog.count, c.more.count,
               c.more.values.filter { $0 > 0 }.count, have.count, levels)
@@ -207,7 +214,7 @@ final class ProfileNumbers {
         var latest: (Date, String)?
         for id in ids { let a = rows[id]!.at; if latest == nil || a > latest!.0 { latest = (a, name(id)) } }
         for r in regions + towns where !r.name.isEmpty && (latest == nil || r.at > latest!.0) { latest = (r.at, r.name) }
-        add("Places", "Latest stamp", latest?.1)
+        add("Places", "Latest stamp", latest.map { "\($0.1), \(Calendar(identifier: .gregorian).component(.year, from: $0.0))" })
         // the country with the most stamps: itself, and its regions and towns
         var most: [String: Int] = [:]
         for id in ids { most[id] = 1 }
@@ -217,13 +224,13 @@ final class ProfileNumbers {
             if most[cc] != nil { most[cc, default: 0] += 1 }
         }
         let top = most.max { a, b in a.value != b.value ? a.value < b.value : a.key > b.key }
-        add("Places", "Most stamps in one country", top.flatMap { $0.value > 1 ? "\(name($0.key)), \($0.value.formatted())" : nil })
+        add("Places", "Most stamps in one country", top.flatMap { $0.value > 1 ? "\(name($0.key)), \($0.value.formatted()) stamps" : nil })
         // the place you went back to most
         let back = ids.compactMap { id -> (String, Int)? in
             let v = marks[.country(id)]?.visits ?? 0
             return v > 1 ? (id, v) : nil
         }.max { a, b in a.1 != b.1 ? a.1 < b.1 : a.0 > b.0 }
-        add("Places", "Been back most", back.map { "\(name($0.0)), \($0.1.formatted()) times" })
+        add("Places", "Most visits", back.map { "\(name($0.0)), \($0.1.formatted()) times" })
         // the edges, by name: each place's own middle
         let mid = ids.compactMap { id -> (String, Double, Double)? in
             guard let ll = byID[id]?.ll, ll.count == 2 else { return nil }
