@@ -15,6 +15,12 @@
 
 - Tellus: traced from NASA/USGS Landsat (*Your Name in Landsat*, public domain), Esri World Imagery (Esri, Maxar, Earthstar Geographics and the GIS user community) and OpenStreetMap (ODbL). Every character's place is in `fonts/Tellus/CREDITS.md`.
 
+## Sounds
+
+- `app/wya/Resources/Sounds/stamp.caf`: "traditional stamp.wav" by I.fekry, [Freesound 470710](https://freesound.org/s/470710/), CC0 1.0.
+- `app/wya/Resources/Sounds/page.caf`: "Quiet Page Turn - 8" by SpaceJoe, [Freesound 484968](https://freesound.org/s/484968/), CC0 1.0.
+- Both trimmed to one event, faded at the ends, loudness evened, mono AAC.
+
 ## Planets
 
 - The planet and moon surface maps and Saturn's ring in `app/wya/Resources/Cosmos` (`planet-*.jpg`, `saturn-ring.png`): [Solar System Scope](https://www.solarsystemscope.com/textures/), based on NASA data, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Resized to 1024 x 512 (the ring to 1024 x 16); Earth's cloud map laid over its day map. See `app/wya/Resources/Cosmos/CREDITS.txt`.

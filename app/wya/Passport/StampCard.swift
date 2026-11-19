@@ -36,6 +36,8 @@ final class CardState {
                 withAnimation(.spring(response: 0.12 * k, dampingFraction: 1)) { self.press = 1 } completion: { [weak self] in
                     guard let self, self.flying else { return }
                     Feel.stamp()
+                    // (and its sound, a real stamp's, on the same contact)
+                    Sound.play(.stamp)
                     self.flying = false
                 }
             }
@@ -88,6 +90,7 @@ final class CardState {
     func open(_ i: Int, at point: CGPoint, map: MapController, water: Water? = nil) {
         // one press, one job: the touch that closed a card never opens another (Appendix A.4)
         guard place == nil, CACurrentMediaTime() - closedAt > 0.4 else { return }
+        Sound.prepare()
         // (its Details' Provinces read now, so they are there when Details opens, D14)
         if let w = map.world, i < w.places.count { DetailsRegions.prefetch(w.places[i].id.lowercased()) }
         // WHEN IT DOES NOT FIT (4.2.2): the book would be under 300 pt (at 50% it never fits on any phone): the water

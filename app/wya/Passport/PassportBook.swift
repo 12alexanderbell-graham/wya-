@@ -37,6 +37,7 @@ final class BookState {
             if let id, let i = order.firstIndex(of: id) { page = i / 6 }
             page = min(page, pages - 1)
             Feel.tap()
+            Sound.prepare()
             withAnimation(.spring(response: 0.42 * CardState.slow, dampingFraction: 1)) { p = 1 }
             // the cover starts to swing at p = 0.55 of the flight (about 0.15 s in)
             try? await Task.sleep(for: .milliseconds(Int(150 * CardState.slow)))
@@ -240,6 +241,8 @@ struct PassportBook: View {
     /// backward the previous page comes down flat and is the page
     private func turn(forward: Bool, from: Double, speed: CGFloat) {
         Feel.tick()
+        // (a real page's sound as the leaf goes over; none past the first or the last page)
+        if forward ? b.page < b.pages - 1 : b.page > 0 { Sound.play(.page, volume: 0.8) }
         if forward {
             guard b.page < b.pages - 1 else { return }
             if from <= 0 { b.turn = 0.1 }

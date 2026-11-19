@@ -477,6 +477,8 @@ struct SourcesPage: View {
         .init(name: "IANA tz database", what: "Each country's clocks", licence: "Public domain", url: "https://www.iana.org/time-zones"),
         .init(name: "Solar System Scope", what: "The planets' surfaces, from NASA's data, resized", licence: "CC BY 4.0",
               url: "https://www.solarsystemscope.com/textures/"),
+        .init(name: "I.fekry, on Freesound", what: "The stamp's sound", licence: "CC0", url: "https://freesound.org/s/470710/"),
+        .init(name: "SpaceJoe, on Freesound", what: "The page's sound", licence: "CC0", url: "https://freesound.org/s/484968/"),
     ]
     @Environment(\.openURL) private var openURL
     var body: some View {
