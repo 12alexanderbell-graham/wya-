@@ -758,6 +758,8 @@ final class MapController {
                 if let k = order.firstIndex(where: { $0.row == r }), k > 0 { coarser = await RegionCatalog.shared.fetch(id, row: order[k - 1].row) }
             }
             let above = coarser
+            // (its regions' English names, for their cards and pages)
+            await RegionNames.load(id)
             let scene = file.flatMap { RegionScene(place: i, id: id, row: r, file: $0, above: above) }
             let lines = scene.map { RegionLines.between(prev, $0, start: 0, delay: prev == nil ? 0.3 : 0) }
             await MainActor.run {

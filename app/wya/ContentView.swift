@@ -774,7 +774,7 @@ struct ContentView: View {
     private func regionTapped() {
         guard let sc = map.regionScene, let u = map.regionPressed, u < sc.unitIDs.count else { return }
         let key = PlaceKey(.region, sc.unitIDs[u])
-        let name = sc.unitNames[u]
+        let name = RegionNames.english(map.world?.places[sc.place].id ?? "", sc.unitNames[u])
         guard head.quickStamp else {
             // the card from the water (6.7); its parents' line: the country at the first level, below it the region
             // it is in, then the country ( under Cher, as a town's card)
@@ -1416,7 +1416,7 @@ struct ContentView: View {
     @MainActor static func regionMenu(_ u: Int, in sc: RegionScene, at p: CGPoint, map: MapController, water: Water,
                                       head: HeadState) -> UIMenu {
         let key = PlaceKey(.region, sc.unitIDs[u])
-        let name = sc.unitNames[u]
+        let name = RegionNames.english(map.world?.places[sc.place].id ?? "", sc.unitNames[u])
         let st = MarkStore.shared.state(key)
         let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         let country = map.world.map { $0.places[sc.place].n } ?? ""

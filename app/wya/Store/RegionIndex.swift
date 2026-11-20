@@ -154,3 +154,25 @@ final class RegionIndex {
         return h
     }
 }
+
+/// A REGION'S ENGLISH NAME: the map's region files name them in their own language, while its page and search say,;
+/// the regions' records (regions/<cc>.json) give the English name for the names they were matched by. Read when a
+/// country's region map opens
+@MainActor
+enum RegionNames {
+    private static var byCountry: [String: [String: String]] = [:]
+    static func load(_ cc: String) async {
+        let c = cc.lowercased()
+        guard byCountry[c] == nil, case .ok(let d) = await Servers.data.file("regions/\(c).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return }
+        var m: [String: String] = [:]
+        for v in all.values {
+            guard let r = v as? [String: Any], let n = r["n"] as? String, !n.isEmpty else { continue }
+            for u in (r["u"] as? [String]) ?? [] where u.townFolded != n.townFolded { m[u.townFolded] = n }
+        }
+        byCountry[c] = m
+    }
+    /// its English name where its record has one, else the name as given
+    static func english(_ cc: String, _ name: String) -> String { byCountry[cc.lowercased()]?[name.townFolded] ?? name }
+}
+
