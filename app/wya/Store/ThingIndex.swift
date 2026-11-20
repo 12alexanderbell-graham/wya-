@@ -57,7 +57,10 @@ final class ThingIndex {
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 out.reserveCapacity(all.count)
                 for r in all {
-                    guard r.count >= 7, let n = r[0] as? String, let f = r[1] as? String, let id = r[2] as? String else { continue }
+                    guard r.count >= 7, var n = r[0] as? String, let f = r[1] as? String, let id = r[2] as? String else { continue }
+                    if let c = n.first, c.isLowercase, !n.hasPrefix("l'"), !n.hasPrefix("l\u{2019}"), !n.hasPrefix("d'") {
+                        n = c.uppercased() + n.dropFirst()
+                    }
                     let h = Hit(name: n, file: f, id: id, kind: (r[3] as? NSNumber)?.intValue ?? 11,
                                 fame: (r[4] as? NSNumber)?.intValue ?? 0, lat: (r[5] as? NSNumber)?.doubleValue ?? 0, lon: (r[6] as? NSNumber)?.doubleValue ?? 0)
                     let codes = r.count > 7 ? (r[7] as? String ?? "").split(separator: "|").map { $0.lowercased() } : []

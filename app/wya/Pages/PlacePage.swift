@@ -210,11 +210,7 @@ extension PlacePageState.OnePage {
         }
         let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
         if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
-            var name = town.name
-            if let r = name.range(of: "^(.+?) [0-9]{1,2}( .*)?$", options: .regularExpression), r.lowerBound == name.startIndex,
-               let d = name.range(of: " [0-9]{1,2}( |$)", options: .regularExpression) {
-                name = String(name[..<d.lowerBound])
-            }
+            let name = town.name
             if !what.localizedCaseInsensitiveContains(name) {
                 out.rows.append(("Where", land.isEmpty || land == name ? name : name + ", " + land))
             }
