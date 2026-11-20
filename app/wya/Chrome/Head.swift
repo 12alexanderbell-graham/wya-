@@ -1080,7 +1080,7 @@ struct SearchResults: View {
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
             ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
         let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
-            : Self.countryKeys(starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
+            : Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
                                small: smallRest, rest: otherRegions)
@@ -1385,17 +1385,32 @@ struct SearchResults: View {
     }
     /// the Countries map's rows in their order, eight at most (made in steps: one long sum of them took the
     /// compiler minutes)
-    private static func countryKeys(starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
+    private static func countryKeys(typed: String, starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
                                     named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
                                     small: [RegionIndex.Hit], rest: [RegionIndex.Hit]) -> [ResultKey] {
         let town = { (t: TownIndex.Hit) -> ResultKey in ResultKey.town(t.key) }
         let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
         var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += cities.map(town)
-        out += towns.map(town)
+        let whole = towns.filter { $0.name.townFolded == typed }
+        let begun = towns.filter { $0.name.townFolded != typed }
+        out += whole.map(town)
         out += exact.map(region)
         // (a name typed whole and found: its sights before the other regions that only start with it)
-        if exact.isEmpty && towns.isEmpty { out += named.map(region); out += sights } else { out += sights; out += named.map(region) }
+        if exact.isEmpty && whole.isEmpty {
+            // (a region of under 100,000 people stays after the sights, as before: it never pushes them off the rows)
+            let peopled = named.map { ($0, RegionIndex.shared.people($0)) }
+            // (the regions keep their own order, the best known first: "par" is Paris before Paraná; each town goes in
+            // before the first of them with fewer people than it)
+            var weighed = peopled.filter { $0.1 >= 100_000 }.map { ($0.1, region($0.0)) }
+            for t in begun {
+                let at = weighed.firstIndex { $0.0 < t.people } ?? weighed.count
+                weighed.insert((t.people, town(t)), at: at)
+            }
+            out += weighed.map(\.1)
+            out += sights
+            out += peopled.filter { $0.1 < 100_000 }.map { region($0.0) }
+        } else { out += begun.map(town); out += sights; out += named.map(region) }
         out += otherTowns.map(town)
         out += others.map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += small.map(region)
