@@ -686,7 +686,13 @@ extension PlacePageState {
         if town == nil, case .ok(let pd) = await Servers.data.file("native/activities/\(cc).json"),
            let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any], j["first"] as? String == key,
            let rows = j["rows"] as? [[String]] {
-            return rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? activity($0[0], line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
+            let acts = rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? activity($0[0], line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
+            // : each venue six places further down
+            return acts.enumerated().sorted { a, b in
+                let ka = a.offset + (isVenue(a.element.name, a.element.line) ? 6 : 0)
+                let kb = b.offset + (isVenue(b.element.name, b.element.line) ? 6 : 0)
+                return ka != kb ? ka < kb : a.offset < b.offset
+            }.map(\.element)
         }
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
         // (a town's rows are never kept: its file name has no town in it, and a town's few rows come fast)
