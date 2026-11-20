@@ -35,7 +35,7 @@ final class RegionIndex {
                 for r in all {
                     guard r.count >= 4, let n = r[0] as? String, let p = r[1] as? String, let id = r[3] as? String else { continue }
                     let h = Hit(name: n, place: p, row: (r[2] as? NSNumber)?.intValue ?? 1, id: id)
-                    out.append((n.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), h))
+                    out.append((n.townFolded, h))
                 }
             }
             var bytes: [UInt8] = [], start: [Int32] = [0]
@@ -68,7 +68,7 @@ final class RegionIndex {
         let towns = TownIndex.shared.peopleRows()
         let regions = rows.map { (folded: $0.folded, place: $0.hit.place, row: $0.hit.row, id: $0.hit.id) }
         Task.detached(priority: .utility) {
-            let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+            let fold = { (s: String) in s.townFolded }
             // each first-level division's people (the sum of its towns'), and each town's (the biggest of its name)
             var byRegion: [String: Int] = [:], byTown: [String: Int] = [:]
             for t in towns {
@@ -98,7 +98,7 @@ final class RegionIndex {
     func people(_ h: Hit) -> Int { people()[h.place + "|\(h.row)|" + h.id] ?? 0 }
 
     func hits(_ query: String, limit: Int = 4) -> [Hit] {
-        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, q.count >= 2 else { return [] }
         // (read first, so the list is made again when the towns' index comes)
         let townsIn = TownIndex.shared.ready && peopleReady
@@ -116,7 +116,8 @@ final class RegionIndex {
                     // (a later word starting with it: for "denis"; never the middle of a word; the words looked at
                     // only in a name that holds it at all)
                     else if mid, inside.count < limit, n > ql, memmem(base + a, n, qa, ql) != nil,
-                            rows[i].folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) }) {
+                            rows[i].folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains(where: { $0.hasPrefix(q) })
+                                || rows[i].folded.contains(" " + q) {
                         inside.append(rows[i].hit)
                     }
                 }
