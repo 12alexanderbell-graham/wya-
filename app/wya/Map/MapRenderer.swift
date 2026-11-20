@@ -1662,7 +1662,7 @@ final class MapMTKView: MTKView, UIContextMenuInteractionDelegate {
             let st = MarkStore.shared.state(PlaceKey(.region, sc.unitIDs[u]))
             e.state = st
             e.accessibilityFrameInContainerSpace = r
-            e.accessibilityLabel = Self.label("\(sc.unitNames[u]), \(kind)", st)
+            e.accessibilityLabel = Self.label("\(RegionNames.english(sc.id, sc.unitNames[u])), \(kind)", st)
             e.accessibilityTraits = .button
             let at = CGPoint(x: r.midX, y: r.midY)
             e.activate = { [weak c] in

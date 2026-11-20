@@ -45,7 +45,7 @@ struct HistoryTrack {
             guard let u = index[e.key.id], let b = sc.box(of: u) else { continue }
             let at = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
             let g = EqualEarth.unproject(at)
-            stops.append(Stop(key: e.key, place: sc.place, at: at, from: e.from, name: sc.unitNames[u], ll: SIMD2(g.lon, g.lat)))
+            stops.append(Stop(key: e.key, place: sc.place, at: at, from: e.from, name: RegionNames.english(sc.id, sc.unitNames[u]), ll: SIMD2(g.lon, g.lat)))
         }
         return stops
     }
