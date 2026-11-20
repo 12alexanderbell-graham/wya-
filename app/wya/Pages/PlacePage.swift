@@ -304,7 +304,9 @@ extension PlacePageState.OnePage {
         // Cuba's the convertible peso, gone since 2021)
         let currencies = ["gb-eng": "British pound (£)", "gb-sct": "British pound (£)", "gb-wls": "British pound (£)",
                           "gb-nir": "British pound (£)", "ac": "Saint Helena pound (£)", "sj": "Norwegian krone (kr)",
-                          "zw": "Zimbabwe Gold (ZiG)", "cu": "Cuban peso ($)"]
+                          "zw": "Zimbabwe Gold (ZiG)", "cu": "Cuban peso ($)",
+                          "ge": "Georgian lari (₾)", "gl": "Danish krone (kr.)", "gm": "Gambian dalasi (D)", "mk": "Macedonian denar (den)",
+                          "ve": "Venezuelan bolívar (Bs.)", "sh": "Saint Helena pound (£)"]
         if let v = currencies[cc] { out.rows.append(("Currency", v)) }
         else if let c = f["currency"] as? [[String: Any]], let first = c.first {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
