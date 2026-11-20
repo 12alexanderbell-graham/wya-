@@ -89,7 +89,7 @@ final class PlacePageState {
         func load() {
             if key.kind == .country { Task { await loadCountry(key.id.lowercased()); settled = true } }
             else if key.kind == .town { Task { await loadTown(country, id: key.id); settled = true } }
-            else if key.kind == .region, let code { Task { await loadRegion(country, code: code); settled = true } }
+            else if key.kind == .region { Task { await loadRegion(country, code: code ?? ""); settled = true } }
             else if key.kind == .thing { loadThing() }
             else { settled = true }
         }
@@ -463,9 +463,13 @@ extension PlacePageState.OnePage {
 
     /// A REGION'S FACTS (16.4.5: People, Area, Capital, its parent) from the server's regions (level 1, by ISO code)
     fileprivate func loadRegion(_ cc: String, code: String) async {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let me = fold(name)
         guard case .ok(let d) = await Servers.data.file("regions/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-              let r = all[code] as? [String: Any], self.code == code else { return }
+              let r = (all[code] as? [String: Any]) ?? all.values.compactMap({ $0 as? [String: Any] }).first(where: { v in
+                  ((v["u"] as? [String]) ?? []).contains { fold($0) == me } || (v["n"] as? String).map(fold) == me
+              }), (self.code ?? "") == code else { return }
         var out = PlacePageState.Facts()
         if let desc = r["d"] as? String { out.prose = desc.prefix(1).uppercased() + desc.dropFirst() + "." }
         // its photo (Wikidata's) and, where Wikivoyage has an article for it, that article's opening words in place
