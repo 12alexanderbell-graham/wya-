@@ -108,7 +108,7 @@ enum ListTicks {
             if fold(CountryEntity(id: cc).name) == fold(it.n) {
                 of += 1
                 if MarkStore.shared.state(.country(cc)).stamped { been += 1 }
-            } else if let t = TownIndex.shared.named(it.n, in: cc) {
+            } else if let t = TownIndex.shared.named(it.n, in: cc), t.people >= 1_000 {
                 of += 1
                 if MarkStore.shared.state(PlaceKey(.town, t.id)).stamped { been += 1 }
             }

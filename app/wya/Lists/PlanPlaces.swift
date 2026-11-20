@@ -17,7 +17,8 @@ enum PlanPlaces {
                 let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
                 let inCountry = hits.filter { cc == nil || $0.file.lowercased() == cc!.lowercased() }
                 let page = { (k: PlaceKey) in URL(string: "wya://page/" + (k.description.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")) }
-                if let t = inCountry.first(where: { fold($0.name) == fold(name) }) {
+                // (a town of some size: "Pasta" in a list of dishes is not the hamlet of Pasta near Turin, as the list's map)
+                if let t = inCountry.first(where: { fold($0.name) == fold(name) && $0.people >= 1_000 }) {
                     url = page(PlaceKey(.town, t.id))
                 } else {
                     // A SIGHT OF THAT NAME IN THAT COUNTRY: its own page, before a town that only starts like it
@@ -26,7 +27,7 @@ enum PlanPlaces {
                     let things = ThingIndex.shared.hits(name, open: cc, limit: 6, near: false)
                     if let h = things.first(where: { (cc == nil || $0.file.lowercased() == cc!.lowercased()) && fold($0.name) == fold(name) }) {
                         url = page(PlaceKey(.thing, "wd:" + h.id))
-                    } else if let t = inCountry.first {
+                    } else if let t = inCountry.first(where: { $0.people >= 1_000 }) {
                         url = page(PlaceKey(.town, t.id))
                     }
                 }
