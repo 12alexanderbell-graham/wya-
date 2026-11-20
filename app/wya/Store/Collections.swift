@@ -23,6 +23,8 @@ final class CollectionStore {
         var type = ""
         /// its key when it is not a thing (a capital is its town,: one stamp for both)
         var own: String? = nil
+        /// its own photo, a Commons file (Wikidata's image of it, collections-14), or ""
+        var photo = ""
         /// its name on the map: a list's long official name up to its first comma, colon or bracket; its card and
         /// page say it whole
         var short: String {
@@ -203,7 +205,7 @@ final class CollectionStore {
             var out: [Collection] = []
             // (collections-4 has World Heritage, its best known first; the older file if the server still holds only that)
             var data: Data?
-            for f in ["native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
+            for f in ["native/collections/collections-14.wyco", "native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let raw = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] {
@@ -222,7 +224,7 @@ final class CollectionStore {
                                     at: EqualEarth.project(lon: ll[1].doubleValue, lat: ll[0].doubleValue),
                                     date: i["d"] as? String ?? "", label: i["l"] as? String ?? "",
                                     fame: long ? (i["f"] as? NSNumber)?.intValue ?? 1 : 9, ccs: ccs,
-                                    type: i["t"] as? String ?? "", own: i["k"] as? String)
+                                    type: i["t"] as? String ?? "", own: i["k"] as? String, photo: i["p"] as? String ?? "")
                     }
                     out.append(Collection(id: id, title: t, scope: c["scope"] as? String ?? "world", event: c["event"] as? Bool ?? false,
                                           source: c["source"] as? String ?? "", items: its, offMap: off.count, unmapped: off,

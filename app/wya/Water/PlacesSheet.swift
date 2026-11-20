@@ -55,10 +55,13 @@ struct PlacesSheet: View {
                                 water.go(.quarter)
                                 map.showSetPlace(map.placesKind == CollectionStore.capitals ? CollectionStore.capitals : map.placesSet, id: it.id)
                             } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(it.short).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                                    let land = Self.country(it, map: map)
-                                    if !land.isEmpty { Text(land).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
+                                HStack(spacing: 12) {
+                                    SetPlaceThumb(item: it)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(it.short).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                                        let land = Self.country(it, map: map)
+                                        if !land.isEmpty { Text(land).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
+                                    }
                                 }
                                 .padding(.horizontal, 24)
                                 .frame(maxWidth: .infinity, minHeight: Self.rowH, alignment: .leading)
@@ -268,5 +271,42 @@ struct PlacesRows: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(r.count.isEmpty ? r.title : r.title + ", " + r.count)
         .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+
+/// A SET'S PLACE'S PICTURE: the place's own photo (its Commons file, as its page shows it), small and square with
+/// round corners, as Apple Maps' guides list places; its country's flag where it has none or while the photo comes
+struct SetPlaceThumb: View {
+    let item: CollectionStore.Item
+    @State private var things = ThingStore.shared
+    @State private var photo: UIImage?
+
+    var body: some View {
+        let _ = things.version
+        let cc = item.cc.lowercased()
+        let own = item.photo.isEmpty ? nil : PlacePageState.photo(item.photo)
+        let file = own ?? things.thing(item.id).map(\.thing.photo).flatMap { $0.isEmpty ? nil : PlacePageState.photo($0) }
+        let url = file.flatMap { Self.commons($0) }
+        // (fetched and kept as the pages' photos are: AsyncImage keeps nothing, and a list scrolled back blinked)
+        let shot = url.flatMap { photo ?? PagePhoto.cached($0) }
+        ZStack {
+            if let shot { Image(uiImage: shot).resizable().scaledToFill().frame(width: 44, height: 44) }
+            else if let f = Flags.square(cc) { f.resizable().interpolation(.high).scaledToFill().frame(width: 44, height: 44) }
+        }
+        .task(id: url) {
+            guard let url, shot == nil else { return }
+            await PagePhoto.prefetch(url); photo = PagePhoto.cached(url)
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onAppear { if !cc.isEmpty { things.load(cc) } }
+        .accessibilityHidden(true)
+    }
+    /// its Commons file at three times the row's size (Special:FilePath, as the pages ask)
+    static func commons(_ file: String) -> URL? {
+        let name = file.replacingOccurrences(of: " ", with: "_")
+        guard let e = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        return URL(string: "https://commons.wikimedia.org/wiki/Special:FilePath/\(e)?width=144")
     }
 }

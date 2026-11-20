@@ -1834,6 +1834,8 @@ struct PagePhoto: View {
         }
     }
 
+    /// a photo already fetched and kept, or nil
+    static func cached(_ url: URL) -> UIImage? { kept.object(forKey: url as NSURL) }
     /// the photo fetched, its upper part taken (a standing photo) and made ready to draw, kept for the page; one fetch
     /// per photo at a time (the page's wait and the photo itself asked for it together and it came down twice)
     private static var fetching: [URL: Task<Void, Never>] = [:]
