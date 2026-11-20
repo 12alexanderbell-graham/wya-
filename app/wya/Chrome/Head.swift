@@ -1079,7 +1079,15 @@ struct SearchResults: View {
         // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
             ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
+        let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
+        let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits.contains { begins($0.name) }
+            || townHits.contains { begins($0.name) }
+        let guessLead: [ResultKey] = hits.isEmpty && !anyBegins ? guess.map { [ResultKey.place($0)] } ?? [] : []
         let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
+            : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
+                               named: namedRest, sights: sights, otherTowns: otherTowns,
+                               others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
+                               small: smallRest, rest: otherRegions)).prefix(8))
             : Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
