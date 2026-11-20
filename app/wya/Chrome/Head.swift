@@ -1187,11 +1187,12 @@ struct SearchResults: View {
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
-                                case .thing(let k): thingRow(thingHits.first { $0.key == k })
+                                case .thing(let k): thingRow(thingHits.first { $0.key == k }, twin: Self.twin(thing: k, in: thingHits))
                                 case .item(let k): itemRow(itemHits.first { $0.key == k })
                                 case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil)
                                                            ?? countryCities.first { $0.key == k },
-                                                           note: townGuess?.key == k ? "Did you mean?" : nil)
+                                                           note: townGuess?.key == k ? "Did you mean?" : nil,
+                                                           twin: Self.twin(town: k, in: townHits))
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k },
                                                                      twin: Self.twin(k, in: anyRegionHits))
                                 case .pin(let id): pinRow(PinStore.shared.pin(id))
@@ -1654,10 +1655,13 @@ struct SearchResults: View {
         return kinds + sets
     }
 
-    private func townRow(_ h: TownIndex.Hit?, note: String? = nil) -> some View {
+    private func townRow(_ h: TownIndex.Hit?, note: String? = nil, twin: Bool = false) -> some View {
         var country: [String] = []
         if let note { country = [note] }
         else if let h { country = h.file == map.placeOpenID && !h.region.isEmpty ? [h.region] : countryNotes(h.file) }
+        if note == nil, twin, let h, !h.region.isEmpty, h.file != map.placeOpenID {
+            country = country.map { "\(h.region), \($0)" } + [h.region]
+        }
         return Button { townAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
@@ -1695,12 +1699,36 @@ struct SearchResults: View {
         return setCountries?[q] ?? []
     }
 
-    private func thingRow(_ h: ThingIndex.Hit?) -> some View {
+    /// another found of the same name in the same country (each then says where it is)
+    static func twin(town k: String, in all: [TownIndex.Hit]) -> Bool {
+        guard let h = all.first(where: { $0.key == k }) else { return false }
+        return all.contains { $0.key != k && $0.file == h.file && $0.name == h.name }
+    }
+    static func twin(thing k: String, in all: [ThingIndex.Hit]) -> Bool {
+        guard let h = all.first(where: { $0.key == k }) else { return false }
+        return all.contains { $0.key != k && $0.file == h.file && $0.name == h.name }
+    }
+    /// the town a thing stands in or by (within 30 km) with its region, found once per thing
+    private static var townsOf: [String: String] = [:]
+    private static func townOf(_ h: ThingIndex.Hit) -> String? {
+        if let t = townsOf[h.id] { return t.isEmpty ? nil : t }
+        guard TownIndex.shared.ready else { return nil }
+        // (with its region: two of them stand in Paris, Texas and Paris, Tennessee)
+        let t = TownIndex.shared.nearest(lat: h.lat, lon: h.lon, km: 30).map { $0.region.isEmpty ? $0.name : "\($0.name), \($0.region)" } ?? ""
+        townsOf[h.id] = t
+        return t.isEmpty ? nil : t
+    }
+
+    private func thingRow(_ h: ThingIndex.Hit?, twin: Bool = false) -> some View {
         let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
         let many = (h.map { Self.sharedBy($0.id) } ?? []).compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted()
         let manyWords = many.count >= 4 ? many.prefix(2).joined(separator: ", ") + " and \(many.count - 2) more" : many.joined(separator: ", ")
         // (and a shorter form where the whole does not fit beside a long name:)
-        let country: [String] = many.count >= 2 ? [manyWords, many[0] + " and \(many.count - 1) more"] : countryNotes(h?.file)
+        var country: [String] = many.count >= 2 ? [manyWords, many[0] + " and \(many.count - 1) more"] : countryNotes(h?.file)
+        if many.count < 2, twin, let h, h.file != map.placeOpenID, let town = Self.townOf(h) {
+            // (the town and its region; the flag says the country)
+            country = [town] + [String(town.split(separator: ",").first ?? "")]
+        }
         return Button { thingAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
