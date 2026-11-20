@@ -352,13 +352,13 @@ extension PlacePageState.OnePage {
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
             out.cities = all.compactMap { t in
-                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue, !PlacePageState.notACity(t) else { return nil }
+                guard let n = t["n"] as? String, !PlacePageState.notACity(t) else { return nil }
                 // (its region, unless that is its own name again:, on Japan's page)
                 let r0 = t["r"] as? String ?? ""
                 let r = r0.compare(n, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
                     || r0.localizedCaseInsensitiveContains(n) && r0.count <= n.count + 12 ? "" : r0
                 let ll = t["ll"] as? [NSNumber]
-                return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
+                return PlacePageState.Inside(key: PlacePageState.cityKey(cc, t, name: n), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
@@ -517,10 +517,9 @@ extension PlacePageState.OnePage {
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let cities = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
             out.cities = cities.compactMap { t in
-                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue,
-                      let rr = t["r"] as? String, names.contains(fold(rr)), !PlacePageState.notACity(t) else { return nil }
+                guard let n = t["n"] as? String, let rr = t["r"] as? String, names.contains(fold(rr)), !PlacePageState.notACity(t) else { return nil }
                 let ll = t["ll"] as? [NSNumber]
-                return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: "", code: nil,
+                return PlacePageState.Inside(key: PlacePageState.cityKey(cc, t, name: n), name: n, line: "", code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
@@ -536,8 +535,11 @@ extension PlacePageState.OnePage {
         }
         if !rings.isEmpty {
             ThingStore.shared.load(cc)
-            for _ in 0 ..< 40 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-            func inside(_ p: SIMD2<Double>) -> Bool {
+            // (the United States' sights take longer than four seconds to come: ten)
+            for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let east = rings.contains { r in r.contains { $0.x > 180 } }
+            func inside(_ p0: SIMD2<Double>) -> Bool {
+                let p = east && p0.x < 0 ? SIMD2(p0.x + 360, p0.y) : p0
                 var odd = false
                 for r in rings where r.count > 2 {
                     var j = r.count - 1
@@ -815,6 +817,11 @@ extension PlacePageState {
         return t.isEmpty ? s : t
     }
 
+    /// a city's key: its GeoNames id, else its name
+    nonisolated static func cityKey(_ cc: String, _ t: [String: Any], name: String) -> PlaceKey {
+        if let gid = (t["gid"] as? NSNumber)?.intValue { return PlaceKey(.town, "\(cc)/\(gid)") }
+        return PlaceKey(.town, "\(cc)/\(name)")
+    }
     /// a part of a city, or a place that was (GeoNames' PPLX, PPLH, PPLQ, PPLW), not a city of its own: Quarto
     /// Oggiaro, a district of Milan, stood third among Lombardy's cities
     nonisolated static func notACity(_ t: [String: Any]) -> Bool {
