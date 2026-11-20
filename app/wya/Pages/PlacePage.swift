@@ -657,18 +657,18 @@ extension PlacePageState {
         if town == nil, case .ok(let pd) = await Servers.data.file("native/activities/\(cc).json"),
            let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any], j["first"] as? String == key,
            let rows = j["rows"] as? [[String]] {
-            return rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? Activity(name: corrected($0[0], wd: $0[1].isEmpty ? nil : $0[1]), line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
+            return rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? activity($0[0], line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
         }
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
         // (a town's rows are never kept: its file name has no town in it, and a town's few rows come fast)
         if town == nil, let k = try? Data(contentsOf: keep), let j = try? JSONSerialization.jsonObject(with: k) as? [String: Any],
            (j["bytes"] as? NSNumber)?.intValue == d.count, let rows = j["rows"] as? [[String]] {
-            return rows.compactMap { $0.count == 2 ? Activity(name: $0[0], line: $0[1]) : nil }
+            return rows.compactMap { $0.count == 2 ? activity($0[0], line: $0[1], wd: nil) : nil }
         }
         var things: Data?
         if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
         let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first, near: near) }.value
-        let out = rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line, wd: $0.wd) }
+        let out = rows.map { Self.activity($0.name, line: $0.line, wd: $0.wd) }
         // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
         // them was kept for good)
         if town == nil, out.count > 50, things != nil, ThingIndex.shared.ready,
@@ -848,7 +848,19 @@ extension PlacePageState {
     /// the source's HTML entities as the characters they stand for THE SOURCE'S SPELLING CORRECTED, never simplified
     /// (F147, the data rule): Wikivoyage writes where the name is Théâtre. A name with a Wikidata id takes the label
     /// our things carry for it when the two differ only in accents and case (Wikidata's is the checked spelling);
-    /// others go through the table of corrections made by hand
+    /// others go through the table of corrections made by hand AN ACTIVITY, ITS NAME CORRECTED AND A GUIDE'S ASIDE
+    /// MOVED UNDER IT: ran off its row as. The name is the name; the aside leads the line under it, where it still
+    /// says something (,; 372 of 33,356 listings)
+    static func activity(_ name: String, line: String, wd: String?) -> Activity {
+        var t = corrected(name, wd: wd), l = line
+        if t.hasSuffix(")"), let open = t.range(of: " (", options: .backwards), open.lowerBound > t.startIndex {
+            var aside = String(t[t.index(open.lowerBound, offsetBy: 2)..<t.index(before: t.endIndex)]).trimmingCharacters(in: .whitespaces)
+            t = String(t[..<open.lowerBound]).trimmingCharacters(in: .whitespaces)
+            if let c = aside.first, c.isLowercase { aside = c.uppercased() + aside.dropFirst() }
+            if !aside.isEmpty, !l.localizedCaseInsensitiveContains(aside) { l = l.isEmpty ? aside : "\(aside) · \(l)" }
+        }
+        return Activity(name: t, line: l, wd: wd)
+    }
     static func corrected(_ name: String, wd: String?) -> String {
         let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
         if let wd, let label = ThingIndex.shared.hit(wd)?.name, label != name, fold(label) == fold(name) { return label }
@@ -1810,8 +1822,10 @@ private struct InsideList: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             let alike = all.count > 1 && Set(all.map(\.line)).count == 1
+            let heads = Set(all.map { $0.line.components(separatedBy: " · ").first ?? "" })
+            let sameHead = all.count > 1 && heads.count == 1 && all.allSatisfy { $0.line.contains(" · ") }
             let pictured = all.contains { !$0.photo.isEmpty }
-            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured) }
+            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured, dropHead: sameHead) }
             if rows.count > limit {
                 Button { shown += 10 } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -1822,13 +1836,14 @@ private struct InsideList: View {
         }
     }
 
-    private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false) -> some View {
+    private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false, dropHead: Bool = false) -> some View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
             if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country) }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
-                if line, !r.line.isEmpty { Text(PlacePageState.mended(r.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
+                let said = dropHead ? r.line.components(separatedBy: " · ").dropFirst().joined(separator: " · ") : r.line
+                if line, !said.isEmpty { Text(PlacePageState.mended(said)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
             }
             Spacer(minLength: 8)
             Button {
