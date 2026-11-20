@@ -856,8 +856,9 @@ extension PlacePageState {
         if let r = t.range(of: "]]"), t.distance(from: t.startIndex, to: r.lowerBound) < 300 {
             t = String(t[r.upperBound...]).trimmingCharacters(in: .whitespaces)
         }
+        if t.hasPrefix("thumb ") { t = String(t.dropFirst(6)) }
         let head = t.prefix(300)
-        if t.hasPrefix("thumb|") || head.contains("px|"), let bar = head.range(of: "|", options: .backwards) {
+        if t.hasPrefix("thumb|") || head.contains("px|") || head.contains("thumb|"), let bar = head.range(of: "|", options: .backwards) {
             let rest = String(t[bar.upperBound...])
             let n = NSRegularExpression.escapedPattern(for: name)
             if let r = rest.range(of: "\\b" + n + "( \\(| is | was | are |, )", options: .regularExpression),
@@ -865,6 +866,8 @@ extension PlacePageState {
                 t = String(rest[start...])
             } else { t = rest }
         }
+        // (its own name dropped before "is":)
+        if t.hasPrefix("is ") || t.hasPrefix("are ") { t = name + " " + t }
         return t.isEmpty ? s : t
     }
 
