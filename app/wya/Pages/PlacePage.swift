@@ -293,22 +293,32 @@ extension PlacePageState.OnePage {
         // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
         if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
             var pop: [String: Double] = [:]
+            var byName: [String: String] = [:]
+            let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
             if case .ok(let rd) = await Servers.data.file("regions/\(cc).json"),
                let all = try? JSONSerialization.jsonObject(with: rd) as? [String: Any] {
-                for (k, v) in all { pop[k] = ((v as? [String: Any])?["pop"] as? NSNumber)?.doubleValue }
+                for (k, v) in all {
+                    let r = v as? [String: Any]
+                    pop[k] = (r?["pop"] as? NSNumber)?.doubleValue
+                    for n in (r?["u"] as? [String]) ?? [] { byName[fold(n)] = k }
+                }
+            }
+            let key = { (u: RegionFile.Unit) -> String? in
+                if let c = u.code, pop.keys.contains(c) { return c }
+                return byName[fold(u.name)] ?? (u.code?.isEmpty == false ? u.code : nil)
             }
             var seen = Set<String>()
             let word = RegionsMenuModel.word(first.level.one)
             let units = file.units.filter { seen.insert($0.id).inserted }
-            let ranked = units.sorted { a, b in (pop[a.code ?? ""] ?? 0) > (pop[b.code ?? ""] ?? 0) }
+            let ranked = units.sorted { a, b in (pop[key(a) ?? ""] ?? 0) > (pop[key(b) ?? ""] ?? 0) }
             let level: String = String(word.prefix(1)).uppercased() + String(word.dropFirst())
             var rows: [PlacePageState.Inside] = []
             for u in ranked {
                 // (the level's word once: over is "Osaka")
                 var line: String = level
-                if let n = pop[u.code ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
+                if let n = pop[key(u) ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
                 rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(u.name, word),
-                                                  line: line, code: u.code))
+                                                  line: line, code: key(u)))
             }
             out.regions = rows
         }
