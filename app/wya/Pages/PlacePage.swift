@@ -322,9 +322,12 @@ extension PlacePageState.OnePage {
             let t = a.replacingOccurrences(of: "_", with: " ")
             out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), PlacePageState.day(uk["updated"] as? String)))
         }
+        var regionLooks: ([String: String], [String: Set<String>]) = ([:], [:])
         // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
         if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
             var pop: [String: Double] = [:], img: [String: String] = [:]
+            // (its capital and its names, for a region with no photo to take its capital's or biggest city's)
+            var capOf: [String: String] = [:], namesOf: [String: Set<String>] = [:]
             var byName: [String: String] = [:]
             let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
             if case .ok(let rd) = await Servers.data.file("regions/\(cc).json"),
@@ -333,7 +336,9 @@ extension PlacePageState.OnePage {
                     let r = v as? [String: Any]
                     pop[k] = (r?["pop"] as? NSNumber)?.doubleValue
                     if let f = PlacePageState.photo(r?["img"]) { img[k] = f }
-                    for n in (r?["u"] as? [String]) ?? [] { byName[fold(n)] = k }
+                    for n in (r?["u"] as? [String]) ?? [] { byName[fold(n)] = k; namesOf[k, default: []].insert(fold(n)) }
+                    if let c = r?["cap"] as? String { capOf[k] = fold(c) }
+                    if let n = r?["n"] as? String { namesOf[k, default: []].insert(fold(n)) }
                 }
             }
             let key = { (u: RegionFile.Unit) -> String? in
@@ -352,8 +357,10 @@ extension PlacePageState.OnePage {
                 if let n = pop[key(u) ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
                 rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(u.name, word),
                                                   line: line, code: key(u), photo: img[key(u) ?? ""] ?? ""))
+                namesOf[key(u) ?? u.id, default: []].insert(fold(u.name))
             }
             out.regions = rows
+            regionLooks = (capOf, namesOf)
         }
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
@@ -367,6 +374,20 @@ extension PlacePageState.OnePage {
                 return PlacePageState.Inside(key: PlacePageState.cityKey(cc, t, name: n), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
                               photo: PlacePageState.photo(t["img"]) ?? "")
+            }
+            let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+            let raw = all.compactMap { t -> (String, String, String)? in
+                guard let n = t["n"] as? String, let f = PlacePageState.photo(t["img"]) else { return nil }
+                return (fold(n), fold(t["r"] as? String ?? ""), f)
+            }
+            out.regions = out.regions.map { r in
+                guard r.photo.isEmpty else { return r }
+                let k = r.code ?? r.key.id
+                let names = regionLooks.1[k] ?? [fold(r.name)]
+                let cap = regionLooks.0[k]
+                guard let f = raw.first(where: { cap != nil && $0.0 == cap! })?.2
+                        ?? raw.first(where: { names.contains($0.1) || $0.1.hasPrefix(fold(r.name)) })?.2 else { return r }
+                var r2 = r; r2.photo = f; return r2
             }
         }
         // highlights: the country's World Heritage sites (the list the server's country file names)
