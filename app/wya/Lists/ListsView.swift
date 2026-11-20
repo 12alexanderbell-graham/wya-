@@ -264,8 +264,14 @@ struct ListsWater: View {
                     ForEach(plans) { p in
                         let ccs = Array(NSOrderedSet(array: (p.days.flatMap(\.items) + p.ideas).compactMap { $0.cc?.lowercased() })
                             .array.compactMap { $0 as? String }.prefix(4))
+                        // (each thing's own place, as a list's:, where they are, not Georgia's middle)
+                        let spots = (p.days.flatMap(\.items) + p.ideas).compactMap { i -> String? in
+                            guard let cc = i.cc, !cc.isEmpty else { return nil }
+                            let n = i.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+                            return n.isEmpty ? nil : n + "|" + cc.lowercased()
+                        }
                         tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs,
-                             cover: ccs.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p))
+                             cover: ccs.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots)
                     }
                 }
                 .padding(.top, 4)
