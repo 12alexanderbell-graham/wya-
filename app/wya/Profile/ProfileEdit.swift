@@ -465,8 +465,12 @@ struct NationalitiesSheet: View {
         let have = Set(edit.nationalities)
         // nothing typed: every country, A to Z, to pick from
         if q.isEmpty {
+            let lived = { (id: String) in MarkStore.shared.state(.country(id)).lived }
             return w.places.filter { !have.contains($0.id) && $0.id.count == 2 }
-                .sorted { $0.n.localizedStandardCompare($1.n) == .orderedAscending }
+                .sorted { a, b in
+                    let la = lived(a.id), lb = lived(b.id)
+                    return la != lb ? la : a.n.localizedStandardCompare(b.n) == .orderedAscending
+                }
                 .map { (id: $0.id, n: $0.n) }
         }
         var start: [(String, String)] = [], inside: [(String, String)] = []
