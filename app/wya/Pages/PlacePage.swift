@@ -344,7 +344,7 @@ extension PlacePageState.OnePage {
                 guard let h = PlacePageState.heritage?[q], let n = h["n"] as? String else { return nil }
                 let year = h["year"] as? String
                 return PlacePageState.Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
-                                 photo: (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
+                                 photo: PlacePageState.photo(h["img"]) ?? (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
