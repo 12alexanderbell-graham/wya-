@@ -1120,13 +1120,16 @@ struct SearchResults: View {
                 let sets = map.pinsMode ? [] : Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
                 let named = cut.filter { $0.name.townFolded == folded }
                     + cut.filter { $0.name.townFolded != folded && TownIndex.shared.otherNames($0.id).contains(folded) }
+                let knownLeads = thingHits.contains { $0.fame >= 3 && !inSets.contains($0.id) && starts($0.name.townFolded) }
+                let smallLater = knownLeads ? named.filter { $0.people < 50_000 } : []
                 let whole = named.filter { $0.people >= 500_000 }.map { ResultKey.town($0.key) }
                     + itemHits.prefix(3).filter { $0.item.name.townFolded == folded }.map { ResultKey.item($0.key) }
-                    + named.map { ResultKey.town($0.key) }
+                    + named.filter { t in !smallLater.contains(t) }.map { ResultKey.town($0.key) }
                 let big = cut.filter { $0.people >= 300_000 && $0.name.townFolded.hasPrefix(folded) }.prefix(2).map { ResultKey.town($0.key) }
                 let lands = rest.filter { i in map.world.map { $0.places[i].n.townFolded.hasPrefix(folded) } ?? false }.prefix(2)
                 let k = Array(sets) + lead.map { ResultKey.place($0) } + (coded && !things.isEmpty ? [things[0]] : []) + whole + Array(big)
-                    + lands.map { ResultKey.place($0) } + Array(items) + Array(known) + towns + things + others
+                    + lands.map { ResultKey.place($0) } + Array(items) + Array(known) + smallLater.map { ResultKey.town($0.key) }
+                    + towns + things + others
                     + rest.prefix(max(2, 8 - cut.count - things.count - lead.count)).map { ResultKey.place($0) }
                 // nothing found: the nearest town by spelling first, else the nearest country
                 if k.isEmpty, let g = townGuess { return [.town(g.key)] }

@@ -1,8 +1,8 @@
 import Foundation
 
 /// SEARCH OVER EVERY THING (Part 1.10 in Places, D12's things part): every thing of D5 (57,754), famous first, read once
-/// from the data server (`native/things/things-index-2.wyti`: rows [name, file, Wikidata id, kind, fame, lat, lon,
-/// other names]) the first time Places is searched. Names starting with what was typed, then (from three letters) names
+/// from the data server (`native/things/things-index-3.wyti`: rows [name, file, Wikidata id, kind, fame, lat, lon,
+/// codes, and (3) the names people know it by]) the first time Places is searched. Names starting with what was typed, then (from three letters) names
 /// holding it; an airport's code ("JFK") finds it whole; the open country's before everywhere else's.
 @MainActor
 @Observable
@@ -20,7 +20,13 @@ final class ThingIndex {
     }
     private(set) var ready = false
     @ObservationIgnored private var loading = false
-    @ObservationIgnored private var rows: [(folded: String, codes: [String], hit: Hit)] = []
+    @ObservationIgnored private var rows: [(folded: String, codes: [String], hit: Hit, alt: Bool)] = []
+    /// the index: 3 (with the names people know) where the server has it, else 2
+    nonisolated private static func file() async -> ServerAnswer<Data> {
+        let r = await Servers.data.file("native/things/things-index-3.wyti")
+        if case .ok(_) = r { return r }
+        return await Servers.data.file("native/things/things-index-2.wyti")
+    }
     /// the folded names as bytes, one after another, and where each row's starts (one more than rows): the search's
     /// pass over every thing, as strings, took 40 to 90 ms a letter
     @ObservationIgnored private var nameBytes: [UInt8] = []
@@ -34,8 +40,8 @@ final class ThingIndex {
         guard !ready, !loading else { return }
         loading = true
         Task.detached(priority: .userInitiated) {
-            var out: [(String, [String], Hit)] = []
-            if case .ok(let d) = await Servers.data.file("native/things/things-index-2.wyti"),
+            var out: [(String, [String], Hit, Bool)] = []
+            if case .ok(let d) = await Self.file(),
                let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 out.reserveCapacity(all.count)
                 for r in all {
@@ -43,7 +49,16 @@ final class ThingIndex {
                     let h = Hit(name: n, file: f, id: id, kind: (r[3] as? NSNumber)?.intValue ?? 11,
                                 fame: (r[4] as? NSNumber)?.intValue ?? 0, lat: (r[5] as? NSNumber)?.doubleValue ?? 0, lon: (r[6] as? NSNumber)?.doubleValue ?? 0)
                     let codes = r.count > 7 ? (r[7] as? String ?? "").split(separator: "|").map { $0.lowercased() } : []
-                    out.append((n.townFolded, codes, h))
+                    out.append((n.townFolded, codes, h, false))
+                    // ITS NAME AS PEOPLE KNOW IT: English Wikipedia's title, searched as a name is and shown when it
+                    // is what was found; straight after its thing, so it keeps the thing's place in the famous-first
+                    // order (at the end, Istanbul's Blue Mosque came after two others)
+                    if r.count > 8, let alt = r[8] as? String, !alt.isEmpty {
+                        for a in alt.split(separator: "|") {
+                            out.append((String(a).townFolded, [], Hit(name: String(a), file: h.file, id: h.id, kind: h.kind,
+                                                                      fame: h.fame, lat: h.lat, lon: h.lon), true))
+                        }
+                    }
                 }
             }
             var bytes: [UInt8] = [], start: [Int32] = [0]
@@ -104,7 +119,9 @@ final class ThingIndex {
                 return sx != sy ? sx : x.offset < y.offset
             }.map(\.element)
         }
-        var h = Array((coded + best(home) + homeIn + best(away) + awayIn).prefix(limit))
+        // (a thing once: found by its name and by its other name, its name)
+        var seen = Set<String>()
+        var h = Array((coded + best(home) + homeIn + best(away) + awayIn).filter { seen.insert($0.id).inserted }.prefix(limit))
         // ONE LETTER OFF: with nothing found, a word of a name that starts with what was typed give or take one
         // letter (missed, extra, wrong or two swapped), the best known first
         if h.isEmpty, near, q.count >= 4 {
@@ -120,7 +137,8 @@ final class ThingIndex {
                     i = j + 1
                 }
             }
-            h = Array(close.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.prefix(limit).map(\.0))
+            var once = Set<String>()
+            h = Array(close.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.map(\.0).filter { once.insert($0.id).inserted }.prefix(limit))
         }
         last = Array(([(q, open, near, h)] + last).prefix(2))
         return h
@@ -154,7 +172,7 @@ final class ThingIndex {
     func kind(_ k: Int) -> [Hit] {
         guard ready else { return [] }
         if let c = byKind[k] { return c }
-        let out = rows.lazy.map(\.hit).filter { $0.kind == k }.enumerated()
+        let out = rows.lazy.filter { !$0.alt }.map(\.hit).filter { $0.kind == k }.enumerated()
             .sorted { $0.element.fame != $1.element.fame ? $0.element.fame > $1.element.fame : $0.offset < $1.offset }
             .map(\.element)
         byKind[k] = out
