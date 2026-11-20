@@ -1855,7 +1855,7 @@ private struct InsideList: View {
     private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false, dropHead: Bool = false) -> some View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
-            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country) }
+            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country, flag: false) }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                 let said = dropHead ? r.line.components(separatedBy: " · ").dropFirst().joined(separator: " · ") : r.line
@@ -2232,7 +2232,7 @@ private struct PageSuggestions: View {
                     let pictured = picks.contains { !$0.0.photo.isEmpty }
                     ForEach(picks, id: \.0.key) { r, why in
                         HStack(alignment: .top, spacing: 12) {
-                            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country) }
+                            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country, flag: false) }
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                                 Text(why).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
