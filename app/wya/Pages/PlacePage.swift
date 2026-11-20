@@ -783,11 +783,26 @@ extension PlacePageState.OnePage {
                 return inside(SIMD2(ll.lon, ll.lat))
             }
             .prefix(8)
-            out.highlights = picks.map { o in
+            var all: [PlacePageState.Highlight] = picks.map { o in
                 // (Wikidata's line starts small,: a capital, as a sentence under a name)
                 let l = PlacePageState.brief(o.line, 60)
                 return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
             }
+            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
+            var seen = Set(all.map(\.id))
+            let extra = ["parks", "peaks", "famouslakes", "famousislands", "landmarks"].flatMap { id in
+                (CollectionStore.shared.collection(id)?.items ?? []).filter { i in
+                    guard i.fame == 3, !i.photo.isEmpty, i.cc == cc.lowercased() || i.ccs.contains(cc.lowercased()) else { return false }
+                    let ll = EqualEarth.unproject(SIMD2(Double(i.at.x), Double(i.at.y)))
+                    return inside(SIMD2(ll.lon, ll.lat)) && PlacePageState.photo(i.photo) != nil && ThingStore.shared.thing("wd:" + i.id) == nil
+                }
+            }.filter { seen.insert($0.id).inserted }.prefix(2).map { (i: CollectionStore.Item) -> PlacePageState.Highlight in
+                let name: String = i.name.prefix(1).uppercased() + i.name.dropFirst()
+                let high: String = i.height > 0 ? (f.string(from: i.height as NSNumber) ?? "") + " m high" : ""
+                return PlacePageState.Highlight(id: i.id, name: name, line: high, photo: PlacePageState.photo(i.photo))
+            }
+            all.insert(contentsOf: extra, at: min(1, all.count))
+            out.highlights = Array(all.prefix(8))
         }
         facts = out
         settled = true
