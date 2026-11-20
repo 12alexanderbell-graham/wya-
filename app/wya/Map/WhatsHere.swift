@@ -62,7 +62,8 @@ final class WhatsHere {
                     return (sc, sc.flatMap { s in s.unit(at: at).map { s.unitNames[$0] } })
                 }.value
                 if let sc = found.0 { Self.scenes[cc] = sc }
-                guard let self, self.job == me, let name = found.1, !name.isEmpty, name != country,
+                await RegionNames.load(cc)
+                guard let self, self.job == me, let name = found.1.map({ RegionNames.english(cc, $0) }), !name.isEmpty, name != country,
                       let i = self.items.lastIndex(where: { $0.id == "land" }) else { return }
                 self.items[i] = Item(id: "land", name: "\(name), \(country)", open: nil)
             }
