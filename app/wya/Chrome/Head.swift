@@ -1027,8 +1027,8 @@ struct SearchResults: View {
         let spotSearch = placesSearch || (map.pinsMode && !head.settingsOpen)
         let _ = spotSearch ? TownIndex.shared.load() : ()
         let onCountries = !spotSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
-        let townHits = Self.timed("towns") { spotSearch && typed ? TownIndex.shared.hits(head.query, open: map.placeOpenID)
-            : onCountries && typed ? TownIndex.shared.hits(head.query, open: nil, limit: 6).filter { $0.people >= 50_000 } : [] }
+        let townHits = Self.timed("towns") { spotSearch && typed ? Self.townsFor(head.query, open: map.placeOpenID)
+            : onCountries && typed ? Self.townsFor(head.query, open: nil).filter { $0.people >= 50_000 } : [] }
         // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
         let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
@@ -1058,7 +1058,7 @@ struct SearchResults: View {
         // (two sights at most, the known ones, after the countries; a sight found means no country) (sights only:
         // landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region named as typed
         // before them, "paris" the city first, the rest after)
-        let thingSights = sightSearch ? thingHits.filter { $0.fame >= 3 && (2...6).contains($0.kind) }.prefix(2) : []
+        let thingSights = sightSearch ? thingHits.filter { $0.fame >= 3 && (1...6).contains($0.kind) }.prefix(2) : []
         let sightIDs = Set(thingSights.map(\.id)), fold0 = head.query.trimmingCharacters(in: .whitespaces).townFolded
         let setSights = sightSearch ? itemHits.filter { f in
             let n = f.item.name.townFolded
@@ -1094,7 +1094,9 @@ struct SearchResults: View {
         // for, comes after the sights: Bari's other name "Bali" never put it before Bali. A town that is also a
         // region of that name in its country, Paris, is shown once, as the region)
         let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
-        let exactTowns = bigTowns.filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || ($0.people >= 200_000 && $0.name.townFolded.hasPrefix(typedFold))) }
+        let fullFold = Self.spelledOut(head.query).townFolded
+        let exactTowns = bigTowns.filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
+            || ($0.people >= 200_000 && ($0.name.townFolded.hasPrefix(typedFold) || $0.name.townFolded.hasPrefix(fullFold)))) }
         // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
             ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
@@ -1423,8 +1425,9 @@ struct SearchResults: View {
         let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
         var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += cities.map(town)
-        let whole = towns.filter { $0.name.townFolded == typed }
-        let begun = towns.filter { $0.name.townFolded != typed }
+        let full = spelledOut(typed).townFolded
+        let whole = towns.filter { $0.name.townFolded == typed || $0.name.townFolded == full }.sorted { $0.people > $1.people }
+        let begun = towns.filter { $0.name.townFolded != typed && $0.name.townFolded != full }
         out += whole.map(town)
         let smallExact = named0.isEmpty ? [] : exact.filter { RegionIndex.shared.people($0) < 100_000 }
         out += exact.filter { !smallExact.contains($0) }.map(region)
@@ -1450,6 +1453,15 @@ struct SearchResults: View {
         out += small.map(region)
         out += rest.map(region)
         return Array(out.prefix(8))
+    }
+    /// the towns for what was typed, as typed and with its short words in full, the group with the bigger town first
+    static func townsFor(_ q: String, open: String?, limit: Int = 6) -> [TownIndex.Hit] {
+        let a = TownIndex.shared.hits(q, open: open, limit: limit)
+        let full = spelledOut(q)
+        guard full != q else { return a }
+        let b = TownIndex.shared.hits(full, open: open, limit: limit).filter { h in !a.contains { $0.id == h.id } }
+        let top = { (x: [TownIndex.Hit]) in x.map(\.people).max() ?? 0 }
+        return top(b) > top(a) ? b + a : a + b
     }
     /// a typed name with its short words in full: is,
     static func spelledOut(_ q: String) -> String {

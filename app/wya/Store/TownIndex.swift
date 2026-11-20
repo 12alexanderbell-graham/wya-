@@ -346,6 +346,7 @@ extension String {
             .replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "\u{2013}", with: " ").replacingOccurrences(of: "\u{2010}", with: " ")
             // (and an apostrophe is nothing: was only a for Côte d'Ivoire)
             .replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "\u{2019}", with: "")
+            .replacingOccurrences(of: ".", with: "")
             .replacingOccurrences(of: "ae", with: "a").replacingOccurrences(of: "oe", with: "o")
             .replacingOccurrences(of: "ue", with: "u")
             // (one form of every letter, so names and what was typed compare as bytes as they did as strings)
