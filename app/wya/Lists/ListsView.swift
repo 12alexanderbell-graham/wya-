@@ -311,7 +311,8 @@ struct ListsWater: View {
     private func listTile(_ l: MyList) -> some View {
         tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
              ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }),
-             spots: things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } })
+             spots: things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } },
+             places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
     }
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {
@@ -322,9 +323,10 @@ struct ListsWater: View {
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
     private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil,
-                      cover: AnyView? = nil, words: String? = nil, spots: [String] = []) -> some View {
+                      cover: AnyView? = nil, words: String? = nil, spots: [String] = [], places: Bool = true) -> some View {
+        let unit = places ? (n == 1 ? "place" : "places") : (n == 1 ? "thing" : "things")
         let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
-            .flatMap { $0 } ?? "\(n) \(n == 1 ? "place" : "places")")
+            .flatMap { $0 } ?? "\(n) \(unit)")
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
             Color.clear
