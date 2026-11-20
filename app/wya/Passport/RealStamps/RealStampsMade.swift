@@ -10,6 +10,15 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        "as": Stamp(id: "as", w: 520, h: 330, ink: "#4a4a4a", round: false, slots: [
+            Slot(what: .date("{M}/{dd}/{yy}"), x: 180, y: 222, font: .caveat, size: 70, weight: 600, anchor: .middle, tracking: 2, fill: "#1f1f1f", m: .identity, fit: 300, length: nil)
+        ]),
+        "bl": Stamp(id: "bl", w: 560, h: 290, ink: "#2b2b2b", round: false, slots: [
+            Slot(what: .date("{dd} {FRAF} {yyyy}"), x: 300, y: 172, font: .barlow, size: 52, weight: 500, anchor: .middle, tracking: 6, fill: "#2b2b2b", m: .identity, fit: 380, length: nil)
+        ]),
+        "mf": Stamp(id: "mf", w: 600, h: 380, ink: "#333333", round: false, slots: [
+            Slot(what: .date("{dd}.{MM}.{yy}  88"), x: 280, y: 228, font: .barlow, size: 66, weight: 500, anchor: .middle, tracking: 3, fill: "#e0453c", m: .identity, fit: 330, length: nil)
+        ]),
         "gs": Stamp(id: "gs", w: 400, h: 560, ink: "#2b2b2b", round: false, slots: [
             Slot(what: .date("{MON} {dd} {yyyy}"), x: 200, y: 162, font: .barlow, size: 36, weight: 500, anchor: .middle, tracking: 3, fill: "#2b2b2b", m: .identity, fit: 240, length: nil)
         ]),
