@@ -804,6 +804,7 @@ extension PlacePageState.OnePage {
             all.insert(contentsOf: extra, at: min(1, all.count))
             out.highlights = Array(all.prefix(8))
         }
+        if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         facts = out
         settled = true
     }
