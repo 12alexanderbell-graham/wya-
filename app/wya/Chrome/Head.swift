@@ -1684,14 +1684,29 @@ struct SearchResults: View {
         else if !map.placesMode { ContentView.openThing(file: h.file, id: h.id, head: head, map: map) }
         else { map.showThing(file: h.file, id: h.id) }
     }
+    /// the countries a set's place lies in, by its Wikidata id (made once the sets have come)
+    private static var setCountries: [String: [String]]?
+    private static func sharedBy(_ q: String) -> [String] {
+        if setCountries == nil, CollectionStore.shared.ready {
+            var d: [String: [String]] = [:]
+            for c in CollectionStore.shared.all { for i in c.items where i.ccs.count > 1 { d[i.id] = i.ccs } }
+            setCountries = d
+        }
+        return setCountries?[q] ?? []
+    }
+
     private func thingRow(_ h: ThingIndex.Hit?) -> some View {
-        let country: [String] = countryNotes(h?.file)
+        let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
+        let many = (h.map { Self.sharedBy($0.id) } ?? []).compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted()
+        let manyWords = many.count >= 4 ? many.prefix(2).joined(separator: ", ") + " and \(many.count - 2) more" : many.joined(separator: ", ")
+        // (and a shorter form where the whole does not fit beside a long name:)
+        let country: [String] = many.count >= 2 ? [manyWords, many[0] + " and \(many.count - 1) more"] : countryNotes(h?.file)
         return Button { thingAct(h) } label: {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
-                rowFlag(h?.file)
-                ResultWords(name: h?.name ?? "", notes: h?.file == map.placeOpenID ? [] : country)
+                rowFlag(many.count >= 2 ? nil : h?.file)
+                ResultWords(name: h?.name ?? "", notes: many.count < 2 && h?.file == map.placeOpenID ? [] : country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -1720,16 +1735,19 @@ struct SearchResults: View {
         map.showSetPlace(h.list, id: h.item.id)
     }
     private func itemRow(_ h: CollectionStore.Found?) -> some View {
-        // (one country's place says its country, as a thing does; one on the border of two says both, with no flag;
+        // (one country's place says its country, as a thing does; one on the border of two or more says them, with no flag;
         // a sea or a range has none to say. Its name as the map says it: a list's long official name is cut short)
         // (by the countries the map has: Rome's centre, Italy's and the Holy See's, says Italy)
         let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
         let ccs = (h?.item.ccs ?? []).filter { named($0) != nil }
         let cc = ccs.count == 1 ? ccs[0] : nil
-        let two = ccs.count == 2 ? ccs.compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted() : []
-        let country = two.count == 2 ? two.joined(separator: ", ") : cc.flatMap(named) ?? ""
+        let two = ccs.count >= 2 ? ccs.compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted() : []
+        let country = two.count >= 4 ? two.prefix(2).joined(separator: ", ") + " and \(two.count - 2) more"
+            : two.count >= 2 ? two.joined(separator: ", ") : cc.flatMap(named) ?? ""
         var itemNotes: [String] = []
-        if !((cc != nil && cc == map.placeOpenID) || country.isEmpty) { itemNotes = cc != nil ? countryNotes(cc) : [country] }
+        if !((cc != nil && cc == map.placeOpenID) || country.isEmpty) {
+            itemNotes = cc != nil ? countryNotes(cc) : two.count >= 3 ? [country, two[0] + " and \(two.count - 1) more"] : [country]
+        }
         return Button { itemAct(h) } label: {
             HStack(spacing: 12) {
                 rowFlag(cc)
