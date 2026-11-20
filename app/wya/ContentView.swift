@@ -1528,13 +1528,13 @@ private struct SheetWatch: View {
 }
 
 
-/// DEPTH OF FOCUS ON APPLE'S MAP: what ours does through its lens (a card, the region card, the passport, the search
-/// in front: the map behind goes softly out of focus), Apple's map does as a whole, its names and coasts going soft
+/// DEPTH OF FOCUS ON APPLE'S MAP: what ours does through its lens (a country's card, the passport, the search in
+/// front: the map behind goes softly out of focus), Apple's map does as a whole, its names and coasts going soft
 /// behind what is in front, eased in and out with the card
 struct AppleLens: ViewModifier {
     let searching: Bool
     func body(content: Content) -> some View {
-        let on = !MapRenderer.lensOff && (CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown || searching)
+        let on = !MapRenderer.lensOff && (CardState.shared.shown || BookState.shared.shown || searching)
         content
             .blur(radius: on ? 7 : 0, opaque: true)
             .animation(.smooth(duration: 0.45), value: on)
