@@ -849,7 +849,23 @@ extension PlacePageState {
         guard let file = best?.file, let key = best?.key, case .ok(let pd) = await Servers.data.file("place/\(file)/\(key).json"),
               let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any],
               let intro = (j["g"] as? [String: Any])?["intro"] as? String, !intro.isEmpty else { return nil }
-        return intro
+        return uncaptioned(intro, name: name)
+    }
+    static func uncaptioned(_ s: String, name: String) -> String {
+        var t = s
+        if let r = t.range(of: "]]"), t.distance(from: t.startIndex, to: r.lowerBound) < 300 {
+            t = String(t[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
+        let head = t.prefix(300)
+        if t.hasPrefix("thumb|") || head.contains("px|"), let bar = head.range(of: "|", options: .backwards) {
+            let rest = String(t[bar.upperBound...])
+            let n = NSRegularExpression.escapedPattern(for: name)
+            if let r = rest.range(of: "\\b" + n + "( \\(| is | was | are |, )", options: .regularExpression),
+               let start = rest[..<r.lowerBound].isEmpty ? nil : Optional(r.lowerBound) {
+                t = String(rest[start...])
+            } else { t = rest }
+        }
+        return t.isEmpty ? s : t
     }
 
     static func activities(_ cc: String, town: String?, first: [String] = [], near: (lat: Double, lon: Double, km: Double)? = nil) async -> [Activity] {
