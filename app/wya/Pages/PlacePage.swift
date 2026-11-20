@@ -504,6 +504,7 @@ extension PlacePageState.OnePage {
                 return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
             }
         }
+        if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id else { return }
         facts = out
         settled = true
