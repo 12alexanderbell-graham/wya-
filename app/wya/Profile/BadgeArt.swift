@@ -31,6 +31,9 @@ enum BadgeForm: Hashable {
     case places([String], in: String? = nil)
     case swirl
     case medal
+    /// A MEDAL STRUCK WITH ITS NUMBER: the step its level stands for ("20" for Languages at gold, the first step for
+    /// one not yet earned) raised on its face, as a real medal is struck with what it was won for
+    case struck(String)
 
     @MainActor static func of(_ b: Badge) -> BadgeForm {
         switch b.id {
@@ -49,7 +52,11 @@ enum BadgeForm: Hashable {
             let cont = b.family == "world" && b.name.hasSuffix("Europe") ? "Europe" : nil
             return .places(m.sorted(), in: cont)
         }
-        return .medal
+        guard !b.steps.isEmpty else { return .medal }
+        let n = b.steps[min(b.steps.count - 1, max(0, b.level - 1))]
+        // (the number only, no unit: would not fit a face; a share keeps its %)
+        let t = b.unit == .percent ? "\(n)%" : b.unit == .tenthDegrees ? String(format: "%.0f°", Double(n) / 10) : n.formatted()
+        return .struck(t)
     }
 
     /// the places a badge is about, where it is about a set of them on the map
@@ -77,6 +84,7 @@ enum BadgeForm: Hashable {
         case .places(let ids, let c): "p:" + (c.map { $0 + ":" } ?? "") + ids.joined(separator: ",")
         case .swirl: "swirl"
         case .medal: "medal"
+        case .struck(let t): "struck:" + t
         }
     }
 }
@@ -167,7 +175,7 @@ enum BadgeSolid {
         case .continent(let n): p = BadgeOutline.continent(world, n)
         case .places(let ids, let c): p = BadgeOutline.traced(BadgeRings.places(world, Set(ids), in: c))
         case .swirl: p = BadgeOutline.swirl
-        case .medal: p = BadgeOutline.disc(0.5)
+        case .medal, .struck: p = BadgeOutline.disc(0.5)
         }
         // (none is kept too, once the world is here: a set too spread is not traced again)
         if p != nil || world != nil { outlines[form.key] = .some(p) }
@@ -195,14 +203,19 @@ enum BadgeSolid {
                 // the metals' middle: a disc standing proud of the rays
                 body.addChild(core)
             }
-        case .medal:
+        case .medal, .struck:
             // a disc, and a rim standing proud of it on both faces
             guard let face = solid(BadgeOutline.disc(0.43), depth: 0.07, chamfer: 0.015, mat: mat, smooth: true),
                   let rim = solid(BadgeOutline.ring(outer: 0.5, inner: 0.41), depth: 0.13, chamfer: 0.025, mat: mat, smooth: true)
             else { return nil }
             body.addChild(face)
             body.addChild(rim)
-            if diamond, let gem = BadgeGem.mesh(radius: 0.3, table: 0.36, height: 0.14, facets: 24) {
+            if case .struck(let t) = form, let num = struck(t, mat: mat) {
+                // its number raised on the face's front, as high as the rim stands
+                let fb = face.visualBounds(relativeTo: body), nb = num.visualBounds(relativeTo: num)
+                num.position = [-nb.center.x * num.scale.x, -nb.center.y * num.scale.y, fb.max.z - nb.min.z - 0.004]
+                body.addChild(num)
+            } else if diamond, let gem = BadgeGem.mesh(radius: 0.3, table: 0.36, height: 0.14, facets: 24) {
                 let stone = ModelEntity(mesh: gem, materials: [mat])
                 stone.position.z = 0.03
                 body.addChild(stone)
@@ -212,6 +225,20 @@ enum BadgeSolid {
         let b = body.visualBounds(relativeTo: body)
         for c in body.children { c.position -= b.center }
         return body
+    }
+
+    /// a medal's number as a solid: rounded bold, scaled so it sits inside the rim with room round it
+    static func struck(_ t: String, mat: PhysicallyBasedMaterial) -> ModelEntity? {
+        let base = UIFont.systemFont(ofSize: 0.3, weight: .bold)
+        let font = base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: 0.3) } ?? base
+        let mesh = MeshResource.generateText(t, extrusionDepth: 0.05, font: font, containerFrame: .zero,
+                                             alignment: .center, lineBreakMode: .byClipping)
+        let e = ModelEntity(mesh: mesh, materials: [mat])
+        let b = e.visualBounds(relativeTo: e)
+        // (inside a 0.41 rim: at most 0.6 across and 0.34 high)
+        let k = min(0.6 / max(0.001, b.extents.x), 0.34 / max(0.001, b.extents.y))
+        e.scale = [k, k, 1]
+        return e
     }
 
     static func solid(_ path: Path, depth: Float, chamfer: Float, mat: PhysicallyBasedMaterial, smooth: Bool = false) -> ModelEntity? {
@@ -252,9 +279,11 @@ final class BadgeArt {
     /// each badge's form, worked out once the world is here
     private var forms: [String: BadgeForm] = [:]
     func form(_ b: Badge) -> BadgeForm {
-        if let f = forms[b.id] { return f }
+        // (by its level too: a medal's number is its level's step)
+        let k = b.id + "|\(b.level)"
+        if let f = forms[k] { return f }
         let f = BadgeForm.of(b)
-        if world != nil, b.id != "islandnations" || BadgeStore.shared.ready { forms[b.id] = f }
+        if world != nil, b.id != "islandnations" || BadgeStore.shared.ready { forms[k] = f }
         return f
     }
     private var env: EnvironmentResource?
