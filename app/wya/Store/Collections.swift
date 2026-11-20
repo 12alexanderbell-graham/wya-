@@ -25,6 +25,9 @@ final class CollectionStore {
         var own: String? = nil
         /// its own photo, a Commons file (Wikidata's image of it, collections-14; 15 without views from space), or ""
         var photo = ""
+        /// a peak's height in metres, or 0; a park's, lake's, island's, range's or sea's area in km², or 0 (Wikidata)
+        var height = 0
+        var area = 0
         /// its name on the map: a list's long official name up to its first comma, colon or bracket; its card and
         /// page say it whole
         var short: String {
@@ -224,7 +227,8 @@ final class CollectionStore {
                                     at: EqualEarth.project(lon: ll[1].doubleValue, lat: ll[0].doubleValue),
                                     date: i["d"] as? String ?? "", label: i["l"] as? String ?? "",
                                     fame: long ? (i["f"] as? NSNumber)?.intValue ?? 1 : 9, ccs: ccs,
-                                    type: i["t"] as? String ?? "", own: i["k"] as? String, photo: i["p"] as? String ?? "")
+                                    type: i["t"] as? String ?? "", own: i["k"] as? String, photo: i["p"] as? String ?? "",
+                                    height: (i["e"] as? NSNumber)?.intValue ?? 0, area: (i["a"] as? NSNumber)?.intValue ?? 0)
                     }
                     out.append(Collection(id: id, title: t, scope: c["scope"] as? String ?? "world", event: c["event"] as? Bool ?? false,
                                           source: c["source"] as? String ?? "", items: its, offMap: off.count, unmapped: off,

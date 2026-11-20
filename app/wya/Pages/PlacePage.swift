@@ -194,10 +194,13 @@ extension PlacePageState.OnePage {
         }
         var out = PlacePageState.Facts()
         if !t.photo.isEmpty { out.photo = PlacePageState.photo(t.photo) }
-        // (its own line is already under its name; no prose repeating it)
-        if !["spot", "other", "area"].contains(t.kindName), !what.lowercased().contains(t.kindName) {
-            out.rows.append(("Kind", t.kindName.capitalized))
+        // (its own line is already under its name; no prose repeating it) (a set that says what it is names it: Lake
+        // Baikal read)
+        let kind = setKind() ?? t.kindName
+        if !["spot", "other", "area"].contains(kind), !what.lowercased().contains(kind) {
+            out.rows.append(("Kind", kind.prefix(1).uppercased() + kind.dropFirst()))
         }
+        out.rows += setFacts()
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
         // where it is in words (the nearest town and its country), the numbers only when no town is near; the towns'
         // index read first if it is not yet (it is read once, in the background)
@@ -255,9 +258,30 @@ extension PlacePageState.OnePage {
             if TownIndex.shared.ready { self.settled = true }
         }
     }
+    /// what a Places set knows of it and its own record does not: a peak's height, a park's, lake's or island's area
+    private func setKind() -> String? {
+        let named = ["peaks": "mountain", "ranges": "mountain range", "famouslakes": "lake", "lakes": "lake",
+                     "famousislands": "island", "islands": "island"]
+        for c in CollectionStore.shared.all {
+            guard let k = named[c.id], c.items.contains(where: { $0.key == key }) else { continue }
+            return k
+        }
+        return nil
+    }
+    private func setFacts() -> [(String, String)] {
+        // (every set it is in: Lake Baikal's World Heritage record has no area, its lakes record has)
+        let its = CollectionStore.shared.all.compactMap { c in c.items.first { $0.key == key } }
+        let height = its.map(\.height).max() ?? 0, area = its.map(\.area).max() ?? 0
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
+        var rows: [(String, String)] = []
+        if height > 0, let n = f.string(from: height as NSNumber) { rows.append(("Height", "\(n) m")) }
+        if area > 0, let n = f.string(from: area as NSNumber) { rows.append(("Area", "\(n) km²")) }
+        return rows
+    }
     private func seedOnly() {
         var out = PlacePageState.Facts()
         out.photo = photo.flatMap { PlacePageState.photo($0) }
+        out.rows = setFacts()
         facts = out
         settled = true
     }
