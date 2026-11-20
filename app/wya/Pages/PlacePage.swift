@@ -56,7 +56,7 @@ final class PlacePageState {
         let key: PlaceKey
         let name: String
         /// one line of what it is; empty for a country
-        let what: String
+        var what: String
         /// the country it is in (its flag and colours)
         let country: String
         /// a region's ISO 3166-2 code (its facts on the server are keyed by it)
@@ -199,6 +199,7 @@ extension PlacePageState.OnePage {
             } else { seedOnly() }
             return
         }
+        if what.isEmpty, t.line.isEmpty, let l = setLine() { what = l }
         var out = PlacePageState.Facts()
         if !t.photo.isEmpty { out.photo = PlacePageState.photo(t.photo) }
         // (its own line is already under its name; no prose repeating it) (a set that says what it is names it: Lake
@@ -252,6 +253,10 @@ extension PlacePageState.OnePage {
             let names: [String] = own.sorted().prefix(3).map { PlacePageState.countryName($0) }.filter { !$0.isEmpty }
             let lands: String = land.isEmpty ? names.joined(separator: ", ") : land
             if !lands.isEmpty { out.rows.append(("Where", lands)) }
+        }
+        // (no Where that the line under its name says whole: over)
+        out.rows.removeAll { r in
+            r.0 == "Where" && r.1.split(separator: ",").allSatisfy { what.localizedCaseInsensitiveContains($0.trimmingCharacters(in: .whitespaces)) }
         }
         // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
         // it is
@@ -352,6 +357,22 @@ extension PlacePageState.OnePage {
         }
     }
     /// what a Places set knows of it and its own record does not: a peak's height, a park's, lake's or island's area
+    /// a set's place's line from its sets, or nil
+    private func setLine() -> String? {
+        let words = ["world-heritage": "World Heritage site", "peaks": "Mountain", "ranges": "Mountain range",
+                     "famouslakes": "Lake", "lakes": "Lake", "famousislands": "Island", "islands": "Island",
+                     "parks": "Protected area", "seas": "Sea", "landmarks": "Landmark"]
+        var word: String?, ccs: [String] = []
+        for c in CollectionStore.shared.all {
+            guard let i = c.items.first(where: { $0.key == key }) else { continue }
+            if ccs.isEmpty { ccs = i.ccs.isEmpty ? [i.cc] : i.ccs }
+            if word == nil || c.id == "world-heritage" { word = words[c.id] ?? word }
+        }
+        guard let word else { return nil }
+        let names = ccs.prefix(3).map { PlacePageState.countryName($0) }.filter { !$0.isEmpty }
+        let lands = names.count <= 1 ? names.joined() : names.dropLast().joined(separator: ", ") + " and " + names.last!
+        return lands.isEmpty ? word : word + " in " + lands
+    }
     /// a set's place as a thing (its kind by its set, no line of its own), or nil
     private func setThing() -> (cc: String, thing: ThingStore.Thing)? {
         guard key.kind == .thing else { return nil }
