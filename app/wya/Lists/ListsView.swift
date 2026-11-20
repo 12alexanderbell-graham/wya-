@@ -304,24 +304,26 @@ struct ListsWater: View {
     /// none, the glass), its name at the bottom left and how many things at the right
     private func listTile(_ l: MyList) -> some View {
         tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
-             ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }))
+             ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }),
+             spots: things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } })
     }
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {
         let ccs = Array(NSOrderedSet(array: wishThings.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
-        return tile(l.id, name: l.name, dim: false, count: wishThings.count, ccs: ccs)
+        return tile(l.id, name: l.name, dim: false, count: wishThings.count, ccs: ccs,
+                    spots: wishThings.compactMap { t in t.cc.map { t.name + "|" + $0 } })
     }
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
     private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil,
-                      cover: AnyView? = nil, words: String? = nil) -> some View {
+                      cover: AnyView? = nil, words: String? = nil, spots: [String] = []) -> some View {
         let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
             .flatMap { $0 } ?? "\(n) \(n == 1 ? "place" : "places")")
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
-                .overlay { if let cover { cover } else { ListCover(ccs: ccs, world: map.world) } }
+                .overlay { if let cover { cover } else { ListCover(ccs: ccs, world: map.world, spots: spots) } }
                 .clipShape(shape)
                 // (glass only for a tile with nothing of its own to show: over the map it washed Apple's colours out)
                 .glassEffect(ccs.isEmpty && cover == nil ? PageGlass.on : .clear, in: shape)
@@ -405,7 +407,7 @@ struct ListsWater: View {
                 .padding(.top, ccs.isEmpty ? 0 : 192)
                 .background(alignment: .top) {
                     if !ccs.isEmpty {
-                        ListCover(ccs: ccs, world: map.world)
+                        ListCover(ccs: ccs, world: map.world, spots: things.compactMap { t in t.cc.map { t.name + "|" + $0 } })
                             .frame(height: 180)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
@@ -1230,6 +1232,8 @@ struct ListsWheel: View {
 struct ListCover: View {
     let ccs: [String]
     var world: World? = nil
+    /// its places,: each dot at its own town or sight where one is found, else its country's middle
+    var spots: [String] = []
     @State private var img: UIImage?
     @Environment(\.displayScale) private var scale
 
@@ -1240,12 +1244,15 @@ struct ListCover: View {
             }
             .frame(width: g.size.width, height: g.size.height)
             .clipped()
-            .task(id: ccs.joined(separator: ",") + "|\(Int(g.size.width))x\(Int(g.size.height))") {
-                img = ListMapCovers.cached(ccs, size: g.size)
-                if img == nil { img = await ListMapCovers.image(ccs, world: world, size: g.size, scale: scale) }
+            // (made again once the towns' and sights' indexes have come: their dots move to their own places)
+            .task(id: ccs.joined(separator: ",") + "|" + spots.joined(separator: ",") + "|\(Int(g.size.width))x\(Int(g.size.height))"
+                  + (TownIndex.shared.ready && ThingIndex.shared.ready ? "|r" : "")) {
+                img = ListMapCovers.cached(ccs, spots: spots, size: g.size)
+                if img == nil { img = await ListMapCovers.image(ccs, spots: spots, world: world, size: g.size, scale: scale) }
             }
         }
         .accessibilityHidden(true)
+        .onAppear { if !spots.isEmpty { TownIndex.shared.load(); ThingIndex.shared.load() } }
     }
 }
 
@@ -1254,27 +1261,66 @@ struct ListCover: View {
 @MainActor
 enum ListMapCovers {
     private static var cache: [String: UIImage] = [:]
-    private static func key(_ ccs: [String], _ size: CGSize) -> String { ccs.sorted().joined(separator: ",") + "|\(Int(size.width))x\(Int(size.height))" }
-    static func cached(_ ccs: [String], size: CGSize) -> UIImage? { cache[key(ccs, size)] }
+    private static func key(_ ccs: [String], _ spots: [String], _ size: CGSize) -> String {
+        ccs.sorted().joined(separator: ",") + "|" + spots.joined(separator: ",") + "|\(Int(size.width))x\(Int(size.height))"
+            + (TownIndex.shared.ready && ThingIndex.shared.ready ? "|r" : "")
+    }
+    static func cached(_ ccs: [String], spots: [String] = [], size: CGSize) -> UIImage? { cache[key(ccs, spots, size)] }
 
-    static func image(_ ccs: [String], world: World?, size: CGSize, scale: CGFloat) async -> UIImage? {
-        let k = key(ccs, size)
+    /// A PLACE OF A LIST, WHERE IT IS: a town of that name in that country, else a sight of exactly that name there,
+    /// else nil (its country's middle)
+    static func spot(_ name: String, _ cc: String) -> CLLocationCoordinate2D? {
+        // (a town of some size: "Pasta" in a list of dishes is not the hamlet of Pasta near Turin)
+        if let t = TownIndex.shared.named(name, in: cc), t.people >= 1_000 { return CLLocationCoordinate2D(latitude: t.lat, longitude: t.lon) }
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        if ThingIndex.shared.ready, let h = ThingIndex.shared.hits(name, open: cc, limit: 6, near: false)
+            .first(where: { $0.file.lowercased() == cc.lowercased() && fold($0.name) == fold(name) }) {
+            return CLLocationCoordinate2D(latitude: h.lat, longitude: h.lon)
+        }
+        return nil
+    }
+
+    static func image(_ ccs: [String], spots: [String] = [], world: World?, size: CGSize, scale: CGFloat) async -> UIImage? {
+        let k = key(ccs, spots, size)
         if let c = cache[k] { return c }
         guard let world, !ccs.isEmpty, size.width > 4, size.height > 4 else { return nil }
         // the countries' frames, as Apple's map points (the frames are in our own map's units: Equal Earth)
         var rect = MKMapRect.null
         var mids: [CLLocationCoordinate2D] = []
+        var frames: [String: MKMapRect] = [:], midOf: [String: CLLocationCoordinate2D] = [:]
         for cc in ccs {
             guard let i = world.placeIndex[cc.lowercased()] ?? world.placeIndex[cc], let f = world.frame(of: i) else { continue }
             let m = EqualEarth.unproject(SIMD2(Double(f.x + f.z) / 2, Double(f.y + f.w) / 2))
-            mids.append(CLLocationCoordinate2D(latitude: max(-80, min(80, m.lat)), longitude: m.lon))
+            let mid = CLLocationCoordinate2D(latitude: max(-80, min(80, m.lat)), longitude: m.lon)
+            mids.append(mid); midOf[cc.lowercased()] = mid
+            var r = MKMapRect.null
             for q in [SIMD2(f.x, f.y), SIMD2(f.z, f.w)] {
                 let ll = EqualEarth.unproject(SIMD2(Double(q.x), Double(q.y)))
                 let p = MKMapPoint(CLLocationCoordinate2D(latitude: max(-80, min(80, ll.lat)), longitude: ll.lon))
-                rect = rect.union(MKMapRect(origin: p, size: MKMapSize(width: 0, height: 0)))
+                r = r.union(MKMapRect(origin: p, size: MKMapSize(width: 0, height: 0)))
             }
+            frames[cc.lowercased()] = r
+            rect = rect.union(r)
         }
         guard !rect.isNull else { return nil }
+        // (each place at its own town or sight where found; a country of none of them keeps its middle)
+        if !spots.isEmpty {
+            var placed: [CLLocationCoordinate2D] = [], placedCC = Set<String>(), seen = Set<String>()
+            for s in spots.prefix(40) {
+                let parts = s.split(separator: "|", maxSplits: 1).map(String.init)
+                guard parts.count == 2, seen.insert(s.lowercased()).inserted else { continue }
+                if let c = spot(parts[0], parts[1]) { placed.append(c); placedCC.insert(parts[1].lowercased()) }
+            }
+            let rest = ccs.map { $0.lowercased() }.filter { !placedCC.contains($0) }
+            mids = placed + rest.compactMap { midOf[$0] }
+            // (framed on the places themselves, and on the whole of a country only where nothing in it is placed: a
+            // list of Vladivostok framed on all of Russia ended in the north, Vladivostok under its edge)
+            if !placed.isEmpty {
+                rect = .null
+                for m in placed { rect = rect.union(MKMapRect(origin: MKMapPoint(m), size: MKMapSize(width: 0, height: 0))) }
+                for cc in rest { if let r = frames[cc] { rect = rect.union(r) } }
+            }
+        }
         // room round them, and the cover's own shape (never stretched)
         let aspect = size.width / size.height
         var w = max(rect.size.width, MKMapSize.world.width / 60) * 1.4, h = max(rect.size.height, MKMapSize.world.height / 60) * 1.4
