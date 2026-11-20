@@ -307,7 +307,7 @@ struct SetPlaceThumb: View {
         }
         .task(id: url) {
             guard let url, shot == nil else { return }
-            await PagePhoto.prefetch(url); photo = PagePhoto.cached(url)
+            await PagePhoto.prefetch(url, focus: false); photo = PagePhoto.cached(url)
         }
         .frame(width: 44, height: 44)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

@@ -2542,20 +2542,21 @@ struct PagePhoto: View {
     /// the photo fetched, its upper part taken (a standing photo) and made ready to draw, kept for the page; one fetch
     /// per photo at a time (the page's wait and the photo itself asked for it together and it came down twice)
     private static var fetching: [URL: Task<Void, Never>] = [:]
-    static func prefetch(_ url: URL) async {
+    /// `focus` false (a list's 44 pt thumbnail, drawn filled from its middle): no Vision, the photo kept as fetched
+    static func prefetch(_ url: URL, focus wantFocus: Bool = true) async {
         guard kept.object(forKey: url as NSURL) == nil else { return }
         if let t = fetching[url] { await t.value; return }
         let t = Task {
             let file = disk(url)
             if let d = try? Data(contentsOf: file), let i = UIImage(data: d) {
-                if let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
+                if wantFocus, let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
                 kept.setObject(await i.byPreparingForDisplay() ?? i, forKey: url as NSURL)
                 return
             }
             guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
-            let whole: CGPoint? = if let cg0 = i0.cgImage { await Self.mainObjectQueued(cg0) } else { nil }
+            let whole: CGPoint? = if wantFocus, let cg0 = i0.cgImage { await Self.mainObjectQueued(cg0) } else { nil }
             let i = upper(i0, around: whole)
-            if let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
+            if wantFocus, let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
             let ready = await i.byPreparingForDisplay() ?? i
             kept.setObject(ready, forKey: url as NSURL)
             if let jpg = i.jpegData(compressionQuality: 0.85) {
