@@ -271,7 +271,9 @@ struct ListsWater: View {
                             return n.isEmpty ? nil : n + "|" + cc.lowercased()
                         }
                         let named = ccs.isEmpty ? Self.namedTown(p.name) : nil
-                        let ccs2 = named.map { [$0.file.lowercased()] } ?? ccs
+                        // (or the country it says,: its map)
+                        let land = ccs.isEmpty && named == nil ? Self.namedCountry(p.name) : nil
+                        let ccs2 = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs
                         let spots2 = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots
                         tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs2,
                              cover: ccs2.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots2)
@@ -327,6 +329,12 @@ struct ListsWater: View {
             if let h = TownIndex.shared.hits(t, open: nil, limit: 3).first(where: { $0.name.townFolded == t.townFolded && $0.people >= 100_000 }) { return h }
         }
         return nil
+    }
+    /// a country a plan's name says by the map's name for it (: jp), or nil
+    @MainActor static func namedCountry(_ name: String) -> String? {
+        guard let w = AIContext.map?.world else { return nil }
+        let f = " " + name.townFolded + " "
+        return w.places.first { pl in pl.n.count >= 4 && f.contains(" " + pl.n.townFolded + " ") }?.id.lowercased()
     }
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {

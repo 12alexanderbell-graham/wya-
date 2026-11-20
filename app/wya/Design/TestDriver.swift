@@ -1229,6 +1229,12 @@ final class TestDriver {
                     ListsStore.shared.change { $0.plans.append(pl) }
                     ListsState.shared.kind = 1; ListsState.shared.open = p.count > 2 && p[2] == "home" ? nil : pl.id
                     NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
+                // planempty <name>: a plan of that name with no places, on the shelf (its cover from its name)
+                case "planempty":
+                    let pl = Plan(name: p.dropFirst().joined(separator: " "), start: "", days: [PlanDay()])
+                    ListsStore.shared.change { $0.plans.append(pl) }
+                    ListsState.shared.kind = 1; ListsState.shared.open = nil
+                    NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
                 // plandrop <name>: a test's plan taken out again placesswipe on|off: Places' caption as the menu,
                 // swiped
                 case "placesswipe": UserDefaults.standard.set(a == "on", forKey: "wya.placesSwipe")
