@@ -37,7 +37,9 @@ final class PlacePageState {
     }
     /// the server's World Heritage list, read once
     static var heritage: [String: [String: Any]]?
-    struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil }
+    struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil
+        /// its own photo (a Commons file, as its page shows it), or ""
+        var photo = "" }
     /// ONE PAGE of the stack (16.2: a row or card on a page pushes its own page on top; closing it returns to this one)
     @MainActor
     @Observable
@@ -292,7 +294,7 @@ extension PlacePageState.OnePage {
         }
         // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
         if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
-            var pop: [String: Double] = [:]
+            var pop: [String: Double] = [:], img: [String: String] = [:]
             var byName: [String: String] = [:]
             let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
             if case .ok(let rd) = await Servers.data.file("regions/\(cc).json"),
@@ -300,6 +302,7 @@ extension PlacePageState.OnePage {
                 for (k, v) in all {
                     let r = v as? [String: Any]
                     pop[k] = (r?["pop"] as? NSNumber)?.doubleValue
+                    if let f = PlacePageState.photo(r?["img"]) { img[k] = f }
                     for n in (r?["u"] as? [String]) ?? [] { byName[fold(n)] = k }
                 }
             }
@@ -318,7 +321,7 @@ extension PlacePageState.OnePage {
                 var line: String = level
                 if let n = pop[key(u) ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
                 rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(u.name, word),
-                                                  line: line, code: key(u)))
+                                                  line: line, code: key(u), photo: img[key(u) ?? ""] ?? ""))
             }
             out.regions = rows
         }
@@ -332,7 +335,8 @@ extension PlacePageState.OnePage {
                     || r0.localizedCaseInsensitiveContains(n) && r0.count <= n.count + 12 ? "" : r0
                 let ll = t["ll"] as? [NSNumber]
                 return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: r, code: nil,
-                              at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil })
+                              at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
+                              photo: PlacePageState.photo(t["img"]) ?? "")
             }
         }
         // highlights: the country's World Heritage sites (the list the server's country file names)
@@ -1637,7 +1641,8 @@ private struct InsideList: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             let alike = all.count > 1 && Set(all.map(\.line)).count == 1
-            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike) }
+            let pictured = all.contains { !$0.photo.isEmpty }
+            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured) }
             if rows.count > limit {
                 Button { shown += 10 } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -1648,9 +1653,10 @@ private struct InsideList: View {
         }
     }
 
-    private func row(_ r: PlacePageState.Inside, line: Bool = true) -> some View {
+    private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false) -> some View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
+            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country) }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                 if line, !r.line.isEmpty { Text(PlacePageState.mended(r.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
