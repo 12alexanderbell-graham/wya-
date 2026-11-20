@@ -277,6 +277,12 @@ extension PlacePageState.OnePage {
                 let bare = name.replacingOccurrences(of: " (National Park|National Monument|National Historical Park|Nature Reserve|Biosphere Reserve)$", with: "", options: .regularExpression)
                 d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
             }
+            // (or the article that lists it, where that article is named for it: Angkor Wat is listed, without words,
+            // in)
+            if d == nil, let art = await PlacePageState.listingArticle(cc, wd: wd),
+               art.townFolded.split(separator: " ").contains(where: { w in w.count >= 4 && name.townFolded.split(separator: " ").contains(w) }) {
+                d = await PlacePageState.guideIntro(cc, name: art, lat: ll.lat, lon: ll.lon, within: 30)
+            }
             if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
                 self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
                 self.facts?.proseWikivoyage = true
@@ -1348,6 +1354,12 @@ extension PlacePageState {
 
     /// a thing's own words from the country's guide listings: the listing with its Wikidata id, else the first with its
     /// name (any case and accents); only a description of some length (a line of directions is not one)
+    /// the guide's article that lists a thing (by its Wikidata id), or nil
+    static func listingArticle(_ cc: String, wd: String?) async -> String? {
+        guard let wd, case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
+              let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
+        return all.keys.sorted().first { k in (all[k] ?? []).contains { ($0["wd"] as? String) == wd } }
+    }
     static func listingText(_ cc: String, wd: String?, name: String) async -> String? {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
