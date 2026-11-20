@@ -180,13 +180,13 @@ final class PlacePageState {
 extension PlacePageState.OnePage {
     /// A THING'S PAGE (16.2 for things, D5 as it is): its photo, its own line as the prose, its kind and where it is
     fileprivate func loadThing() {
-        guard let (cc, t) = ThingStore.shared.thing(key.id) else {
+        guard let (cc, t) = ThingStore.shared.thing(key.id) ?? (ThingStore.shared.things(country) != nil ? setThing() : nil) else {
             // its country's things not read yet: once they are, or (a World Heritage site the data keeps as a whole) its
             // photo and kind from what opened it
             if ThingStore.shared.things(country) == nil {
                 Task { @MainActor in
                     for _ in 0 ..< 60 where ThingStore.shared.things(country) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-                    if ThingStore.shared.thing(key.id) != nil { loadThing(); return }
+                    if ThingStore.shared.thing(key.id) != nil || (ThingStore.shared.things(country) != nil && setThing() != nil) { loadThing(); return }
                     seedOnly()
                 }
             } else { seedOnly() }
@@ -275,6 +275,15 @@ extension PlacePageState.OnePage {
         }
     }
     /// what a Places set knows of it and its own record does not: a peak's height, a park's, lake's or island's area
+    /// a set's place as a thing (its kind by its set, no line of its own), or nil
+    private func setThing() -> (cc: String, thing: ThingStore.Thing)? {
+        guard key.kind == .thing else { return nil }
+        let its = CollectionStore.shared.all.compactMap { c in c.items.first { $0.key == key } }
+        guard let i = its.first else { return nil }
+        let k = ThingStore.kinds.firstIndex(of: setKind() == "lake" ? "water" : setKind() == "island" ? "nature" : setKind() ?? "landmark") ?? 2
+        let cc = i.cc.isEmpty ? country.lowercased() : i.cc
+        return (cc, ThingStore.Thing(id: i.id, name: i.name, kind: k, at: i.at, fame: min(3, i.fame), line: "", photo: its.lazy.map(\.photo).first { !$0.isEmpty } ?? ""))
+    }
     private func setKind() -> String? {
         let named = ["peaks": "mountain", "ranges": "mountain range", "famouslakes": "lake", "lakes": "lake",
                      "famousislands": "island", "islands": "island"]
@@ -293,8 +302,9 @@ extension PlacePageState.OnePage {
         let height = its.map(\.height).max() ?? 0, area = its.map(\.area).max() ?? 0
         let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
         var rows: [(String, String)] = []
-        if height > 0, let n = f.string(from: height as NSNumber) { rows.append(("Height", "\(n) m")) }
-        if area > 0, let n = f.string(from: area as NSNumber) { rows.append(("Area", "\(n) km²")) }
+        // (not what the line under its name says already: over)
+        if height > 0, let n = f.string(from: height as NSNumber), !what.contains(n) { rows.append(("Height", "\(n) m")) }
+        if area > 0, let n = f.string(from: area as NSNumber), !what.contains(n) { rows.append(("Area", "\(n) km²")) }
         return rows
     }
     private func seedOnly() {
