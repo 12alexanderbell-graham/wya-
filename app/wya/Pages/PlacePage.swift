@@ -225,7 +225,11 @@ extension PlacePageState.OnePage {
             let km = (dx * dx + dy * dy).squareRoot()
             return km <= 2 ? (o, km) : nil
         }
-        .sorted { a, b in a.0.fame != b.0.fame ? a.0.fame > b.0.fame : a.1 < b.1 }
+        // (as well known, a sports ground after the sights, then the nearest, as the other cards)
+        .sorted { a, b in
+            let va = PlacePageState.isVenue(a.0.name, a.0.line), vb = PlacePageState.isVenue(b.0.name, b.0.line)
+            return a.0.fame != b.0.fame ? a.0.fame > b.0.fame : va != vb ? !va : a.1 < b.1
+        }
         .prefix(6)
         if !near.isEmpty {
             out.highlights = near.map { o, km in
