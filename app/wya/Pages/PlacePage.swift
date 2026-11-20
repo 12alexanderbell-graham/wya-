@@ -2072,11 +2072,15 @@ private struct PageSuggestions: View {
                 Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
                 Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                 VStack(alignment: .leading, spacing: 0) {
+                    let pictured = picks.contains { !$0.0.photo.isEmpty }
                     ForEach(picks, id: \.0.key) { r, why in
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
-                            Text(why).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                                .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .top, spacing: 12) {
+                            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country) }
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                                Text(why).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
