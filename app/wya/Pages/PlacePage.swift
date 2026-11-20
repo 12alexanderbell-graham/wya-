@@ -256,7 +256,7 @@ extension PlacePageState.OnePage {
         .sorted { a, b in
             let sa = PlacePageState.isStudy(a.0.name), sb = PlacePageState.isStudy(b.0.name)
             let va = PlacePageState.isVenue(a.0.name, a.0.line), vb = PlacePageState.isVenue(b.0.name, b.0.line)
-            return sa != sb ? !sa : a.0.fame != b.0.fame ? a.0.fame > b.0.fame : va != vb ? !va : a.1 < b.1
+            return sa != sb ? !sa : va != vb ? !va : a.0.fame != b.0.fame ? a.0.fame > b.0.fame : a.1 < b.1
         }
         .prefix(6)
         if !near.isEmpty {
@@ -632,7 +632,7 @@ extension PlacePageState.OnePage {
             .sorted { a, b in
                 let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
                 let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
-                return sa != sb ? !sa : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
+                return sa != sb ? !sa : va != vb ? !va : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset
             }
             .map(\.element)
             .prefix(8)
@@ -775,7 +775,7 @@ extension PlacePageState.OnePage {
             .sorted { a, b in
                 let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
                 let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
-                return sa != sb ? !sa : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
+                return sa != sb ? !sa : va != vb ? !va : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset
             }
             .map(\.element)
             .lazy.filter { o in
@@ -923,7 +923,7 @@ extension PlacePageState {
                    options: [.regularExpression, .caseInsensitive]) != nil
     }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
-        (name + " " + line).range(of: #"\b(stadium|stadio|estadio|arena|sports venue|multisports venue|racecourse|race track|circuit|ballpark)\b"#,
+        (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark)\b"#,
                                   options: [.regularExpression, .caseInsensitive]) != nil
     }
     /// a pass or a city card (,,): a ticket, not a thing to see or do
