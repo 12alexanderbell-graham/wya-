@@ -1035,7 +1035,7 @@ struct SearchResults: View {
         // (the sets' own places: the parks, peaks, lakes and the rest of Places' menu, the set looked at first)
         let _ = map.pinsMode || sightSearch ? CollectionStore.shared.load() : ()
         let spelled = Self.spelledOut(head.query)
-        let itemTyped = (spotSearch || sightSearch) && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : []
+        let itemTyped = Self.timed("sets") { (spotSearch || sightSearch) && typed ? CollectionStore.shared.find(head.query, first: map.placesCollection) : [] }
         let itemHits = itemTyped.isEmpty && (spotSearch || sightSearch) && typed && spelled != head.query
             ? CollectionStore.shared.find(spelled, first: map.placesCollection) : itemTyped
         // (a near spelling only with nothing else found: found Vinson Massif, then Tinson Pen Aerodrome)
