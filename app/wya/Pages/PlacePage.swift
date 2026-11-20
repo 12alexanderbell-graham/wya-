@@ -1814,6 +1814,18 @@ struct SourcesRow: View {
         .onChange(of: PlacePageState.shared.sourcesTest) { _, _ in PlacePageState.shared.sheetAsked += 1 }
     }
 
+    /// THE LISTS' PHOTOS: each as (its place's name, its Commons file)
+    static func listPhotos(_ facts: PlacePageState.Facts) -> [(String, String)] {
+        var out: [(String, String)] = []
+        for a in facts.activities.prefix(40) {
+            if let wd = a.wd, let p = ThingStore.shared.thing(wd)?.thing.photo, let f = PlacePageState.photo(p) { out.append((a.name, f)) }
+        }
+        // (the first forty of each: past them a list is opened ten at a time, and Italy's 663 cities asked Commons for
+        // every author at once)
+        for r in facts.regions.prefix(40) + facts.cities.prefix(40) where !r.photo.isEmpty { out.append((r.name, r.photo)) }
+        return out
+    }
+
     /// the page's sources as (what, who and the licence) pairs, in the page's order
     static func lines(_ facts: PlacePageState.Facts, kind: PlaceKey.Kind, credits: [String: String], id: String = "") -> [(String, String)] {
         var out: [(String, String)] = []
@@ -1826,6 +1838,7 @@ struct SourcesRow: View {
             out.append(("Photo of \(h.name)", (credits[f] ?? f) + ", Wikimedia Commons"))
         }
         if !facts.activities.isEmpty { out.append(("Activities", "Wikivoyage, CC BY-SA")) }
+        for (n, f) in listPhotos(facts) { out.append(("Photo of \(n)", (credits[f] ?? f) + ", Wikimedia Commons")) }
         // (where the page has its regions: the places whose regions, or outline, are geoBoundaries' (gbOpen, CC BY 4.0))
         let cc = id.lowercased()
         if kind == .country, ["sm", "li", "ad", "to", "tv", "fm", "gm"].contains(cc) { out.append(("Regions", "geoBoundaries, CC BY 4.0")) }
@@ -1838,7 +1851,7 @@ struct SourcesRow: View {
     static func credits(_ facts: PlacePageState.Facts) async -> [String: String] {
         var out: [String: String] = [:]
         var shards: [String: [String: Any]] = [:]
-        for f in facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? []) {
+        for f in facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? []) + listPhotos(facts).map(\.1) {
             let sh = Self.shard(f)
             if shards[sh] == nil, case .ok(let d) = await Servers.data.file("credits/\(sh).json"),
                let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { shards[sh] = j }
@@ -1848,7 +1861,7 @@ struct SourcesRow: View {
         }
         // the rest (the World Heritage photos are not in the server's credits) from Commons itself: each file's author and
         // licence short name, in one request
-        let missing = (facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? [])).filter { out[$0] == nil }
+        let missing = (facts.highlights.compactMap(\.photo) + (facts.photo.map { [$0] } ?? []) + listPhotos(facts).map(\.1)).filter { out[$0] == nil }
         for start in stride(from: 0, to: missing.count, by: 50) {
             let batch = Array(missing[start ..< min(missing.count, start + 50)])
             var c = URLComponents(string: "https://commons.wikimedia.org/w/api.php")!
