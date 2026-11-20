@@ -192,6 +192,8 @@ struct ListSuggestions: View {
                 HStack(spacing: 12) {
                     if let wd = Self.sight(pk), SetPlaceThumb.file(own: "", thing: wd) != nil {
                         SetPlaceThumb(own: "", thing: wd, cc: pk.cc)
+                    } else if let f = Self.setPlace(pk.what, pk.cc), SetPlaceThumb.file(own: f.item.photo, thing: f.item.id) != nil {
+                        SetPlaceThumb(own: f.item.photo, thing: f.item.id, cc: pk.cc)
                     } else {
                         Group {
                             if let f = Flags.row(pk.cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
