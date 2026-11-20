@@ -617,7 +617,7 @@ enum TownStamps {
         let country = PlaceKey.country(cc)
         if !MarkStore.shared.state(country).stamped {
             await MarkStore.shared.stamp(country, source: source)
-            through.insert(cc)
+            remember(cc)
         }
         if let place, let point { await stampRegions(cc: cc, place: place, at: point, source: source) }
     }
@@ -646,11 +646,19 @@ enum TownStamps {
     @MainActor
     private static func unstampChain(_ key: PlaceKey, name: String, cc: String) async {
         await MarkStore.shared.unstamp(key, name: name)
+        await release(cc)
+    }
+
+    /// A COUNTRY STAMPED ONLY THROUGH A PLACE IN IT, GIVEN BACK: once no stamped town, thing or region of it holds
+    /// it, the country is unstamped too (the friend's review, board 14: removing Western Australia left Australia
+    /// stamped)
+    @MainActor
+    static func release(_ cc0: String) async {
+        let cc = cc0.lowercased()
         guard through.contains(cc) else { return }
-        // still held by another stamped town or thing of it
         let held = MarkStore.shared.marks.contains { k, s in
             guard s.stamped else { return false }
-            if k.kind == .town { return k.id.hasPrefix(cc + "/") }
+            if k.kind == .town || k.kind == .region { return k.id.lowercased().hasPrefix(cc + "/") }
             if k.kind == .thing { return (ThingStore.shared.thing(k.id)?.cc ?? ThingIndex.shared.hit(k.id)?.file) == cc }
             return false
         }
@@ -659,6 +667,8 @@ enum TownStamps {
         let country = PlaceKey.country(cc)
         if MarkStore.shared.state(country).stamped { await MarkStore.shared.unstamp(country) }
     }
+    /// a country stamped only through a place in it (a town, a region)
+    @MainActor static func remember(_ cc: String) { through.insert(cc.lowercased()) }
 
     /// a country no longer held only through a town
     @MainActor static func forget(_ cc: String) { through.remove(cc.lowercased()) }

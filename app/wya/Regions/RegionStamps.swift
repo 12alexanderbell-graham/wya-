@@ -26,7 +26,10 @@ enum RegionStamps {
     @MainActor
     private static func stampChain(id: String, name unitName: String, parent: String?, cc: String, row: Int,
                                    source: MarkSource) async {
+        // (the country the region stamps with it, when it was not stamped before, is held only through it)
+        let had = MarkStore.shared.state(.country(cc)).stamped
         await MarkStore.shared.stamp(PlaceKey(.region, id), name: unitName, cc: cc, level: row, source: source)
+        if !had, MarkStore.shared.state(.country(cc)).stamped { TownStamps.remember(cc) }
         // stamped by hand at its own level: no longer
         forget(id)
         for (pid, name, row) in await parents(parent, cc: cc, row: row) {
@@ -68,6 +71,8 @@ enum RegionStamps {
             forget(pid)
             childRow = row
         }
+        // and its country, if this region was all that held it
+        await TownStamps.release(cc)
     }
 
     /// the regions stamped only through a child (kept on the phone with the marks' account)
