@@ -1164,9 +1164,7 @@ private struct PageLayer: View {
                     top(key, L: L)
                 }
                 marking(key)
-                if let f = page.facts, !f.prose.isEmpty {
-                    Text(f.prose).font(.body).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, alignment: .leading)
-                }
+                if let f = page.facts, !f.prose.isEmpty { PageOpening(text: f.prose).id(f.prose) }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
                 if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, L: L).id("highlights") }
                 // ("lists": where the head's search takes the page, the first of its long lists)
@@ -2013,5 +2011,30 @@ enum SuggestionsCache {
     static func put(_ key: String, stamped: Int, _ picks: [AIService.Pick]) {
         all[key] = Entry(stamped: stamped, at: Date(), picks: picks)
         if let u = url, let d = try? JSONEncoder().encode(all) { try? d.write(to: u, options: .atomic) }
+    }
+}
+
+
+/// A PAGE'S OPENING WORDS: its first sentences, about four lines, and "More" in the half ink after them; a tap lays
+/// the rest out in place, the page under it moving down to make room
+struct PageOpening: View {
+    let text: String
+    @State private var open = false
+
+    var body: some View {
+        let short = PlacePageState.brief(text, 240)
+        let more = !open && short.count < text.count
+        (Text(more ? short : text).foregroundStyle(Palette.ink)
+            + Text(more ? "  More" : "").foregroundStyle(Palette.ink.opacity(0.5)))
+            .font(.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard more else { return }
+                Feel.tap()
+                withAnimation(Motion.quick) { open = true }
+            }
+            .accessibilityAddTraits(more ? .isButton : [])
+            .accessibilityHint(more ? "Shows the rest" : "")
     }
 }
