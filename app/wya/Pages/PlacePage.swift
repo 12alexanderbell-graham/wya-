@@ -1058,6 +1058,10 @@ extension PlacePageState {
             }
             if cut { t = out + rest }
         }
+        if let name, !name.isEmpty, t.hasPrefix(name + ", ") {
+            let after = t.dropFirst(name.count + 2)
+            if ["is ", "are ", "was ", "were "].contains(where: { after.hasPrefix($0) }) { t = name + " " + after }
+        }
         // A NOTE'S NUMBER LEFT STANDING: a raised figure that follows no word or number is the source's footnote
         // mark, never text ("km²" keeps its own)
         if t.unicodeScalars.contains(where: { "\u{00B9}\u{00B2}\u{00B3}\u{2070}\u{2074}\u{2075}\u{2076}\u{2077}\u{2078}\u{2079}".unicodeScalars.contains($0) }) {
