@@ -271,7 +271,12 @@ extension PlacePageState.OnePage {
         // name), so a castle's page says what the castle is
         let id = key.id, name = self.name, wd = t.id
         Task { @MainActor in
-            let d = await PlacePageState.listingText(cc, wd: wd, name: name)
+            var d = await PlacePageState.listingText(cc, wd: wd, name: name)
+            if d == nil {
+                // (and by its name without and the like: the Grand Canyon's article is)
+                let bare = name.replacingOccurrences(of: " (National Park|National Monument|National Historical Park|Nature Reserve|Biosphere Reserve)$", with: "", options: .regularExpression)
+                d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
+            }
             if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
                 self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
                 self.facts?.proseWikivoyage = true
