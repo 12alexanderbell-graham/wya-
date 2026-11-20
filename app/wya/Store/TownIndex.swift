@@ -245,7 +245,11 @@ final class TownIndex {
         return best.map(\.1)
     }
 
-    /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere
+    /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere a
+    /// city's numbered district (,,)
+    nonisolated static func isDistrict(_ n: String) -> Bool {
+        n.range(of: "^[^0-9]+ [0-9]{1,2}( .*)?$", options: .regularExpression) != nil
+    }
     func hits(_ query: String, open: String?, limit: Int = 6) -> [Hit] {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, !q.isEmpty else { return [] }
@@ -301,7 +305,9 @@ final class TownIndex {
         // exact names, biggest first (the rows are in order of size)
         let exactAll = (exact + exactAlt).sorted { $0.people > $1.people }
         var seen = Set<String>()
-        let h = Array((exactAll + home + homeIn + away + awayIn + homeAlt + awayAlt).filter { seen.insert($0.id).inserted }.prefix(limit))
+        let numbered = !q.contains(where: \.isNumber)
+        let h = Array((exactAll + home + homeIn + away + awayIn + homeAlt + awayAlt)
+            .filter { seen.insert($0.id).inserted && !(numbered && Self.isDistrict($0.name)) }.prefix(limit))
         last = (q, open, h)
         return h
     }
