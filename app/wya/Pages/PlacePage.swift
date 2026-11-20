@@ -219,14 +219,28 @@ extension PlacePageState.OnePage {
             }
         }
         let land = PlacePageState.countryName(cc)
-        if let town = TownIndex.shared.place(lat: ll.lat, lon: ll.lon, km: 40) {
+        var own = Set(CollectionStore.shared.all.compactMap { c in c.items.first { $0.key == key } }.flatMap { $0.ccs.map { $0.lowercased() } })
+        if !cc.isEmpty { own.insert(cc.lowercased()) }
+        var whereTown = TownIndex.shared.place(lat: ll.lat, lon: ll.lon, km: 40)
+        if let n = whereTown, !own.isEmpty, !own.contains(n.file.lowercased()) {
+            let k = cos(ll.lat * .pi / 180)
+            let mine = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, count: 12).first { (h: TownIndex.Hit) -> Bool in
+                let dy: Double = (h.lat - ll.lat) * 111.2
+                let dx: Double = (h.lon - ll.lon) * 111.2 * k
+                return own.contains(h.file.lowercased()) && dx * dx + dy * dy <= 1600
+            }
+            whereTown = mine ?? n
+        }
+        if let town = whereTown {
             let land = PlacePageState.countryName(town.file)
             let name = town.name
             if !what.localizedCaseInsensitiveContains(name) {
                 out.rows.append(("Where", land.isEmpty || land == name ? name : name + ", " + land))
             }
         } else {
-            out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
+            let names: [String] = own.sorted().prefix(3).map { PlacePageState.countryName($0) }.filter { !$0.isEmpty }
+            let lands: String = land.isEmpty ? names.joined(separator: ", ") : land
+            if !lands.isEmpty { out.rows.append(("Where", lands)) }
         }
         // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
         // it is
