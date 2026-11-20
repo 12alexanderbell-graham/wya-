@@ -223,13 +223,15 @@ extension PlacePageState.OnePage {
         }
         // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
         // it is
+        let size = Double(setArea())
+        let reach = size > 0 ? min(90, max(2, size.squareRoot() / 2)) : kind == "mountain" ? 10 : 2
         let mine = SIMD2(ll.lat, ll.lon)
         let near = (ThingStore.shared.things(cc) ?? []).compactMap { o -> (ThingStore.Thing, Double)? in
             guard o.id != t.id, !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil, !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
             let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
             let dy = (p.lat - mine.x) * 111.2, dx = (p.lon - mine.y) * 111.2 * cos(mine.x * .pi / 180)
             let km = (dx * dx + dy * dy).squareRoot()
-            return km <= 2 ? (o, km) : nil
+            return km <= reach ? (o, km) : nil
         }
         // (as well known, a sports ground after the sights, then the nearest, as the other cards)
         .sorted { a, b in
@@ -239,7 +241,7 @@ extension PlacePageState.OnePage {
         .prefix(6)
         if !near.isEmpty {
             out.highlights = near.map { o, km in
-                let d = km < 1 ? "\(Int((km * 1000 / 50).rounded()) * 50) m away" : String(format: "%.1f km away", km)
+                let d = km < 1 ? "\(Int((km * 1000 / 50).rounded()) * 50) m away" : km < 10 ? String(format: "%.1f km away", km) : "\(Int(km.rounded())) km away"
                 return PlacePageState.Highlight(id: o.id, name: o.name, line: d, photo: PlacePageState.photo(o.photo))
             }
             out.highlightsTitle = "Nearby"
@@ -267,6 +269,9 @@ extension PlacePageState.OnePage {
             return k
         }
         return nil
+    }
+    private func setArea() -> Int {
+        CollectionStore.shared.all.compactMap { c in c.items.first { $0.key == key }?.area }.max() ?? 0
     }
     private func setFacts() -> [(String, String)] {
         // (every set it is in: Lake Baikal's World Heritage record has no area, its lakes record has)
