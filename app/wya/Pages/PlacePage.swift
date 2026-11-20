@@ -291,11 +291,15 @@ extension PlacePageState.OnePage {
             if d == nil {
                 // (and by its name without and the like: the Grand Canyon's article is)
                 let bare = name.replacingOccurrences(of: " (National Park|National Monument|National Historical Park|Nature Reserve|Biosphere Reserve)$", with: "", options: .regularExpression)
-                d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
+                let others = bare == name ? [] : [bare.townFolded, ("Mount " + bare).townFolded]
+                d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: others)
+                // (an article of exactly its name further off, where the thing is that big: the Great Barrier Reef's,
+                // 2,300 km long, is 436 km from its point)
+                if d == nil { d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 500) }
                 // (and in the other countries its sets give it: the Dead Sea, filed under Israel, has its article in
                 // Jordan's guide,,)
                 for other in landsNow where d == nil && other != cc.lowercased() {
-                    d = await PlacePageState.guideIntro(other, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
+                    d = await PlacePageState.guideIntro(other, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: others)
                 }
             }
             // (or the article that lists it, where that article is named for it: Angkor Wat is listed, without words,
