@@ -29,7 +29,7 @@ final class PlacePageState {
         /// the prose is a Wikivoyage article's opening (else Wikidata's description), for Sources
         var proseWikivoyage = false
     }
-    struct Activity: Hashable { let name: String; let line: String }
+    struct Activity: Hashable { let name: String; let line: String; var wd: String? = nil }
     struct Highlight: Hashable {
         let id: String; let name: String; let line: String; let photo: String?
         /// a site of several countries (the Carpathians' beech forests are eighteen countries'): its picture may be another's
@@ -520,7 +520,7 @@ extension PlacePageState {
         if town == nil, case .ok(let pd) = await Servers.data.file("native/activities/\(cc).json"),
            let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any], j["first"] as? String == key,
            let rows = j["rows"] as? [[String]] {
-            return rows.compactMap { $0.count == 3 ? Activity(name: corrected($0[0], wd: $0[1].isEmpty ? nil : $0[1]), line: $0[2]) : nil }
+            return rows.compactMap { $0.count == 3 ? Activity(name: corrected($0[0], wd: $0[1].isEmpty ? nil : $0[1]), line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
         }
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
         // (a town's rows are never kept: its file name has no town in it, and a town's few rows come fast)
@@ -531,7 +531,7 @@ extension PlacePageState {
         var things: Data?
         if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
         let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first) }.value
-        let out = rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line) }
+        let out = rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line, wd: $0.wd) }
         // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
         // them was kept for good)
         if town == nil, out.count > 50, things != nil, ThingIndex.shared.ready,
@@ -1191,7 +1191,7 @@ private struct PageLayer: View {
                 // ("lists": where the head's search takes the page, the first of its long lists)
                 // (where the first long list starts: the head's search brings its title under the field)
                 if let f = page.facts, !f.activities.isEmpty {
-                    ActivitiesList(all: f.activities)
+                    ActivitiesList(all: f.activities, country: page.country)
                         .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("page")).minY }) { listsY = $0 }
                 }
                 if let f = page.facts, !f.regions.isEmpty {
@@ -1799,6 +1799,8 @@ enum PageGlass {
 /// its name and one line (Wikivoyage's words, credited in Sources)
 private struct ActivitiesList: View {
     let all: [PlacePageState.Activity]
+    /// the page's country (its things' photos, its flag where a sight has none)
+    var country = ""
     @State private var shown = 5
 
     var body: some View {
@@ -1812,10 +1814,13 @@ private struct ActivitiesList: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Activities").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             ForEach(rows.prefix(limit), id: \.self) { a in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                    if !a.line.isEmpty {
-                        Text(PlacePageState.mended(a.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                HStack(alignment: .top, spacing: 12) {
+                    if let wd = a.wd { SetPlaceThumb(own: "", thing: wd, cc: country) }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                        if !a.line.isEmpty {
+                            Text(PlacePageState.mended(a.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        }
                     }
                 }
                 // (one gap between rows whatever their lines: a row of one line was centred in 52 pt, so the row
