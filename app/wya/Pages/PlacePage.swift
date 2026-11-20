@@ -293,12 +293,20 @@ extension PlacePageState.OnePage {
             default: return nil
             }
         }
-        if let v = s("capital") { out.rows.append(("Capital", v)) }
+        let capitals = ["gb-eng": "London", "gb-sct": "Edinburgh", "gb-wls": "Cardiff", "gb-nir": "Belfast", "ag": "St. John's",
+                        "bq": "Kralendijk", "sj": "Longyearbyen"]
+        if let v = capitals[cc] ?? s("capital") { out.rows.append(("Capital", v)) }
         let wbPeople = ((j["worldbank"] as? [String: Any])?["population"] as? [Any])?.first as? NSNumber
         if let v = wbPeople ?? (f["population"] as? NSNumber) { out.rows.append(("People", PlacePageState.big(v.doubleValue))) }
         if let v = PlacePageState.area(f["area"], cc: cc) { out.rows.append(("Area", v + " km²")) }
         if let z = PlacePageState.zones(f["timezone"], cc: cc) { out.rows.append(z) }
-        if let c = f["currency"] as? [[String: Any]], let first = c.first {
+        // (and the currency: the UK's nations, Ascension and Svalbard had none; Zimbabwe's first was the Botswana pula,
+        // Cuba's the convertible peso, gone since 2021)
+        let currencies = ["gb-eng": "British pound (£)", "gb-sct": "British pound (£)", "gb-wls": "British pound (£)",
+                          "gb-nir": "British pound (£)", "ac": "Saint Helena pound (£)", "sj": "Norwegian krone (kr)",
+                          "zw": "Zimbabwe Gold (ZiG)", "cu": "Cuban peso ($)"]
+        if let v = currencies[cc] { out.rows.append(("Currency", v)) }
+        else if let c = f["currency"] as? [[String: Any]], let first = c.first {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
             out.rows.append(("Currency", [n, (first["sym"] as? String).map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")))
         }
