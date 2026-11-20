@@ -1137,6 +1137,24 @@ extension PlacePageState {
         return nil
     }
 
+    /// A CITY'S BEST KNOWN SIGHT WITH A PHOTO within 10 km (its landmarks, nature and spots, never a station or an
+    /// airport): its id, for a city row whose own photo is a map or a montage. Once per city
+    static var sightsNear: [PlaceKey: String] = [:]
+    static func sightNear(_ r: Inside, cc: String) -> String? {
+        if let k = sightsNear[r.key] { return k.isEmpty ? nil : k }
+        guard let at = r.at, let all = ThingStore.shared.things(cc.lowercased()) else { return nil }
+        let me = EqualEarth.unproject(SIMD2(Double(at.x), Double(at.y)))
+        let k = cos(me.lat * .pi / 180)
+        let near = all.filter { t in
+            guard !t.photo.isEmpty, (2...6).contains(t.kind), t.fame >= 2 else { return false }
+            let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+            let dx = (ll.lon - me.lon) * k * 111.2, dy = (ll.lat - me.lat) * 111.2
+            return dx * dx + dy * dy < 100
+        }
+        let best = near.max { $0.fame < $1.fame }?.id ?? ""
+        sightsNear[r.key] = best
+        return best.isEmpty ? nil : best
+    }
     static func photo(_ any: Any?) -> String? {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
@@ -1876,7 +1894,10 @@ private struct InsideList: View {
     private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false, dropHead: Bool = false) -> some View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
-            if pictured { SetPlaceThumb(own: r.photo, thing: "", cc: country, flag: false) }
+            if pictured {
+                SetPlaceThumb(own: r.photo, thing: r.photo.isEmpty && r.key.kind == .town ? (PlacePageState.sightNear(r, cc: country) ?? "") : "",
+                              cc: country, flag: false)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                 let said = dropHead ? r.line.components(separatedBy: " · ").dropFirst().joined(separator: " · ") : r.line
@@ -1955,6 +1976,11 @@ struct SourcesRow: View {
         // (the first forty of each: past them a list is opened ten at a time, and Italy's 663 cities asked Commons for
         // every author at once)
         for r in facts.regions.prefix(40) + facts.cities.prefix(40) where !r.photo.isEmpty { out.append((r.name, r.photo)) }
+        // (a city's photo borrowed from its best known sight, credited as that sight's)
+        for r in facts.cities.prefix(40) where r.photo.isEmpty {
+            if let wd = PlacePageState.sightsNear[r.key], !wd.isEmpty, let t = ThingStore.shared.thing(wd)?.thing,
+               let f = PlacePageState.photo(t.photo) { out.append((t.name, f)) }
+        }
         return out
     }
 
