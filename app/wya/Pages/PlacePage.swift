@@ -248,8 +248,9 @@ extension PlacePageState.OnePage {
         }
         // (as well known, a sports ground after the sights, then the nearest, as the other cards)
         .sorted { a, b in
+            let sa = PlacePageState.isStudy(a.0.name), sb = PlacePageState.isStudy(b.0.name)
             let va = PlacePageState.isVenue(a.0.name, a.0.line), vb = PlacePageState.isVenue(b.0.name, b.0.line)
-            return a.0.fame != b.0.fame ? a.0.fame > b.0.fame : va != vb ? !va : a.1 < b.1
+            return sa != sb ? !sa : a.0.fame != b.0.fame ? a.0.fame > b.0.fame : va != vb ? !va : a.1 < b.1
         }
         .prefix(6)
         if !near.isEmpty {
@@ -568,8 +569,9 @@ extension PlacePageState.OnePage {
             }
             // (as well known, the sights file's own order, as a region's)
             .sorted { a, b in
+                let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
                 let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
-                return a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
+                return sa != sb ? !sa : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
             }
             .map(\.element)
             .prefix(8)
@@ -693,8 +695,9 @@ extension PlacePageState.OnePage {
                 !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil && !["station", "stay", "route", "event", "city", "area"].contains(o.kindName)
             }
             .sorted { a, b in
+                let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
                 let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
-                return a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
+                return sa != sb ? !sa : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
             }
             .map(\.element)
             .lazy.filter { o in
@@ -833,9 +836,13 @@ extension PlacePageState {
         }.map(\.element)
     }
     nonisolated static func push(_ a: Activity) -> Int {
-        if a.name.range(of: #"\b(university|universit[äéà]|universidad|universidade|college|school|academy|institute of technology|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
-                        options: [.regularExpression, .caseInsensitive]) != nil { return 20 }
+        if isStudy(a.name) { return 20 }
         return isVenue(a.name, a.line) ? 6 : 0
+    }
+    /// a place of study or a visitors' office: not what a traveller comes for
+    nonisolated static func isStudy(_ name: String) -> Bool {
+        name.range(of: #"\b(university|universit[äéà]|universidad|universidade|college|school|academy|institute of technology|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
+                   options: [.regularExpression, .caseInsensitive]) != nil
     }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
         (name + " " + line).range(of: #"\b(stadium|stadio|estadio|arena|sports venue|multisports venue|racecourse|race track|circuit|ballpark)\b"#,
