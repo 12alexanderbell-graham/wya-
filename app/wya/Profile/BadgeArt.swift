@@ -210,7 +210,7 @@ enum BadgeSolid {
             else { return nil }
             body.addChild(face)
             body.addChild(rim)
-            if case .struck(let t) = form, let num = struck(t, mat: mat) {
+            if case .struck(let t) = form, let num = struck(t, mat: diamond ? BadgeMaterial.of(.silver, opaque: live) : mat) {
                 // its number raised on the face's front, as high as the rim stands
                 let fb = face.visualBounds(relativeTo: body), nb = num.visualBounds(relativeTo: num)
                 num.position = [-nb.center.x * num.scale.x, -nb.center.y * num.scale.y, fb.max.z - nb.min.z - 0.004]
