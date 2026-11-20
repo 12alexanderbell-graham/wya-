@@ -610,7 +610,7 @@ struct ListsWater: View {
                 if s.naming || p.name.isEmpty {
                     TextField("", text: Binding(get: { p.name }, set: { v in changePlan(p.id) { $0.name = String(v.prefix(60)) } }),
                               prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                     .focused($naming)
                     .submitLabel(.done)
                     .onSubmit { s.naming = false }
@@ -618,7 +618,7 @@ struct ListsWater: View {
                     .onChange(of: naming) { _, f in if !f { s.naming = false } }
                     .frame(minHeight: 44)
                 } else {
-                    Text(p.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    Text(p.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                         .frame(minHeight: 44)
                         .onTapGesture { Feel.tap(); s.naming = true }
                 }
@@ -957,14 +957,14 @@ struct TierPage: View {
                 if s.naming || t.name.isEmpty {
                     TextField("", text: Binding(get: { t.name }, set: { v in change { $0.name = String(v.prefix(60)) } }),
                               prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                    .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                     .focused(naming)
                     .submitLabel(.done)
                     .onSubmit { s.naming = false }
                     .onAppear { naming.wrappedValue = true }
                     .frame(minHeight: 44)
                 } else {
-                    Text(t.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    Text(t.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                         .frame(minHeight: 44)
                         .onTapGesture { Feel.tap(); s.naming = true }
                 }

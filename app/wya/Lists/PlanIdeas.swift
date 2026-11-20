@@ -83,9 +83,12 @@ private struct PlanSuggestions: View {
         let have = Set((p.days.flatMap(\.items) + p.ideas).map { $0.what.lowercased() })
         let shown = picks.filter { !have.contains($0.what.lowercased()) }
         VStack(alignment: .leading, spacing: 4) {
-            Text("Suggestions").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                .padding(.top, 28)
-            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            Color.clear.frame(height: 0)
+            if !shown.isEmpty {
+                Text("Suggestions").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .padding(.top, 28)
+                Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            }
             ForEach(shown, id: \.self) { pk in
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 1) {
@@ -161,9 +164,12 @@ struct ListSuggestions: View {
         let have = Set(things.map { $0.name.lowercased() })
         let shown = picks.filter { !have.contains($0.what.lowercased()) }
         VStack(alignment: .leading, spacing: 4) {
-            Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-                .padding(.top, 28)
-            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            Color.clear.frame(height: 0)
+            if !shown.isEmpty {
+                Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .padding(.top, 28)
+                Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            }
             ForEach(shown, id: \.self) { pk in
                 HStack(spacing: 12) {
                     Group {

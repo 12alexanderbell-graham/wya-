@@ -1931,9 +1931,10 @@ private struct PageSuggestions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            Color.clear.frame(height: 0)
             if !picks.isEmpty {
+                Text("Suggestions").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                Text("Based on your passport and history").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(picks, id: \.0.key) { r, why in
                         VStack(alignment: .leading, spacing: 1) {
