@@ -686,13 +686,7 @@ extension PlacePageState {
         if town == nil, case .ok(let pd) = await Servers.data.file("native/activities/\(cc).json"),
            let j = try? JSONSerialization.jsonObject(with: pd) as? [String: Any], j["first"] as? String == key,
            let rows = j["rows"] as? [[String]] {
-            let acts = rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? activity($0[0], line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil }
-            // : each venue six places further down
-            return acts.enumerated().sorted { a, b in
-                let ka = a.offset + (isVenue(a.element.name, a.element.line) ? 6 : 0)
-                let kb = b.offset + (isVenue(b.element.name, b.element.line) ? 6 : 0)
-                return ka != kb ? ka < kb : a.offset < b.offset
-            }.map(\.element)
+            return Self.settled(rows.compactMap { $0.count == 3 && !isTicket($0[0]) ? activity($0[0], line: $0[2], wd: $0[1].isEmpty ? nil : $0[1]) : nil })
         }
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json") else { return [] }
         // (a town's rows are never kept: its file name has no town in it, and a town's few rows come fast)
@@ -703,7 +697,7 @@ extension PlacePageState {
         var things: Data?
         if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
         let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first, near: near) }.value
-        let out = rows.map { Self.activity($0.name, line: $0.line, wd: $0.wd) }
+        let out = Self.settled(rows.map { Self.activity($0.name, line: $0.line, wd: $0.wd) })
         // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
         // them was kept for good)
         if town == nil, out.count > 50, things != nil, ThingIndex.shared.ready,
@@ -756,7 +750,19 @@ extension PlacePageState {
     #endif
 
     /// a sports ground (its name or Wikidata's line says so): as well known as a cathedral it still comes after it,
-    /// as a sight to travel for
+    /// as a sight to travel for A LIST OF THINGS TO DO IN A TRAVELLER'S ORDER: each venue six places further down,
+    /// and a place of study or a visitors' office twenty
+    nonisolated static func settled(_ acts: [Activity]) -> [Activity] {
+        acts.enumerated().sorted { a, b in
+            let ka = a.offset + push(a.element), kb = b.offset + push(b.element)
+            return ka != kb ? ka < kb : a.offset < b.offset
+        }.map(\.element)
+    }
+    nonisolated static func push(_ a: Activity) -> Int {
+        if a.name.range(of: #"\b(university|universit[äéà]|universidad|universidade|college|school|academy|institute of technology|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
+                        options: [.regularExpression, .caseInsensitive]) != nil { return 20 }
+        return isVenue(a.name, a.line) ? 6 : 0
+    }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
         (name + " " + line).range(of: #"\b(stadium|stadio|estadio|arena|sports venue|multisports venue|racecourse|race track|circuit|ballpark)\b"#,
                                   options: [.regularExpression, .caseInsensitive]) != nil
