@@ -2548,14 +2548,14 @@ struct PagePhoto: View {
         let t = Task {
             let file = disk(url)
             if let d = try? Data(contentsOf: file), let i = UIImage(data: d) {
-                if let cg = i.cgImage { focus[url] = await Task.detached(priority: .userInitiated) { Self.mainObject(cg) }.value }
+                if let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
                 kept.setObject(await i.byPreparingForDisplay() ?? i, forKey: url as NSURL)
                 return
             }
             guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
-            let whole = await Task.detached(priority: .userInitiated) { i0.cgImage.flatMap(Self.mainObject) }.value
+            let whole: CGPoint? = if let cg0 = i0.cgImage { await Self.mainObjectQueued(cg0) } else { nil }
             let i = upper(i0, around: whole)
-            if let cg = i.cgImage { focus[url] = await Task.detached(priority: .userInitiated) { Self.mainObject(cg) }.value }
+            if let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
             let ready = await i.byPreparingForDisplay() ?? i
             kept.setObject(ready, forKey: url as NSURL)
             if let jpg = i.jpegData(compressionQuality: 0.85) {
@@ -2584,8 +2584,16 @@ extension PagePhoto {
     /// each photo's main object's middle (0 to 1 from its top left), found once per launch
     static var focus: [URL: CGPoint] = [:]
     /// A PHOTO'S MAIN OBJECT, as Vision finds it (objectness: a building, a statue, a peak; nil for a view with none,
-    /// or one it is unsure of). Its middle, from the top left.
+    /// or one it is unsure of). Its middle, from the top left. VISION ON A QUEUE OF ITS OWN, one photo at a time
+    private static let vision = DispatchQueue(label: "wya.page-photo-vision", qos: .utility)
+    static func mainObjectQueued(_ cg: CGImage) async -> CGPoint? {
+        await withCheckedContinuation { c in vision.async { c.resume(returning: mainObject(cg)) } }
+    }
     nonisolated static func mainObject(_ cg: CGImage) -> CGPoint? {
+        // (the simulator cannot run it,, and there it may never answer)
+        #if targetEnvironment(simulator)
+        return nil
+        #else
         let r = VNGenerateObjectnessBasedSaliencyImageRequest()
         // (the simulator cannot run it,: there every photo keeps its middle)
         try? VNImageRequestHandler(cgImage: cg).perform([r])
@@ -2593,6 +2601,7 @@ extension PagePhoto {
                 .filter({ $0.confidence >= 0.3 && $0.boundingBox.width * $0.boundingBox.height >= 0.02 })
                 .max(by: { $0.confidence < $1.confidence }) else { return nil }
         return CGPoint(x: o.boundingBox.midX, y: 1 - o.boundingBox.midY)
+        #endif
     }
 
     /// A STANDING PHOTO'S UPPER PART: a square from just under its top, where a mountain, a tower or a face is; a
