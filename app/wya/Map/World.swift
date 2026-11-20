@@ -1,14 +1,11 @@
 import Foundation
 import simd
 
-/// The world, already projected: Equal Earth (the default, 20 Oct #64) into a box 1000 map units wide, y down from
-/// the North Pole. Built once from the old app's topology (Natural Earth 10m with the corrections) by
-/// tools/prep.py, so the app never projects at launch.
-///
-/// world.wyam: "WYAM", u32 version 1, f32 width, f32 height,
-///   u32 units, then per unit u16 owner (the place's index in world-meta.json, 0xFFFF none),
-///   u32 rings, then per ring u16 unit (0xFFFF = a lake), u32 n, n × (f32 x, f32 y),
-///   u32 segments, then per segment 6 × f32: x0 y0 x1 y1, distance along its line, flags (bit 1 dashed, bit 2 border).
+/// The world, already projected: Equal Earth into a box 1000 map units wide, y down from the North Pole. Built once
+/// from the old app's topology by tools/prep.py, so the app never projects at launch. world.wyam: "WYAM", u32 version
+/// 1, f32 width, f32 height, u32 units, then per unit u16 owner (the place's index in world-meta.json, 0xFFFF none),
+/// u32 rings, then per ring u16 unit (0xFFFF = a lake), u32 n, n × (f32 x, f32 y), u32 segments, then per segment 6 ×
+/// f32: x0 y0 x1 y1, distance along its line, flags (bit 1 dashed, bit 2 border).
 nonisolated final class World: @unchecked Sendable {
     struct Place: Decodable, Sendable {
         let id: String
@@ -38,7 +35,7 @@ nonisolated final class World: @unchecked Sendable {
         let unitConts: [[String]]?
         let placeConts: [[String]]?
         let contViews: [String: [Double]]?
-        /// each unit's key ("ru|Europe", "piece:crimea"), and a disputed piece's continent for each place it can go to
+        /// each unit's key, and a disputed piece's continent for each place it can go to
         let unitKeys: [String]?
         let pieceConts: [String: [String: [String]]]?
     }
@@ -68,8 +65,8 @@ nonisolated final class World: @unchecked Sendable {
     let unitRings: [[Int]]
     let lakeRings: [Int]
     /// THE CONTINENTS (the old geo.js inCont, worked out by tools/conts.py from the old data): each unit's (a country
-    /// across two is sliced, "ru|Europe" and "ru|Asia", each piece on its own), each place's, and each continent's
-    /// view (the old WorldGeometry.contView, in map units x0 y0 x1 y1)
+    /// across two is sliced, and, each piece on its own), each place's, and each continent's view (the old
+    /// WorldGeometry.contView, in map units x0 y0 x1 y1)
     let unitConts: [[String]]
     /// each place's biggest piece's longitude: which side of the date line the place is on (nan: none, or a place that
     /// stays where it is over the line)
@@ -78,8 +75,6 @@ nonisolated final class World: @unchecked Sendable {
     let contViews: [String: SIMD4<Double>]
     func inCont(_ place: Int, _ k: String) -> Bool { place >= 0 && place < placeConts.count && placeConts[place].contains(k) }
 
-    /// The places the count counts: everything but the three the data marks as not real places (Clipperton, the
-    /// Coral Sea Islands, Ashmore and Cartier): 263.
     var countable: Int { places.reduce(0) { $0 + ($1.junk ? 0 : 1) } }
 
     /// D19 NEIGHBOURS: who borders whom in this world's borders view (each view is its own World, so Russia's include
@@ -117,9 +112,6 @@ nonisolated final class World: @unchecked Sendable {
     private let neighbourLock = NSLock()
     private var madeNeighbours: [Set<Int>]?
 
-    /// D12, first part: each country's and territory's names in every language (GeoNames, `place-names.json`), folded,
-    /// for search's "starts with" (typing "Allemagne" or "ドイツ" finds Germany). Worked out once, in the background
-    /// after the world loads; never used for "did you mean" (its edit distance runs over the place's own names only)
     var otherLanguageNames: [[String]] {
         namesLock.lock(); defer { namesLock.unlock() }
         if let n = madeNames { return n }
@@ -148,7 +140,7 @@ nonisolated final class World: @unchecked Sendable {
     /// each place's names folded for search (case and accents gone), made once on first use, not per keystroke:
     /// its own name first, then its official name and other names
     private(set) lazy var searchNames: [[String]] = places.map { p in
-        let f = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let f = { (s: String) in s.townFolded }
         return [f(p.n)] + ([p.official ?? ""] + p.alt).filter { !$0.isEmpty }.map(f)
     }
 
@@ -177,8 +169,8 @@ nonisolated final class World: @unchecked Sendable {
         var owners: [Int] = []
         owners.reserveCapacity(nu)
         for _ in 0..<nu { let v = u16(); owners.append(v == 0xFFFF ? -1 : v) }
-        // WHOSE EACH UNIT IS IN THE VIEW: the file's owners were the
-        // data's defaults; with the disputes, each unit goes to whom the view gives it, the old app's way
+        // WHOSE EACH UNIT IS IN THE VIEW: the file's owners were the data's defaults; with the disputes, each unit
+        // goes to whom the view gives it, the old app's way
         var oo: [String: String] = [:]
         for p in m.places { for o in p.objs ?? [] { oo[o] = p.id } }
         objOwner = oo
@@ -232,10 +224,10 @@ nonisolated final class World: @unchecked Sendable {
         }
         // THE PIECES OVER THE DATE LINE: a country's piece on the far side of 180° from the rest of it is moved over
         // the line to sit beside it, Chukotka's tip beside Russia, the Aleutians past 180° beside Alaska, Fiji's and
-        // New Zealand's islands east of the line beside them. Each point moves by its own parallel's width (360° there),
-        // the same as drawing it at its longitude ± 360°, so the shape is exactly its own. Antarctica (it is the whole
-        // width) and Kiribati (it truly spans the line, with no side to belong to) stay where they are. The relief and
-        // the sea run on past the edge, so the moved pieces have their own ground under them.
+        // New Zealand's islands east of the line beside them. Each point moves by its own parallel's width (360°
+        // there), the same as drawing it at its longitude ± 360°, so the shape is exactly its own. Antarctica (it is
+        // the whole width) and Kiribati (it truly spans the line, with no side to belong to) stay where they are. The
+        // relief and the sea run on past the edge, so the moved pieces have their own ground under them.
         func lonAt(_ x: Float, _ y: Float) -> Double { EqualEarth.lon(x: Double(x), lat: EqualEarth.lat(y: Double(y))) }
         var biggest: [Int: (area: Float, ring: Int)] = [:]
         for (ri, r) in rs.enumerated() where r.unit >= 0 && owners[r.unit] >= 0 {
@@ -304,9 +296,9 @@ nonisolated final class World: @unchecked Sendable {
                 while i < sg.count { sg[i] = sg[i] >= 2 ? 2 : 0; i += 6 }
             }
         }
-        // THE LAKES' SHORES at the world's own level too: the world file
-        // has the lakes as shapes but no shore lines, while the slices draw every shore, so going in a level made the
-        // shores appear at once. Each lake ring's edges are added here as coast (BUILD-BOOK 1.6).
+        // THE LAKES' SHORES at the world's own level too: the world file has the lakes as shapes but no shore lines,
+        // while the slices draw every shore, so going in a level made the shores appear at once. Each lake ring's
+        // edges are added here as coast (BUILD-BOOK 1.6:).
         for li in lr {
             let r = rs[li]
             guard r.count >= 3 else { continue }
@@ -340,14 +332,13 @@ nonisolated final class World: @unchecked Sendable {
         return try World(wyam: Data(contentsOf: a), meta: Data(contentsOf: b), disputes: d, view: Borders.view)
     }
 
-    /// The part of a place to frame when it is flown to (23 Oct 14:17: a search result zooms): its biggest
-    /// piece of land and the pieces
-    /// close to it, gathered outward one after another (a gap under a twelfth of the biggest piece's size), so the
-    /// United States is the 48 states and not Alaska and Hawaii too, Russia is not stretched over the date line by its
-    /// piece past 180°, and Indonesia is all its islands. A small archipelago (all of it under 30 map units, about
-    /// 1,200 km) is framed whole: the Bahamas, Cape Verde, the Maldives. x0 y0 x1 y1 in map units.
-    /// `whole`: for the place's own map (Regions, Places), where every part of it has to be in sight: an archipelago
-    /// with no main land and a country in two halves are framed whole (see `gather`)
+    /// The part of a place to frame when it is flown to: its biggest piece of land and the pieces close to it,
+    /// gathered outward one after another (a gap under a twelfth of the biggest piece's size), so the United States
+    /// is the 48 states and not Alaska and Hawaii too, Russia is not stretched over the date line by its piece past
+    /// 180°, and Indonesia is all its islands. A small archipelago (all of it under 30 map units, about 1,200 km) is
+    /// framed whole: the Bahamas, Cape Verde, the Maldives. x0 y0 x1 y1 in map units. `whole`: for the place's own
+    /// map (Regions, Places), where every part of it has to be in sight: an archipelago with no main land and a
+    /// country in two halves are framed whole (see `gather`)
     func frame(of place: Int, whole: Bool = false) -> SIMD4<Float>? {
         var boxes: [SIMD4<Float>] = []
         for (u, owner) in unitOwner.enumerated() where owner == place {
@@ -435,8 +426,8 @@ nonisolated final class World: @unchecked Sendable {
 
     /// The place under a point of the map (map units), by the even-odd rule on its rings; nil over the sea or a lake.
     /// Where several hold it (an enclave and the country round it, the Vatican and Italy), the smallest piece there
-    /// wins (29 Oct 02:10); a tiny piece within `reach` of the point wins over land round it, so a place smaller
-    /// than a fingertip can be touched.
+    /// wins; a tiny piece within `reach` of the point wins over land round it, so a place smaller than a fingertip
+    /// can be touched.
     func place(at p: SIMD2<Float>, reach: Float = 0, tiny: Float = 0) -> Int? {
         var inside: [Int: (on: Bool, size: Float)] = [:]
         for (i, r) in rings.enumerated() where r.unit >= 0 {
@@ -472,7 +463,7 @@ nonisolated final class World: @unchecked Sendable {
         return best?.place
     }
 
-    /// the disputed piece under a map point ("crimea"), the smallest if pieces overlap; nil off every piece
+    /// the disputed piece under a map point, the smallest if pieces overlap; nil off every piece
     func piece(at p: SIMD2<Float>) -> String? {
         var inside: [Int: (on: Bool, size: Float)] = [:]
         for r in rings where r.unit >= 0 && r.unit < unitKeys.count && unitKeys[r.unit].hasPrefix("piece:") {

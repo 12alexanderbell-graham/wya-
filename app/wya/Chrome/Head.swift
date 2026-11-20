@@ -1854,7 +1854,7 @@ struct SearchResults: View {
     }
 
     /// a name as search compares it: no case, no accents ( finds Curaçao)
-    static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+    static func fold(_ s: String) -> String { s.townFolded }
 
     /// edits between two names, two letters swapped counting as one
     private static func distance(_ a: [Character], _ b: [Character]) -> Int {
