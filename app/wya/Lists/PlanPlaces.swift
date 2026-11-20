@@ -27,10 +27,19 @@ enum PlanPlaces {
                     let things = ThingIndex.shared.hits(name, open: cc, limit: 6, near: false)
                     if let h = things.first(where: { (cc == nil || $0.file.lowercased() == cc!.lowercased()) && fold($0.name) == fold(name) }) {
                         url = page(PlaceKey(.thing, "wd:" + h.id))
-                    } else if let t = inCountry.first(where: { $0.people >= 1_000 }) {
+                    } else if cc.flatMap({ ListSuggestions.setPlace(name, $0) }) == nil, let t = inCountry.first(where: { $0.people >= 1_000 }) {
                         url = page(PlaceKey(.town, t.id))
                     }
                 }
+            }
+            if url == nil, let cc, let f = ListSuggestions.setPlace(name, cc), let head = AIContext.head {
+                NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)
+                try? await Task.sleep(for: .milliseconds(350))
+                head.quickStamp = false
+                if !map.placesMode { head.mode = .places }
+                for _ in 0 ..< 40 where !map.placesMode { try? await Task.sleep(for: .milliseconds(50)) }
+                map.showSetPlace(f.list, id: f.item.id)
+                return
             }
             if url == nil, let cc, !cc.isEmpty { url = URL(string: "wya://country/\(cc.lowercased())") }
             guard let u = url else { Feel.refuse(); return }

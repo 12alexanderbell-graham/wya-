@@ -162,6 +162,15 @@ struct ListSuggestions: View {
         return ThingIndex.shared.hits(name, open: cc.lowercased(), limit: 6, near: false)
             .first { $0.file.lowercased() == cc.lowercased() && fold($0.name) == fold(name) }?.id
     }
+    /// a name that is one of the Places sets' places in that country: its set and record
+    @MainActor static func setPlace(_ name: String, _ cc: String) -> CollectionStore.Found? {
+        guard CollectionStore.shared.ready, !cc.isEmpty else { return nil }
+        let n = name.townFolded, c = cc.lowercased()
+        for col in CollectionStore.shared.all {
+            if let it = col.items.first(where: { ($0.cc == c || $0.ccs.contains(c)) && $0.name.townFolded == n }) { return .init(list: col.id, item: it) }
+        }
+        return nil
+    }
     let listID: String
     let name: String
     let things: [ListsThing]
