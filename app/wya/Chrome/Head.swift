@@ -1575,12 +1575,12 @@ struct SearchResults: View {
     /// whether another region found has the same name in the same country (: the state and the city)
     static func twin(_ k: String, in hits: [RegionIndex.Hit]) -> Bool {
         guard let h = hits.first(where: { $0.key == k }) else { return false }
-        return hits.contains { $0.key != k && $0.place == h.place && $0.row != h.row && $0.name.townFolded == h.name.townFolded }
+        return hits.contains { $0.key != k && $0.place == h.place && ($0.row != h.row || !h.parent.isEmpty) && $0.name.townFolded == h.name.townFolded }
     }
     private func anyRegionRow(_ h: RegionIndex.Hit?, twin: Bool = false) -> some View {
         var country: [String] = countryNotes(h?.place)
-        // (two of one name in one country say which is which: and, else the level's word alone)
-        if twin, let h, let l = RegionCatalog.shared.levels[h.place.lowercased()], h.row >= 1, h.row <= l.count {
+        let named = twin && !(h?.parent.isEmpty ?? true) ? (h?.name ?? "") + ", " + (h?.parent ?? "") : (h?.name ?? "")
+        if twin, let h, h.parent.isEmpty, let l = RegionCatalog.shared.levels[h.place.lowercased()], h.row >= 1, h.row <= l.count {
             let one = RegionsMenuModel.label(l[h.row - 1].one)
             country = country.map { one + " · " + $0 } + [one]
         }
@@ -1589,7 +1589,7 @@ struct SearchResults: View {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
                 rowFlag(h?.place)
-                ResultWords(name: h?.name ?? "", notes: country)
+                ResultWords(name: named, notes: country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)

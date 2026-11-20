@@ -13,6 +13,8 @@ final class RegionIndex {
         let place: String
         let row: Int
         let id: String
+        /// the region it lies in, one level up ( for a Florence County), or "" (regions-index-3)
+        var parent: String = ""
         var key: String { "r:\(place)-\(row)|\(id)" }
     }
     private(set) var ready = false
@@ -31,13 +33,14 @@ final class RegionIndex {
         Task.detached(priority: .userInitiated) {
             var out: [(String, Hit)] = []
             var data: Data?
-            for f in ["native/regions/regions-index-3.wyri", "native/regions/regions-index-2.wyri"] where data == nil {
+            // (-4: and the region each lies in, one level up, for two of one name:)
+            for f in ["native/regions/regions-index-4.wyri", "native/regions/regions-index-3.wyri", "native/regions/regions-index-2.wyri"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 for r in all {
                     guard r.count >= 4, let n = r[0] as? String, let p = r[1] as? String, let id = r[3] as? String else { continue }
-                    let h = Hit(name: n, place: p, row: (r[2] as? NSNumber)?.intValue ?? 1, id: id)
+                    let h = Hit(name: n, place: p, row: (r[2] as? NSNumber)?.intValue ?? 1, id: id, parent: r.count > 4 ? (r[4] as? String ?? "") : "")
                     out.append((n.townFolded, h))
                 }
             }
