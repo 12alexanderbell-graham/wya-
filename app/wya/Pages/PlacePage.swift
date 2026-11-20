@@ -1392,10 +1392,11 @@ private struct PageLayer: View {
                 if let f = page.facts, !f.prose.isEmpty { PageOpening(text: f.prose).id(f.prose) }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
                 if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, title: f.highlightsTitle, L: L).id("highlights") }
-                // ("lists": where the head's search takes the page, the first of its long lists)
-                // (where the first long list starts: the head's search brings its title under the field)
-                if let f = page.facts, !f.activities.isEmpty {
-                    ActivitiesList(all: f.activities, country: page.country)
+                // ("lists": where the head's search takes the page, the first of its long lists) (where the first
+                // long list starts: the head's search brings its title under the field)
+                if let f = page.facts, case let shown = Set(f.highlights.map(\.id)),
+                   case let acts = f.activities.filter({ $0.wd.map { !shown.contains($0) } ?? true }), !acts.isEmpty {
+                    ActivitiesList(all: acts, country: page.country)
                         .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .named("page")).minY }) { listsY = $0 }
                 }
                 if let f = page.facts, !f.regions.isEmpty {
@@ -1405,9 +1406,13 @@ private struct PageLayer: View {
                         }
                 }
                 if let f = page.facts, !f.cities.isEmpty { insideList("Cities", f.cities) }
-                if MapSettingsStore.shared.value.ai { suggestions() }
-                if MarkStore.shared.state(key).stamped { record(key) }
-                if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
+                VStack(alignment: .leading, spacing: 0) {
+                    if MapSettingsStore.shared.value.ai { suggestions() }
+                    VStack(alignment: .leading, spacing: 32) {
+                        if MarkStore.shared.state(key).stamped { record(key) }
+                        if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
+                    }
+                }
                 Color.clear.frame(height: 140).id("end")
             }
             .padding(.horizontal, 16)
@@ -2238,6 +2243,7 @@ private struct PageSuggestions: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, picks.isEmpty ? 0 : 32)
         // asked once it is on screen (and again if the page's places come after it was first seen)
         .onGeometryChange(for: Bool.self) { g in
             let f = g.frame(in: .global)
