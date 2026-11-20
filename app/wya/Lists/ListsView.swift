@@ -1303,7 +1303,10 @@ enum ListMapCovers {
         var rect = MKMapRect.null
         var mids: [CLLocationCoordinate2D] = []
         var frames: [String: MKMapRect] = [:], midOf: [String: CLLocationCoordinate2D] = [:]
-        for cc in ccs {
+        // (the countries of all its places, not only the first four: the Wishlist's Madagascar and Namibia had no dot)
+        var all = ccs.map { $0.lowercased() }
+        for s in spots { if let c = s.split(separator: "|").last.map({ String($0).lowercased() }), !all.contains(c) { all.append(c) } }
+        for cc in all {
             guard let i = world.placeIndex[cc.lowercased()] ?? world.placeIndex[cc], let f = world.frame(of: i) else { continue }
             let m = EqualEarth.unproject(SIMD2(Double(f.x + f.z) / 2, Double(f.y + f.w) / 2))
             let mid = CLLocationCoordinate2D(latitude: max(-80, min(80, m.lat)), longitude: m.lon)
@@ -1326,7 +1329,7 @@ enum ListMapCovers {
                 guard parts.count == 2, seen.insert(s.lowercased()).inserted else { continue }
                 if let c = spot(parts[0], parts[1]) { placed.append(c); placedCC.insert(parts[1].lowercased()) }
             }
-            let rest = ccs.map { $0.lowercased() }.filter { !placedCC.contains($0) }
+            let rest = all.filter { !placedCC.contains($0) }
             mids = placed + rest.compactMap { midOf[$0] }
             // (framed on the places themselves, and on the whole of a country only where nothing in it is placed: a
             // list of Vladivostok framed on all of Russia ended in the north, Vladivostok under its edge)
@@ -1340,7 +1343,8 @@ enum ListMapCovers {
         let aspect = size.width / size.height
         var w = max(rect.size.width, MKMapSize.world.width / 60) * 1.4, h = max(rect.size.height, MKMapSize.world.height / 60) * 1.4
         if w / h < aspect { w = h * aspect } else { h = w / aspect }
-        w = min(w, MKMapSize.world.width); h = min(h, MKMapSize.world.height)
+        if w > MKMapSize.world.width { w = MKMapSize.world.width; h = w / aspect }
+        if h > MKMapSize.world.height { h = MKMapSize.world.height; w = h * aspect }
         let o = MKMapPoint(x: rect.midX - w / 2, y: max(0, rect.midY - h / 2))
         let opt = MKMapSnapshotter.Options()
         opt.mapRect = MKMapRect(origin: o, size: MKMapSize(width: w, height: h))
