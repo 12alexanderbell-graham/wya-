@@ -208,8 +208,9 @@ extension PlacePageState.OnePage {
                 if TownIndex.shared.ready, self.key.kind == .thing { self.loadThing() } else { self.settled = true }
             }
         }
-        let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
+        let land = PlacePageState.countryName(cc)
         if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
+            let land = PlacePageState.countryName(town.file)
             let name = town.name
             if !what.localizedCaseInsensitiveContains(name) {
                 out.rows.append(("Where", land.isEmpty || land == name ? name : name + ", " + land))
@@ -1213,6 +1214,11 @@ extension PlacePageState {
         let own = clean(official)
         let list = own.isEmpty ? Array(clean(used).prefix(1)) : Array(own.prefix(3))
         return list.isEmpty ? nil : list.joined(separator: ", ")
+    }
+    /// a country by the map's own name ("China",), else the system's
+    static func countryName(_ cc: String) -> String {
+        if let w = AIContext.map?.world, let i = w.placeIndex[cc.lowercased()] ?? w.placeIndex[cc.uppercased()] { return w.places[i].n }
+        return Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
     }
     static func photo(_ any: Any?) -> String? {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
