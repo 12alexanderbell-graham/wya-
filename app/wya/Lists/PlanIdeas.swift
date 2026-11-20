@@ -154,11 +154,13 @@ private struct PlanSuggestions: View {
 /// list (a place with its country, for its flag). Asked once the section is on screen; with the AI off, not there.
 struct ListSuggestions: View {
     /// a pick that is a known sight of its country (its name exactly): its Wikidata id, for its photo
-    @MainActor static func sight(_ pk: AIService.PlanPick) -> String? {
-        guard ThingIndex.shared.ready, !pk.cc.isEmpty else { return nil }
+    @MainActor static func sight(_ pk: AIService.PlanPick) -> String? { sight(pk.what, pk.cc) }
+    /// a name that is a known sight of that country (exactly): its Wikidata id
+    @MainActor static func sight(_ name: String, _ cc: String) -> String? {
+        guard ThingIndex.shared.ready, !cc.isEmpty else { return nil }
         let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
-        return ThingIndex.shared.hits(pk.what, open: pk.cc.lowercased(), limit: 6, near: false)
-            .first { $0.file.lowercased() == pk.cc.lowercased() && fold($0.name) == fold(pk.what) }?.id
+        return ThingIndex.shared.hits(name, open: cc.lowercased(), limit: 6, near: false)
+            .first { $0.file.lowercased() == cc.lowercased() && fold($0.name) == fold(name) }?.id
     }
     let listID: String
     let name: String
