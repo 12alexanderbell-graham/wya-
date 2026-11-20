@@ -108,7 +108,7 @@ struct StampedList: View {
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .region, s.stamped, let u = index[k.id], u < sc.unitNames.count else { return nil }
             let line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
-            return Row(id: k.id, name: sc.unitNames[u], place: sc.place, line: line, kind: .region, flag: flag)
+            return Row(id: k.id, name: RegionNames.english(sc.id, sc.unitNames[u]), place: sc.place, line: line, kind: .region, flag: flag)
         }
     }
 
