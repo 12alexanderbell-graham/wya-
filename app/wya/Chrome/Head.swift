@@ -1486,9 +1486,9 @@ struct SearchResults: View {
     /// on it (A6.14's straight route, then the region shown as on a region map)
     /// your pins whose name or place holds what was typed: those starting with it first, newest first in each
     static func pinMatches(_ query: String) -> [Pin] {
-        let q = query.trimmingCharacters(in: .whitespaces).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard !q.isEmpty else { return [] }
-        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let fold = { (s: String) in s.townFolded }
         var starts: [Pin] = [], holds: [Pin] = []
         for p in PinStore.shared.pins.reversed() {
             let words = [p.title, p.place, p.note ?? ""].map(fold)
