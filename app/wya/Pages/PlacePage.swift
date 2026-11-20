@@ -738,9 +738,12 @@ extension PlacePageState {
         guard let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
         // the country's things: Wikidata id -> (fame, place in the file)
         var fame: [String: (fame: Int, at: Int)] = [:]
+        // each thing's own line (Wikidata's), for a listing whose words are only how to get there
+        var wdLine: [String: String] = [:]
         if let td = things, let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
             // (a sports ground after the rest of its tier: Rome's Olympic Stadium stood third)
             for (i, r) in rows.enumerated() where r.count > 6 {
+                if let q = r[0] as? String, let l = r[6] as? String, !l.isEmpty, wdLine[q] == nil { wdLine[q] = l }
                 if let q = r[0] as? String, let f = (r[5] as? NSNumber)?.intValue, fame[q] == nil {
                     let venue = isVenue(r[1] as? String ?? "", r[6] as? String ?? "")
                     fame[q] = (f, (venue ? 1_000_000 : 0) + i)
@@ -815,7 +818,11 @@ extension PlacePageState {
         // the best 400 (five show, ten more a tap, the page's search goes through them), each line cleaned now
         return out.prefix(400).map { r in
             let w = raw[r.name.lowercased()] ?? ("", "")
-            let desc = w.desc.isEmpty ? "" : plain(w.desc)
+            var desc = w.desc.isEmpty ? "" : plain(w.desc)
+            if desc.count < 90, desc.range(of: #"\b(exit|station|lines? to|bus|metro|subway|take the|tram)\b"#, options: [.regularExpression, .caseInsensitive]) != nil,
+               let l = r.wd.flatMap({ wdLine[$0] }) {
+                desc = l.prefix(1).uppercased() + l.dropFirst()
+            }
             let line = brief(town != nil || wideOnes.contains(w.city) ? desc : (desc.isEmpty ? w.city : "\(w.city) · \(desc)"), 112)
             return (name: r.name, wd: r.wd, line: line)
         }
