@@ -302,9 +302,7 @@ extension PlacePageState.OnePage {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
             out.rows.append(("Currency", [n, (first["sym"] as? String).map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")))
         }
-        if let v = cc == "us" ? "English" : s("officialLanguage").map({ $0.replacingOccurrences(of: "Putonghua", with: "Mandarin") }) {
-            out.rows.append(("Languages", v))
-        }
+        if let v = PlacePageState.languages(f["officialLanguage"], used: f["languageUsed"], cc: cc) { out.rows.append(("Languages", v)) }
         if let v = s("drivingSide") { out.rows.append(("Driving side", v.capitalized)) }
         if let v = PlacePageState.plugs(f["plug"]) { out.rows.append(("Plugs", v)) }
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
@@ -1174,6 +1172,28 @@ extension PlacePageState {
         let best = near.max { $0.fame < $1.fame }?.id ?? ""
         sightsNear[r.key] = best
         return best.isEmpty ? nil : best
+    }
+    /// A COUNTRY'S LANGUAGES as a traveller means them: the official ones, three at most, by their usual names (
+    /// Mandarin, Greek, Kurdish), without sign languages or; with none, the most used one (Uruguay, Guadeloupe); and
+    /// by hand where the record is wrong for a traveller (the United States' were its territories', Azerbaijan's its
+    /// sign language, the United Kingdom's nations had none)
+    static func languages(_ official: Any?, used: Any?, cc: String) -> String? {
+        let byHand = ["us": "English", "az": "Azerbaijani", "gb-eng": "English", "gb-sct": "English, Scots, Scottish Gaelic",
+                      "gb-wls": "Welsh, English", "gb-nir": "English, Irish"]
+        if let v = byHand[cc] { return v }
+        let names = ["Putonghua": "Mandarin", "Modern Greek": "Greek", "Kurdish language": "Kurdish",
+                     "North Korean standard language": "Korean"]
+        func clean(_ any: Any?) -> [String] {
+            let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
+            var seen = Set<String>()
+            return all.compactMap { n -> String? in
+                guard !n.localizedCaseInsensitiveContains("sign language"), !n.hasPrefix("languages of") else { return nil }
+                return names[n] ?? n
+            }.filter { seen.insert($0).inserted }
+        }
+        let own = clean(official)
+        let list = own.isEmpty ? Array(clean(used).prefix(1)) : Array(own.prefix(3))
+        return list.isEmpty ? nil : list.joined(separator: ", ")
     }
     static func photo(_ any: Any?) -> String? {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
