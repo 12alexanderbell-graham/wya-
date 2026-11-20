@@ -510,9 +510,10 @@ extension PlacePageState.OnePage {
                 }.map(\.i).min()
                 if let best { known[q] = best }
             }
+            let whole = Set(CollectionStore.shared.collection("world-heritage")?.items.map(\.id) ?? [])
             let sites = ids.filter { q in
                 let h = PlacePageState.heritage?[q]
-                return h?["year"] as? String != nil && !((h?["crit"] as? [String]) ?? []).isEmpty
+                return whole.contains(q) || (h?["year"] as? String != nil && !((h?["crit"] as? [String]) ?? []).isEmpty)
             }
             var kept: [(String, Double, Double)] = []
             let ranked = sites.enumerated().sorted { a, b in
@@ -521,6 +522,7 @@ extension PlacePageState.OnePage {
             }.map(\.element).filter { q in
                 guard let h = PlacePageState.heritage?[q], let ll = h["ll"] as? [NSNumber], ll.count == 2 else { return true }
                 let sig = (h["year"] as? String ?? "") + ((h["crit"] as? [String]) ?? []).joined()
+                guard !sig.isEmpty else { return true }
                 let lat = ll[0].doubleValue, lon = ll[1].doubleValue
                 if kept.contains(where: { k in k.0 == sig && abs(k.1 - lat) * 111.2 < 10 && abs(k.2 - lon) * 111.2 * cos(lat * .pi / 180) < 10 }) { return false }
                 kept.append((sig, lat, lon))
