@@ -56,7 +56,7 @@ struct ContentView: View {
                 // PINS (Part 8): Apple's map over ours while Pins is the mode; it takes our camera when it comes (in
                 // full screen it turns with ours: the same frame and the same quarter turn about the centre)
                 if head.mode == .pins { sideways(PinsMapView(map: map, water: water)) }
-                else if map.appleWorld { sideways(AppleWorldView(map: map, water: water)) }
+                else if map.appleWorld { sideways(AppleWorldView(map: map, water: water).modifier(AppleLens(searching: head.searching))) }
                 // ANTARCTICA picked: its own south-polar map over the world's (Map/AntarcticaPolar.swift)
                 ZStack {
                     if map.continent == "Antarctica", head.mode != .pins, !side.on {
@@ -1524,5 +1524,19 @@ private struct SheetWatch: View {
             // (from the start: until the water first moved the map took its top for 0, and a continent picked then was
             // framed for the wrong room and jumped into place later)
             .onChange(of: water.form().top, initial: true) { _, t in if !Sideways.shared.on { map.sheetMoved(top: t, goal: water.goalTop) } }
+    }
+}
+
+
+/// DEPTH OF FOCUS ON APPLE'S MAP: what ours does through its lens (a card, the region card, the passport, the search
+/// in front: the map behind goes softly out of focus), Apple's map does as a whole, its names and coasts going soft
+/// behind what is in front, eased in and out with the card
+struct AppleLens: ViewModifier {
+    let searching: Bool
+    func body(content: Content) -> some View {
+        let on = !MapRenderer.lensOff && (CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown || searching)
+        content
+            .blur(radius: on ? 7 : 0, opaque: true)
+            .animation(.smooth(duration: 0.45), value: on)
     }
 }
