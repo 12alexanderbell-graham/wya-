@@ -417,7 +417,7 @@ extension PlacePageState.OnePage {
         ThingIndex.shared.load()
         let nats0 = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).filter { $0 != cc }
         let paths = ["country/\(cc).json", "regions/\(cc).json", "cities/\(cc).json", "heritage.json",
-                     "native/things/things-\(cc)-3.wyth", "native/activities/\(cc).json"] + nats0.map { "country/\($0).json" }
+                     ThingStore.file(cc), "native/activities/\(cc).json"] + nats0.map { "country/\($0).json" }
         await withTaskGroup(of: Void.self) { g in
             for p in paths { g.addTask { _ = await Servers.data.file(p) } }
         }
@@ -572,7 +572,7 @@ extension PlacePageState.OnePage {
             // opened on a fort listed in 2023, the newest first)
             var known: [String: Int] = [:]
             var spots: [(i: Int, name: String, lat: Double, lon: Double)] = []
-            if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
+            if case .ok(let td) = await Servers.data.file(ThingStore.file(cc)),
                let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
                 for (i, r) in rows.enumerated() {
                     if let q = r.first as? String, known[q] == nil { known[q] = i }
@@ -1015,7 +1015,7 @@ extension PlacePageState {
             return rows.compactMap { $0.count == 2 ? activity($0[0], line: $0[1], wd: nil) : nil }
         }
         var things: Data?
-        if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
+        if case .ok(let td) = await Servers.data.file(ThingStore.file(cc)) { things = td }
         let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first, near: near) }.value
         let out = Self.settled(rows.map { Self.activity($0.name, line: $0.line, wd: $0.wd) })
         // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
@@ -1054,7 +1054,7 @@ extension PlacePageState {
                 first = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
             }
             var things: Data?
-            if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
+            if case .ok(let td) = await Servers.data.file(ThingStore.file(cc)) { things = td }
             // (only a list ranked by the things file and long enough to be the country's, as the page itself keeps)
             guard things != nil else { continue }
             let rows = activityRows(d, things, town: nil, first: first)
@@ -1473,7 +1473,7 @@ extension PlacePageState {
     /// landmark, a mountain, water, nature or a spot) with a photo of it as you would see it there; never one on a
     /// border, a school, a stadium, an airport, a museum's building, a place of mourning, or a picture from above
     static func bestSightPhoto(_ cc: String) async -> String? {
-        guard case .ok(let d) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
+        guard case .ok(let d) = await Servers.data.file(ThingStore.file(cc)),
               let rows = try? JSONSerialization.jsonObject(with: d) as? [[Any]] else { return nil }
         let skip = "border|between|universit|college|school|stadium|arena|airport|station|territory|museum|concentration|camp\\b|memorial|genocide|cemetery|prison|place name"
         let fromAbove = "\\b[0-9]+\\.[0-9]+[NSEW]\\b|^A[0-9]+\\.[0-9]+|aerial image|\\bISS\\b"

@@ -35,6 +35,8 @@ final class ThingIndex {
     }
     /// the index: 3 (with the names people know) where the server has it, else 2
     nonisolated private static func file() async -> ServerAnswer<Data> {
+        let r4 = await Servers.data.file("native/things/things-index-4.wyti")
+        if case .ok(_) = r4 { return r4 }
         let r = await Servers.data.file("native/things/things-index-3.wyti")
         if case .ok(_) = r { return r }
         return await Servers.data.file("native/things/things-index-2.wyti")
