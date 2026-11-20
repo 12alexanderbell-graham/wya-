@@ -1199,7 +1199,9 @@ extension PlacePageState {
         }
         // a page's own marks that a decoded turns back into: never words
         if t.contains("<") {
-            t = t.replacingOccurrences(of: "</?(?:big|small|span|b|i|u|em|strong|sup|sub|br|div|p|font|abbr)\\b[^>]*>", with: "",
+            t = t.replacingOccurrences(of: "<maplink\\b[^>]*?\\btext=\"([^\"]*)\"[^>…]*(?:>(?:.*?</maplink>)?)?", with: "$1",
+                                       options: [.regularExpression, .caseInsensitive])
+            t = t.replacingOccurrences(of: "</?(?:big|small|span|b|i|u|em|strong|sup|sub|br|div|p|font|abbr|nowiki|maplink)\\b[^>]*>", with: "",
                                        options: [.regularExpression, .caseInsensitive])
         }
         // editors' notes left in the source  are not text: taken out, and one left open runs to the end
