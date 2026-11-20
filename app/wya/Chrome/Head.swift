@@ -1206,7 +1206,7 @@ struct SearchResults: View {
                                                            twin: Self.twin(town: k, in: townHits))
                                 case .anyRegion(let k): anyRegionRow(anyRegionHits.first { $0.key == k },
                                                                      twin: Self.twin(k, in: anyRegionHits))
-                                case .pin(let id): pinRow(PinStore.shared.pin(id))
+                                case .pin(let id): pinRow(PinStore.shared.pin(id), twin: Self.twin(pin: id, in: pinHits))
                                 case .set(let p): setRow(p)
                                 }
                             }
@@ -1512,7 +1512,12 @@ struct SearchResults: View {
         PinsMapState.shared.go(to: p)
         if let w = head.water, w.stop != .quarter { w.go(.quarter) }
     }
-    private func pinRow(_ p: Pin?) -> some View {
+    /// another of your pins found under the same name and place (each then says the day it was made)
+    static func twin(pin id: UUID, in all: [Pin]) -> Bool {
+        guard let p = all.first(where: { $0.id == id }) else { return false }
+        return all.contains { $0.id != id && $0.title == p.title && $0.place == p.place }
+    }
+    private func pinRow(_ p: Pin?, twin: Bool = false) -> some View {
         Button { pinAct(p) } label: {
             HStack(spacing: 12) {
                 Group {
@@ -1525,8 +1530,9 @@ struct SearchResults: View {
                 // (a pin named by its place,, says its country once: "Paris" and)
                 let country = p.map { $0.place.components(separatedBy: ", ").last ?? "" } ?? ""
                 let title = p?.title ?? ""
+                let day = p.map { $0.made.formatted(.dateTime.day().month(.abbreviated).hour().minute()) } ?? ""
                 ResultWords(name: !country.isEmpty && title.hasSuffix(", " + country) ? String(title.dropLast(country.count + 2)) : title,
-                            notes: [country])
+                            notes: twin && !day.isEmpty ? [country.isEmpty ? day : day + " · " + country, day] : [country])
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
