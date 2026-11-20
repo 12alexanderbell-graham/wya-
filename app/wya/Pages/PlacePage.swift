@@ -315,11 +315,16 @@ extension PlacePageState.OnePage {
         if let v = PlacePageState.plugs(f["plug"]) { out.rows.append(("Plugs", v)) }
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
         // (a list, or one number: the United States', Canada's and Australia's came as one and were left out)
-        if let first = (f["emergency"] as? [String])?.first ?? (f["emergency"] as? String) { out.rows.append(("Emergency", first)) }
+        // (and by hand where the record has none: the UK's nations, Australia's and France's territories and others)
+        let emergencies = ["gb-eng": "999", "gb-sct": "999", "gb-wls": "999", "gb-nir": "999", "fk": "999", "cx": "000", "cc": "000",
+                           "nf": "000", "gf": "112", "bl": "112", "mf": "112", "wf": "112", "sj": "112", "mp": "911", "sx": "911", "bq": "911"]
+        if let first = emergencies[cc] ?? (f["emergency"] as? [String])?.first ?? (f["emergency"] as? String) { out.rows.append(("Emergency", first)) }
         // (the Netherlands here is the one in Europe, the Caribbean islands places of their own: Wikidata's highest point
         // is Mount Scenery, on Saba)
         // (and Australia's is the mainland's, not Mawson Peak on Heard Island; the United States had none)
-        if let v = cc == "nl" ? "Vaalserberg" : cc == "au" ? "Mount Kosciuszko" : cc == "us" ? "Denali" : s("highestPoint") {
+        let peaks = ["nl": "Vaalserberg", "au": "Mount Kosciuszko", "us": "Denali", "gb-eng": "Scafell Pike", "gb-sct": "Ben Nevis",
+                     "gb-wls": "Yr Wyddfa (Snowdon)", "gb-nir": "Slieve Donard"]
+        if let v = peaks[cc] ?? s("highestPoint") {
             out.rows.append(("Highest point", v))
         }
         // each government's advice, with who says it and when it was checked
