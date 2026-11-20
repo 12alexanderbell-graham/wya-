@@ -2520,7 +2520,8 @@ struct PagePhoto: View {
             // filling its frame around what the photo is of, not its middle: the frame centred on the photo's main
             // object as far as the photo reaches, its middle when there is none
             GeometryReader { g in
-                let f = Self.focus[url] ?? CGPoint(x: 0.5, y: 0.5)
+                // (-1: looked for and none found: its middle)
+                let f = Self.focus[url].flatMap { $0.x < 0 ? nil : $0 } ?? CGPoint(x: 0.5, y: 0.5)
                 let k = max(g.size.width / max(i.size.width, 1), g.size.height / max(i.size.height, 1))
                 let w = i.size.width * k, h = i.size.height * k
                 Image(uiImage: i).resizable()
@@ -2549,14 +2550,16 @@ struct PagePhoto: View {
         let t = Task {
             let file = disk(url)
             if let d = try? Data(contentsOf: file), let i = UIImage(data: d) {
-                if wantFocus, let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
+                if wantFocus, keptFocus(url) == nil, let cg = i.cgImage {
+                    focus[url] = await Self.mainObjectQueued(cg) ?? CGPoint(x: -1, y: -1)
+                }
                 kept.setObject(await i.byPreparingForDisplay() ?? i, forKey: url as NSURL)
                 return
             }
             guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
             let whole: CGPoint? = if wantFocus, let cg0 = i0.cgImage { await Self.mainObjectQueued(cg0) } else { nil }
             let i = upper(i0, around: whole)
-            if wantFocus, let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) }
+            if wantFocus, let cg = i.cgImage { focus[url] = await Self.mainObjectQueued(cg) ?? CGPoint(x: -1, y: -1) }
             let ready = await i.byPreparingForDisplay() ?? i
             kept.setObject(ready, forKey: url as NSURL)
             if let jpg = i.jpegData(compressionQuality: 0.85) {
@@ -2582,8 +2585,38 @@ extension PagePhoto {
         return dir.appendingPathComponent(String(h, radix: 16) + ".jpg")
     }
 
-    /// each photo's main object's middle (0 to 1 from its top left), found once per launch
-    static var focus: [URL: CGPoint] = [:]
+    /// each photo's main object's middle (0 to 1 from its top left), found once and kept with the photos
+    static var focus: [URL: CGPoint] = [:] { didSet { saveFocusSoon() } }
+    private static var focusLoaded = false
+    private static var focusSaving = false
+    private static var focusFile: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("page-photos-2/focus.json")
+    }
+    /// the kept answers, read once (a photo's own is looked up before Vision is asked)
+    static func keptFocus(_ url: URL) -> CGPoint?? {
+        if !focusLoaded {
+            focusLoaded = true
+            if let d = try? Data(contentsOf: focusFile), let m = try? JSONDecoder().decode([String: [Double]].self, from: d) {
+                var f: [URL: CGPoint] = [:]
+                for (k, v) in m { if let u = URL(string: k) { f[u] = v.count == 2 ? CGPoint(x: v[0], y: v[1]) : CGPoint(x: -1, y: -1) } }
+                focusSaving = true; focus.merge(f) { a, _ in a }; focusSaving = false
+            }
+        }
+        guard let p = focus[url] else { return nil }
+        return p.x < 0 ? .some(nil) : .some(p)
+    }
+    private static func saveFocusSoon() {
+        guard !focusSaving else { return }
+        focusSaving = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            focusSaving = false
+            let m = Dictionary(uniqueKeysWithValues: focus.map { ($0.key.absoluteString, $0.value.x < 0 ? [] : [Double($0.value.x), Double($0.value.y)]) })
+            if let d = try? JSONEncoder().encode(m) {
+                try? FileManager.default.createDirectory(at: focusFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+                do { try d.write(to: focusFile, options: .atomic) } catch { NSLog("wya focus not kept: %@", "\(error)") }
+            }
+        }
+    }
     /// A PHOTO'S MAIN OBJECT, as Vision finds it (objectness: a building, a statue, a peak; nil for a view with none,
     /// or one it is unsure of). Its middle, from the top left. VISION ON A QUEUE OF ITS OWN, one photo at a time
     private static let vision = DispatchQueue(label: "wya.page-photo-vision", qos: .utility)
