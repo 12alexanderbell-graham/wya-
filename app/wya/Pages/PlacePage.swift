@@ -517,9 +517,12 @@ extension PlacePageState.OnePage {
         var out = PlacePageState.Facts()
         // (a capital says so first: Paris's page never said it is France's)
         if CollectionStore.shared.collection(CollectionStore.capitals)?.items.contains(where: { $0.key == key }) == true,
-           let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) { out.rows.append(("Capital of", land)) }
+           case let land = PlacePageState.countryName(cc), !land.isEmpty, land != name { out.rows.append(("Capital of", land)) }
         if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
-        if let e = t["ele"] as? NSNumber { out.rows.append(("Height", "\(e.intValue) m")) }
+        if let e = t["ele"] as? NSNumber {
+            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
+            out.rows.append(("Height", "\(f.string(from: e) ?? "\(e.intValue)") m"))
+        }
         var zone = (t["tz"] as? String).flatMap(TimeZone.init(identifier:))
         if zone == nil, let ll = t["ll"] as? [NSNumber], ll.count == 2 { zone = await Self.zone(lat: ll[0].doubleValue, lon: ll[1].doubleValue) }
         if let tz = zone {
@@ -527,7 +530,13 @@ extension PlacePageState.OnePage {
             out.rows.append(("Local time", f.string(from: Date())))
         }
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
-            out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
+            let h = hi.map(\.doubleValue), l = lo.map(\.doubleValue)
+            let hm = h.indices.max { h[$0] < h[$1] } ?? 6, lm = l.indices.min { l[$0] < l[$1] } ?? 0
+            let mf = DateFormatter(); mf.locale = Locale(identifier: "en_GB")
+            let mon = mf.shortMonthSymbols ?? []
+            if mon.count == 12 {
+                out.rows.append(("Climate", "\(Int(h[hm].rounded()))° \(mon[hm]) · \(Int(l[lm].rounded()))° \(mon[lm])"))
+            }
         }
         if let n = t["n"] as? String {
             let ll = t["ll"] as? [NSNumber]
