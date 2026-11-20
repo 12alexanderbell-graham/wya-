@@ -551,7 +551,7 @@ extension PlacePageState.OnePage {
             .map(\.element).prefix(8 - out.highlights.count)
             out.highlights += more.map { o in
                 let l = PlacePageState.brief(o.line, 60)
-                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+                return PlacePageState.Highlight(id: o.id, name: o.name.prefix(1).uppercased() + o.name.dropFirst(), line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
             }
         }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
@@ -688,7 +688,7 @@ extension PlacePageState.OnePage {
         // (after the city's best known sight: Paris opened on the Île de la Cité before the Eiffel Tower)
         var all = picks.map { o in
             let l = PlacePageState.brief(o.line, 60)
-            return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+            return PlacePageState.Highlight(id: o.id, name: o.name.prefix(1).uppercased() + o.name.dropFirst(), line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
         }
         all.insert(contentsOf: extra, at: min(1, all.count))
         return Array(all.prefix(8))
@@ -807,7 +807,7 @@ extension PlacePageState.OnePage {
             var all: [PlacePageState.Highlight] = picks.map { o in
                 // (Wikidata's line starts small,: a capital, as a sentence under a name)
                 let l = PlacePageState.brief(o.line, 60)
-                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+                return PlacePageState.Highlight(id: o.id, name: o.name.prefix(1).uppercased() + o.name.dropFirst(), line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
             }
             let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
             var seen = Set(all.map(\.id))
@@ -1007,7 +1007,8 @@ extension PlacePageState {
                    options: [.regularExpression, .caseInsensitive]) != nil
     }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
-        (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark)\b"#,
+        if (name + " " + line).range(of: #"amphithea|roman|ancient|antique|historic"#, options: [.regularExpression, .caseInsensitive]) != nil { return false }
+        return (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark)\b"#,
                                   options: [.regularExpression, .caseInsensitive]) != nil
     }
     /// a pass or a city card (,,): a ticket, not a thing to see or do
