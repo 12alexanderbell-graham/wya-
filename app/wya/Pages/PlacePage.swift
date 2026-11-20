@@ -529,7 +529,7 @@ extension PlacePageState.OnePage {
             for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
             let have = Set(out.highlights.map { $0.name.townFolded })
             let more = (ThingStore.shared.things(cc) ?? []).filter { o in
-                o.fame >= 2 && (2...6).contains(o.kind) && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
+                o.fame >= 1 && (2...6).contains(o.kind) && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
                     && !PlacePageState.isStudy(o.name) && !PlacePageState.isVenue(o.name, o.line)
                     && !have.contains(where: { $0.contains(o.name.townFolded) || o.name.townFolded.contains($0) })
             }.enumerated().sorted { a, b in a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset }
