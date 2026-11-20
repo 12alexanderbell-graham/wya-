@@ -887,7 +887,13 @@ extension PlacePageState {
         }
         if let r = t.range(of: "(\\d+px\\||thumb\\||right\\||left\\||upright\\||center\\||noborder\\|)+", options: .regularExpression) {
             let before = t[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
-            t = before.count >= 60 || before.hasSuffix(".") ? before : String(t[r.upperBound...])
+            let after = t[r.upperBound...]
+            if let next = after.range(of: "\\s(This|These|The|It|Its|In|During|There|With|Since|Located|Founded|Today|Once|From)\\s", options: .regularExpression),
+               after.distance(from: after.startIndex, to: next.lowerBound) < 150, after.distance(from: after.startIndex, to: next.lowerBound) > 2 {
+                t = before + " " + after[after.index(after: next.lowerBound)...]
+            } else {
+                t = before.count >= 60 || before.hasSuffix(".") ? before : String(after)
+            }
         }
         t = re(re(re(re(t, "\\[\\[|\\]\\]", ""), " {2,}", " "), " ([.,;:)])", "$1"), "\\( *\\)", "")
         return t.trimmingCharacters(in: .whitespaces)
