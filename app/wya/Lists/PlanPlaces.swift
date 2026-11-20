@@ -16,8 +16,19 @@ enum PlanPlaces {
                 let hits = TownIndex.shared.hits(name, open: cc, limit: 12)
                 let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
                 let inCountry = hits.filter { cc == nil || $0.file.lowercased() == cc!.lowercased() }
-                if let t = inCountry.first(where: { fold($0.name) == fold(name) }) ?? inCountry.first {
-                    url = URL(string: "wya://page/" + (PlaceKey(.town, t.id).description.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""))
+                let page = { (k: PlaceKey) in URL(string: "wya://page/" + (k.description.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")) }
+                if let t = inCountry.first(where: { fold($0.name) == fold(name) }) {
+                    url = page(PlaceKey(.town, t.id))
+                } else {
+                    // A SIGHT OF THAT NAME IN THAT COUNTRY: its own page, before a town that only starts like it
+                    ThingIndex.shared.load()
+                    for _ in 0 ..< 80 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    let things = ThingIndex.shared.hits(name, open: cc, limit: 6, near: false)
+                    if let h = things.first(where: { (cc == nil || $0.file.lowercased() == cc!.lowercased()) && fold($0.name) == fold(name) }) {
+                        url = page(PlaceKey(.thing, "wd:" + h.id))
+                    } else if let t = inCountry.first {
+                        url = page(PlaceKey(.town, t.id))
+                    }
                 }
             }
             if url == nil, let cc, !cc.isEmpty { url = URL(string: "wya://country/\(cc.lowercased())") }
