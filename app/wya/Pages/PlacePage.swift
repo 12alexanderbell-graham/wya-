@@ -212,7 +212,7 @@ extension PlacePageState.OnePage {
             }
         }
         let land = PlacePageState.countryName(cc)
-        if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
+        if let town = TownIndex.shared.place(lat: ll.lat, lon: ll.lon, km: 40) {
             let land = PlacePageState.countryName(town.file)
             let name = town.name
             if !what.localizedCaseInsensitiveContains(name) {

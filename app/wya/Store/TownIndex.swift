@@ -223,6 +223,23 @@ final class TownIndex {
         return best.map(Self.asCity)
     }
 
+    /// THE PLACE A SPOT IS IN, by the name people know: the nearest town, unless a city at least five times its size
+    /// has the spot well inside it (within 2 km + √people / 200 of its middle: Barcelona 8.5 km, New York 17 km;
+    /// Versailles, 17 km from Paris, stays Versailles)
+    func place(lat: Double, lon: Double, km: Double = 15) -> Hit? {
+        guard let n = nearest(lat: lat, lon: lon, km: km) else { return nil }
+        let k = cos(lat * .pi / 180)
+        for r in rows {
+            let h = r.hit
+            guard h.people >= 300_000 else { break }
+            guard h.people >= n.people * 5, h.file == n.file else { continue }
+            let reach = (2 + Double(h.people).squareRoot() / 200) / 111.2
+            let dy = h.lat - lat, dx = (h.lon - lon) * k
+            if dx * dx + dy * dy <= reach * reach { return Self.asCity(h) }
+        }
+        return n
+    }
+
     /// the `count` towns nearest a point, nearest first (What's here?, A11.4), however far
     func nearest(lat: Double, lon: Double, count: Int) -> [Hit] {
         guard ready, count > 0 else { return [] }
