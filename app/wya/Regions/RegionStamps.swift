@@ -20,7 +20,7 @@ enum RegionStamps {
     }
     @MainActor
     private static func stampChain(_ unit: Int, in scene: RegionScene, source: MarkSource) async {
-        await stampChain(id: scene.unitIDs[unit], name: scene.unitNames[unit], parent: scene.unitParents[unit],
+        await stampChain(id: scene.unitIDs[unit], name: RegionNames.english(scene.id, scene.unitNames[unit]), parent: scene.unitParents[unit],
                          cc: scene.id, row: scene.row, source: source)
     }
     @MainActor
@@ -53,7 +53,7 @@ enum RegionStamps {
     }
     @MainActor
     private static func unstampChain(_ unit: Int, in scene: RegionScene) async {
-        await unstampChain(id: scene.unitIDs[unit], name: scene.unitNames[unit], parent: scene.unitParents[unit],
+        await unstampChain(id: scene.unitIDs[unit], name: RegionNames.english(scene.id, scene.unitNames[unit]), parent: scene.unitParents[unit],
                            cc: scene.id, row: scene.row)
     }
     @MainActor
