@@ -220,7 +220,7 @@ final class TownIndex {
             let d = dx * dx + dy * dy
             if d < bd { bd = d; best = r.hit }
         }
-        return best
+        return best.map(Self.asCity)
     }
 
     /// the `count` towns nearest a point, nearest first (What's here?, A11.4), however far
@@ -242,11 +242,16 @@ final class TownIndex {
             if best.count > count { best.removeLast() }
             if best.count == count { worst = best[count - 1].0 }
         }
-        return best.map(\.1)
+        return best.map { Self.asCity($0.1) }
     }
 
     /// at most `limit` towns for what was typed: the open country's first (`open`, its file), then everywhere a
-    /// city's numbered district (,,)
+    /// district by its city's name ( is Paris); any other town as it is
+    nonisolated static func asCity(_ h: Hit) -> Hit {
+        guard isDistrict(h.name), let d = h.name.range(of: " [0-9]{1,2}( |$)", options: .regularExpression) else { return h }
+        return Hit(name: String(h.name[..<d.lowerBound]), file: h.file, id: h.id, people: h.people, lat: h.lat, lon: h.lon, region: h.region)
+    }
+    /// a city's numbered district (,,)
     nonisolated static func isDistrict(_ n: String) -> Bool {
         n.range(of: "^[^0-9]+ [0-9]{1,2}( .*)?$", options: .regularExpression) != nil
     }
