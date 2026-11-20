@@ -1,4 +1,5 @@
 import SwiftUI
+import Vision
 import simd
 import MapKit
 
@@ -2072,8 +2073,18 @@ struct PagePhoto: View {
     var body: some View {
         // a kept photo is drawn at once, before any task runs
         if let i = image ?? Self.kept.object(forKey: url as NSURL) {
-            Image(uiImage: i).resizable().scaledToFill()
-                .onAppear { onImage?(i) }
+            // filling its frame around what the photo is of, not its middle: the frame centred on the photo's main
+            // object as far as the photo reaches, its middle when there is none
+            GeometryReader { g in
+                let f = Self.focus[url] ?? CGPoint(x: 0.5, y: 0.5)
+                let k = max(g.size.width / max(i.size.width, 1), g.size.height / max(i.size.height, 1))
+                let w = i.size.width * k, h = i.size.height * k
+                Image(uiImage: i).resizable()
+                    .frame(width: w, height: h)
+                    .offset(x: min(0, max(g.size.width - w, g.size.width / 2 - f.x * w)),
+                            y: min(0, max(g.size.height - h, g.size.height / 2 - f.y * h)))
+            }
+            .onAppear { onImage?(i) }
         } else {
             Palette.cream.task(id: url) {
                 await Self.prefetch(url)
@@ -2093,11 +2104,14 @@ struct PagePhoto: View {
         let t = Task {
             let file = disk(url)
             if let d = try? Data(contentsOf: file), let i = UIImage(data: d) {
+                if let cg = i.cgImage { focus[url] = await Task.detached(priority: .userInitiated) { Self.mainObject(cg) }.value }
                 kept.setObject(await i.byPreparingForDisplay() ?? i, forKey: url as NSURL)
                 return
             }
             guard let (d, _) = try? await URLSession.shared.data(from: url), let i0 = UIImage(data: d) else { return }
-            let i = upper(i0)
+            let whole = await Task.detached(priority: .userInitiated) { i0.cgImage.flatMap(Self.mainObject) }.value
+            let i = upper(i0, around: whole)
+            if let cg = i.cgImage { focus[url] = await Task.detached(priority: .userInitiated) { Self.mainObject(cg) }.value }
             let ready = await i.byPreparingForDisplay() ?? i
             kept.setObject(ready, forKey: url as NSURL)
             if let jpg = i.jpegData(compressionQuality: 0.85) {
@@ -2112,19 +2126,37 @@ struct PagePhoto: View {
 }
 
 extension PagePhoto {
-    /// where a page photo is kept on the phone (Caches: the system may clear it, and it is fetched again)
+    /// where a page photo is kept on the phone the photos kept before "-2", cleared once per launch
+    private static var oldGone = false
     static func disk(_ url: URL) -> URL {
         var h: UInt64 = 14695981039346656037
         for b in url.absoluteString.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
-        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("page-photos")
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        if !oldGone { oldGone = true; try? FileManager.default.removeItem(at: caches.appendingPathComponent("page-photos")) }
+        let dir = caches.appendingPathComponent("page-photos-2")
         return dir.appendingPathComponent(String(h, radix: 16) + ".jpg")
+    }
+
+    /// each photo's main object's middle (0 to 1 from its top left), found once per launch
+    static var focus: [URL: CGPoint] = [:]
+    /// A PHOTO'S MAIN OBJECT, as Vision finds it (objectness: a building, a statue, a peak; nil for a view with none,
+    /// or one it is unsure of). Its middle, from the top left.
+    nonisolated static func mainObject(_ cg: CGImage) -> CGPoint? {
+        let r = VNGenerateObjectnessBasedSaliencyImageRequest()
+        // (the simulator cannot run it,: there every photo keeps its middle)
+        try? VNImageRequestHandler(cgImage: cg).perform([r])
+        guard let o = (r.results?.first)?.salientObjects?
+                .filter({ $0.confidence >= 0.3 && $0.boundingBox.width * $0.boundingBox.height >= 0.02 })
+                .max(by: { $0.confidence < $1.confidence }) else { return nil }
+        return CGPoint(x: o.boundingBox.midX, y: 1 - o.boundingBox.midY)
     }
 
     /// A STANDING PHOTO'S UPPER PART: a square from just under its top, where a mountain, a tower or a face is; a
     /// lying photo as it is
-    static func upper(_ i: UIImage) -> UIImage {
+    static func upper(_ i: UIImage, around: CGPoint? = nil) -> UIImage {
         guard i.imageOrientation == .up, let cg = i.cgImage, cg.height > cg.width else { return i }
-        let w = cg.width, top = cg.height / 20
+        let w = cg.width
+        let top = around.map { max(0, min(cg.height - w, Int($0.y * CGFloat(cg.height)) - w / 2)) } ?? cg.height / 20
         guard let c = cg.cropping(to: CGRect(x: 0, y: top, width: w, height: min(w, cg.height - top))) else { return i }
         return UIImage(cgImage: c, scale: i.scale, orientation: i.imageOrientation)
     }
