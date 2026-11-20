@@ -40,6 +40,12 @@ final class PlacePageState {
     }
     /// the server's World Heritage list, read once
     static var heritage: [String: [String: Any]]?
+    /// a World Heritage site's name: its record's, else (a record that has only its id,: 1,546 of 3,460) the World
+    /// Heritage set's ("Caral"), else nil
+    @MainActor static func heritageName(_ q: String) -> String? {
+        if let n = heritage?[q]?["n"] as? String, n.range(of: #"^Q[0-9]+$"#, options: .regularExpression) == nil { return n }
+        return CollectionStore.shared.collection("world-heritage")?.items.first { $0.id == q }?.name
+    }
     struct Inside: Hashable { let key: PlaceKey; let name: String; let line: String; let code: String?; var at: SIMD2<Float>? = nil
         /// its own photo (a Commons file, as its page shows it), or ""
         var photo = "" }
@@ -473,18 +479,48 @@ extension PlacePageState.OnePage {
             // (the best known first, by the country's things' own order, as its activities are ranked: France's
             // opened on a fort listed in 2023, the newest first)
             var known: [String: Int] = [:]
+            var spots: [(i: Int, name: String, lat: Double, lon: Double)] = []
             if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth"),
                let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
-                for (i, r) in rows.enumerated() { if let q = r.first as? String, known[q] == nil { known[q] = i } }
+                for (i, r) in rows.enumerated() {
+                    if let q = r.first as? String, known[q] == nil { known[q] = i }
+                    if r.count > 4, let n = r[1] as? String, let la = (r[3] as? NSNumber)?.doubleValue, let lo = (r[4] as? NSNumber)?.doubleValue {
+                        spots.append((i, n.townFolded, la, lo))
+                    }
+                }
             }
-            let ranked = ids.enumerated().sorted { a, b in
+            for q in ids where known[q] == nil {
+                guard let h = PlacePageState.heritage?[q], let ll = h["ll"] as? [NSNumber], ll.count == 2 else { continue }
+                let lat = ll[0].doubleValue, lon = ll[1].doubleValue, k = cos(lat * .pi / 180)
+                let wn = (PlacePageState.heritageName(q) ?? "").townFolded
+                let best = spots.filter { sp in
+                    let dy = (sp.lat - lat) * 111.2, dx = (sp.lon - lon) * 111.2 * k, d = (dx * dx + dy * dy).squareRoot()
+                    return d <= 1.5 || (d <= 30 && sp.name.count >= 6 && wn.contains(sp.name))
+                }.map(\.i).min()
+                if let best { known[q] = best }
+            }
+            let sites = ids.filter { q in
+                let h = PlacePageState.heritage?[q]
+                return h?["year"] as? String != nil && !((h?["crit"] as? [String]) ?? []).isEmpty
+            }
+            var kept: [(String, Double, Double)] = []
+            let ranked = sites.enumerated().sorted { a, b in
                 let x = known[a.element] ?? Int.max, y = known[b.element] ?? Int.max
                 return x != y ? x < y : a.offset < b.offset
-            }.map(\.element)
+            }.map(\.element).filter { q in
+                guard let h = PlacePageState.heritage?[q], let ll = h["ll"] as? [NSNumber], ll.count == 2 else { return true }
+                let sig = (h["year"] as? String ?? "") + ((h["crit"] as? [String]) ?? []).joined()
+                let lat = ll[0].doubleValue, lon = ll[1].doubleValue
+                if kept.contains(where: { k in k.0 == sig && abs(k.1 - lat) * 111.2 < 10 && abs(k.2 - lon) * 111.2 * cos(lat * .pi / 180) < 10 }) { return false }
+                kept.append((sig, lat, lon))
+                return true
+            }
             out.highlights = ranked.compactMap { q in
-                guard let h = PlacePageState.heritage?[q], let n = h["n"] as? String else { return nil }
+                guard let h = PlacePageState.heritage?[q], let n = PlacePageState.heritageName(q) else { return nil }
+                // (not a whole prefecture, province or state the list took in by mistake: Japan's had)
+                if ((h["kind"] as? [String]) ?? []).contains(where: { $0.hasPrefix("prefecture") || $0.hasPrefix("province of") || $0.hasPrefix("state of") }) { return nil }
                 let year = h["year"] as? String
-                return PlacePageState.Highlight(id: q, name: n, line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
+                return PlacePageState.Highlight(id: q, name: n.prefix(1).uppercased() + n.dropFirst(), line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
                                  photo: PlacePageState.photo(h["img"]) ?? (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
