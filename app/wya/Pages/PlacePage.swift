@@ -186,13 +186,14 @@ final class PlacePageState {
 extension PlacePageState.OnePage {
     /// A THING'S PAGE (16.2 for things, D5 as it is): its photo, its own line as the prose, its kind and where it is
     fileprivate func loadThing() {
-        guard let (cc, t) = ThingStore.shared.thing(key.id) ?? (ThingStore.shared.things(country) != nil ? setThing() : nil) else {
+        guard let (cc, t) = ThingStore.shared.thing(key.id) ?? (ThingStore.shared.things(country.lowercased()) != nil ? setThing() : nil) else {
             // its country's things not read yet: once they are, or (a World Heritage site the data keeps as a whole) its
             // photo and kind from what opened it
-            if ThingStore.shared.things(country) == nil {
+            if ThingStore.shared.things(country.lowercased()) == nil {
+                ThingStore.shared.load(country.lowercased())
                 Task { @MainActor in
-                    for _ in 0 ..< 60 where ThingStore.shared.things(country) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-                    if ThingStore.shared.thing(key.id) != nil || (ThingStore.shared.things(country) != nil && setThing() != nil) { loadThing(); return }
+                    for _ in 0 ..< 100 where ThingStore.shared.things(country.lowercased()) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+                    if ThingStore.shared.thing(key.id) != nil || (ThingStore.shared.things(country.lowercased()) != nil && setThing() != nil) { loadThing(); return }
                     seedOnly()
                 }
             } else { seedOnly() }

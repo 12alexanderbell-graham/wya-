@@ -1229,6 +1229,16 @@ final class TestDriver {
                     ListsStore.shared.change { $0.plans.append(pl) }
                     ListsState.shared.kind = 1; ListsState.shared.open = p.count > 2 && p[2] == "home" ? nil : pl.id
                     NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
+                // itempage <name>: a Places set's place's own page, as its mark's opens it
+                case "itempage":
+                    CollectionStore.shared.load()
+                    for _ in 0 ..< 100 where !CollectionStore.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    let found = CollectionStore.shared.find(p.dropFirst().joined(separator: " "), first: nil, limit: 1).first
+                    NSLog("wya itempage %@ ready %d found %@", p.dropFirst().joined(separator: " "), CollectionStore.shared.ready ? 1 : 0, found?.item.name ?? "nil")
+                    if let f = found {
+                        PlacePageState.shared.open(f.item.key, name: f.item.name, country: f.item.cc,
+                                                   from: CGRect(x: 200, y: 400, width: 44, height: 44))
+                    }
                 // planempty <name>: a plan of that name with no places, on the shelf (its cover from its name)
                 case "planempty":
                     let pl = Plan(name: p.dropFirst().joined(separator: " "), start: "", days: [PlanDay()])
