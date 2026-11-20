@@ -225,8 +225,21 @@ extension PlacePageState.OnePage {
         // it is
         let size = Double(setArea())
         let reach = size > 0 ? min(90, max(2, size.squareRoot() / 2)) : kind == "mountain" ? 10 : 2
+        var lands = [cc.lowercased()]
+        for c in CollectionStore.shared.all { if let i = c.items.first(where: { $0.key == key }) { lands += i.ccs } }
+        if let f = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: max(40, reach))?.file { lands.append(f.lowercased()) }
+        lands = lands.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
+        let unread = lands.filter { ThingStore.shared.things($0) == nil }
+        if !unread.isEmpty {
+            for u in unread { ThingStore.shared.load(u) }
+            let id = key.id
+            Task { @MainActor in
+                for _ in 0 ..< 60 where unread.contains(where: { ThingStore.shared.things($0) == nil }) { try? await Task.sleep(for: .milliseconds(100)) }
+                if self.key.id == id, !unread.contains(where: { ThingStore.shared.things($0) == nil }) { self.loadThing() }
+            }
+        }
         let mine = SIMD2(ll.lat, ll.lon)
-        let near = (ThingStore.shared.things(cc) ?? []).compactMap { o -> (ThingStore.Thing, Double)? in
+        let near = lands.flatMap { ThingStore.shared.things($0) ?? [] }.compactMap { o -> (ThingStore.Thing, Double)? in
             guard o.id != t.id, !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil, !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
             let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
             let dy = (p.lat - mine.x) * 111.2, dx = (p.lon - mine.y) * 111.2 * cos(mine.x * .pi / 180)
