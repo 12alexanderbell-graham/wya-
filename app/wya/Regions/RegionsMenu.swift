@@ -75,9 +75,23 @@ struct RegionsMenu: View {
     /// the rows as the search leaves them: what matches, names starting with what you typed first (the head's own
     /// search order), only countries of the list
     private var shownRows: [RegionsMenuModel.Row] {
-        guard !query.isEmpty else { return model.rows }
+        guard !query.isEmpty else { return Self.yoursFirst(model.rows) }
         let byPlace = Dictionary(model.rows.map { ($0.place, $0) }, uniquingKeysWith: { a, _ in a })
         return SearchResults.matches(map: map, query: query).compactMap { byPlace[$0] }
+    }
+
+    /// THE COUNTRIES YOU KNOW FIRST: the countries you have stamped regions in lead, the most first; then the
+    /// countries you have stamped; then every other, by name. Each group keeps the list's own A to Z within it
+    static func yoursFirst(_ rows: [RegionsMenuModel.Row]) -> [RegionsMenuModel.Row] {
+        let rank = { (r: RegionsMenuModel.Row) -> Int in
+            r.count > 0 ? 0 : MarkStore.shared.state(.country(r.id)).stamped ? 1 : 2
+        }
+        return rows.enumerated().sorted { a, b in
+            let ra = rank(a.element), rb = rank(b.element)
+            if ra != rb { return ra < rb }
+            if ra == 0, a.element.count != b.element.count { return a.element.count > b.element.count }
+            return a.offset < b.offset
+        }.map(\.element)
     }
 
     /// regions of every place whose name matches what was typed (the index the map's search reads)
