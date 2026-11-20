@@ -314,9 +314,13 @@ struct ListsWater: View {
     /// A LIST ON THE SHELF: a tile, its cover (until covers come: the flags of its first four countries, side by side;
     /// none, the glass), its name at the bottom left and how many things at the right
     private func listTile(_ l: MyList) -> some View {
-        tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
-             ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }),
-             spots: things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } },
+        let spots = things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } }
+        let named = spots.isEmpty ? Self.namedTown(l.name) : nil
+        let land = spots.isEmpty && named == nil ? Self.namedCountry(l.name) : nil
+        let ccs = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? Array(l.countries.prefix(4))
+        return tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
+             ccs: ccs, ticks: ListTicks.count(l.items.filter { $0.k != .section }),
+             spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
              places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
     }
     /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil
