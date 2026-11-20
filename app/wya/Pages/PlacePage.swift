@@ -348,6 +348,7 @@ extension PlacePageState.OnePage {
             var pop: [String: Double] = [:], img: [String: String] = [:]
             // (its capital and its names, for a region with no photo to take its capital's or biggest city's)
             var capOf: [String: String] = [:], namesOf: [String: Set<String>] = [:]
+            var nameOf: [String: String] = [:]
             var byName: [String: String] = [:]
             let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
             if case .ok(let rd) = await Servers.data.file("regions/\(cc).json"),
@@ -358,6 +359,7 @@ extension PlacePageState.OnePage {
                     if let f = PlacePageState.photo(r?["img"]) { img[k] = f }
                     for n in (r?["u"] as? [String]) ?? [] { byName[fold(n)] = k; namesOf[k, default: []].insert(fold(n)) }
                     if let c = r?["cap"] as? String { capOf[k] = fold(c) }
+                    if let n = r?["n"] as? String, !n.isEmpty { nameOf[k] = n }
                     if let n = r?["n"] as? String { namesOf[k, default: []].insert(fold(n)) }
                 }
             }
@@ -375,7 +377,7 @@ extension PlacePageState.OnePage {
                 // (the level's word once: over is "Osaka")
                 var line: String = level
                 if let n = pop[key(u) ?? ""] { line = level + " · " + PlacePageState.big(n) + " people" }
-                rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(u.name, word),
+                rows.append(PlacePageState.Inside(key: PlaceKey(.region, u.id), name: PlacePageState.withoutLevel(nameOf[key(u) ?? ""] ?? u.name, word),
                                                   line: line, code: key(u), photo: img[key(u) ?? ""] ?? ""))
                 namesOf[key(u) ?? u.id, default: []].insert(fold(u.name))
             }
