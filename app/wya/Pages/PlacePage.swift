@@ -437,7 +437,12 @@ extension PlacePageState.OnePage {
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
             out.rows.append(("Climate", "\(Int(hi[6].doubleValue.rounded()))° Jul · \(Int(lo[0].doubleValue.rounded()))° Jan"))
         }
-        if let n = t["n"] as? String { out.activities = await PlacePageState.activities(cc, town: n) }
+        if let n = t["n"] as? String {
+            let ll = t["ll"] as? [NSNumber]
+            let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
+            let near = ll.flatMap { $0.count == 2 ? (lat: $0[0].doubleValue, lon: $0[1].doubleValue, km: reach) : nil }
+            out.activities = await PlacePageState.activities(cc, town: n, near: near)
+        }
         // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
         // article's), as a country's page has them
         out.photo = PlacePageState.photo(t["img"])
@@ -634,7 +639,7 @@ extension PlacePageState {
         return intro
     }
 
-    static func activities(_ cc: String, town: String?, first: [String] = []) async -> [Activity] {
+    static func activities(_ cc: String, town: String?, first: [String] = [], near: (lat: Double, lon: Double, km: Double)? = nil) async -> [Activity] {
         // (kept once worked out, beside the listings file's own size: the same file gives the same rows)
         let key = firstKey(first)
         let keep = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -655,7 +660,7 @@ extension PlacePageState {
         }
         var things: Data?
         if case .ok(let td) = await Servers.data.file("native/things/things-\(cc)-3.wyth") { things = td }
-        let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first) }.value
+        let rows = await Task.detached(priority: .userInitiated) { Self.activityRows(d, things, town: town, first: first, near: near) }.value
         let out = rows.map { Activity(name: Self.corrected($0.name, wd: $0.wd), line: $0.line, wd: $0.wd) }
         // (kept only when worked out whole: ranked by the things file, the spellings checked; a list made without
         // them was kept for good)
@@ -715,7 +720,8 @@ extension PlacePageState {
     }
 
     /// the activities' rows (name as the source writes it, cleaned; its Wikidata id; its line), in their order
-    nonisolated static func activityRows(_ d: Data, _ things: Data?, town: String?, first: [String]) -> [(name: String, wd: String?, line: String)] {
+    nonisolated static func activityRows(_ d: Data, _ things: Data?, town: String?, first: [String],
+                                         near: (lat: Double, lon: Double, km: Double)? = nil) -> [(name: String, wd: String?, line: String)] {
         guard let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return [] }
         // the country's things: Wikidata id -> (fame, place in the file)
         var fame: [String: (fame: Int, at: Int)] = [:]
@@ -740,7 +746,21 @@ extension PlacePageState {
         }
         let rest = byCity.keys.sorted().filter { !first.contains($0) }
         let wideOnes = town == nil ? Set(rest.filter { wide(byCity[$0] ?? []) }) : []
-        let cities = town.map { [$0] } ?? (first.filter { byCity[$0] != nil } + rest.filter { !wideOnes.contains($0) } + rest.filter { wideOnes.contains($0) })
+        // (a town's own guide, then the guides whose listings' middle lies within its reach, the nearest first:
+        // Brooklyn's and Manhattan's for New York)
+        let around: [String] = {
+            guard let town, let near else { return [] }
+            return byCity.keys.filter { $0 != town }.compactMap { c -> (String, Double)? in
+                let pts = (byCity[c] ?? []).compactMap { ($0["ll"] as? [NSNumber]).flatMap { $0.count == 2 ? ($0[0].doubleValue, $0[1].doubleValue) : nil } }
+                guard !pts.isEmpty else { return nil }
+                let la = pts.map(\.0).reduce(0, +) / Double(pts.count), lo = pts.map(\.1).reduce(0, +) / Double(pts.count)
+                let dy = (la - near.lat) * 111.2, dx = (lo - near.lon) * 111.2 * cos(near.lat * .pi / 180)
+                let km = (dx * dx + dy * dy).squareRoot()
+                return km <= near.km ? (c, km) : nil
+            }
+            .sorted { $0.1 < $1.1 }.map(\.0)
+        }()
+        let cities = town.map { [$0] + around } ?? (first.filter { byCity[$0] != nil } + rest.filter { !wideOnes.contains($0) } + rest.filter { wideOnes.contains($0) })
         var seen = Set<String>()
         // ranks[r][c]: city c's rows of rank r with their place in the things' file
         typealias Row = (name: String, wd: String?, line: String)
