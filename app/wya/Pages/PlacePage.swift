@@ -294,7 +294,8 @@ extension PlacePageState.OnePage {
             }
         }
         if let v = s("capital") { out.rows.append(("Capital", v)) }
-        if let v = f["population"] as? NSNumber { out.rows.append(("People", PlacePageState.big(v.doubleValue))) }
+        let wbPeople = ((j["worldbank"] as? [String: Any])?["population"] as? [Any])?.first as? NSNumber
+        if let v = wbPeople ?? (f["population"] as? NSNumber) { out.rows.append(("People", PlacePageState.big(v.doubleValue))) }
         if let v = PlacePageState.area(f["area"], cc: cc) { out.rows.append(("Area", v + " km²")) }
         if let z = PlacePageState.zones(f["timezone"], cc: cc) { out.rows.append(z) }
         if let c = f["currency"] as? [[String: Any]], let first = c.first {
