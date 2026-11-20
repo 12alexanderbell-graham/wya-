@@ -10,6 +10,10 @@ import Foundation
 
 extension RealStamps {
     static let made: [String: Stamp] = [
+        // Saint Helena: the seaport's entry stamp, 2017 (Commons), its wirebirds traced from it,
+        "sh": Stamp(id: "sh", w: 480, h: 380, ink: "#2b2b2b", round: false, slots: [
+            Slot(what: .date("{dd} {MON} {yyyy}"), x: 240, y: 240, font: .barlow, size: 46, weight: 600, anchor: .middle, tracking: 3, fill: "#2b2b2b", m: .identity, fit: 330, length: nil)
+        ]),
         // Guinea: the police's entry stamp, 1993 (Commons),
         "gn": Stamp(id: "gn", w: 440, h: 250, ink: "#34508e", round: false, slots: [
             Slot(what: .date("{d}-{M}-{yy}"), x: 290, y: 170, font: .barlow, size: 36, weight: 500, anchor: .middle, tracking: 2, fill: "#34508e", m: .identity, fit: 200, length: nil)
