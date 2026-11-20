@@ -617,46 +617,8 @@ extension PlacePageState.OnePage {
         // ITS HIGHLIGHTS: the best known sights with a photo near it, 12 km round a city of a million, 5 km round a
         // smaller one, as a region's page has them
         if let ll = t["ll"] as? [NSNumber], ll.count == 2 {
-            let lat = ll[0].doubleValue, lon = ll[1].doubleValue
             let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
-            ThingStore.shared.load(cc)
-            for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-            let picks = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
-                guard !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil,
-                      !["station", "stay", "route", "event", "city", "area"].contains(o.kindName) else { return false }
-                let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
-                let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
-                return dx * dx + dy * dy <= reach * reach
-            }
-            // (as well known, the sights file's own order, as a region's)
-            .sorted { a, b in
-                let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
-                let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
-                return sa != sb ? !sa : va != vb ? !va : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset
-            }
-            .map(\.element)
-            .prefix(8)
-            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
-            var seen = Set(picks.map(\.id))
-            let extra = ["peaks", "famouslakes", "famousislands", "parks", "landmarks"].flatMap { id in
-                (CollectionStore.shared.collection(id)?.items ?? []).filter { i in
-                    guard i.fame == 3, !i.photo.isEmpty else { return false }
-                    let p = EqualEarth.unproject(SIMD2(Double(i.at.x), Double(i.at.y)))
-                    let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
-                    return dx * dx + dy * dy <= reach * reach && PlacePageState.photo(i.photo) != nil && ThingStore.shared.thing("wd:" + i.id) == nil
-                }
-            }.filter { seen.insert($0.id).inserted }.prefix(2).map { (i: CollectionStore.Item) -> PlacePageState.Highlight in
-                let name: String = i.name.prefix(1).uppercased() + i.name.dropFirst()
-                let high: String = i.height > 0 ? (f.string(from: i.height as NSNumber) ?? "") + " m high" : ""
-                return PlacePageState.Highlight(id: i.id, name: name, line: high, photo: PlacePageState.photo(i.photo))
-            }
-            // (after the city's best known sight: Paris opened on the Île de la Cité before the Eiffel Tower)
-            var all = picks.map { o in
-                let l = PlacePageState.brief(o.line, 60)
-                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
-            }
-            all.insert(contentsOf: extra, at: min(1, all.count))
-            out.highlights = Array(all.prefix(8))
+            out.highlights = await nearHighlights(cc, lat: ll[0].doubleValue, lon: ll[1].doubleValue, reach: reach)
         }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id else { return }
@@ -674,7 +636,48 @@ extension PlacePageState.OnePage {
 
     /// A TOWN THE CITIES' FILE DOES NOT HAVE: what the towns' index knows of it (its people; its region is already
     /// under its name), and its guide's opening words where Wikivoyage has an article near it (its local time from
-    /// the nearest town the cities' file has, which shares its clock)
+    /// the nearest town the cities' file has, which shares its clock) A TOWN'S HIGHLIGHTS: the best known sights with
+    /// a photo within `reach` km of it, and the best known of the sets' places that no country's things hold
+    private func nearHighlights(_ cc: String, lat: Double, lon: Double, reach: Double) async -> [PlacePageState.Highlight] {
+        ThingStore.shared.load(cc)
+        for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        let picks = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
+            guard !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil,
+                  !["station", "stay", "route", "event", "city", "area"].contains(o.kindName) else { return false }
+            let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
+            let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
+            return dx * dx + dy * dy <= reach * reach
+        }
+        // (as well known, the sights file's own order, as a region's)
+        .sorted { a, b in
+            let sa = PlacePageState.isStudy(a.element.name), sb = PlacePageState.isStudy(b.element.name)
+            let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
+            return sa != sb ? !sa : va != vb ? !va : a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset
+        }
+        .map(\.element)
+        .prefix(8)
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
+        var seen = Set(picks.map(\.id))
+        let extra = ["peaks", "famouslakes", "famousislands", "parks", "landmarks"].flatMap { id in
+            (CollectionStore.shared.collection(id)?.items ?? []).filter { i in
+                guard i.fame == 3, !i.photo.isEmpty else { return false }
+                let p = EqualEarth.unproject(SIMD2(Double(i.at.x), Double(i.at.y)))
+                let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
+                return dx * dx + dy * dy <= reach * reach && PlacePageState.photo(i.photo) != nil && ThingStore.shared.thing("wd:" + i.id) == nil
+            }
+        }.filter { seen.insert($0.id).inserted }.prefix(2).map { (i: CollectionStore.Item) -> PlacePageState.Highlight in
+            let name: String = i.name.prefix(1).uppercased() + i.name.dropFirst()
+            let high: String = i.height > 0 ? (f.string(from: i.height as NSNumber) ?? "") + " m high" : ""
+            return PlacePageState.Highlight(id: i.id, name: name, line: high, photo: PlacePageState.photo(i.photo))
+        }
+        // (after the city's best known sight: Paris opened on the Île de la Cité before the Eiffel Tower)
+        var all = picks.map { o in
+            let l = PlacePageState.brief(o.line, 60)
+            return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+        }
+        all.insert(contentsOf: extra, at: min(1, all.count))
+        return Array(all.prefix(8))
+    }
     fileprivate func loadSmallTown(_ cc: String, id: String, near all: [[String: Any]]) async {
         guard let t = TownIndex.shared.hit(id), key.id == id else { return }
         var out = PlacePageState.Facts()
@@ -697,6 +700,9 @@ extension PlacePageState.OnePage {
         if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon, others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: t.name), 620); out.proseWikivoyage = true
         }
+        // (its highlights, 5 km round it as a smaller city's, and its photo the first of them's: Hallstatt, Positano and Zermatt opened bare)
+        out.highlights = await nearHighlights(cc, lat: t.lat, lon: t.lon, reach: 5)
+        if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id, !out.rows.isEmpty || !out.prose.isEmpty else { return }
         facts = out
         settled = true
