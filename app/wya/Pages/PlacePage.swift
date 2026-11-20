@@ -858,7 +858,9 @@ extension PlacePageState {
         }
         if t.hasPrefix("thumb ") { t = String(t.dropFirst(6)) }
         let head = t.prefix(300)
-        if t.hasPrefix("thumb|") || head.contains("px|") || head.contains("thumb|"), let bar = head.range(of: "|", options: .backwards) {
+        // (only marks that open the text: one later on,, is the cleaner's below)
+        let opens = head.firstIndex(of: "|").map { head.distance(from: head.startIndex, to: $0) < 30 } ?? false
+        if opens, t.hasPrefix("thumb|") || head.contains("px|") || head.contains("thumb|"), let bar = head.range(of: "|", options: .backwards) {
             let rest = String(t[bar.upperBound...])
             let n = NSRegularExpression.escapedPattern(for: name)
             if let r = rest.range(of: "\\b" + n + "( \\(| is | was | are |, )", options: .regularExpression),
@@ -868,7 +870,27 @@ extension PlacePageState {
         }
         // (its own name dropped before "is":)
         if t.hasPrefix("is ") || t.hasPrefix("are ") { t = name + " " + t }
+        t = unmarked(t)
         return t.isEmpty ? s : t
+    }
+    nonisolated static func unmarked(_ s: String) -> String {
+        func re(_ x: String, _ p: String, _ w: String) -> String { x.replacingOccurrences(of: p, with: w, options: .regularExpression) }
+        var t = s
+        t = re(t, "\\{\\{[^{}]*(\\{[^{}]*\\}[^{}]*)*\\}\\}\\}?", "")
+        t = re(re(t, "\\[\\[[^\\]|]*\\|([^\\]]*)\\]\\]", "$1"), "\\[\\[([^\\]]*)\\]\\]", "$1")
+        t = re(t, "\\(?\\[?https?://[^\\s\\])]*\\s*\\]?\\)?", "")
+        while let r = t.range(of: "]]") {
+            let before = t[..<r.lowerBound]
+            if let dot = before.range(of: ". ", options: .backwards), before.distance(from: dot.upperBound, to: before.endIndex) < 200 {
+                t.removeSubrange(dot.upperBound..<r.upperBound)
+            } else { t.removeSubrange(r) }
+        }
+        if let r = t.range(of: "(\\d+px\\||thumb\\||right\\||left\\||upright\\||center\\||noborder\\|)+", options: .regularExpression) {
+            let before = t[..<r.lowerBound].trimmingCharacters(in: .whitespaces)
+            t = before.count >= 60 || before.hasSuffix(".") ? before : String(t[r.upperBound...])
+        }
+        t = re(re(re(re(t, "\\[\\[|\\]\\]", ""), " {2,}", " "), " ([.,;:)])", "$1"), "\\( *\\)", "")
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     static func activities(_ cc: String, town: String?, first: [String] = [], near: (lat: Double, lon: Double, km: Double)? = nil) async -> [Activity] {
