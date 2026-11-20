@@ -714,6 +714,27 @@ extension PlacePageState {
         return t.isEmpty ? s : t
     }
 
+    /// A LINE WITH A HOLE IN IT CUT BEFORE THE HOLE: the guides' text lost what their templates said (,,), about 600
+    /// times; a sentence with a word then a space then a mark is cut off with all after it, and a line left with
+    /// nothing keeps only its place
+    nonisolated static func mended(_ line: String) -> String {
+        guard let re = holeMark, re.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) != nil else { return line }
+        let parts = line.components(separatedBy: " \u{00B7} ")
+        let head = parts.count > 1 ? parts[0] : nil
+        let text = parts.count > 1 ? parts.dropFirst().joined(separator: " \u{00B7} ") : line
+        var kept = ""
+        for piece in text.split(separator: ". ", omittingEmptySubsequences: false).map(String.init) {
+            let sentence = piece
+            if re.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)) != nil { break }
+            kept += (kept.isEmpty ? "" : ". ") + sentence
+        }
+        if !kept.isEmpty, !kept.hasSuffix("."), !kept.hasSuffix("\u{2026}") { kept += "." }
+        if let head { return kept.isEmpty ? head : head + " \u{00B7} " + kept }
+        return kept
+    }
+    nonisolated private static let holeMark = try? NSRegularExpression(
+        pattern: "\\b(?:a|an|the|and|of|is|are|was|were|to|in|by|from|with|as|at|on) [,.;:]|\\b(?:a|an|the)[,.;:]", options: [.caseInsensitive])
+
     nonisolated static func plain(_ s: String, name: String? = nil) -> String {
         var t = Self.withoutHatnote(s)
         for (e, c) in [("&amp;", "&"), ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&nbsp;", " "),
@@ -1601,7 +1622,8 @@ private struct InsideList: View {
         if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-            ForEach(rows.prefix(limit), id: \.self) { r in row(r) }
+            let alike = all.count > 1 && Set(all.map(\.line)).count == 1
+            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike) }
             if rows.count > limit {
                 Button { shown += 10 } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -1612,12 +1634,12 @@ private struct InsideList: View {
         }
     }
 
-    private func row(_ r: PlacePageState.Inside) -> some View {
+    private func row(_ r: PlacePageState.Inside, line: Bool = true) -> some View {
         let s = MarkStore.shared.state(r.key)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
-                if !r.line.isEmpty { Text(r.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
+                if line, !r.line.isEmpty { Text(PlacePageState.mended(r.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
             }
             Spacer(minLength: 8)
             Button {
@@ -1793,7 +1815,7 @@ private struct ActivitiesList: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                     if !a.line.isEmpty {
-                        Text(a.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        Text(PlacePageState.mended(a.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
                 // (one gap between rows whatever their lines: a row of one line was centred in 52 pt, so the row
