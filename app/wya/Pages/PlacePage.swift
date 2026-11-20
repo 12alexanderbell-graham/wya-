@@ -21,6 +21,8 @@ final class PlacePageState {
         var cities: [Inside] = []
         /// Highlights (16.4.6): the country's World Heritage sites for now (the server's heritage list)
         var highlights: [Highlight] = []
+        /// the cards' title: a country's World Heritage sites are its, a sight's neighbours
+        var highlightsTitle = "Highlights"
         /// Activities (16.4.7): Wikivoyage's "see" and "do" listings, a town's sights first (a country's from all its cities
         /// in turn, a town's its own)
         var activities: [Activity] = []
@@ -212,6 +214,25 @@ extension PlacePageState.OnePage {
             }
         } else {
             out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
+        }
+        // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
+        // it is
+        let mine = SIMD2(ll.lat, ll.lon)
+        let near = (ThingStore.shared.things(cc) ?? []).compactMap { o -> (ThingStore.Thing, Double)? in
+            guard o.id != t.id, !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil, !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
+            let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
+            let dy = (p.lat - mine.x) * 111.2, dx = (p.lon - mine.y) * 111.2 * cos(mine.x * .pi / 180)
+            let km = (dx * dx + dy * dy).squareRoot()
+            return km <= 2 ? (o, km) : nil
+        }
+        .sorted { a, b in a.0.fame != b.0.fame ? a.0.fame > b.0.fame : a.1 < b.1 }
+        .prefix(6)
+        if !near.isEmpty {
+            out.highlights = near.map { o, km in
+                let d = km < 1 ? "\(Int((km * 1000 / 50).rounded()) * 50) m away" : String(format: "%.1f km away", km)
+                return PlacePageState.Highlight(id: o.id, name: o.name, line: d, photo: PlacePageState.photo(o.photo))
+            }
+            out.highlightsTitle = "Nearby"
         }
         facts = out
         // ITS TEXT: the guide's own listing of it, where a Wikivoyage guide lists it (by its Wikidata id, else its
@@ -1208,7 +1229,7 @@ private struct PageLayer: View {
                 marking(key)
                 if let f = page.facts, !f.prose.isEmpty { PageOpening(text: f.prose).id(f.prose) }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
-                if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, L: L).id("highlights") }
+                if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, title: f.highlightsTitle, L: L).id("highlights") }
                 // ("lists": where the head's search takes the page, the first of its long lists)
                 // (where the first long list starts: the head's search brings its title under the field)
                 if let f = page.facts, !f.activities.isEmpty {
@@ -1406,10 +1427,10 @@ private struct PageLayer: View {
     /// HIGHLIGHTS (16.4.6): a sideways row, one card wide with the next peeking 24 pt; the photo fills the card's top
     /// (square corners, 16:10; real photos from Wikimedia Commons, credited in Sources), its name 17 pt semibold and one
     /// line 15 pt black 50% under it; the plus at the photo's top right wishes it
-    private func highlights(_ all: [PlacePageState.Highlight], L: Layout) -> some View {
+    private func highlights(_ all: [PlacePageState.Highlight], title: String = "Highlights", L: Layout) -> some View {
         let w = L.W - 32 - 24
         return VStack(alignment: .leading, spacing: 12) {
-            Text("Highlights").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(all, id: \.self) { h in highlightCard(h, w: w) }
