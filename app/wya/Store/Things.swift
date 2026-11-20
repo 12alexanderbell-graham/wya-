@@ -22,13 +22,25 @@ final class ThingStore {
         /// `m:wd:Q1234` (Part 0.2.2's thing key, its source's id)
         var key: PlaceKey { PlaceKey(.thing, "wd:" + id) }
         var kindName: String { ThingStore.kinds[min(max(kind, 0), 11)] }
+        func called(_ n: String) -> Thing { Thing(id: id, name: n, kind: kind, at: at, fame: fame, line: line, photo: photo) }
     }
     private(set) var version = 0
     @ObservationIgnored private var byCC: [String: [Thing]] = [:]
     @ObservationIgnored private var loading = Set<String>()
 
     func things(_ cc: String) -> [Thing]? { byCC[cc] }
-    /// one thing by its key's id ("wd:Q1234") among the countries read
+
+    /// A THING FOUND BY THE NAME PEOPLE KNOW IT BY: picked in search as, it is called so on the map, its card and its
+    /// page for the rest of the session, not; its own name stays everywhere it was not found so (ThingIndex's other
+    /// names)
+    @ObservationIgnored private var foundAs: [String: String] = [:]
+    func call(_ id: String, _ name: String) {
+        guard foundAs[id] != name else { return }
+        foundAs[id] = name
+        for (cc, all) in byCC { if let k = all.firstIndex(where: { $0.id == id }) { byCC[cc]![k] = all[k].called(name) } }
+        version += 1
+    }
+    /// one thing by its key's id  among the countries read
     func thing(_ id: String) -> (cc: String, thing: Thing)? {
         let q = id.hasPrefix("wd:") ? String(id.dropFirst(3)) : id
         for (cc, all) in byCC { if let t = all.first(where: { $0.id == q }) { return (cc, t) } }
@@ -73,7 +85,7 @@ final class ThingStore {
                 me.loading.remove(cc)
                 guard let found else { me.failedAt[cc] = Date(); return }
                 me.failedAt[cc] = nil
-                me.byCC[cc] = found
+                me.byCC[cc] = found.map { me.foundAs[$0.id].map($0.called) ?? $0 }
                 me.version += 1
             }
         }

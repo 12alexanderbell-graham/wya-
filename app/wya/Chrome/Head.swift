@@ -1687,6 +1687,8 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
         guard let h else { return }
+        // (found by the name people know it by: called so from now on)
+        if let own = ThingIndex.shared.hit(h.id)?.name, own != h.name { ThingStore.shared.call(h.id, h.name) }
         if map.pinsMode { pinsGo(lat: h.lat, lon: h.lon, metres: 4_000, name: h.name) }
         else if !map.placesMode { ContentView.openThing(file: h.file, id: h.id, head: head, map: map) }
         else { map.showThing(file: h.file, id: h.id) }
