@@ -525,6 +525,50 @@ extension PlacePageState.OnePage {
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
         }
+        // ITS HIGHLIGHTS: the best known sights with a photo inside its own outline (its units' rings, even-odd), as
+        // cards like a country's World Heritage
+        var rings: [[SIMD2<Double>]] = []
+        for lv in RegionCatalog.shared.used(cc) {
+            if let f = await RegionCatalog.shared.fetch(cc, row: lv.row) {
+                let mine = f.units.filter { $0.id == key.id }
+                if !mine.isEmpty { rings = mine.flatMap(\.rings); break }
+            }
+        }
+        if !rings.isEmpty {
+            ThingStore.shared.load(cc)
+            for _ in 0 ..< 40 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            func inside(_ p: SIMD2<Double>) -> Bool {
+                var odd = false
+                for r in rings where r.count > 2 {
+                    var j = r.count - 1
+                    for i in 0 ..< r.count {
+                        let a = r[i], b = r[j]
+                        if (a.y > p.y) != (b.y > p.y), p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x { odd.toggle() }
+                        j = i
+                    }
+                }
+                return odd
+            }
+            let picks = (ThingStore.shared.things(cc) ?? []).filter { o in
+                !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil && !["station", "stay", "route", "event", "city", "area"].contains(o.kindName)
+            }
+            // (as well known, a landmark, water, nature or a mountain before a spot or anything else: Lombardy opened on
+            // the San Siro stadium)
+            .sorted { a, b in
+                let rank = { (k: String) in ["landmark": 0, "water": 1, "nature": 2, "mountain": 3, "spot": 4][k] ?? 5 }
+                return a.fame != b.fame ? a.fame > b.fame : rank(a.kindName) < rank(b.kindName)
+            }
+            .lazy.filter { o in
+                let ll = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
+                return inside(SIMD2(ll.lon, ll.lat))
+            }
+            .prefix(8)
+            out.highlights = picks.map { o in
+                // (Wikidata's line starts small,: a capital, as a sentence under a name)
+                let l = PlacePageState.brief(o.line, 60)
+                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+            }
+        }
         facts = out
         settled = true
     }
