@@ -560,6 +560,11 @@ extension PlacePageState.OnePage {
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
         }
+        if out.photo == nil {
+            let cap = (r["cap"] as? String).map(fold)
+            out.photo = (out.cities.first { cap != nil && fold($0.name) == cap && !$0.photo.isEmpty }
+                         ?? out.cities.first { !$0.photo.isEmpty }).map(\.photo)
+        }
         // ITS HIGHLIGHTS: the best known sights with a photo inside its own outline (its units' rings, even-odd), as
         // cards like a country's World Heritage
         var rings: [[SIMD2<Double>]] = []
