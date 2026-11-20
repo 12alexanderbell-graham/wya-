@@ -786,7 +786,9 @@ struct ContentView: View {
             Task { @MainActor in
                 let up = await RegionStamps.parents(of: u, in: sc).first?.1
                 guard map.regionScene === sc, map.regionPressed == u else { return }
-                RegionCardState.shared.open(key, name: name, parents: up.map { "\($0), \(country)" } ?? country, place: sc.place, map: map)
+                // (its region in English too: under Barcelona's province)
+                let cc = map.world?.places[sc.place].id ?? ""
+                RegionCardState.shared.open(key, name: name, parents: up.map { "\(RegionNames.english(cc, $0)), \(country)" } ?? country, place: sc.place, map: map)
             }
             return
         }
