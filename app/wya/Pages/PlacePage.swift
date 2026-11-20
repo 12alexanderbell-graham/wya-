@@ -1346,16 +1346,21 @@ extension PlacePageState {
     static func listingText(_ cc: String, wd: String?, name: String) async -> String? {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
-        var byName: String?
+        var byID: [String] = [], byName: [String] = []
         for k in all.keys.sorted() {
             for l in all[k] ?? [] {
                 guard let t = l["d"] as? String, t.count > 60 else { continue }
-                if let wd, (l["wd"] as? String) == wd { return t }
-                if byName == nil, let n = l["n"] as? String,
-                   n.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame { byName = t }
+                if let wd, (l["wd"] as? String) == wd { byID.append(t) }
+                else if let n = l["n"] as? String, n.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame { byName.append(t) }
             }
         }
-        return byName
+        let short = name.replacingOccurrences(of: "^(Mount|Mt\\.?|Lake|The) ", with: "", options: .regularExpression)
+        func score(_ t: String) -> Int { (t.localizedCaseInsensitiveContains(short) ? 10_000 : 0) + t.count }
+        guard var best = (byID.isEmpty ? byName : byID).max(by: { score($0) < score($1) }) else { return nil }
+        for (it, verb) in [("It is ", "is "), ("It's ", "is "), ("It was ", "was ")] where best.hasPrefix(it) {
+            best = name + " " + verb + best.dropFirst(it.count)
+        }
+        return best
     }
 
     /// A PAGE'S PHOTO: the first of the place's pictures that is a photo of it as you would see it there; never the
