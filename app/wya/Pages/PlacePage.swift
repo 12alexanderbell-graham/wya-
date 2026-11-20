@@ -458,15 +458,19 @@ extension PlacePageState.OnePage {
             let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
             ThingStore.shared.load(cc)
             for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-            let rank = { (k: String) in ["landmark": 0, "water": 1, "nature": 2, "mountain": 3, "spot": 4][k] ?? 5 }
-            let picks = (ThingStore.shared.things(cc) ?? []).filter { o in
+            let picks = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
                 guard !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil,
                       !["station", "stay", "route", "event", "city", "area"].contains(o.kindName) else { return false }
                 let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
                 let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
                 return dx * dx + dy * dy <= reach * reach
             }
-            .sorted { a, b in a.fame != b.fame ? a.fame > b.fame : rank(a.kindName) < rank(b.kindName) }
+            // (as well known, the sights file's own order, as a region's)
+            .sorted { a, b in
+                let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
+                return a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
+            }
+            .map(\.element)
             .prefix(8)
             out.highlights = picks.map { o in
                 let l = PlacePageState.brief(o.line, 60)
@@ -578,15 +582,14 @@ extension PlacePageState.OnePage {
                 }
                 return odd
             }
-            let picks = (ThingStore.shared.things(cc) ?? []).filter { o in
+            let picks = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
                 !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil && !["station", "stay", "route", "event", "city", "area"].contains(o.kindName)
             }
-            // (as well known, a landmark, water, nature or a mountain before a spot or anything else: Lombardy opened on
-            // the San Siro stadium)
             .sorted { a, b in
-                let rank = { (k: String) in ["landmark": 0, "water": 1, "nature": 2, "mountain": 3, "spot": 4][k] ?? 5 }
-                return a.fame != b.fame ? a.fame > b.fame : rank(a.kindName) < rank(b.kindName)
+                let va = PlacePageState.isVenue(a.element.name, a.element.line), vb = PlacePageState.isVenue(b.element.name, b.element.line)
+                return a.element.fame != b.element.fame ? a.element.fame > b.element.fame : va != vb ? !va : a.offset < b.offset
             }
+            .map(\.element)
             .lazy.filter { o in
                 let ll = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
                 return inside(SIMD2(ll.lon, ll.lat))
@@ -713,6 +716,12 @@ extension PlacePageState {
     }
     #endif
 
+    /// a sports ground (its name or Wikidata's line says so): as well known as a cathedral it still comes after it,
+    /// as a sight to travel for
+    nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
+        (name + " " + line).range(of: #"\b(stadium|stadio|estadio|arena|sports venue|multisports venue|racecourse|race track|circuit|ballpark)\b"#,
+                                  options: [.regularExpression, .caseInsensitive]) != nil
+    }
     /// a pass or a city card (,,): a ticket, not a thing to see or do
     nonisolated static func isTicket(_ name: String) -> Bool {
         // (and, one word)
@@ -726,8 +735,12 @@ extension PlacePageState {
         // the country's things: Wikidata id -> (fame, place in the file)
         var fame: [String: (fame: Int, at: Int)] = [:]
         if let td = things, let rows = try? JSONSerialization.jsonObject(with: td) as? [[Any]] {
-            for (i, r) in rows.enumerated() where r.count > 5 {
-                if let q = r[0] as? String, let f = (r[5] as? NSNumber)?.intValue, fame[q] == nil { fame[q] = (f, i) }
+            // (a sports ground after the rest of its tier: Rome's Olympic Stadium stood third)
+            for (i, r) in rows.enumerated() where r.count > 6 {
+                if let q = r[0] as? String, let f = (r[5] as? NSNumber)?.intValue, fame[q] == nil {
+                    let venue = isVenue(r[1] as? String ?? "", r[6] as? String ?? "")
+                    fame[q] = (f, (venue ? 1_000_000 : 0) + i)
+                }
             }
         }
         let city = { (k: String) in k.split(separator: "/", maxSplits: 1).first.map(String.init) ?? k }
