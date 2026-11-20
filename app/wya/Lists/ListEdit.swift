@@ -2,7 +2,8 @@ import SwiftUI
 
 /// ADDING TO A LIST, IN THE LIST: a field at the list's foot. As you type, the countries, regions and towns of that
 /// name come under it, each with its flag and what it is; one tapped goes in with its country (its flag, its tick).
-/// Return with nothing picked puts in what was typed, as it is (a dish, a thing, a link).
+/// Return with nothing picked puts in what was typed, as it is (a dish, a thing, a link). The best known sights are
+/// found too.
 struct ListAddRow: View {
     let listID: String
     @State private var text = ""
@@ -38,7 +39,7 @@ struct ListAddRow: View {
                 .accessibilityAddTraits(.isButton)
             }
         }
-        .onAppear { TownIndex.shared.load(); RegionIndex.shared.load() }
+        .onAppear { TownIndex.shared.load(); RegionIndex.shared.load(); ThingIndex.shared.load() }
     }
 
     /// what is typed, found: countries first (the start of their name), then regions, then towns
@@ -51,6 +52,11 @@ struct ListAddRow: View {
         let starts = CountryEntity.all.filter { fold($0.name).hasPrefix(fq) }
         let inside = CountryEntity.all.filter { !fold($0.name).hasPrefix(fq) && fold($0.name).contains(fq) }
         for c in (starts + inside).prefix(2) { out.append(Found(name: c.name, cc: c.id, line: "Country")) }
+        _ = ThingIndex.shared.ready
+        for h in ThingIndex.shared.hits(q, open: nil, limit: 3, near: false).filter({ $0.fame >= 2 }).prefix(2) {
+            let cc = h.file.lowercased()
+            out.append(Found(name: h.name, cc: cc, line: CountryEntity(id: cc).name))
+        }
         _ = RegionIndex.shared.ready; _ = TownIndex.shared.ready
         // (towns before regions: Tbilisi the city before Tbilisi the region; both shown, each saying what it is)
         for t in TownIndex.shared.hits(q, open: nil, limit: 3) {
