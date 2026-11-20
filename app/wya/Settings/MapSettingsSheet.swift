@@ -477,6 +477,8 @@ struct SourcesPage: View {
         .init(name: "IANA tz database", what: "Each country's clocks", licence: "Public domain", url: "https://www.iana.org/time-zones"),
         .init(name: "Solar System Scope", what: "The planets' surfaces, from NASA's data, resized", licence: "CC BY 4.0",
               url: "https://www.solarsystemscope.com/textures/"),
+        .init(name: "Squiresy92, on Wikimedia Commons", what: "Norfolk Island's arms, on its stamp", licence: "CC BY-SA 4.0",
+              url: "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Norfolk_Island.svg"),
         .init(name: "I.fekry, on Freesound", what: "The stamp's sound", licence: "CC0", url: "https://freesound.org/s/470710/"),
         .init(name: "SpaceJoe, on Freesound", what: "The page's sound", licence: "CC0", url: "https://freesound.org/s/484968/"),
         .init(name: "qubodup, on Freesound", what: "The passport closing", licence: "CC0", url: "https://freesound.org/s/862315/"),
