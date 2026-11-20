@@ -197,7 +197,7 @@ extension PlacePageState.OnePage {
         // (its own line is already under its name; no prose repeating it) (a set that says what it is names it: Lake
         // Baikal read)
         let kind = setKind() ?? t.kindName
-        if !["spot", "other", "area"].contains(kind), !what.lowercased().contains(kind) {
+        if !["spot", "other", "area", "landmark"].contains(kind), !what.lowercased().contains(kind) {
             out.rows.append(("Kind", kind.prefix(1).uppercased() + kind.dropFirst()))
         }
         out.rows += setFacts()
