@@ -202,21 +202,22 @@ struct ProfileStatsList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(all.enumerated()), id: \.offset) { i, g in
-                    Text(g.0).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-                        .padding(.top, i == 0 ? 8 : 28).padding(.bottom, 4)
+                    // (a size and a weight over its stats' bold names, so it still reads as their title)
+                    Text(g.0).font(.title2.weight(.bold)).foregroundStyle(Palette.ink)
+                        .padding(.top, i == 0 ? 8 : 36).padding(.bottom, 4)
                         .edgeRow()
                         .accessibilityAddTraits(.isHeader)
                     ForEach(g.1) { r in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(r.label).font(.body).foregroundStyle(Palette.ink)
+                            Text(r.label).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 8)
                             // (a long value goes onto a second line, never cut off:)
                             value(r.value).lineLimit(3).multilineTextAlignment(.trailing)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        .padding(.vertical, 10)
-                        .frame(minHeight: 44)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: 34)
                         .edgeRow()
                         .accessibilityElement(children: .combine)
                     }
@@ -239,13 +240,13 @@ struct ProfileStatsList: View {
         .frame(width: width, height: h, alignment: .top)
         .frame(width: width, height: room, alignment: .top)
     }
-    /// : the count in black, "of 58" at 50%; anything else as it is
+    /// : the count in black, "of 58" at 50%; anything else as it is; never bold (the stat's name is)
     private func value(_ v: String) -> Text {
         if let r = v.range(of: " of "), v[..<r.lowerBound].allSatisfy({ $0.isNumber || $0 == "," }) {
-            return Text(v[..<r.lowerBound]).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
+            return Text(v[..<r.lowerBound]).font(.body.monospacedDigit()).foregroundStyle(Palette.ink)
                 + Text(" of " + v[r.upperBound...]).font(.body.monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
         }
-        return Text(v).font(.body.weight(.semibold).monospacedDigit()).foregroundStyle(Palette.ink)
+        return Text(v).font(.body.monospacedDigit()).foregroundStyle(Palette.ink)
     }
 }
 
