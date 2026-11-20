@@ -30,8 +30,11 @@ final class RegionIndex {
         loading = true
         Task.detached(priority: .userInitiated) {
             var out: [(String, Hit)] = []
-            if case .ok(let d) = await Servers.data.file("native/regions/regions-index-2.wyri"),
-               let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
+            var data: Data?
+            for f in ["native/regions/regions-index-3.wyri", "native/regions/regions-index-2.wyri"] where data == nil {
+                if case .ok(let d) = await Servers.data.file(f) { data = d }
+            }
+            if let d = data, let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
                 for r in all {
                     guard r.count >= 4, let n = r[0] as? String, let p = r[1] as? String, let id = r[3] as? String else { continue }
                     let h = Hit(name: n, place: p, row: (r[2] as? NSNumber)?.intValue ?? 1, id: id)
