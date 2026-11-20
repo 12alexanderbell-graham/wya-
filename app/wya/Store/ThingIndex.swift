@@ -82,7 +82,7 @@ final class ThingIndex {
             let coded = out.contains { !$0.1.isEmpty }
             await MainActor.run {
                 let me = ThingIndex.shared
-                me.rows = out
+                me.rows = out; me.famous = nil
                 // (a long formal name with a much shorter name people know: the known one on the map, cards and pages)
                 ThingStore.shared.know(Self.shorter(out))
                 (me.nameBytes, me.nameStart, me.anyCodes) = (bytes, start, coded)
@@ -144,30 +144,40 @@ final class ThingIndex {
         if h.isEmpty, near, q.count >= 4 {
             let typed = Array(q.utf8)
             var close: [(Hit, Int)] = []
+            // (over the names' bytes already kept, not each name made into an array again on every keystroke)
             for (n, r) in rows.enumerated() {
-                let f = Array(r.folded.utf8)
-                var i = 0
-                while i < f.count {
+                let lo = Int(nameStart[n]), hi = Int(nameStart[n + 1])
+                var i = lo
+                while i < hi {
                     var j = i
-                    while j < f.count, f[j] != 32 { j += 1 }
-                    if Self.nearStart(typed, f[i ..< j]) { close.append((r.hit, n)); break }
+                    while j < hi, nameBytes[j] != 32 { j += 1 }
+                    if j - i >= typed.count - 1, Self.nearStart(typed, nameBytes[i ..< j]) { close.append((r.hit, n)); break }
                     i = j + 1
                 }
             }
             var once = Set<String>()
             h = Array(close.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.map(\.0).filter { once.insert($0.id).inserted }.prefix(limit))
         }
-        // A FAMOUS NAME SPELT A LITTLE WRONG, WORDS AND ALL: the best known things whose name, or the part of it from
-        // a word's start, is what was typed give or take one slip (two from eight letters), a swap counting as one
+        // A FAMOUS NAME SPELT A LITTLE WRONG, WORDS AND ALL: the best known things (fame 3) whose name, or the part
+        // of it from a word's start, is what was typed give or take one slip (two from eight letters), a swap
+        // counting as one
         if h.isEmpty, near, q.count >= 5 {
             let typed = Array(q), most = q.count >= 8 ? 2 : 1
             var close: [(Hit, Int, Int)] = []
-            for (n, r) in rows.enumerated() where r.hit.fame >= 2 {
-                let f = Array(r.folded)
-                var starts = [0]
-                for (i, c) in f.enumerated() where c == " " && i + 1 < f.count { starts.append(i + 1) }
+            if famous == nil {
+                famous = rows.enumerated().compactMap { n, r in
+                    guard r.hit.fame >= 3 else { return nil }
+                    let f = Array(r.folded)
+                    var st = [0]
+                    for (i, c) in f.enumerated() where c == " " && i + 1 < f.count { st.append(i + 1) }
+                    return (n, f, st)
+                }
+            }
+            for (n, f, starts) in famous ?? [] {
+                let r = rows[n]
                 var best = Int.max
-                for s0 in starts {
+                // (from a word starting as typed, or with its two first letters swapped: a wrong first letter is rare)
+                for s0 in starts where f[s0] == typed[0] || (typed.count > 1 && f[s0] == typed[1]) {
                     for len in [typed.count - 1, typed.count, typed.count + 1] where len > 0 && s0 + len <= f.count {
                         best = min(best, Self.slips(typed, Array(f[s0 ..< s0 + len]), most))
                     }
@@ -180,6 +190,21 @@ final class ThingIndex {
         }
         last = Array(([(q, open, near, h)] + last).prefix(2))
         return h
+    }
+    /// how near a name is to what was typed: the fewest slips between it and the name, or the name's part from a
+    /// word's start, of about its length (up to 3)
+    nonisolated static func nearness(_ typed: String, _ name: String) -> Int {
+        let t = Array(typed.townFolded), f = Array(name.townFolded)
+        guard !t.isEmpty else { return 3 }
+        var starts = [0]
+        for (i, c) in f.enumerated() where c == " " && i + 1 < f.count { starts.append(i + 1) }
+        var best = 3
+        for s0 in starts {
+            for len in [t.count - 1, t.count, t.count + 1] where len > 0 && s0 + len <= f.count {
+                best = min(best, slips(t, Array(f[s0 ..< s0 + len]), 2))
+            }
+        }
+        return best
     }
     /// the slips between two names (a letter missed, extra or wrong, or two swapped), counting up to `cap` + 1
     nonisolated static func slips(_ a: [Character], _ b: [Character], _ cap: Int) -> Int {
@@ -200,8 +225,9 @@ final class ThingIndex {
         return d[a.count][b.count]
     }
     /// whether a word starts with `q` give or take one letter: a letter missed, one extra, one wrong, or two swapped
-    nonisolated static func nearStart(_ q: [UInt8], _ w: ArraySlice<UInt8>) -> Bool {
-        let w = Array(w)
+    nonisolated static func nearStart(_ q: [UInt8], _ w0: ArraySlice<UInt8>) -> Bool {
+        guard let first = w0.first, first == q[0] || (q.count > 1 && first == q[1]) || q.count <= 4 else { return false }
+        let w = Array(w0)
         guard w.count >= q.count - 1, let d = q.indices.first(where: { $0 >= w.count || q[$0] != w[$0] }) else { return false }
         func same(_ a: Int, _ b: Int) -> Bool {   // the rest of q from a matches w from b
             let n = q.count - a
@@ -223,6 +249,8 @@ final class ThingIndex {
     }
     /// each thing's row by its id, made once at the first look-up
     @ObservationIgnored private var byID: [String: Int]?
+    /// the best known things' rows, letters and word starts, for the near spelling of a whole name (made once)
+    @ObservationIgnored private var famous: [(Int, [Character], [Int])]?
     /// A KIND'S THINGS EVERYWHERE: the best known first (fame, then the index's own order, which is the data's), made
     /// once per kind
     func kind(_ k: Int) -> [Hit] {

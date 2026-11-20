@@ -1043,8 +1043,12 @@ struct SearchResults: View {
             ? Self.thingHits(head.query, spelled: spelled, open: map.placeOpenID, near: itemHits.isEmpty) : [] }
         let typedFolded = head.query.trimmingCharacters(in: .whitespaces).townFolded
         let thingsNearOnly = !thingHits.isEmpty && !thingHits.contains { $0.name.townFolded.contains(typedFolded) }
-        let townGuess = (spotSearch || onCountries) && typed && townHits.isEmpty && hits.isEmpty && itemHits.isEmpty && guess == nil
+        let townGuess0 = (spotSearch || onCountries) && typed && townHits.isEmpty && hits.isEmpty && itemHits.isEmpty && guess == nil
             && (thingHits.isEmpty || thingsNearOnly) ? TownIndex.shared.guess(head.query) : nil
+        // (only as near as the sights found or nearer: "eifel" is the Eiffel Tower, one slip, not Kiel, two)
+        let townGuess = townGuess0.flatMap { g in
+            thingHits.isEmpty || ThingIndex.nearness(head.query, g.name) <= ThingIndex.nearness(head.query, thingHits[0].name) ? g : nil
+        }
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
