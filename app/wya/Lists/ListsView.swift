@@ -416,7 +416,12 @@ struct ListsWater: View {
     /// list of no countries yet: the name alone, no cover); then its things, each its square flag at 44, its name.
     /// A note shows when its row is tapped. Taking a thing out is in the row's hold menu, never a button on every row.
     private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat) -> some View {
-        let ccs = Array(NSOrderedSet(array: things.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
+        let ccs0 = Array(NSOrderedSet(array: things.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
+        let named = ccs0.isEmpty && !s.naming ? Self.namedTown(title) : nil
+        let land = ccs0.isEmpty && !s.naming && named == nil ? Self.namedCountry(title) : nil
+        let ccs = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs0
+        let spots0 = things.compactMap { t in t.cc.map { t.name + "|" + $0 } }
+        let spots = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots0
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
@@ -441,7 +446,7 @@ struct ListsWater: View {
                 .padding(.top, ccs.isEmpty ? 0 : 192)
                 .background(alignment: .top) {
                     if !ccs.isEmpty {
-                        ListCover(ccs: ccs, world: map.world, spots: things.compactMap { t in t.cc.map { t.name + "|" + $0 } })
+                        ListCover(ccs: ccs, world: map.world, spots: spots)
                             .frame(height: 180)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
