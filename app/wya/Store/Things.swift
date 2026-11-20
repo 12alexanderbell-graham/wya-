@@ -34,6 +34,14 @@ final class ThingStore {
     /// page for the rest of the session, not; its own name stays everywhere it was not found so (ThingIndex's other
     /// names)
     @ObservationIgnored private var foundAs: [String: String] = [:]
+    /// the shorter names people know for long formal ones (ThingIndex.shorter), applied to every country read and to come
+    func know(_ names: [String: String]) {
+        for (id, n) in names where foundAs[id] == nil { foundAs[id] = n }
+        for (cc, all) in byCC {
+            for (k, t) in all.enumerated() { if let n = names[t.id], t.name != n { byCC[cc]![k] = t.called(n) } }
+        }
+        version += 1
+    }
     func call(_ id: String, _ name: String) {
         guard foundAs[id] != name else { return }
         foundAs[id] = name
@@ -53,6 +61,8 @@ final class ThingStore {
     /// `opened`: the country itself opened in Places, which always asks again
     func load(_ cc: String, opened: Bool = false) {
         guard byCC[cc] == nil, !loading.contains(cc) else { return }
+        // (the index brings the shorter names people know for long formal ones: asked for with the first country)
+        ThingIndex.shared.load()
         if !opened, let t = failedAt[cc], Date().timeIntervalSince(t) < 60 { return }
         loading.insert(cc)
         Task.detached(priority: .userInitiated) {

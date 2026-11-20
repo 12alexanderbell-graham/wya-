@@ -21,6 +21,18 @@ final class ThingIndex {
     private(set) var ready = false
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var rows: [(folded: String, codes: [String], hit: Hit, alt: Bool)] = []
+    /// THE SHORTER NAME PEOPLE KNOW, for a long formal one: a thing's own name of 32 letters or more gives way to its
+    /// other name when that is at most six tenths as long (98 things). A short own name always stays (Bozcaada is not
+    /// called Tenedos)
+    nonisolated private static func shorter(_ rows: [(String, [String], Hit, Bool)]) -> [String: String] {
+        var own: [String: String] = [:], out: [String: String] = [:]
+        for r in rows {
+            if !r.3 { own[r.2.id] = r.2.name; continue }
+            guard let o = own[r.2.id], o.count >= 32, Double(r.2.name.count) <= Double(o.count) * 0.6, out[r.2.id] == nil else { continue }
+            out[r.2.id] = r.2.name
+        }
+        return out
+    }
     /// the index: 3 (with the names people know) where the server has it, else 2
     nonisolated private static func file() async -> ServerAnswer<Data> {
         let r = await Servers.data.file("native/things/things-index-3.wyti")
@@ -68,6 +80,8 @@ final class ThingIndex {
             await MainActor.run {
                 let me = ThingIndex.shared
                 me.rows = out
+                // (a long formal name with a much shorter name people know: the known one on the map, cards and pages)
+                ThingStore.shared.know(Self.shorter(out))
                 (me.nameBytes, me.nameStart, me.anyCodes) = (bytes, start, coded)
                 me.loading = false
                 me.ready = !out.isEmpty
