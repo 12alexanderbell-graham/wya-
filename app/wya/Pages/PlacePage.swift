@@ -271,12 +271,18 @@ extension PlacePageState.OnePage {
         // ITS TEXT: the guide's own listing of it, where a Wikivoyage guide lists it (by its Wikidata id, else its
         // name), so a castle's page says what the castle is
         let id = key.id, name = self.name, wd = t.id
+        let landsNow = lands
         Task { @MainActor in
             var d = await PlacePageState.listingText(cc, wd: wd, name: name)
             if d == nil {
                 // (and by its name without and the like: the Grand Canyon's article is)
                 let bare = name.replacingOccurrences(of: " (National Park|National Monument|National Historical Park|Nature Reserve|Biosphere Reserve)$", with: "", options: .regularExpression)
                 d = await PlacePageState.guideIntro(cc, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
+                // (and in the other countries its sets give it: the Dead Sea, filed under Israel, has its article in
+                // Jordan's guide,,)
+                for other in landsNow where d == nil && other != cc.lowercased() {
+                    d = await PlacePageState.guideIntro(other, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: bare == name ? [] : [bare.townFolded])
+                }
             }
             // (or the article that lists it, where that article is named for it: Angkor Wat is listed, without words,
             // in)
