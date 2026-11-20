@@ -157,8 +157,47 @@ final class ThingIndex {
             var once = Set<String>()
             h = Array(close.sorted { $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.1 < $1.1 }.map(\.0).filter { once.insert($0.id).inserted }.prefix(limit))
         }
+        // A FAMOUS NAME SPELT A LITTLE WRONG, WORDS AND ALL: the best known things whose name, or the part of it from
+        // a word's start, is what was typed give or take one slip (two from eight letters), a swap counting as one
+        if h.isEmpty, near, q.count >= 5 {
+            let typed = Array(q), most = q.count >= 8 ? 2 : 1
+            var close: [(Hit, Int, Int)] = []
+            for (n, r) in rows.enumerated() where r.hit.fame >= 2 {
+                let f = Array(r.folded)
+                var starts = [0]
+                for (i, c) in f.enumerated() where c == " " && i + 1 < f.count { starts.append(i + 1) }
+                var best = Int.max
+                for s0 in starts {
+                    for len in [typed.count - 1, typed.count, typed.count + 1] where len > 0 && s0 + len <= f.count {
+                        best = min(best, Self.slips(typed, Array(f[s0 ..< s0 + len]), most))
+                    }
+                }
+                if best <= most { close.append((r.hit, best, n)) }
+            }
+            var once = Set<String>()
+            h = Array(close.sorted { $0.1 != $1.1 ? $0.1 < $1.1 : $0.0.fame != $1.0.fame ? $0.0.fame > $1.0.fame : $0.2 < $1.2 }
+                .map(\.0).filter { once.insert($0.id).inserted }.prefix(limit))
+        }
         last = Array(([(q, open, near, h)] + last).prefix(2))
         return h
+    }
+    /// the slips between two names (a letter missed, extra or wrong, or two swapped), counting up to `cap` + 1
+    nonisolated static func slips(_ a: [Character], _ b: [Character], _ cap: Int) -> Int {
+        if abs(a.count - b.count) > cap { return cap + 1 }
+        var d = [[Int]](repeating: [Int](repeating: 0, count: b.count + 1), count: a.count + 1)
+        for i in 0 ... a.count { d[i][0] = i }
+        for j in 0 ... b.count { d[0][j] = j }
+        if a.isEmpty || b.isEmpty { return max(a.count, b.count) }
+        for i in 1 ... a.count {
+            var row = Int.max
+            for j in 1 ... b.count {
+                var v = min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+                if i > 1, j > 1, a[i - 1] == b[j - 2], a[i - 2] == b[j - 1] { v = min(v, d[i - 2][j - 2] + 1) }
+                d[i][j] = v; row = min(row, v)
+            }
+            if row > cap { return cap + 1 }
+        }
+        return d[a.count][b.count]
     }
     /// whether a word starts with `q` give or take one letter: a letter missed, one extra, one wrong, or two swapped
     nonisolated static func nearStart(_ q: [UInt8], _ w: ArraySlice<UInt8>) -> Bool {
