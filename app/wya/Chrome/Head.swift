@@ -1041,7 +1041,10 @@ struct SearchResults: View {
         // (a near spelling only with nothing else found: found Vinson Massif, then Tinson Pen Aerodrome)
         let thingHits = Self.timed("things") { (spotSearch || sightSearch) && typed
             ? Self.thingHits(head.query, spelled: spelled, open: map.placeOpenID, near: itemHits.isEmpty) : [] }
-        let townGuess = spotSearch && typed && townHits.isEmpty && hits.isEmpty && thingHits.isEmpty && itemHits.isEmpty ? TownIndex.shared.guess(head.query) : nil
+        let typedFolded = head.query.trimmingCharacters(in: .whitespaces).townFolded
+        let thingsNearOnly = !thingHits.isEmpty && !thingHits.contains { $0.name.townFolded.contains(typedFolded) }
+        let townGuess = (spotSearch || onCountries) && typed && townHits.isEmpty && hits.isEmpty && itemHits.isEmpty && guess == nil
+            && (thingHits.isEmpty || thingsNearOnly) ? TownIndex.shared.guess(head.query) : nil
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = countriesSearch ? RegionIndex.shared.load() : ()
@@ -1140,7 +1143,7 @@ struct SearchResults: View {
                     + towns + things + others
                     + rest.prefix(max(2, 8 - cut.count - things.count - lead.count)).map { ResultKey.place($0) }
                 // nothing found: the nearest town by spelling first, else the nearest country
-                if k.isEmpty, let g = townGuess { return [.town(g.key)] }
+                if let g = townGuess { return [.town(g.key)] + k }
                 // (each once before the eight are counted: 's three towns of that name, listed twice, took the eight
                 // rows' room and Luzern itself was cut)
                 var once = Set<ResultKey>()
@@ -1154,7 +1157,7 @@ struct SearchResults: View {
                 let rest = spots()
                 return Array((pins + (pins.isEmpty || rest != [.miss] ? rest : [])).prefix(8))
             }()
-            : !placesSearch ? mapKeys
+            : !placesSearch ? (townGuess.map { [.town($0.key)] + mapKeys.filter { $0 != .miss } } ?? mapKeys)
             : !typed ? []
             : typed ? spots() : baseKeys
         // each result once: a region or a thing found by two of its names is one key, and a key twice in the rows
