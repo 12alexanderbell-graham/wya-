@@ -446,6 +446,28 @@ extension PlacePageState.OnePage {
                                                        others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
+        // ITS HIGHLIGHTS: the best known sights with a photo near it, 12 km round a city of a million, 5 km round a
+        // smaller one, as a region's page has them
+        if let ll = t["ll"] as? [NSNumber], ll.count == 2 {
+            let lat = ll[0].doubleValue, lon = ll[1].doubleValue
+            let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
+            ThingStore.shared.load(cc)
+            for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let rank = { (k: String) in ["landmark": 0, "water": 1, "nature": 2, "mountain": 3, "spot": 4][k] ?? 5 }
+            let picks = (ThingStore.shared.things(cc) ?? []).filter { o in
+                guard !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil,
+                      !["station", "stay", "route", "event", "city", "area"].contains(o.kindName) else { return false }
+                let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
+                let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
+                return dx * dx + dy * dy <= reach * reach
+            }
+            .sorted { a, b in a.fame != b.fame ? a.fame > b.fame : rank(a.kindName) < rank(b.kindName) }
+            .prefix(8)
+            out.highlights = picks.map { o in
+                let l = PlacePageState.brief(o.line, 60)
+                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+            }
+        }
         guard key.id == id else { return }
         facts = out
         settled = true
