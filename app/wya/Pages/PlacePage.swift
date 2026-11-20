@@ -234,8 +234,18 @@ extension PlacePageState.OnePage {
         }
         if let town = whereTown {
             let land = PlacePageState.countryName(town.file)
-            let name = town.name
-            if !what.localizedCaseInsensitiveContains(name) {
+            let big = setArea() >= 100
+            // (the town's first-level division as its record names it, its first name where it gives two,)
+            let region = town.region.split(separator: "/").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            let name = big ? (region.isEmpty || self.name.townFolded.contains(region.townFolded) ? "" : region) : town.name
+            // (a big place of several countries says them: Lake Geneva,)
+            let several = big && own.count > 1
+            if several {
+                let names: [String] = own.sorted().prefix(3).map { PlacePageState.countryName($0) }.filter { !$0.isEmpty }
+                if !names.isEmpty { out.rows.append(("Where", names.joined(separator: ", "))) }
+            } else if name.isEmpty {
+                if !land.isEmpty { out.rows.append(("Where", land)) }
+            } else if !what.localizedCaseInsensitiveContains(name) {
                 out.rows.append(("Where", land.isEmpty || land == name ? name : name + ", " + land))
             }
         } else {
