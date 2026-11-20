@@ -235,8 +235,9 @@ enum BadgeSolid {
                                              alignment: .center, lineBreakMode: .byClipping)
         let e = ModelEntity(mesh: mesh, materials: [mat])
         let b = e.visualBounds(relativeTo: e)
-        // (inside a 0.41 rim: at most 0.6 across and 0.34 high)
-        let k = min(0.6 / max(0.001, b.extents.x), 0.34 / max(0.001, b.extents.y))
+        // (inside a 0.41 rim: at most 0.6 across and 0.34 high; a lone digit, with the face's room round it, 0.44
+        // high: at 0.34 a "520" and "50%")
+        let k = min(0.6 / max(0.001, b.extents.x), (t.count == 1 ? 0.44 : 0.34) / max(0.001, b.extents.y))
         e.scale = [k, k, 1]
         return e
     }
