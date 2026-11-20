@@ -575,10 +575,27 @@ extension PlacePageState.OnePage {
             }
             .map(\.element)
             .prefix(8)
-            out.highlights = picks.map { o in
+            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
+            var seen = Set(picks.map(\.id))
+            let extra = ["peaks", "famouslakes", "famousislands", "parks", "landmarks"].flatMap { id in
+                (CollectionStore.shared.collection(id)?.items ?? []).filter { i in
+                    guard i.fame == 3, !i.photo.isEmpty else { return false }
+                    let p = EqualEarth.unproject(SIMD2(Double(i.at.x), Double(i.at.y)))
+                    let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
+                    return dx * dx + dy * dy <= reach * reach && PlacePageState.photo(i.photo) != nil && ThingStore.shared.thing("wd:" + i.id) == nil
+                }
+            }.filter { seen.insert($0.id).inserted }.prefix(2).map { (i: CollectionStore.Item) -> PlacePageState.Highlight in
+                let name: String = i.name.prefix(1).uppercased() + i.name.dropFirst()
+                let high: String = i.height > 0 ? (f.string(from: i.height as NSNumber) ?? "") + " m high" : ""
+                return PlacePageState.Highlight(id: i.id, name: name, line: high, photo: PlacePageState.photo(i.photo))
+            }
+            // (after the city's best known sight: Paris opened on the Île de la Cité before the Eiffel Tower)
+            var all = picks.map { o in
                 let l = PlacePageState.brief(o.line, 60)
                 return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
             }
+            all.insert(contentsOf: extra, at: min(1, all.count))
+            out.highlights = Array(all.prefix(8))
         }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id else { return }
