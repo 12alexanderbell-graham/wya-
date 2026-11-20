@@ -68,6 +68,13 @@ struct PlacesSheet: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            // ITS PHOTO'S SOURCE: held, the row offers the photo's own page on Commons, its author
+                            // and licence
+                            .contextMenu {
+                                if let f = SetPlaceThumb.file(own: it.photo, thing: it.id), let u = SetPlaceThumb.page(f) {
+                                    Link("Photo on Wikimedia Commons", destination: u)
+                                }
+                            }
                             .edgeRow()
                         }
                     }
@@ -288,8 +295,7 @@ struct SetPlaceThumb: View {
     var body: some View {
         let _ = things.version
         let cc = cc.lowercased()
-        let mine = own.isEmpty ? nil : PlacePageState.photo(own)
-        let file = mine ?? things.thing(thing).map(\.thing.photo).flatMap { $0.isEmpty ? nil : PlacePageState.photo($0) }
+        let file = Self.file(own: own, thing: thing)
         let url = file.flatMap { Self.commons($0) }
         // (fetched and kept as the pages' photos are: AsyncImage keeps nothing, and a list scrolled back blinked)
         let shot = url.flatMap { photo ?? PagePhoto.cached($0) }
@@ -305,6 +311,18 @@ struct SetPlaceThumb: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onAppear { if !cc.isEmpty { things.load(cc) } }
         .accessibilityHidden(true)
+    }
+    /// the photo it shows: its own, else its thing's, through the pages' photo rule
+    static func file(own: String, thing: String) -> String? {
+        let _ = ThingStore.shared.version
+        let mine = own.isEmpty ? nil : PlacePageState.photo(own)
+        return mine ?? ThingStore.shared.thing(thing).map(\.thing.photo).flatMap { $0.isEmpty ? nil : PlacePageState.photo($0) }
+    }
+    /// its file's own page on Commons (its author, licence and history)
+    static func page(_ file: String) -> URL? {
+        let name = file.replacingOccurrences(of: " ", with: "_")
+        guard let e = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
+        return URL(string: "https://commons.wikimedia.org/wiki/File:\(e)")
     }
     /// its Commons file at three times the row's size (Special:FilePath, as the pages ask)
     static func commons(_ file: String) -> URL? {
