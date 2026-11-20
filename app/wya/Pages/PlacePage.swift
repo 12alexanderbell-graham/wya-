@@ -524,6 +524,21 @@ extension PlacePageState.OnePage {
                                  photo: PlacePageState.photo(h["img"]) ?? (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
+        if out.highlights.count < 8 {
+            ThingStore.shared.load(cc)
+            for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let have = Set(out.highlights.map { $0.name.townFolded })
+            let more = (ThingStore.shared.things(cc) ?? []).filter { o in
+                o.fame >= 2 && (2...6).contains(o.kind) && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
+                    && !PlacePageState.isStudy(o.name) && !PlacePageState.isVenue(o.name, o.line)
+                    && !have.contains(where: { $0.contains(o.name.townFolded) || o.name.townFolded.contains($0) })
+            }.enumerated().sorted { a, b in a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset }
+            .map(\.element).prefix(8 - out.highlights.count)
+            out.highlights += more.map { o in
+                let l = PlacePageState.brief(o.line, 60)
+                return PlacePageState.Highlight(id: o.id, name: o.name, line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+            }
+        }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
         out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
