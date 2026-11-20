@@ -301,14 +301,20 @@ extension PlacePageState.OnePage {
             let n = (first["name"] as? String).map { $0.prefix(1).uppercased() + $0.dropFirst() }
             out.rows.append(("Currency", [n, (first["sym"] as? String).map { "(\($0))" }].compactMap { $0 }.joined(separator: " ")))
         }
-        if let v = s("officialLanguage") { out.rows.append(("Languages", v)) }
+        if let v = cc == "us" ? "English" : s("officialLanguage").map({ $0.replacingOccurrences(of: "Putonghua", with: "Mandarin") }) {
+            out.rows.append(("Languages", v))
+        }
         if let v = s("drivingSide") { out.rows.append(("Driving side", v.capitalized)) }
         if let v = PlacePageState.plugs(f["plug"]) { out.rows.append(("Plugs", v)) }
         if let v = s("callingCode") { out.rows.append(("Calling code", v)) }
-        if let e = f["emergency"] as? [String], let first = e.first { out.rows.append(("Emergency", first)) }
+        // (a list, or one number: the United States', Canada's and Australia's came as one and were left out)
+        if let first = (f["emergency"] as? [String])?.first ?? (f["emergency"] as? String) { out.rows.append(("Emergency", first)) }
         // (the Netherlands here is the one in Europe, the Caribbean islands places of their own: Wikidata's highest point
         // is Mount Scenery, on Saba)
-        if let v = cc == "nl" ? "Vaalserberg" : s("highestPoint") { out.rows.append(("Highest point", v)) }
+        // (and Australia's is the mainland's, not Mawson Peak on Heard Island; the United States had none)
+        if let v = cc == "nl" ? "Vaalserberg" : cc == "au" ? "Mount Kosciuszko" : cc == "us" ? "Denali" : s("highestPoint") {
+            out.rows.append(("Highest point", v))
+        }
         // each government's advice, with who says it and when it was checked
         let adv = j["advisories"] as? [String: Any] ?? [:]
         if let ca = adv["ca"] as? [String: Any], let t = ca["text"] as? String {
@@ -1265,7 +1271,7 @@ extension PlacePageState {
         let every = (raw as? [String]) ?? (raw as? String).map { [$0] } ?? []
         let known = (placeZones[cc] ?? []).compactMap { TimeZone(identifier: $0) }
         let own = known.isEmpty ? every.filter { $0.contains("/") }.compactMap { TimeZone(identifier: $0) } : known
-        let named = Set(own.map { $0.secondsFromGMT() / 60 })
+        let named = Set(own.map { ($0.secondsFromGMT() - Int($0.daylightSavingTimeOffset())) / 60 })
         let m = (named.isEmpty ? Set(every.compactMap(minutes)) : named).sorted()
         guard let first = m.first, let last = m.last else {
             // (words only, for a place the database does not list: the words)
