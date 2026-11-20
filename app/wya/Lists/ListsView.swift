@@ -270,8 +270,11 @@ struct ListsWater: View {
                             let n = i.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
                             return n.isEmpty ? nil : n + "|" + cc.lowercased()
                         }
-                        tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs,
-                             cover: ccs.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots)
+                        let named = ccs.isEmpty ? Self.namedTown(p.name) : nil
+                        let ccs2 = named.map { [$0.file.lowercased()] } ?? ccs
+                        let spots2 = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots
+                        tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs2,
+                             cover: ccs2.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots2)
                     }
                 }
                 .padding(.top, 4)
@@ -313,6 +316,17 @@ struct ListsWater: View {
              ccs: Array(l.countries.prefix(4)), ticks: ListTicks.count(l.items.filter { $0.k != .section }),
              spots: things(l).compactMap { t in t.cc.map { t.name + "|" + $0 } },
              places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
+    }
+    /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil
+    static func namedTown(_ name: String) -> TownIndex.Hit? {
+        TownIndex.shared.load()
+        guard TownIndex.shared.ready else { return nil }
+        let w = name.split(whereSeparator: { !$0.isLetter && $0 != "'" && $0 != "-" }).map(String.init)
+        let tries = (w.indices.dropLast().map { w[$0] + " " + w[$0 + 1] }) + w.filter { $0.count >= 4 }
+        for t in tries {
+            if let h = TownIndex.shared.hits(t, open: nil, limit: 3).first(where: { $0.name.townFolded == t.townFolded && $0.people >= 100_000 }) { return h }
+        }
+        return nil
     }
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {
