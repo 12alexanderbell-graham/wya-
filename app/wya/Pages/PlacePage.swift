@@ -1879,7 +1879,7 @@ private struct InsideList: View {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             let alike = all.count > 1 && Set(all.map(\.line)).count == 1
             let heads = Set(all.map { $0.line.components(separatedBy: " · ").first ?? "" })
-            let sameHead = all.count > 1 && heads.count == 1 && all.allSatisfy { $0.line.contains(" · ") }
+            let sameHead = all.count > 1 && heads.count == 1 && all.contains { $0.line.contains(" · ") }
             let pictured = all.contains { !$0.photo.isEmpty }
             ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured, dropHead: sameHead) }
             if rows.count > limit {
@@ -1894,6 +1894,8 @@ private struct InsideList: View {
 
     private func row(_ r: PlacePageState.Inside, line: Bool = true, pictured: Bool = false, dropHead: Bool = false) -> some View {
         let s = MarkStore.shared.state(r.key)
+        // (asked again once the country's sights have come: Hyderabad was looked at before them and stayed bare)
+        let _ = r.photo.isEmpty ? ThingStore.shared.version : 0
         return HStack(spacing: 12) {
             if pictured {
                 SetPlaceThumb(own: r.photo, thing: r.photo.isEmpty && r.key.kind == .town ? (PlacePageState.sightNear(r, cc: country) ?? "") : "",
