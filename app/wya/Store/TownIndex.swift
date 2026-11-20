@@ -326,6 +326,7 @@ extension String {
             .replacingOccurrences(of: "œ", with: "oe").replacingOccurrences(of: "æ", with: "ae")
             .replacingOccurrences(of: "ø", with: "o").replacingOccurrences(of: "ł", with: "l").replacingOccurrences(of: "ß", with: "ss")
             .replacingOccurrences(of: "ı", with: "i").replacingOccurrences(of: "đ", with: "d").replacingOccurrences(of: "þ", with: "th")
+            .replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "\u{2013}", with: " ").replacingOccurrences(of: "\u{2010}", with: " ")
             .replacingOccurrences(of: "ae", with: "a").replacingOccurrences(of: "oe", with: "o")
             .replacingOccurrences(of: "ue", with: "u")
             // (one form of every letter, so names and what was typed compare as bytes as they did as strings)
