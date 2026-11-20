@@ -1195,7 +1195,9 @@ extension PlacePageState {
                       "gb-wls": "Welsh, English", "gb-nir": "English, Irish"]
         if let v = byHand[cc] { return v }
         let names = ["Putonghua": "Mandarin", "Modern Greek": "Greek", "Kurdish language": "Kurdish",
-                     "North Korean standard language": "Korean"]
+                     "North Korean standard language": "Korean", "British English": "English", "Standard Chinese": "Mandarin",
+                     "Standard Taiwanese Mandarin": "Mandarin", "Jersey Legal French": "French", "Grenadian Creole English": "English",
+                     "Standard Algerian Berber": "Berber", "Standard Moroccan Tamazight": "Tamazight"]
         func clean(_ any: Any?) -> [String] {
             let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
             var seen = Set<String>()
