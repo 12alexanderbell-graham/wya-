@@ -64,7 +64,7 @@ final class ProfileNumbers {
         let counted = Set(ids.map { pos?.countedAs($0) ?? $0 })
         c.territories = counted.filter { id in !(pos?.counts(id) ?? (byID[id]?.k == "country" || byID[id]?.k == "entity")) }.count
         c.lived = marks.filter { $0.key.kind == .country && $0.value.lived }.count
-        c.wish = marks.filter { $0.key.kind == .country && $0.value.wished }.count
+        c.wish = marks.filter { $0.value.wished }.count
         c.streak = map.streakWeeks
         c.verified = rows.filter(\.verified).count
         c.regions = regionRows.count
