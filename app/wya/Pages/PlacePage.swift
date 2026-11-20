@@ -352,7 +352,7 @@ extension PlacePageState.OnePage {
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
             out.cities = all.compactMap { t in
-                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue else { return nil }
+                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue, !PlacePageState.notACity(t) else { return nil }
                 // (its region, unless that is its own name again:, on Japan's page)
                 let r0 = t["r"] as? String ?? ""
                 let r = r0.compare(n, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
@@ -510,6 +510,21 @@ extension PlacePageState.OnePage {
         if let p = r["pop"] as? NSNumber { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
+        // ITS CITIES: the country's cities whose region is this one (by its record's name, its own, or the names its
+        // record was matched by), the most peopled first, as a country's page lists them
+        var names = Set([me] + ((r["u"] as? [String]) ?? []).map(fold))
+        if let n = r["n"] as? String { names.insert(fold(n)) }
+        if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
+           let cities = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+            out.cities = cities.compactMap { t in
+                guard let n = t["n"] as? String, let gid = (t["gid"] as? NSNumber)?.intValue,
+                      let rr = t["r"] as? String, names.contains(fold(rr)), !PlacePageState.notACity(t) else { return nil }
+                let ll = t["ll"] as? [NSNumber]
+                return PlacePageState.Inside(key: PlaceKey(.town, "\(cc)/\(gid)"), name: n, line: "", code: nil,
+                              at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
+                              photo: PlacePageState.photo(t["img"]) ?? "")
+            }
+        }
         facts = out
         settled = true
     }
@@ -754,6 +769,12 @@ extension PlacePageState {
             }
         }
         return t.isEmpty ? s : t
+    }
+
+    /// a part of a city, or a place that was (GeoNames' PPLX, PPLH, PPLQ, PPLW), not a city of its own: Quarto
+    /// Oggiaro, a district of Milan, stood third among Lombardy's cities
+    nonisolated static func notACity(_ t: [String: Any]) -> Bool {
+        ["PPLX", "PPLH", "PPLQ", "PPLW"].contains(t["fc"] as? String ?? "")
     }
 
     /// A LINE WITH A HOLE IN IT CUT BEFORE THE HOLE: the guides' text lost what their templates said (,,), about 600
