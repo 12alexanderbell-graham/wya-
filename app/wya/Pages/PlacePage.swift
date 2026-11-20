@@ -1318,7 +1318,9 @@ extension PlacePageState {
     /// sign language, the United Kingdom's nations had none)
     static func languages(_ official: Any?, used: Any?, cc: String) -> String? {
         let byHand = ["us": "English", "az": "Azerbaijani", "gb-eng": "English", "gb-sct": "English, Scots, Scottish Gaelic",
-                      "gb-wls": "Welsh, English", "gb-nir": "English, Irish"]
+                      "gb-wls": "Welsh, English", "gb-nir": "English, Irish",
+                      "za": "Zulu, Xhosa, Afrikaans, English", "no": "Norwegian, Sámi", "ml": "Bambara, French",
+                      "ch": "German, French, Italian, Romansh"]
         if let v = byHand[cc] { return v }
         let names = ["Putonghua": "Mandarin", "Modern Greek": "Greek", "Kurdish language": "Kurdish",
                      "North Korean standard language": "Korean", "British English": "English", "Standard Chinese": "Mandarin",
