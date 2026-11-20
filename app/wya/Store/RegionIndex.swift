@@ -33,8 +33,9 @@ final class RegionIndex {
         Task.detached(priority: .userInitiated) {
             var out: [(String, Hit)] = []
             var data: Data?
-            // (-4: and the region each lies in, one level up, for two of one name:)
-            for f in ["native/regions/regions-index-4.wyri", "native/regions/regions-index-3.wyri", "native/regions/regions-index-2.wyri"] where data == nil {
+            // (-4: and the region each lies in, one level up, for two of one name:; -5: that region found by the
+            // shapes where the file names none, 1,655 of 1,808 such pairs told apart)
+            for f in ["native/regions/regions-index-5.wyri", "native/regions/regions-index-4.wyri", "native/regions/regions-index-3.wyri", "native/regions/regions-index-2.wyri"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let all = try? JSONSerialization.jsonObject(with: d) as? [[Any]] {
