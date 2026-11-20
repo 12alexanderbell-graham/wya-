@@ -515,7 +515,7 @@ extension PlacePageState.OnePage {
                 let h = PlacePageState.heritage?[q]
                 return whole.contains(q) || (h?["year"] as? String != nil && !((h?["crit"] as? [String]) ?? []).isEmpty)
             }
-            var kept: [(String, Double, Double)] = []
+            var kept: [(String, Double, Double, Bool)] = []
             let ranked = sites.enumerated().sorted { a, b in
                 let x = known[a.element] ?? Int.max, y = known[b.element] ?? Int.max
                 return x != y ? x < y : a.offset < b.offset
@@ -524,8 +524,10 @@ extension PlacePageState.OnePage {
                 let sig = (h["year"] as? String ?? "") + ((h["crit"] as? [String]) ?? []).joined()
                 guard !sig.isEmpty else { return true }
                 let lat = ll[0].doubleValue, lon = ll[1].doubleValue
-                if kept.contains(where: { k in k.0 == sig && abs(k.1 - lat) * 111.2 < 10 && abs(k.2 - lon) * 111.2 * cos(lat * .pi / 180) < 10 }) { return false }
-                kept.append((sig, lat, lon))
+                // (two whole sites of the set are never one: Kraków's Old Town and the Wieliczka salt mines, both 1978)
+                let mine = whole.contains(q)
+                if kept.contains(where: { k in k.0 == sig && !(k.3 && mine) && abs(k.1 - lat) * 111.2 < 10 && abs(k.2 - lon) * 111.2 * cos(lat * .pi / 180) < 10 }) { return false }
+                kept.append((sig, lat, lon, mine))
                 return true
             }
             out.highlights = ranked.compactMap { q in
