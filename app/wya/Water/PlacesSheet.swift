@@ -289,6 +289,8 @@ struct SetPlaceThumb: View {
     let own: String
     let thing: String
     let cc: String
+    /// its country's flag where it has no photo (false: the space left empty, as a page's Activities)
+    var flag = true
     @State private var things = ThingStore.shared
     @State private var photo: UIImage?
 
@@ -301,7 +303,7 @@ struct SetPlaceThumb: View {
         let shot = url.flatMap { photo ?? PagePhoto.cached($0) }
         ZStack {
             if let shot { Image(uiImage: shot).resizable().scaledToFill().frame(width: 44, height: 44) }
-            else if let f = Flags.square(cc) { f.resizable().interpolation(.high).scaledToFill().frame(width: 44, height: 44) }
+            else if flag, let f = Flags.square(cc) { f.resizable().interpolation(.high).scaledToFill().frame(width: 44, height: 44) }
         }
         .task(id: url) {
             guard let url, shot == nil else { return }

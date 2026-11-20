@@ -2046,9 +2046,11 @@ private struct ActivitiesList: View {
         if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text("Activities").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+            // (the photos' column only where one of the rows shown has a photo)
+            let pictured = rows.prefix(limit).contains { $0.wd.map { SetPlaceThumb.file(own: "", thing: $0) != nil } ?? false }
             ForEach(rows.prefix(limit), id: \.self) { a in
                 HStack(alignment: .top, spacing: 12) {
-                    if let wd = a.wd { SetPlaceThumb(own: "", thing: wd, cc: country) }
+                    if pictured { SetPlaceThumb(own: "", thing: a.wd ?? "", cc: country, flag: false) }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                         if !a.line.isEmpty {
