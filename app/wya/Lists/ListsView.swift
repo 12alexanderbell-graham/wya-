@@ -422,8 +422,12 @@ struct ListsWater: View {
                 ForEach(things) { t in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {
-                            if let cc = t.cc, let wd = ListSuggestions.sight(t.name, cc), SetPlaceThumb.file(own: "", thing: wd) != nil {
-                                SetPlaceThumb(own: "", thing: wd, cc: cc)
+                            let key = PlaceKey(t.id).flatMap { $0.kind == .thing ? $0 : nil }
+                            let own = key.flatMap { CollectionStore.shared.item($0)?.photo } ?? ""
+                            let wd = key.map { $0.id.hasPrefix("wd:") ? String($0.id.dropFirst(3)) : $0.id }
+                                ?? t.cc.flatMap { ListSuggestions.sight(t.name, $0) }
+                            if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
+                                SetPlaceThumb(own: own, thing: wd ?? "", cc: cc)
                             } else {
                                 Group {
                                     if let cc = t.cc, let f = Flags.row(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
