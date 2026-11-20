@@ -313,6 +313,30 @@ extension PlacePageState.OnePage {
                     d = await PlacePageState.guideIntro(other, name: name, lat: ll.lat, lon: ll.lon, within: 30, others: others)
                 }
             }
+            if d == nil {
+                let me = name.townFolded, k = cos(ll.lat * .pi / 180)
+                func close(_ la: Double, _ lo: Double) -> Bool {
+                    let dy = (la - ll.lat) * 111.2, dx = (lo - ll.lon) * 111.2 * k
+                    return dx * dx + dy * dy <= 900
+                }
+                let inside = (ThingStore.shared.things(cc.lowercased()) ?? []).filter { o in
+                    let n = o.name.townFolded
+                    guard o.id != wd, n.count >= 5, n != me, me.contains(n) else { return false }
+                    let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
+                    return close(p.lat, p.lon)
+                }.sorted { $0.fame > $1.fame }
+                for o in inside.prefix(3) where d == nil {
+                    d = await PlacePageState.listingText(cc, wd: o.id, name: o.name)
+                }
+                if d == nil {
+                    let words = name.split(whereSeparator: { !$0.isLetter && $0 != "-" && $0 != "'" }).map(String.init)
+                    for w in words where d == nil && w.count >= 4 && w.first?.isUppercase == true {
+                        if let t = TownIndex.shared.hits(w, open: cc.lowercased(), limit: 3).first(where: { $0.name.townFolded == w.townFolded && $0.file.lowercased() == cc.lowercased() && close($0.lat, $0.lon) }) {
+                            d = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon)
+                        }
+                    }
+                }
+            }
             // (or the article that lists it, where that article is named for it: Angkor Wat is listed, without words,
             // in)
             if d == nil, let art = await PlacePageState.listingArticle(cc, wd: wd),
