@@ -192,7 +192,9 @@ extension PlacePageState.OnePage {
         var out = PlacePageState.Facts()
         if !t.photo.isEmpty { out.photo = PlacePageState.photo(t.photo) }
         // (its own line is already under its name; no prose repeating it)
-        out.rows.append(("Kind", t.kindName.capitalized))
+        if !["spot", "other", "area"].contains(t.kindName), !what.lowercased().contains(t.kindName) {
+            out.rows.append(("Kind", t.kindName.capitalized))
+        }
         let ll = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
         // where it is in words (the nearest town and its country), the numbers only when no town is near; the towns'
         // index read first if it is not yet (it is read once, in the background)
@@ -205,8 +207,9 @@ extension PlacePageState.OnePage {
         }
         let land = Locale(identifier: "en_GB").localizedString(forRegionCode: cc.uppercased()) ?? ""
         if let town = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: 40) {
-            // (the town, then its country unless they are one:,)
-            out.rows.append(("Where", land.isEmpty || land == town.name ? town.name : town.name + ", " + land))
+            if !what.localizedCaseInsensitiveContains(town.name) {
+                out.rows.append(("Where", land.isEmpty || land == town.name ? town.name : town.name + ", " + land))
+            }
         } else {
             out.rows.append(("Where", land.isEmpty ? String(format: "%.4f, %.4f", ll.lat, ll.lon) : land))
         }
