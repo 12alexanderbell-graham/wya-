@@ -153,6 +153,13 @@ private struct PlanSuggestions: View {
 /// SUGGESTIONS ON ONE OF YOUR LISTS: up to three more of what the list is, each with why for you; a plus puts it in the
 /// list (a place with its country, for its flag). Asked once the section is on screen; with the AI off, not there.
 struct ListSuggestions: View {
+    /// a pick that is a known sight of its country (its name exactly): its Wikidata id, for its photo
+    @MainActor static func sight(_ pk: AIService.PlanPick) -> String? {
+        guard ThingIndex.shared.ready, !pk.cc.isEmpty else { return nil }
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        return ThingIndex.shared.hits(pk.what, open: pk.cc.lowercased(), limit: 6, near: false)
+            .first { $0.file.lowercased() == pk.cc.lowercased() && fold($0.name) == fold(pk.what) }?.id
+    }
     let listID: String
     let name: String
     let things: [ListsThing]
@@ -172,11 +179,15 @@ struct ListSuggestions: View {
             }
             ForEach(shown, id: \.self) { pk in
                 HStack(spacing: 12) {
-                    Group {
-                        if let f = Flags.row(pk.cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                    if let wd = Self.sight(pk), SetPlaceThumb.file(own: "", thing: wd) != nil {
+                        SetPlaceThumb(own: "", thing: wd, cc: pk.cc)
+                    } else {
+                        Group {
+                            if let f = Flags.row(pk.cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                        }
+                        .frame(width: 44, height: 33)
+                        .frame(width: 44, height: 44)
                     }
-                    .frame(width: 44, height: 33)
-                    .frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(pk.what).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                         Text(pk.place.isEmpty ? pk.why : "\(pk.place) · \(pk.why)").font(.subheadline)
@@ -202,6 +213,8 @@ struct ListSuggestions: View {
                 }
                 .padding(.vertical, 6)
                 .frame(minHeight: 56)
+                // (its country's sights, for its photo)
+                .onAppear { if !pk.cc.isEmpty { ThingStore.shared.load(pk.cc.lowercased()); ThingIndex.shared.load() } }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
