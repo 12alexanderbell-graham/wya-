@@ -12,7 +12,9 @@ import UniformTypeIdentifiers
 final class ListsState {
     static let shared = ListsState()
     /// 0 Lists, 1 Plans, 2 Tier lists, 3 Books: the kind the wheel is on, the one the shelf shows
-    var kind = 0
+    var kind = 0 { didSet { if kind != oldValue { kindForward = kind > oldValue } } }
+    /// the wheel last turned on to a later kind (the shelf slides in from the right) or an earlier one (from the left)
+    var kindForward = true
     /// a test's hold on the wheel mid-turn (nil: let go)
     var testDial: CGFloat?
     /// the list open, by id ("wish" is the map's wishlist)
@@ -225,10 +227,19 @@ struct ListsWater: View {
     @ViewBuilder private func rows(_ w: CGFloat) -> some View {
         let q = s.query.trimmingCharacters(in: .whitespaces).lowercased()
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                shelf(q)
+            // THE SHELF SLIDES WITH THE WHEEL: the kind turned to comes in from the side the wheel turned toward, the
+            // one left goes out the other side (in a box that stays, so the change is inside it: the scroll view's
+            // own content took no transition)
+            ZStack(alignment: .topLeading) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    shelf(q)
+                }
+                .frame(width: w, alignment: .leading)
+                .id(s.kind)
+                .transition(.asymmetric(insertion: .move(edge: s.kindForward ? .trailing : .leading),
+                                        removal: .move(edge: s.kindForward ? .leading : .trailing)))
             }
-            .frame(width: w, alignment: .leading)
+            .frame(width: w, alignment: .topLeading)
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
