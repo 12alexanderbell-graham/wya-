@@ -2483,6 +2483,7 @@ struct PinSheet: View {
                             .foregroundStyle(on ? Palette.white : Palette.ink)
                             .padding(.horizontal, 12).frame(height: 34)
                             .background { if on { Capsule().fill(Palette.ink) } }
+                            .animation(nil, value: on)
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
