@@ -1087,6 +1087,7 @@ struct SearchResults: View {
         let thingNamed = thingSights.filter { $0.name.townFolded == fold0 && $0.fame >= topFame }
         let sights = Array((setNamed.map { ResultKey.item($0.key) } + thingSights.filter { t in !thingNamed.contains { $0.id == t.id } }.map { ResultKey.thing($0.key) }
             + setSights.filter { $0.item.name.townFolded != fold0 }.map { ResultKey.item($0.key) }).prefix(2))
+        let lowSights = Set(thingSights.filter { $0.fame < 3 }.map { ResultKey.thing($0.key) } + setSights.filter { $0.item.fame < 3 }.map { ResultKey.item($0.key) })
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
         let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) }
@@ -1131,11 +1132,11 @@ struct SearchResults: View {
             : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) })).prefix(8))
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights)).prefix(8))
             : Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) })
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights)
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
@@ -1444,7 +1445,7 @@ struct SearchResults: View {
     /// compiler minutes)
     private static func countryKeys(typed: String, starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
                                     named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
-                                    small: [RegionIndex.Hit], rest: [RegionIndex.Hit], named0: [ResultKey] = []) -> [ResultKey] {
+                                    small: [RegionIndex.Hit], rest: [RegionIndex.Hit], named0: [ResultKey] = [], low: Set<ResultKey> = []) -> [ResultKey] {
         let town = { (t: TownIndex.Hit) -> ResultKey in ResultKey.town(t.key) }
         let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
         var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
@@ -1472,8 +1473,9 @@ struct SearchResults: View {
             out += sights
             out += peopled.filter { $0.1 < 100_000 }.map { region($0.0) }
         } else {
-            out += begun.map(town); out += sights
+            out += begun.map(town); out += sights.filter { !low.contains($0) }
             out += towns.filter { ($0.name.townFolded == typed || $0.name.townFolded == full) && $0.people < 50_000 }.map(town)
+            out += sights.filter { low.contains($0) }
             out += named.map(region)
         }
         out += otherTowns.map(town)
