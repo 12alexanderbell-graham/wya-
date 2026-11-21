@@ -1153,6 +1153,7 @@ struct SearchResults: View {
                 let smallLater = knownLeads ? named.filter { $0.people < 50_000 } : []
                 let whole = named.filter { $0.people >= 500_000 }.map { ResultKey.town($0.key) }
                     + itemHits.prefix(3).filter { $0.item.name.townFolded == folded }.map { ResultKey.item($0.key) }
+                    + thingHits.filter { $0.fame >= 2 && $0.name.townFolded == folded && !inSets.contains($0.id) }.prefix(1).map { ResultKey.thing($0.key) }
                     + named.filter { t in !smallLater.contains(t) }.map { ResultKey.town($0.key) }
                 let big = cut.filter { $0.people >= 300_000 && $0.name.townFolded.hasPrefix(folded) }.prefix(2).map { ResultKey.town($0.key) }
                 let lands = rest.filter { i in map.world.map { $0.places[i].n.townFolded.hasPrefix(folded) } ?? false }.prefix(2)
