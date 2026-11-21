@@ -29,3 +29,23 @@ extension View {
     /// rises into place from behind its own bounds (RiseIn)
     func risesIn(_ key: String, delay: Double = 0) -> some View { modifier(RiseIn(key: key, delay: delay)) }
 }
+
+/// A TILE SETTLING AS IT SCROLLS IN: while a tile is coming up from under the bottom edge it leans back in depth, a
+/// little low, and lies flat as it reaches its place; it keeps following the finger (no timer), never fades, and is
+/// still under Reduce Motion.
+struct SettleIn: ViewModifier {
+    func body(content: Content) -> some View {
+        content.scrollTransition(.interactive(timingCurve: .easeOut), axis: .vertical) { c, phase in
+            let p = Motion.reduce ? 0 : max(0, phase.value)
+            return c
+                .rotation3DEffect(.degrees(p * -24), axis: (x: 1, y: 0, z: 0), anchor: .top, perspective: 0.6)
+                .offset(y: p * 18)
+                .scaleEffect(1 - p * 0.05, anchor: .top)
+        }
+    }
+}
+
+extension View {
+    /// leans back and settles flat as it scrolls up into view (SettleIn)
+    func settlesIn() -> some View { modifier(SettleIn()) }
+}

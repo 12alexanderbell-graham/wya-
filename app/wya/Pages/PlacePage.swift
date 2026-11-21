@@ -2086,7 +2086,14 @@ private struct PageLayer: View {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 12) {
-                    ForEach(all, id: \.self) { h in highlightCard(h, w: w) }
+                    ForEach(all, id: \.self) { h in
+                        highlightCard(h, w: w)
+                            .scrollTransition(.interactive, axis: .horizontal) { c, phase in
+                                c.rotation3DEffect(.degrees(Motion.reduce ? 0 : phase.value * -26), axis: (x: 0, y: 1, z: 0),
+                                                   anchor: phase.value > 0 ? .leading : .trailing, perspective: 0.55)
+                                    .scaleEffect(Motion.reduce ? 1 : 1 - abs(phase.value) * 0.07)
+                            }
+                    }
                 }
                 .scrollTargetLayout()
             }

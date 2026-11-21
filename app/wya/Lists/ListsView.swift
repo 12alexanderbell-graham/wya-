@@ -250,7 +250,7 @@ struct ListsWater: View {
             let ordered = lists.filter(\.wish) + lists.filter { !$0.wish }
             if !ordered.isEmpty {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
-                    ForEach(ordered) { l in l.wish ? AnyView(wishTile(l)) : AnyView(listTile(l)) }
+                    ForEach(ordered) { l in (l.wish ? AnyView(wishTile(l)) : AnyView(listTile(l))).settlesIn() }
                 }
                 .padding(.top, 4)
             }
@@ -277,6 +277,7 @@ struct ListsWater: View {
                         let spots2 = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots
                         tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs2,
                              cover: ccs2.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots2)
+                            .settlesIn()
                     }
                 }
                 .padding(.top, 4)
@@ -290,6 +291,7 @@ struct ListsWater: View {
                         tile(t.id, name: t.name.isEmpty ? "New tier list" : t.name, dim: t.name.isEmpty, count: t.count, ccs: [],
                              cover: AnyView(TierBandsCover(tiers: t)),
                              words: t.count == 0 ? "Nothing ranked yet" : "\(t.count) ranked")
+                            .settlesIn()
                     }
                 }
                 .padding(.top, 4)
