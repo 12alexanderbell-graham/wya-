@@ -31,6 +31,8 @@ final class PlacePageState {
         var photo: String?
         /// the prose is a Wikivoyage article's opening (else Wikidata's description), for Sources
         var proseWikivoyage = false
+        /// or English Wikipedia's opening, where no guide has a word on it
+        var proseWikipedia = false
     }
     struct Activity: Hashable { let name: String; let line: String; var wd: String? = nil }
     struct Highlight: Hashable {
@@ -348,9 +350,12 @@ extension PlacePageState.OnePage {
                art.townFolded.split(separator: " ").contains(where: { w in w.count >= 4 && name.townFolded.split(separator: " ").contains(w) }) {
                 d = await PlacePageState.guideIntro(cc, name: art, lat: ll.lat, lon: ll.lon, within: 30)
             }
+            var fromWikipedia = false
+            if d == nil, let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
             if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
                 self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
-                self.facts?.proseWikivoyage = true
+                self.facts?.proseWikivoyage = !fromWikipedia
+                self.facts?.proseWikipedia = fromWikipedia
             }
             // (its town still to come: the page waits for that answer too)
             if TownIndex.shared.ready { self.settled = true }
@@ -1438,9 +1443,56 @@ extension PlacePageState {
         return t
     }
 
-    /// a thing's own words from the country's guide listings: the listing with its Wikidata id, else the first with its
-    /// name (any case and accents); only a description of some length (a line of directions is not one)
-    /// the guide's article that lists a thing (by its Wikidata id), or nil
+    /// a thing's own words from the country's guide listings: the listing with its Wikidata id, else the first with
+    /// its name (any case and accents); only a description of some length (a line of directions is not one) the
+    /// guide's article that lists a thing (by its Wikidata id), or nil WIKIPEDIA'S OPENING: English Wikipedia's first
+    /// paragraph for a Wikidata item (its article's title from Wikidata, then the article's summary), else for its
+    /// name where that article stands within 150 km of it (a World Heritage record has no article of its own:
+    /// Angkor's and the Great Wall's are the place's), without the bracket of other names and sounds after its name;
+    /// kept for the app's run, a miss as ""
+    static var wikipedia: [String: String] = [:]
+    static func wikipediaIntro(wd: String?, name: String, lat: Double, lon: Double) async -> String? {
+        let key = (wd ?? "") + "|" + name
+        if let had = wikipedia[key] { return had.isEmpty ? nil : had }
+        var titles: [(String, Bool)] = []
+        if let wd, wd.hasPrefix("Q") {
+            var c = URLComponents(string: "https://www.wikidata.org/w/api.php")!
+            c.queryItems = [.init(name: "action", value: "wbgetentities"), .init(name: "format", value: "json"), .init(name: "ids", value: wd),
+                            .init(name: "props", value: "sitelinks"), .init(name: "sitefilter", value: "enwiki")]
+            if let u = c.url, let (d, _) = try? await URLSession.shared.data(from: u),
+               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+               let e = (j["entities"] as? [String: Any])?[wd] as? [String: Any],
+               let t = ((e["sitelinks"] as? [String: Any])?["enwiki"] as? [String: Any])?["title"] as? String { titles.append((t, false)) }
+        }
+        if titles.isEmpty {
+            titles.append((name, true))
+            if name.hasPrefix("The ") { titles.append((String(name.dropFirst(4)), true)) }
+        }
+        for (title, check) in titles {
+            guard let path = title.replacingOccurrences(of: " ", with: "_").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)?
+                    .replacingOccurrences(of: "/", with: "%2F"),
+                  let su = URL(string: "https://en.wikipedia.org/api/rest_v1/page/summary/" + path),
+                  let (sd, _) = try? await URLSession.shared.data(from: su),
+                  let sj = try? JSONSerialization.jsonObject(with: sd) as? [String: Any],
+                  (sj["type"] as? String) == "standard", var x = sj["extract"] as? String, x.count > 60 else { continue }
+            if check {
+                guard let co = sj["coordinates"] as? [String: Any], let la = (co["lat"] as? NSNumber)?.doubleValue,
+                      let lo = (co["lon"] as? NSNumber)?.doubleValue else { continue }
+                let dy = (la - lat) * 111.2, dx = (lo - lon) * 111.2 * cos(lat * .pi / 180)
+                guard dx * dx + dy * dy <= 150 * 150 else { continue }
+            }
+            // (the brackets in its first sentence that give other names, sounds or dates:)
+            if let dot = x.range(of: ". ") {
+                var head = String(x[..<dot.lowerBound])
+                head = head.replacingOccurrences(of: #"\s*\([^()]*[:;/][^()]*\)"#, with: "", options: .regularExpression)
+                x = head + x[dot.lowerBound...]
+            }
+            wikipedia[key] = x
+            return x
+        }
+        wikipedia[key] = ""
+        return nil
+    }
     static func listingArticle(_ cc: String, wd: String?) async -> String? {
         guard let wd, case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
@@ -2372,6 +2424,7 @@ struct SourcesRow: View {
     static func lines(_ facts: PlacePageState.Facts, kind: PlaceKey.Kind, credits: [String: String], id: String = "") -> [(String, String)] {
         var out: [(String, String)] = []
         if facts.proseWikivoyage, !facts.prose.isEmpty { out.append(("Text", "Wikivoyage, CC BY-SA")) }
+        else if facts.proseWikipedia, !facts.prose.isEmpty { out.append(("Text", "Wikipedia, CC BY-SA")) }
         else if !facts.prose.isEmpty { out.append(("Text", kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
         if let f = facts.photo { out.append(("Photo", (credits[f] ?? f) + ", Wikimedia Commons")) }
         if !facts.rows.isEmpty { out.append(("Facts", kind == .town ? "GeoNames, CC BY 4.0" : kind == .thing ? "Wikidata, CC0" : "Wikidata")) }
