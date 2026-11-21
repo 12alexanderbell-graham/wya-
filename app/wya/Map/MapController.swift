@@ -298,6 +298,7 @@ final class MapController {
     private(set) var closeUp = false
     static let closeIn: Double = 7, closeOut: Double = 5
     func checkCloseUp() {
+        guard afterFlight == nil, !CardState.shared.shown else { return }
         let want = closeUp ? k > Self.closeOut : k >= Self.closeIn
         #if DEBUG
         NSLog("wya closeup k %.1f -> %d", k, want ? 1 : 0)
