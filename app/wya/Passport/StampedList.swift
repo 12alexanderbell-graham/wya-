@@ -257,6 +257,7 @@ struct StampedList: View {
         .listStyle(.plain)
         // A4.21: the rows drop as one block down through the bottom edge (first tried row by row with a stagger:
         // List's own cell layout moved the rows over each other on the way)
+        .compositingGroup()
         .offset(y: listDrop)
         // the list's bottom soft edge (P3): rows scrolling and leaving go out through it, never cut by a hard line
         .mask(alignment: .top) {
