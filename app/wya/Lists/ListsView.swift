@@ -86,6 +86,7 @@ struct ListsThing: Identifiable {
 struct ListsWater: View {
     let water: Water
     let map: MapController
+    @Environment(\.displayScale) private var scale
     let form: Water.Form
     @State private var s = ListsState.shared
     @State private var store = ListsStore.shared
@@ -236,13 +237,30 @@ struct ListsWater: View {
                 }
                 .frame(width: w, alignment: .leading)
                 .id(s.kind)
-                .transition(.asymmetric(insertion: .move(edge: s.kindForward ? .trailing : .leading),
-                                        removal: .move(edge: s.kindForward ? .leading : .trailing)))
+                // (the side read while it moves: a shelf leaving kept the side of the turn that brought it, and went out
+                // the same way the next one came in)
+                .transition(.asymmetric(insertion: .modifier(active: ShelfSlide(on: true, leaving: false, w: w + 24),
+                                                             identity: ShelfSlide(on: false, leaving: false, w: w + 24)),
+                                        removal: .modifier(active: ShelfSlide(on: true, leaving: true, w: w + 24),
+                                                           identity: ShelfSlide(on: false, leaving: true, w: w + 24))))
             }
             .frame(width: w, alignment: .topLeading)
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
+        // THE OTHER KINDS' COVERS MADE AHEAD: the plans' map covers at the tiles' own size, so they are there when
+        // the wheel turns to them (once the towns' and sights' indexes are in: a cover's key and its dots wait for
+        // them, and a plan with no places yet finds its town by them)
+        .task(id: "\(Int(w))|\(TownIndex.shared.ready && ThingIndex.shared.ready)") {
+            TownIndex.shared.load(); ThingIndex.shared.load()
+            guard TownIndex.shared.ready && ThingIndex.shared.ready else { return }
+            let side = (w - 12) / 2
+            for p in store.book.plans where !p.arch && !p.hid && !p.ai {
+                let (ccs, spots) = Self.planCover(p)
+                guard !ccs.isEmpty else { continue }
+                _ = await ListMapCovers.image(ccs, spots: spots, world: map.world, size: CGSize(width: side, height: side), scale: scale)
+            }
+        }
     }
 
     /// THE SHELF OF THE KIND THE WHEEL IS ON, each kind as what it is (never one card for all): Lists, the wishlist
@@ -273,19 +291,7 @@ struct ListsWater: View {
             if !plans.isEmpty {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
                     ForEach(plans) { p in
-                        let ccs = Array(NSOrderedSet(array: (p.days.flatMap(\.items) + p.ideas).compactMap { $0.cc?.lowercased() })
-                            .array.compactMap { $0 as? String }.prefix(4))
-                        // (each thing's own place, as a list's:, where they are, not Georgia's middle)
-                        let spots = (p.days.flatMap(\.items) + p.ideas).compactMap { i -> String? in
-                            guard let cc = i.cc, !cc.isEmpty else { return nil }
-                            let n = i.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-                            return n.isEmpty ? nil : n + "|" + cc.lowercased()
-                        }
-                        let named = ccs.isEmpty ? Self.namedTown(p.name) : nil
-                        // (or the country it says,: its map)
-                        let land = ccs.isEmpty && named == nil ? Self.namedCountry(p.name) : nil
-                        let ccs2 = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs
-                        let spots2 = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots
+                        let (ccs2, spots2) = Self.planCover(p)
                         tile(p.id, name: p.name.isEmpty ? "New plan" : p.name, dim: p.name.isEmpty, count: p.count, ccs: ccs2,
                              cover: ccs2.isEmpty ? AnyView(PlanCalendarCover(plan: p)) : nil, words: Self.shortWhen(p), spots: spots2)
                             .settlesIn()
@@ -336,7 +342,25 @@ struct ListsWater: View {
              spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
              places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
     }
-    /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil
+    /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil A PLAN'S COVER'S
+    /// PLACES: its countries (the first four) and its things where they are; with no places yet, the town its name
+    /// says  or the country; none, its little calendar
+    static func planCover(_ p: Plan) -> (ccs: [String], spots: [String]) {
+        let ccs = Array(NSOrderedSet(array: (p.days.flatMap(\.items) + p.ideas).compactMap { $0.cc?.lowercased() })
+            .array.compactMap { $0 as? String }.prefix(4))
+        // (each thing's own place, as a list's:, where they are, not Georgia's middle)
+        let spots = (p.days.flatMap(\.items) + p.ideas).compactMap { i -> String? in
+            guard let cc = i.cc, !cc.isEmpty else { return nil }
+            let n = i.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            return n.isEmpty ? nil : n + "|" + cc.lowercased()
+        }
+        let named = ccs.isEmpty ? namedTown(p.name) : nil
+        // (or the country it says,: its map)
+        let land = ccs.isEmpty && named == nil ? namedCountry(p.name) : nil
+        return (named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs,
+                named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots)
+    }
+
     static func namedTown(_ name: String) -> TownIndex.Hit? {
         TownIndex.shared.load()
         guard TownIndex.shared.ready else { return nil }
@@ -1302,7 +1326,9 @@ struct ListCover: View {
     var body: some View {
         GeometryReader { g in
             ZStack {
-                if let img { Image(uiImage: img).resizable().scaledToFill() } else { Color.clear }
+                if let shown = img ?? ListMapCovers.cached(ccs, spots: spots, size: g.size) {
+                    Image(uiImage: shown).resizable().scaledToFill()
+                } else { Color.clear }
             }
             .frame(width: g.size.width, height: g.size.height)
             .clipped()
@@ -1418,5 +1444,16 @@ enum ListMapCovers {
         }
         cache[k] = out
         return out
+    }
+}
+
+/// a shelf moving in or out with the kinds' wheel: the side is the wheel's last turn, read while it moves
+struct ShelfSlide: ViewModifier {
+    let on: Bool
+    let leaving: Bool
+    let w: CGFloat
+    func body(content: Content) -> some View {
+        let fwd = ListsState.shared.kindForward
+        content.offset(x: on ? (leaving ? (fwd ? -w : w) : (fwd ? w : -w)) : 0)
     }
 }
