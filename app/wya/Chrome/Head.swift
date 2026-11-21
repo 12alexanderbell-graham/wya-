@@ -1082,8 +1082,10 @@ struct SearchResults: View {
             return !twin && !sightIDs.contains(f.item.id) && (n.hasPrefix(fold0) || n.contains(" " + fold0)) && (n == fold0 || fold0.count >= 4 || f.item.fame >= 3)
         } : []
         let setNamed = setSights.filter { $0.item.name.townFolded == fold0 }
-        let thingNamed = thingSights.filter { $0.name.townFolded == fold0 }
-        let sights = Array((setNamed.map { ResultKey.item($0.key) } + thingSights.filter { $0.name.townFolded != fold0 }.map { ResultKey.thing($0.key) }
+        // (only when none better known was found: put Kyiv's Golden Gate over the Golden Gate Bridge)
+        let topFame = thingSights.map(\.fame).max() ?? 0
+        let thingNamed = thingSights.filter { $0.name.townFolded == fold0 && $0.fame >= topFame }
+        let sights = Array((setNamed.map { ResultKey.item($0.key) } + thingSights.filter { t in !thingNamed.contains { $0.id == t.id } }.map { ResultKey.thing($0.key) }
             + setSights.filter { $0.item.name.townFolded != fold0 }.map { ResultKey.item($0.key) }).prefix(2))
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
@@ -1455,8 +1457,6 @@ struct SearchResults: View {
         out += exact.filter { !smallExact.contains($0) }.map(region)
         out += named0
         out += smallExact.map(region)
-        // (in the order they came, the known one first: Santorini's Oía before Oiã in Portugal)
-        out += towns.filter { ($0.name.townFolded == typed || $0.name.townFolded == full) && $0.people < 50_000 }.map(town)
         // (a name typed whole and found: its sights before the other regions that only start with it)
         if exact.isEmpty && whole.isEmpty {
             // (a region of under 100,000 people stays after the sights, as before: it never pushes them off the rows)
@@ -1471,7 +1471,11 @@ struct SearchResults: View {
             out += weighed.map(\.1)
             out += sights
             out += peopled.filter { $0.1 < 100_000 }.map { region($0.0) }
-        } else { out += begun.map(town); out += sights; out += named.map(region) }
+        } else {
+            out += begun.map(town); out += sights
+            out += towns.filter { ($0.name.townFolded == typed || $0.name.townFolded == full) && $0.people < 50_000 }.map(town)
+            out += named.map(region)
+        }
         out += otherTowns.map(town)
         out += others.map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += small.map(region)
