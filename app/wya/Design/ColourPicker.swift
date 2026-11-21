@@ -196,7 +196,12 @@ struct ColourPicker: View {
         let marker = CGPoint(x: r + reach * sin(a), y: r - reach * cos(a))
         return ZStack(alignment: .topLeading) {
             Group {
-                if let image { Image(decorative: image, scale: 1).resizable().interpolation(.high) } else { Color.clear }
+                // THE WHEEL THERE FROM THE FIRST FRAME: drawn away from the screen, it was an empty ring for a tenth
+                // of a second as its sheet came up, then all its colours at once; now a small one, quick to draw,
+                // stands in its place until the full one is ready (soft, then sharp; never empty, then full)
+                if let image { Image(decorative: image, scale: 1).resizable().interpolation(.high) }
+                else if let quick = Self.quickWheel(colour.light) { Image(decorative: quick, scale: 1).resizable().interpolation(.high) }
+                else { Color.clear }
             }
             .frame(width: d, height: d)
             .clipShape(Circle())
@@ -326,6 +331,16 @@ struct ColourPicker: View {
     private func keep() {
         store.add(colour)
         done(colour)
+    }
+
+    /// a small wheel for a lightness, kept: drawn on the spot the first time (a quarter of the points, a few thousand)
+    private static var quickWheels: [Int: CGImage] = [:]
+    static func quickWheel(_ light: Double) -> CGImage? {
+        let k = Int(light * 40)
+        if let w = quickWheels[k] { return w }
+        let w = OKLCH.wheel(size: max(24, Int((wheelD / 2).rounded())), light: light)
+        quickWheels[k] = w
+        return w
     }
 
     private func redraw() async {
