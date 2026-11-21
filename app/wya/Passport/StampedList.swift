@@ -34,6 +34,8 @@ struct StampedList: View {
     @State private var kept: [Row] = []
     /// A4.21: how far the rows have dropped through the list's bottom edge
     @State private var listDrop: CGFloat = 0
+    /// closing: where the list stood when it closed, kept while its rows drop out (it no longer rides the water down)
+    @State private var pinnedY0: CGFloat?
     /// the continent the list was opened on (nil: the world)
     @State private var scope: String?
 
@@ -193,7 +195,7 @@ struct StampedList: View {
 
     var body: some View {
         let L = water.layout
-        let y0 = top + 12
+        let y0 = pinnedY0 ?? top + 12
         let bottom = L.capsule.minY - 24
         let h = max(60, bottom - y0)
         // whole rows only (0.7: nothing sits cut off at rest): the height ends between two rows, the soft edge lies
@@ -285,7 +287,12 @@ struct StampedList: View {
             if go && !arrived { arrive() }
         }
         .onChange(of: water.stampedList) { _, open in
-            if open { startTop = form.top; openedAt = Date(); arrived = false } else { leave() }
+            if open {
+                // (back from a close still dropping: in place again at once, nothing dropped)
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { listDrop = 0; pinnedY0 = nil }
+                startTop = form.top; openedAt = Date(); arrived = false
+            } else { leave() }
         }
         // a row that comes while the list is up (an undo, a stamp elsewhere) arrives the same way; one that goes
         // (unstamped here or anywhere) leaves by A4.20: it stays on screen while its words roll out and its flag
@@ -340,21 +347,26 @@ struct StampedList: View {
             withAnimation(Motion.quick) { _ = wordsOut.insert(id) }
         }
     }
-    /// closing: every row's words and flag go in the same frame (no roll, no stagger)
+    /// CLOSING: the rows drop together down and out through the list's bottom soft edge, as for Details (A4.21),
+    /// while the water goes down; the list stays where it stood, so its edge stays above the tabs. They went in one
+    /// frame; now they leave through the edge
     private func leave() {
         let ids = rows.map(\.id)
         let shown = ids.filter { onScreen.contains($0) }
         for id in ids where !onScreen.contains(id) { flagOut.remove(id); wordsOut.remove(id) }
-        // all at once, with no roll: the water starts down as the list closes, and rows still rolling out one by one
-        // rode down with it into the tabs
-        var t = Transaction(); t.disablesAnimations = true
-        withTransaction(t) {
-            for id in shown { wordsOut.remove(id); flagOut.remove(id) }
-        }
         arrived = false
+        pinnedY0 = top + 12
+        withAnimation(Motion.quick) { listDrop = listHeight + 8 }
         // the solar system comes back as soon as the last row has gone (Water's own timer is the cap)
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.leaving(shown.count)) {
-            if !water.stampedList { water.listLeaving = false }
+            guard !water.stampedList else { return }
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) {
+                for id in ids { wordsOut.remove(id); flagOut.remove(id) }
+                listDrop = 0
+                pinnedY0 = nil
+            }
+            water.listLeaving = false
         }
     }
     /// how long the list stays on screen after it is closed, for its rows to leave
