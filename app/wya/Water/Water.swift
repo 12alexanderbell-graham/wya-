@@ -72,11 +72,15 @@ final class Water {
         let me = settingsJob
         let back = settingsFrom
         settingsFrom = nil
+        // landed: the rows' words roll out, then settings let the water go and the caption rolls in (it was one frame)
         let done = { [weak self] in
             guard let self, me == self.settingsJob else { return }
-            self.settingsWords = false
-            self.settingsClosing = false
-            self.settings = false
+            withAnimation(.smooth(duration: 0.15)) { self.settingsWords = false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
+                guard let self, me == self.settingsJob else { return }
+                self.settingsClosing = false
+                self.settings = false
+            }
         }
         if regions { done(); go(.half); return }
         if let back, stop == .half || stop == .full, back != stop, grab == nil { onLand = done; go(back) }

@@ -74,7 +74,7 @@ private struct RowWords: View {
             }
         }
         .font(.body)
-        .contentTransition(.identity)
+        .contentTransition(.numericText(value: shown ? 1 : 0))
         .padding(.horizontal, 16)
         .frame(height: height)
         .frame(maxWidth: .infinity)
