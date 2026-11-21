@@ -209,8 +209,9 @@ final class CollectionStore {
             // (collections-4 has World Heritage, its best known first; the older file if the server still holds only that)
             var data: Data?
             // (18: and for lakes, islands, peaks and the rest, the first photograph in the article named for the
-            // place)
-            for f in ["native/collections/collections-18.wyco", "native/collections/collections-17.wyco", "native/collections/collections-16.wyco", "native/collections/collections-15.wyco", "native/collections/collections-14.wyco", "native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
+            // place) (19: and the places whose only photo was a render from space, Greenland, the Mediterranean, by
+            // hand)
+            for f in ["native/collections/collections-19.wyco", "native/collections/collections-18.wyco", "native/collections/collections-17.wyco", "native/collections/collections-16.wyco", "native/collections/collections-15.wyco", "native/collections/collections-14.wyco", "native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let raw = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] {
