@@ -432,27 +432,37 @@ struct DetailsSheet: View {
                 }
             }
             .frame(minHeight: 52).edgeRow()
-            if calOpen == i, !plain {
-                VStack(alignment: .leading, spacing: 0) {
-                    VisitCalendar(from: Binding(get: { s.d[keyPath: tk(i, \.from)] }, set: { s.d[keyPath: tk(i, \.from)] = $0 }),
-                                  to: Binding(get: { s.d[keyPath: tk(i, \.to)] }, set: { s.d[keyPath: tk(i, \.to)] = $0 }))
-                    HStack(spacing: 12) {
-                        Text("In words").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
-                        Spacer(minLength: 8)
-                        // when the days aren't known: the time in words (40 characters); the empty field says only "Add"
-                        field("Add", id: "rough\(i)", max: 40, trailing: true, rough)
+            // THE CALENDAR OPENS AS A DRAWER: it stood whole at once over How long, How and Why while they slid down
+            // under it. Now its own lasting holder grows to it and is cut to its height, so the month is uncovered
+            // from the top as the rows below move; shutting, it slides up under the edge
+            VStack(alignment: .leading, spacing: 0) {
+                if calOpen == i, !plain {
+                    VStack(alignment: .leading, spacing: 0) {
+                        VisitCalendar(from: Binding(get: { s.d[keyPath: tk(i, \.from)] }, set: { s.d[keyPath: tk(i, \.from)] = $0 }),
+                                      to: Binding(get: { s.d[keyPath: tk(i, \.to)] }, set: { s.d[keyPath: tk(i, \.to)] = $0 }))
+                        HStack(spacing: 12) {
+                            Text("In words").font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44)
+                            Spacer(minLength: 8)
+                            // when the days aren't known: the time in words (40 characters); the empty field says only "Add"
+                            field("Add", id: "rough\(i)", max: 40, trailing: true, rough)
+                        }
+                        .frame(minHeight: 52).edgeRow()
+                        if s.d[keyPath: tk(i, \.from)] != nil {
+                            row("Clear the days", blank: false) { EmptyView() }
+                                .contentShape(Rectangle())
+                                .onTapGesture { Feel.tap(); s.d[keyPath: tk(i, \.from)] = nil; s.d[keyPath: tk(i, \.to)] = nil }
+                                .accessibilityAddTraits(.isButton)
+                        }
                     }
-                    .frame(minHeight: 52).edgeRow()
-                    if s.d[keyPath: tk(i, \.from)] != nil {
-                        row("Clear the days", blank: false) { EmptyView() }
-                            .contentShape(Rectangle())
-                            .onTapGesture { Feel.tap(); s.d[keyPath: tk(i, \.from)] = nil; s.d[keyPath: tk(i, \.to)] = nil }
-                            .accessibilityAddTraits(.isButton)
-                    }
+                    .padding(.bottom, 8)
+                    .transition(.asymmetric(insertion: .identity,
+                                            removal: .modifier(active: DrawerSlide(y: -24), identity: DrawerSlide(y: 0))))
                 }
-                .padding(.bottom, 8)
-                .transition(.identity)
             }
+            // the water's width always (empty, the holder had none, so its cut grew sideways too and the month came
+            // in from the left, "N",, one column at a time): only its foot moves
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .clipShape(SideOpenRect())
             // how long: the days counted when they're known (on the When row), else picked in words
             if VisitCalendar.days(s.d[keyPath: tk(i, \.from)], s.d[keyPath: tk(i, \.to)]) == nil {
                 row("How long", blank: gone) { longStepper(i, blank: gone) }
@@ -1154,8 +1164,11 @@ struct DetailsSheet: View {
         Button(action: act) {
             // the app's own icons only, never SF Symbols (0.8.7): "plus" and "minus" from Icons5
             Icon5Still(key: g, progress: 0, ink: Palette.white, size: 17)
-                .frame(width: 36, height: 36).background(Palette.ink.opacity(dim ? 0.5 : 1), in: .circle)
-                .opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil }
+                .frame(width: 36, height: 36)
+                // its fill and its going away change in one frame, never a fade; only those: the whole circle without
+                // animation also stopped it moving with its row, so when a calendar opened or shut above it the
+                // circles stood at the row's new place over the month while the words glided there
+                .animation(nil) { $0.background(Palette.ink.opacity(dim ? 0.5 : 1), in: .circle).opacity(blank ? 0 : 1) }
                 .frame(width: 44, height: 44)
                 // the whole 44 pt touches (only the drawn circle did)
                 .contentShape(Rectangle())
