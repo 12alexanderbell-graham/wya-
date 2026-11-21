@@ -436,7 +436,8 @@ struct SheetContent: View {
             if captionShown != fits {
                 // (and a tab coming back: the map's caption is there with the map)
                 let taken = water.settings || water.details || water.upload
-                if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || taken != takenWas { captionShown = fits }
+                let still = StampedList.backFromDetails && water.stop == .full
+                if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || (taken != takenWas && !still) { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
         }
