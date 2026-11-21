@@ -411,6 +411,12 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     /// the set whose marks were last drawn, and when it came (its marks settle in, see the set's marks)
     private var setArrivedFor: String?
     private var setArrivedAt: CFTimeInterval = 0
+    /// the set's marks as last drawn, and the ones of the set just left, shrinking away (never gone in one frame)
+    private var lastSetMarks: [SetMarkD] = []
+    private var lastSetFor: String?
+    private var leavingMarks: [SetMarkD] = []
+    private var leavingAt: CFTimeInterval = 0
+    private var leavingBuffer: MTLBuffer?
     /// a place's shape into a mask (the fans fill even-odd), from the level's slices or the world's own outlines
     private func placeFans(_ me: MTLRenderCommandEncoder, _ fp: Int, _ tiles: [DetailTile]?) -> Bool {
         var drew = false
@@ -1301,16 +1307,37 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // 6'. A SET'S MARKS: a place with no shape to see (a World Heritage site, a peak, a park still under 8 pt
         // across) is the map's diamond, smaller than a country's, the same for every place: cream, lime when stamped,
         // blue when wished, darker under a finger. All of the list's places at every zoom; nothing comes or goes as
-        // the map moves.
+        // the map moves. THE SET JUST LEFT: another set picked, its marks shrink away where they stand over 0.22 s on
+        // the arriving marks' curve, also while the next one is still loading; leaving Places takes them at once, as
+        // before
+        let setNow = placesOn ? controller.markCollection?.id : nil
+        // (while the next set loads there is no set for a moment: that is a change too; only leaving Places is not)
+        if let f = lastSetFor, setNow != f {
+            if placesOn { leavingMarks = lastSetMarks; leavingAt = now }
+            lastSetMarks = []; lastSetFor = nil
+        }
+        if !placesOn { leavingMarks = [] }
+        let gone = Float(now - leavingAt)
+        if !leavingMarks.isEmpty, gone < 0.22, let dp = diamondPipe,
+           let lb = leavingBuffer ?? device.makeBuffer(length: 4096 * MemoryLayout<SetMarkD>.stride) {
+            leavingBuffer = lb
+            controller.needsFrame = true
+            let x = gone / 0.22 * 6, k = exp(-x) * (1 + x)
+            let out = leavingMarks.prefix(4096).map { var d = $0; d.pad.x *= k; return d }
+            out.withUnsafeBytes { lb.contents().copyMemory(from: $0.baseAddress!, byteCount: $0.count) }
+            enc.setRenderPipelineState(dp)
+            enc.setVertexBuffer(lb, offset: 0, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 6, instanceCount: out.count)
+        } else if !leavingMarks.isEmpty, gone >= 0.22 { leavingMarks = [] }
         if placesOn, let c = controller.markCollection, !(c.shapes != nil && controller.setScene == nil), let dp = diamondPipe {
-            struct D { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
+            typealias D = SetMarkD
             let scene = controller.setScene
             var plain: [D] = [], wished: [D] = [], stamped: [D] = [], pressed: [D] = []
             let W = Float(controller.view.width), H = Float(controller.view.height)
             // (one size for all of them at any zoom, smaller far out where they are many: the map's one mark)
             let size0 = Float(controller.markPad)
             // A NEW SET SETTLES IN (no teleports): its marks grow into place from the middle of the screen outward,
-            // each over 0.32 s on a spring with no bounce, the last 0.28 s after the first; the old set is gone at once
+            // each over 0.32 s on a spring with no bounce, the last 0.28 s after the first (the old set's shrink away above)
             if setArrivedFor != c.id { setArrivedFor = c.id; setArrivedAt = now }
             let since = Float(now - setArrivedAt)
             if since < 0.7 { controller.needsFrame = true }
@@ -1345,6 +1372,8 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 if st.stamped { stamped.append(d) } else if st.wished { wished.append(d) } else { plain.append(d) }
             }
             let ds = plain + wished + stamped + pressed
+            // (kept at full size each frame: what shrinks away if the set changes)
+            do { lastSetMarks = ds.map { var d = $0; d.pad.x = size0; return d }; lastSetFor = c.id }
             if !ds.isEmpty {
                 let need = ds.count * MemoryLayout<D>.stride
                 if setMarkBuffer == nil || setMarkBuffer!.length < need { setMarkBuffer = device.makeBuffer(length: max(need, 4096) * 2) }
@@ -2068,3 +2097,6 @@ enum SunPosition {
         return SIMD4(Float(s.lat), Float(s.lon), 1, 1)
     }
 }
+
+/// one of a set's marks as the diamond pipeline takes it: where, its size, its colour
+struct SetMarkD { var p: SIMD2<Float>; var pad = SIMD2<Float>(0, 0); var colour: SIMD4<Float> }
