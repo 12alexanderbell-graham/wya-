@@ -2189,6 +2189,7 @@ private struct PageLayer: View {
                     VStack(spacing: 0) {
                         Text(it.0).font(.system(size: 64, weight: .semibold, design: .rounded)).monospacedDigit()
                             .foregroundStyle(Palette.ink).contentTransition(.numericText())
+                            .animation(Motion.quick, value: it.0)
                         Text(it.1).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                     }
                 }
