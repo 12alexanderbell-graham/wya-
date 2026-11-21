@@ -554,34 +554,50 @@ struct DetailsSheet: View {
         s.d.stays = rest.isEmpty ? nil : rest
     }
 
+    /// one lasting part, never a swap: closed it was a row and open a header, swapped in one frame, so the × cut the
+    /// whole part away. Now the words stay where they are (only their weight turns), the plus and the × change about
+    /// their own middle, and the part under them opens and shuts as a drawer: its rows are there at once, shown as
+    /// the part's edge moves down, and on the × they stay, sliding up under the edge as it closes
     @ViewBuilder private var livedSection: some View {
-        if s.lived {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 12) {
-                    Text(out ? Caption.blank("Lived here", "\u{2002}") : "Lived here").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                        .contentTransition(.identity)
-                        .accessibilityAddTraits(.isHeader)
-                    Spacer(minLength: 8)
-                    xCircle("Lived here") {
-                        Feel.lift()
-                        typing = nil
-                        withAnimation(Motion.quick) { s.lived = false }
-                    }
-                    .opacity(out ? 0 : 1)
-                    // (its circle's middle under the plus of Add a visit above: the 44 pt touch reaches 8 pt past)
-                    .padding(.trailing, -8)
+        let on = s.lived
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Text(out ? Caption.blank("Lived here", "\u{2002}") : "Lived here")
+                    .font(.body.weight(on ? .semibold : .regular)).foregroundStyle(Palette.ink)
+                    .contentTransition(out ? .identity : .interpolate)
+                    .accessibilityAddTraits(on ? .isHeader : [])
+                Spacer(minLength: 8)
+                // one mark, not two swapped: the plus turns an eighth into the × while its black circle grows
+                // under it from the middle, the plus white where the circle is (two marks swapped sat apart while
+                // the row moved, the leaving one where the row had been)
+                let disc = Circle().frame(width: 24, height: 24).scaleEffect(on ? 1 : 0.01)
+                ZStack {
+                    disc.foregroundStyle(Palette.ink)
+                    Icon5Still(key: "plus", progress: 0, ink: Palette.ink, size: 17)
+                    Icon5Still(key: "plus", progress: 0, ink: Palette.white, size: 17).mask(disc)
                 }
-                .frame(minHeight: 44).edgeRow()
-                livedBlock
+                .scaleEffect(on ? 13 / 17 * 1.25 : 1)
+                .rotationEffect(.degrees(on ? 45 : 0))
+                .frame(width: 44, height: 44)
+                .opacity(out ? 0 : 1)
+                // (the ×'s middle under the plus of Add a visit above: the 44 pt touch reaches 8 pt past)
+                .padding(.trailing, -8)
             }
-            .transition(.identity)
-        } else {
-            row("Lived here", blank: out) { Icon5(key: "plus", ink: Palette.ink, size: 17).frame(width: 28, height: 28).opacity(out ? 0 : 1) }
-                .contentShape(Rectangle())
-                .onTapGesture { Feel.notch(); withAnimation(Motion.quick) { s.lived = true } }
-                .accessibilityAddTraits(.isButton)
-                .transition(.identity)
+            .frame(minHeight: on ? 44 : 52).edgeRow()
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if s.lived { Feel.lift(); typing = nil } else { Feel.notch() }
+                withAnimation(Motion.quick) { s.lived.toggle() }
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(on ? "Closes Lived here" : "Opens Lived here")
+            if on {
+                livedBlock
+                    .transition(.asymmetric(insertion: .identity,
+                                            removal: .modifier(active: DrawerSlide(y: -16), identity: DrawerSlide(y: 0))))
+            }
         }
+        .clipShape(SideOpenRect())
     }
 
     private var livedBlock: some View {
@@ -1398,4 +1414,10 @@ enum DetailsRegions {
         return e
     }
     static func prefetch(_ cc: String) { Task { _ = await read(cc) } }
+}
+
+/// a drawer's rows leaving: kept while it shuts, sliding up under its edge
+struct DrawerSlide: ViewModifier {
+    var y: CGFloat
+    func body(content: Content) -> some View { content.offset(y: y) }
 }
