@@ -428,6 +428,10 @@ struct ChipRow: View {
                         .padding(.horizontal, 12)
                         .frame(height: 34)
                         .background { if it.on { Capsule().fill(Palette.ink) } }
+                        // THE CHOSEN ONE JUST APPEARS: under the row's animation the black chip faded in over ten
+                        // frames, grey on the glass, its word lost in the grey half-way ("Draw" unreadable for four
+                        // frames); now chip and ink change at once
+                        .animation(nil, value: it.on)
                         // (a chip that can't act yet at the one grey, 50%)
                         .opacity(it.dim ? 0.5 : 1)
                         .frame(height: 44)
