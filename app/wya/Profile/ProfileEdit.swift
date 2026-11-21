@@ -365,7 +365,8 @@ struct ProfileBadgesList: View {
                 .font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
             // what you have, and the next level's number at 50%
             (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
-             + Text(next.map { " of " + Self.value(b, $0) } ?? "").font(.system(size: 22, weight: .semibold, design: .rounded))
+             + Text(next.map { " of " + Self.value(b, $0) + " for " + Badges.levelName[min(5, b.level + 1)] } ?? "")
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .foregroundStyle(Palette.ink.opacity(0.5)))
                 .monospacedDigit()
                 .padding(.top, 20)

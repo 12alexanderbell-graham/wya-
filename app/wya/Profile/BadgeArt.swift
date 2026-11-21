@@ -3,7 +3,7 @@ import RealityKit
 import Metal
 
 /// A BADGE'S LEVEL: lime, blue, silver, gold, diamond (P07 §6), each its own material (BadgeMaterial)
-enum BadgeLevel: Int, CaseIterable {
+nonisolated enum BadgeLevel: Int, CaseIterable {
     case lime = 1, blue, silver, gold, diamond
     var name: String { ["", "Lime", "Blue", "Silver", "Gold", "Diamond"][rawValue] }
     /// the material drawn flat: light at the top left, deep at the bottom right (the logo's own lime and blue; metals
@@ -34,6 +34,22 @@ enum BadgeForm: Hashable {
     /// A MEDAL STRUCK WITH ITS NUMBER: the step its level stands for ("20" for Languages at gold, the first step for
     /// one not yet earned) raised on its face, as a real medal is struck with what it was won for
     case struck(String)
+    /// A NATURAL REGION AS ITSELF: a range's or a sea's own outline from the Places sets' shapes, its relief inside
+    /// it
+    case natural(file: String, key: String, sea: Bool)
+    /// the Arctic seen from above the Pole
+    case arctic
+
+    /// the group badges that are a natural region, not their countries
+    static let regions: [String: BadgeForm] = {
+        let ranges = "native/collections/shapes-ranges-1.wyau", seas = "native/collections/shapes-allseas-2.wyau"
+        return ["The Alps": .natural(file: ranges, key: "Q1286", sea: false),
+                "The Himalayas": .natural(file: ranges, key: "Q5451", sea: false),
+                "The Andes": .natural(file: ranges, key: "Q5456", sea: false),
+                "The Caucasus": .natural(file: ranges, key: "Q5477", sea: false),
+                "The Mediterranean": .natural(file: seas, key: "Q4918", sea: true),
+                "The Arctic": .arctic]
+    }()
 
     @MainActor static func of(_ b: Badge) -> BadgeForm {
         switch b.id {
@@ -46,6 +62,7 @@ enum BadgeForm: Hashable {
         case "streak": return .swirl
         default: break
         }
+        if b.family == "groups", let n = regions[b.name] { return n }
         // a continent's capitals: the continent
         if let p = b.place, BadgeArt.shared.world?.contViews[p] != nil { return .continent(p) }
         if let m = members(b), !m.isEmpty {
@@ -85,6 +102,8 @@ enum BadgeForm: Hashable {
         case .swirl: "swirl"
         case .medal: "medal"
         case .struck(let t): "struck:" + t
+        case .natural(_, let k, _): "n:" + k
+        case .arctic: "arctic"
         }
     }
 }
@@ -95,7 +114,11 @@ enum BadgeRings {
     /// a continent's land: every unit the map counts in it, rings as the map has them, inside the continent's own view;
     /// specks too small to see at a badge's size left out
     static func continent(_ w: World?, _ name: String) -> (rings: [[CGPoint]], aspect: CGFloat) {
-        guard let w, let view = w.contViews[name] else { return ([], 1) }
+        let r = continentBoxed(w, name); return (r.rings, r.aspect)
+    }
+    /// the same, with its box in the map's own units (x0, y0, x1, y1): the flat badges' relief is read through it
+    static func continentBoxed(_ w: World?, _ name: String) -> (rings: [[CGPoint]], aspect: CGFloat, box: SIMD4<Float>) {
+        guard let w, let view = w.contViews[name] else { return ([], 1, .zero) }
         var raw: [[SIMD2<Float>]] = []
         for u in 0 ..< w.unitConts.count where w.unitConts[u].contains(name) && u < w.unitRings.count {
             for ri in w.unitRings[u] {
@@ -109,16 +132,20 @@ enum BadgeRings {
         }
         let all = raw.flatMap { $0 }
         guard let x0 = all.map(\.x).min(), let x1 = all.map(\.x).max(), let y0 = all.map(\.y).min(), let y1 = all.map(\.y).max(),
-              x1 > x0, y1 > y0 else { return ([], 1) }
+              x1 > x0, y1 > y0 else { return ([], 1, .zero) }
         let rings = raw.map { r in r.map { CGPoint(x: CGFloat(($0.x - x0) / (x1 - x0)), y: CGFloat(($0.y - y0) / (y1 - y0))) } }
-        return (rings, CGFloat((x1 - x0) / (y1 - y0)))
+        return (rings, CGFloat((x1 - x0) / (y1 - y0)), SIMD4(x0, y0, x1, y1))
     }
 
     /// the land of these places together, as the map draws them: pieces far from the biggest one's side of the world
     /// left out (Alaska's tail over the date line, an island a world away), specks too; none when what is left still
     /// spans much of the world (a language's countries round the globe: no outline would read as anything there)
     static func places(_ w: World?, _ ids: Set<String>, in cont: String? = nil) -> (rings: [[CGPoint]], aspect: CGFloat) {
-        guard let w, !ids.isEmpty else { return ([], 1) }
+        let r = placesBoxed(w, ids, in: cont); return (r.rings, r.aspect)
+    }
+    /// the same, with its box in the map's own units (x0, y0, x1, y1)
+    static func placesBoxed(_ w: World?, _ ids: Set<String>, in cont: String? = nil) -> (rings: [[CGPoint]], aspect: CGFloat, box: SIMD4<Float>) {
+        guard let w, !ids.isEmpty else { return ([], 1, .zero) }
         var owners = Set<Int>()
         for (i, p) in w.places.enumerated() where ids.contains(p.id) { owners.insert(i) }
         var pieces: [World.Ring] = []
@@ -128,7 +155,7 @@ enum BadgeRings {
         }
         func across(_ r: World.Ring) -> Float { max(r.box.z - r.box.x, r.box.w - r.box.y) }
         func area(_ r: World.Ring) -> Float { (r.box.z - r.box.x) * (r.box.w - r.box.y) }
-        guard let big = pieces.max(by: { area($0) < area($1) }) else { return ([], 1) }
+        guard let big = pieces.max(by: { area($0) < area($1) }) else { return ([], 1, .zero) }
         // the land that holds together: from the biggest piece, every piece within 12% of the whole's size of it,
         // again and again (neighbours touch; Sicily and Corsica come in, the Canaries and the Azores do not)
         var near = [big], box = big.box
@@ -147,18 +174,18 @@ enum BadgeRings {
         }
         // (much of the land left out: the set is spread round the world, Portuguese-speaking, and has no one shape)
         let inArea = near.reduce(Float(0)) { $0 + area($1) }, outArea = rest.reduce(Float(0)) { $0 + area($1) }
-        guard outArea <= (inArea + outArea) * 0.15 else { return ([], 1) }
+        guard outArea <= (inArea + outArea) * 0.15 else { return ([], 1, .zero) }
         // (and most of the places in it: Brazil alone is not Portuguese-speaking)
         func owner(_ r: World.Ring) -> Int { r.unit >= 0 && r.unit < w.unitOwner.count ? w.unitOwner[r.unit] : -1 }
         let all = Set(pieces.map(owner)), held = Set(near.map(owner))
-        guard Double(held.count) >= Double(all.count) * 0.6 else { return ([], 1) }
+        guard Double(held.count) >= Double(all.count) * 0.6 else { return ([], 1, .zero) }
         let x0 = box.x, x1 = box.z, y0 = box.y, y1 = box.w
         // (too small to read as its own shape at a badge's size: Monaco)
-        guard x1 > x0, y1 > y0, max(x1 - x0, y1 - y0) > w.width * 0.0015 else { return ([], 1) }
+        guard x1 > x0, y1 > y0, max(x1 - x0, y1 - y0) > w.width * 0.0015 else { return ([], 1, .zero) }
         let ext = max(x1 - x0, y1 - y0)
         let raw = near.filter { across($0) > ext * 0.006 }.map { Array(w.points[$0.start ..< $0.start + $0.count]) }
         let rings = raw.map { r in r.map { CGPoint(x: CGFloat(($0.x - x0) / (x1 - x0)), y: CGFloat(($0.y - y0) / (y1 - y0))) } }
-        return (rings, CGFloat((x1 - x0) / (y1 - y0)))
+        return (rings, CGFloat((x1 - x0) / (y1 - y0)), SIMD4(x0, y0, x1, y1))
     }
 }
 
@@ -175,7 +202,7 @@ enum BadgeSolid {
         case .continent(let n): p = BadgeOutline.continent(world, n)
         case .places(let ids, let c): p = BadgeOutline.traced(BadgeRings.places(world, Set(ids), in: c))
         case .swirl: p = BadgeOutline.swirl
-        case .medal, .struck: p = BadgeOutline.disc(0.5)
+        case .medal, .struck, .natural, .arctic: p = BadgeOutline.disc(0.5)
         }
         // (none is kept too, once the world is here: a set too spread is not traced again)
         if p != nil || world != nil { outlines[form.key] = .some(p) }
@@ -203,7 +230,7 @@ enum BadgeSolid {
                 // the metals' middle: a disc standing proud of the rays
                 body.addChild(core)
             }
-        case .medal, .struck:
+        case .medal, .struck, .natural, .arctic:
             // a disc, and a rim standing proud of it on both faces
             guard let face = solid(BadgeOutline.disc(0.43), depth: 0.07, chamfer: 0.015, mat: mat, smooth: true),
                   let rim = solid(BadgeOutline.ring(outer: 0.5, inner: 0.41), depth: 0.13, chamfer: 0.025, mat: mat, smooth: true)
@@ -346,7 +373,31 @@ final class BadgeArt {
         }
     }
 
+    /// THE FLAT PICTURE: a region's relief cut to its shape, a number on a flat disc, drawn off the main thread
+    /// (BadgeFlat); the 3D solid below is no longer drawn
     private func render(_ form: BadgeForm, _ level: BadgeLevel, px: Int, scale: CGFloat) async -> UIImage? {
+        var plan: BadgeFlat.Plan?, number: String?, swirl = false
+        func boxed(_ r: (rings: [[CGPoint]], aspect: CGFloat, box: SIMD4<Float>)) -> BadgeFlat.Plan? {
+            r.rings.isEmpty ? nil : BadgeFlat.Plan(plane: .equalEarth(box: SIMD4<Double>(r.box)), rings: r.rings, aspect: r.aspect)
+        }
+        switch form {
+        case .continent(let n): plan = boxed(BadgeRings.continentBoxed(world, n))
+        case .places(let ids, let c): plan = boxed(BadgeRings.placesBoxed(world, Set(ids), in: c))
+        case .natural(let file, let key, let sea): plan = await BadgeNatural.plan(file: file, key: key, sea: sea)
+        case .arctic: plan = BadgeFlat.Plan(plane: .pole(edge: 62), sea: true)
+        case .swirl: swirl = true
+        case .medal: break
+        case .struck(let t): number = t
+        }
+        #if DEBUG
+        let t0 = CACurrentMediaTime()
+        defer { NSLog("wya badgeflat %@ %d px %.0f ms", form.key, px, (CACurrentMediaTime() - t0) * 1000) }
+        #endif
+        let p = plan, n = number, sw = swirl
+        return await Task.detached(priority: .userInitiated) { BadgeFlat.render(p, number: n, swirl: sw, level: level, px: px, scale: scale) }.value
+    }
+
+    private func render3D(_ form: BadgeForm, _ level: BadgeLevel, px: Int, scale: CGFloat) async -> UIImage? {
         // (a set of places too spread to read as one shape is a medal)
         #if DEBUG
         let t0 = CACurrentMediaTime()
@@ -450,56 +501,14 @@ struct BadgeArtView: View {
 struct BadgeLiveView: View {
     let badge: Badge
     let size: CGFloat
-    /// the moment it is earned: it turns in once from the side and comes to rest (its picture not shown first)
+    /// the moment it is earned (it comes with its page; flat now, nothing turns)
     var intro = false
-    @State private var turn = BadgeTurn()
 
     var body: some View {
-        let form = BadgeArt.shared.form(badge), level = BadgeLevel.of(badge)
-        ZStack {
-            // (its picture under it until the solid is up; none for the moment, which turns in from the side)
-            if !intro { BadgeArtView(badge: badge, size: size).opacity(turn.live ? 0 : 1) }
-            RealityView { content in
-                content.camera = .virtual
-                guard let body = BadgeSolid.make(form, level, world: BadgeArt.shared.world, live: true)
-                        ?? BadgeSolid.make(.medal, level, world: BadgeArt.shared.world, live: true) else { return }
-                let pivot = Entity()
-                body.orientation = BadgeSolid.rest
-                pivot.addChild(body)
-                content.add(pivot)
-                let cam = PerspectiveCamera()
-                cam.camera.fieldOfViewInDegrees = BadgeSolid.fov
-                let b = body.visualBounds(relativeTo: nil)
-                cam.position = [b.center.x, b.center.y, b.center.z + BadgeSolid.distance(b)]
-                content.add(cam)
-                let light = Entity()
-                content.add(light)
-                if let env = await BadgeArt.studio() {
-                    light.components.set(ImageBasedLightComponent(source: .single(env), intensityExponent: BadgeArt.exponent(level)))
-                    func receive(_ e: Entity) {
-                        e.components.set(ImageBasedLightReceiverComponent(imageBasedLight: light))
-                        for c in e.children { receive(c) }
-                    }
-                    receive(body)
-                }
-                turn.pivot = pivot
-                turn.live = true
-                if intro, !Motion.reduce {
-                    // from edge on, easing round to rest facing you
-                    pivot.orientation = simd_quatf(angle: -0.5 * .pi, axis: [0, 1, 0])
-                    pivot.move(to: Transform(scale: .one, rotation: simd_quatf(angle: 0, axis: [0, 1, 0]), translation: .zero),
-                               relativeTo: pivot.parent, duration: 1.6, timingFunction: .easeOut)
-                }
-            }
+        BadgeArtView(badge: badge, size: size)
             .frame(width: size, height: size)
-        }
-        .frame(width: size, height: size)
-        .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 2)
-            .onChanged { g in turn.turn(Float(g.translation.width / 90), Float(g.translation.height / 140)) }
-            .onEnded { _ in turn.settle() })
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(badge.name), \(Badges.levelName[min(badge.level, 5)])")
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(badge.name), \(Badges.levelName[min(badge.level, 5)])")
     }
 }
 

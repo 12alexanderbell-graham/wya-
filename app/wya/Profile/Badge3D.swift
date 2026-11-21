@@ -21,7 +21,7 @@ final class Badge3D {
 enum BadgeOutline {
     /// a sun: `rays` curved rays round a disc; each ray's sides leave the disc `w` either side of its angle and meet at
     /// the tip, bending by `bend(t)` along the way (t: 0 at the disc, 1 at the tip)
-    static func sun(rays: Int, inner: CGFloat, outer: (Int) -> CGFloat, w: CGFloat, bend: @escaping (CGFloat) -> CGFloat,
+    nonisolated static func sun(rays: Int, inner: CGFloat, outer: (Int) -> CGFloat, w: CGFloat, bend: @escaping (CGFloat) -> CGFloat,
                     narrow: @escaping (CGFloat) -> CGFloat = { 1 - $0 }) -> Path {
         var p = Path()
         let step = 2 * CGFloat.pi / CGFloat(rays)
@@ -48,7 +48,7 @@ enum BadgeOutline {
     }
 
     /// twelve rays swept round like a pinwheel, each a curved blade
-    static var swirl: Path {
+    nonisolated static var swirl: Path {
         sun(rays: 12, inner: 0.30, outer: { _ in 0.5 }, w: 0.17, bend: { 0.42 * pow($0, 1.7) })
     }
     static func disc(_ r: CGFloat) -> Path { Path(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r)) }
