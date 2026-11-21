@@ -469,17 +469,32 @@ struct DetailsSheet: View {
             }
             if !aThing {
             choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
-            if s.d[keyPath: mode] == "other" {
+            drawer(s.d[keyPath: mode] == "other") {
                 if plain { fieldWords("How, in your words", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
                 else { field("How, in your words", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
             }
             choice("Why", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
             }
-            if !aThing, s.d[keyPath: purpose] == "other" {
+            if !aThing {
+            drawer(s.d[keyPath: purpose] == "other") {
                 if plain { fieldWords("Why, in your words", s.d[keyPath: tk(i, \.purposeOther)], gone: gone) }
                 else { field("Why, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
             }
+            }
         }
+    }
+    /// A PART THAT OPENS UNDER A ROW AS A DRAWER: a lasting holder the water's width, cut to its own height, so what
+    /// comes in is uncovered from the top as the rows below move, and what goes slides up under the edge (inserted
+    /// bare, it stood whole over the rows sliding down under it)
+    private func drawer<V: View>(_ open: Bool, @ViewBuilder _ c: () -> V) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if open {
+                c().transition(.asymmetric(insertion: .identity,
+                                           removal: .modifier(active: DrawerSlide(y: -16), identity: DrawerSlide(y: 0))))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .clipShape(SideOpenRect())
     }
     /// visit i's calendar opened or closed; opening it below full takes the water to full, as typing does (below
     /// full the rows don't scroll, and a month is taller than the room there)
@@ -667,7 +682,7 @@ struct DetailsSheet: View {
                         blank: out) {
                 s.d.livedWhy = $0
             }
-            if s.d.livedWhy == "other" {
+            drawer(s.d.livedWhy == "other") {
                 if out || shownLived != nil { fieldWords("Why, in your words", s.d.livedWhyOther, gone: out) }
                 else { field("Why, in your words", id: "whyOther", max: 60, \.livedWhyOther) }
             }
@@ -1043,7 +1058,7 @@ struct DetailsSheet: View {
             Text(blank ? Caption.blank(name, "\u{2002}") : name).font(.body).foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .frame(minHeight: 44, alignment: .leading)
-            chips(items, chosen: chosen, blank: blank) { set(chosen == $0 ? nil : $0) }
+            chips(items, chosen: chosen, blank: blank) { id in withAnimation(Motion.quick) { set(chosen == id ? nil : id) } }
                 .padding(.bottom, 8)
         }
         // the name and its choices are one row: the sheet's edge never stops under a name with its choices cut off
@@ -1084,7 +1099,9 @@ struct DetailsSheet: View {
             .padding(.horizontal, 12)
             .frame(maxWidth: fill ? .infinity : nil)
             .frame(minHeight: 36)
-            .background { Capsule().fill(picked ? Palette.ink : .clear).opacity(blank ? 0 : 1).transaction { $0.disablesAnimations = true; $0.animation = nil } }
+            // the black of the chosen one comes and goes in one frame, never a fade, but moves with its capsule
+            // (the whole fill kept from animating stood still while its row moved)
+            .animation(nil) { $0.background { Capsule().fill(picked ? Palette.ink : .clear).opacity(blank ? 0 : 1) } }
             // the others are clear glass capsules, so every choice reads as a control (F46, F54)
             .glassEffect(picked || blank ? .identity : .clear, in: .capsule)
             .padding(.vertical, 4)
