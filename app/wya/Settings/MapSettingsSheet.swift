@@ -5,22 +5,53 @@ struct MapSettingsSheet: View {
     let map: MapController
     let form: Water.Form
     @State private var nav = SettingsNav.shared
+    /// the edge swipe back: how far the page has been pulled to the right
+    @State private var pull: CGFloat = 0
+    private func back() {
+        guard !nav.path.isEmpty else { return }
+        Feel.tap()
+        withAnimation(Motion.chrome) { nav.path.removeLast(); pull = 0 }
+    }
 
     var body: some View {
         let L = water.layout
         let top = max(form.top + 16, L.headBottom + 8)
         let bottom = L.capsule.minY - 24
         let width = L.W - 2 * L.sheetInset
-        NavigationStack(path: $nav.path) {
-            SettingsList(map: map, width: width)
-                .navigationDestination(for: String.self) { page in
-                    SettingsPage(page: page, map: map, width: width) { if !nav.path.isEmpty { nav.path.removeLast() } }
-                }
+        // A PUSH OF OUR OWN: the NavigationStack's push laid UIKit's dimming over the page going out, drawn as a grey
+        // box with a hard edge (the pages have no ground of their own) for a third of a second. Now the list goes out
+        // to the left as the page comes in from the right, as Lists' pages; back, the other way, by the back circle
+        // or the edge swipe, which follows the finger as the system's did
+        let H = max(48, bottom - top)
+        ZStack(alignment: .topLeading) {
+            if let page = nav.path.last {
+                SettingsPage(page: page, map: map, width: width) { back() }
+                    .frame(width: width, height: H, alignment: .top)
+                    .offset(x: pull)
+                    .simultaneousGesture(DragGesture(minimumDistance: 12)
+                        .onChanged { v in
+                            guard v.startLocation.x < 32, v.translation.width > 0 else { return }
+                            pull = v.translation.width
+                        }
+                        .onEnded { v in
+                            guard v.startLocation.x < 32 else { return }
+                            if v.translation.width > width / 3 || v.predictedEndTranslation.width > width / 2 { back() }
+                            else { withAnimation(Motion.settle) { pull = 0 } }
+                        })
+                    .id(page)
+                    .transition(.move(edge: .trailing))
+            } else {
+                SettingsList(map: map, width: width)
+                    .frame(width: width, height: H, alignment: .top)
+                    .offset(x: pull > 0 ? -width + pull : 0)
+                    .transition(.move(edge: .leading))
+            }
         }
+        .frame(width: width, height: H, alignment: .topLeading)
+        .clipped()
         // closed: the next opening starts at the list's top
         .onDisappear { nav.path = []; nav.open = nil; nav.openDispute = nil; nav.show = nil }
-        .frame(width: width, height: max(48, bottom - top))
-        .position(x: L.W / 2, y: top + max(48, bottom - top) / 2)
+        .position(x: L.W / 2, y: top + H / 2)
         .environment(\.settingsWordsOn, water.settingsWords)
         // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets and
         // the Places shelf; at full they scroll
@@ -188,11 +219,13 @@ private struct SettingsList: View {
                     RowWords(name: row.name, value: "", dim: true)
                         .onTapGesture { Feel.refuse() }
                 } else {
-                    NavigationLink(value: page) {
+                    Button {
+                        Feel.tap()
+                        withAnimation(Motion.chrome) { SettingsNav.shared.path = [page] }
+                    } label: {
                         RowWords(name: row.name, value: pageValue(row, s), chevron: true)
                     }
                     .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture().onEnded { Feel.tap() })
                     // A PAGE ROW'S HOLD MENU (11.5, as a value row's): Reset to default. Borders back to de facto;
                     // Disputes every piece given back to the borders view. Unavailable when nothing is changed.
                     .contextMenu {
