@@ -504,6 +504,7 @@ extension PlacePageState.OnePage {
             out.advice.append(("United Kingdom", t.prefix(1).uppercased() + t.dropFirst(), PlacePageState.day(uk["updated"] as? String)))
         }
         var regionLooks: ([String: String], [String: Set<String>]) = ([:], [:])
+        var regionShown: [String: String] = [:]
         // what is in it: the first level's regions (by people, from the server's regions where it has them) and the cities
         if let first = RegionCatalog.shared.first(cc), let file = await RegionCatalog.shared.fetch(cc, row: first.row) {
             var pop: [String: Double] = [:], img: [String: String] = [:]
@@ -544,6 +545,7 @@ extension PlacePageState.OnePage {
             }
             out.regions = rows
             regionLooks = (capOf, namesOf)
+            for r in rows { for n in namesOf[r.code ?? r.key.id] ?? [] where regionShown[n] == nil { regionShown[n] = r.name } }
         }
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
            let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
@@ -551,8 +553,9 @@ extension PlacePageState.OnePage {
                 guard let n = t["n"] as? String, !PlacePageState.notACity(t) else { return nil }
                 // (its region, unless that is its own name again:, on Japan's page)
                 let r0 = t["r"] as? String ?? ""
-                let r = r0.compare(n, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
-                    || r0.localizedCaseInsensitiveContains(n) && r0.count <= n.count + 12 ? "" : r0
+                let r1 = regionShown[r0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)] ?? r0
+                let r = r1.compare(n, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+                    || r1.localizedCaseInsensitiveContains(n) && r1.count <= n.count + 12 ? "" : r1
                 let ll = t["ll"] as? [NSNumber]
                 return PlacePageState.Inside(key: PlacePageState.cityKey(cc, t, name: n), name: n, line: r, code: nil,
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
@@ -2542,6 +2545,15 @@ enum PageGlass {
 /// ACTIVITIES (16.4.7; the word chosen, never): its own search field, the first five rows, then Show more; each row
 /// its name and one line (Wikivoyage's words, credited in Sources)
 private struct ActivitiesList: View {
+    /// a row's line down to its place: is "Arles"; a line that is only a sentence is nothing
+    static func where_(_ line: String) -> String {
+        let parts = line.components(separatedBy: " \u{00B7} ")
+        let head = parts[0].trimmingCharacters(in: .whitespaces)
+        if parts.count > 1 { return head }
+        let sentence = head.count > 40 || head.hasSuffix(".") || head.contains(", ") && head.count > 28
+            || head.split(separator: " ").count > 5
+        return sentence ? "" : head
+    }
     let all: [PlacePageState.Activity]
     /// the page's country (its things' photos, its flag where a sight has none)
     var country = ""
@@ -2565,8 +2577,8 @@ private struct ActivitiesList: View {
                     if pictured { SetPlaceThumb(own: "", thing: a.wd ?? "", cc: country, flag: false) }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
-                        if !a.line.isEmpty {
-                            Text(PlacePageState.mended(a.line)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        if case let at = Self.where_(a.line), !at.isEmpty {
+                            Text(at).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                         }
                     }
                 }
