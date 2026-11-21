@@ -296,8 +296,12 @@ final class TownIndex {
                     } else if starts {
                         if rows[i].hit.file == open { home.append(rows[i].hit) } else if away.count < limit { away.append(rows[i].hit) }
                     }
-                    // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
-                    if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { reached = i + 1; break }
+                    // enough found: the open country's (or, with none open, everywhere's) names starting with what
+                    // was typed
+                    if home.count >= limit
+                        || (open == nil && away.count >= limit && exact.count >= 1 && (exact.count >= limit || rows[i].hit.people < 10_000)) {
+                        reached = i + 1; break
+                    }
                 }
                 guard inside, reached > 0 else { return }
                 let end = Int(ownStart[reached])
