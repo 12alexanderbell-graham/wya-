@@ -1028,7 +1028,9 @@ struct SearchResults: View {
         let _ = spotSearch ? TownIndex.shared.load() : ()
         let onCountries = !spotSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let townHits = Self.timed("towns") { spotSearch && typed ? Self.townsFor(head.query, open: map.placeOpenID)
-            : onCountries && typed ? Self.townsFor(head.query, open: nil).filter { $0.people >= 50_000 } : [] }
+            : onCountries && typed ? Self.townsFor(head.query, open: nil).filter { t in
+                t.people >= 50_000 || t.people >= 500 && t.name.townFolded == head.query.trimmingCharacters(in: .whitespaces).townFolded
+            } : [] }
         // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
         let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
