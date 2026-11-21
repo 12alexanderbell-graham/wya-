@@ -137,6 +137,8 @@ struct DetailsSheet: View {
     /// A4.21's Details end: opened from a Stamped list row, the sheet's words start as blanks and roll in (its shapes
     /// grow); closing back to the list they roll out first (`DetailsState.rollingOut`), then the list rises
     @State private var sheetGone = StampedList.backFromDetails
+    /// how far below its place the sheet still is, coming up from the list (0 in place)
+    @State private var rise: CGFloat = StampedList.backFromDetails ? 900 : 0
     /// every word blank and every shape at 0: the Lived block swapping, or the whole sheet coming from / going to the list
     private var out: Bool { blockGone || sheetGone || s.rollingOut }
     @State private var swapJob = 0
@@ -232,6 +234,9 @@ struct DetailsSheet: View {
             }
             .scrollBlur()
             .scrollIndicators(.hidden)
+            // from the Stamped list: the sheet comes up through its bottom soft edge as one block, its words in
+            // place, as the list went down through it
+            .offset(y: rise)
             // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets
             // and the Places shelf; at full they scroll
             .scrollDisabled(water.stop != .full)
@@ -290,7 +295,9 @@ struct DetailsSheet: View {
             // from the list: the words roll in once the list has gone (they start as blanks, see `sheetGone`)
             guard sheetGone else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                withAnimation(.smooth(duration: 0.26)) { sheetGone = false }
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { sheetGone = false; rise = water.layout.capsule.minY - 24 - max(form.top + 20, water.layout.headBottom + 8) }
+                DispatchQueue.main.async { withAnimation(Motion.quick) { rise = 0 } }
             }
         }
         .onChange(of: 1 + (s.d.trips?.count ?? 0), initial: true) { _, n in tripIDs = Self.synced(tripIDs, n) }
