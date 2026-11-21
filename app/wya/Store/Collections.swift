@@ -149,18 +149,23 @@ final class CollectionStore {
         let q = query.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, q.count >= 2 else { return [] }
         if let l = lastFind.first(where: { $0.q == q && $0.first == first }) { return l.hits }
-        let word = " " + q
         var hits: [(Found, Int, Bool, Int)] = []   // found, fame (and the set looked at, and a set of shapes), starts with it, its place in its list
+        let qb = Array(q.utf8), wb = Array((" " + q).utf8), ql = qb.count
         for id in menu {
             guard let c = collection(id) else { continue }
-            let names = foldedNames[id] ?? {
-                let n = c.items.map(\.name.townFolded)
-                foldedNames[id] = n
-                return n
+            // (by its tag: a set cut to a continent is another list of places)
+            let packed = foldedBytes[c.tag] ?? {
+                var bytes: [UInt8] = [], start: [Int] = [0]
+                for it in c.items { bytes.append(contentsOf: it.name.townFolded.utf8); start.append(bytes.count) }
+                foldedBytes[c.tag] = (bytes, start)
+                return (bytes, start)
             }()
+            guard packed.start.count == c.items.count + 1 else { continue }
             for (n, it) in c.items.enumerated() {
-                let starts = names[n].hasPrefix(q)
-                guard starts || names[n].contains(word) else { continue }
+                let a = packed.start[n], len = packed.start[n + 1] - a
+                guard len >= ql else { continue }
+                let starts = packed.bytes.withUnsafeBufferPointer { nb in qb.withUnsafeBufferPointer { qp in memcmp(nb.baseAddress! + a, qp.baseAddress!, ql) == 0 } }
+                guard starts || (len > ql && packed.bytes.withUnsafeBufferPointer { nb in wb.withUnsafeBufferPointer { wp in memmem(nb.baseAddress! + a, len, wp.baseAddress!, ql + 1) != nil } }) else { continue }
                 // (a place in two sets is found in the one that has its shape: Lake Baikal as the lake, not as a
                 // World Heritage point in the middle of its water)
                 hits.append((Found(list: id, item: it), min(3, it.fame) * 4 + (id == first ? 2 : 0) + (c.shapes != nil ? 1 : 0), starts, n))
@@ -175,7 +180,7 @@ final class CollectionStore {
         lastFind = Array(([(q, first, out)] + lastFind).prefix(2))
         return out
     }
-    @ObservationIgnored private var foldedNames: [String: [String]] = [:]
+    @ObservationIgnored private var foldedBytes: [String: (bytes: [UInt8], start: [Int])] = [:]
     /// the last two (a name and its short words in full are asked one after the other)
     @ObservationIgnored private var lastFind: [(q: String, first: String?, hits: [Found])] = []
 
