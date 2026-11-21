@@ -2887,7 +2887,9 @@ struct PageOpening: View {
         (Text(more ? short : text).foregroundStyle(Palette.ink)
             + Text(more ? "  More" : "").foregroundStyle(Palette.ink.opacity(0.5)))
             .font(.body)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentTransition(.identity)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .clipShape(SideOpenRect())
             .contentShape(Rectangle())
             .onTapGesture {
                 guard more else { return }
