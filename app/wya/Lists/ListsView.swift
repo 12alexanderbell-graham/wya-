@@ -119,8 +119,16 @@ struct ListsWater: View {
                 .allowsHitTesting(false)
             VStack(spacing: 8) {
                 topRow(w)
-                Group {
-                    if let id = s.open { listPage(id, w: w) } else { rows(w) }
+                // A LIST OPENS AS A PAGE PUSHED IN: the list comes in from the right while the shelf goes out to the
+                // left, and back the other way
+                ZStack(alignment: .top) {
+                    if let id = s.open {
+                        listPage(id, w: w)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
+                    } else {
+                        rows(w)
+                            .transition(.asymmetric(insertion: .move(edge: .leading), removal: .move(edge: .leading)))
+                    }
                 }
                 .contentMargins(.top, trip == nil ? 0 : 48, for: .scrollContent)
                 .frame(width: w, height: room, alignment: .top)
@@ -260,6 +268,12 @@ struct ListsWater: View {
                 guard !ccs.isEmpty else { continue }
                 _ = await ListMapCovers.image(ccs, spots: spots, world: map.world, size: CGSize(width: side, height: side), scale: scale)
             }
+            let pages = [("Wishlist", wishThings)] + store.book.lists.filter { !$0.arch && !$0.hid && !$0.wish }.map { ($0.name, things($0)) }
+            for (title, th) in pages {
+                let (ccs, spots) = Self.pageCover(title: title, things: th)
+                guard !ccs.isEmpty else { continue }
+                _ = await ListMapCovers.image(ccs, spots: spots, world: map.world, size: CGSize(width: w, height: 180), scale: scale)
+            }
         }
     }
 
@@ -342,9 +356,20 @@ struct ListsWater: View {
              spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
              places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
     }
-    /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil A PLAN'S COVER'S
-    /// PLACES: its countries (the first four) and its things where they are; with no places yet, the town its name
-    /// says  or the country; none, its little calendar
+    /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil A LIST PAGE'S
+    /// COVER'S PLACES: its first four countries and its things where they are; with no places yet, the town or
+    /// country its name says, as its tile shows; never while it is being named
+    static func pageCover(title: String, things: [ListsThing], naming: Bool = false) -> (ccs: [String], spots: [String]) {
+        let ccs0 = Array(NSOrderedSet(array: things.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
+        let named = ccs0.isEmpty && !naming ? namedTown(title) : nil
+        let land = ccs0.isEmpty && !naming && named == nil ? namedCountry(title) : nil
+        let spots0 = things.compactMap { t in t.cc.map { t.name + "|" + $0 } }
+        return (named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs0,
+                named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots0)
+    }
+
+    /// A PLAN'S COVER'S PLACES: its countries (the first four) and its things where they are; with no places yet, the
+    /// town its name says  or the country; none, its little calendar
     static func planCover(_ p: Plan) -> (ccs: [String], spots: [String]) {
         let ccs = Array(NSOrderedSet(array: (p.days.flatMap(\.items) + p.ideas).compactMap { $0.cc?.lowercased() })
             .array.compactMap { $0 as? String }.prefix(4))
@@ -453,12 +478,7 @@ struct ListsWater: View {
     /// list of no countries yet: the name alone, no cover); then its things, each its square flag at 44, its name.
     /// A note shows when its row is tapped. Taking a thing out is in the row's hold menu, never a button on every row.
     private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat) -> some View {
-        let ccs0 = Array(NSOrderedSet(array: things.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
-        let named = ccs0.isEmpty && !s.naming ? Self.namedTown(title) : nil
-        let land = ccs0.isEmpty && !s.naming && named == nil ? Self.namedCountry(title) : nil
-        let ccs = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? ccs0
-        let spots0 = things.compactMap { t in t.cc.map { t.name + "|" + $0 } }
-        let spots = named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots0
+        let (ccs, spots) = Self.pageCover(title: title, things: things, naming: s.naming)
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
