@@ -2008,6 +2008,7 @@ private struct PageLayer: View {
             }
             Text(page.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                .risesIn(key.description)
                 // THE NAME'S HOLD MENU (16.7), the same actions as the page's sheet: Show in passport (a stamped country),
                 // Share (Its book and Add to a list wait for the books and Lists)
                 .contextMenu {
@@ -2025,6 +2026,7 @@ private struct PageLayer: View {
                 }
             if !page.what.isEmpty {
                 Text(page.what).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    .risesIn(key.description + "|" + page.what, delay: 0.08)
             }
         }
         .frame(maxWidth: .infinity)
