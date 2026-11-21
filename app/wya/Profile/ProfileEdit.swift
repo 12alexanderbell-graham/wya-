@@ -195,6 +195,8 @@ struct ProfileStatsList: View {
     @State private var numbers = ProfileNumbers.shared
     /// the gaps between the rows (EdgeRows): the list's visible height ends in one, whole rows only
     @State private var cuts: [CGFloat] = []
+    /// the list is scrolled (its top goes out softly)
+    @State private var scrolled = false
 
     var body: some View {
         let all = numbers.groups.map { ($0.title, $0.rows) } + numbers.sections.map { ($0.name, $0.rows) }
@@ -231,8 +233,11 @@ struct ProfileStatsList: View {
         .scrollTargetBehavior(GapSnap(cuts: cuts))
         .scrollBlur()
         .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
         .mask(alignment: .top) {
             VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: scrolled ? 20 : 0)
                 Color.black
                 LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
