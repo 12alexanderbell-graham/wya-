@@ -55,7 +55,7 @@ struct ContentView: View {
                 if !Perf.shared.off.contains("map") { sidewaysMap }
                 // PINS (Part 8): Apple's map over ours while Pins is the mode; it takes our camera when it comes (in
                 // full screen it turns with ours: the same frame and the same quarter turn about the centre)
-                if head.mode == .pins { sideways(PinsMapView(map: map, water: water)) }
+                if head.mode == .pins { sideways(PinsMapView(map: map, water: water).modifier(AppleLens(searching: head.searching))) }
                 else if map.appleWorld { sideways(AppleWorldView(map: map, water: water).modifier(AppleLens(searching: head.searching))) }
                 // ANTARCTICA picked: its own south-polar map over the world's (Map/AntarcticaPolar.swift)
                 ZStack {
