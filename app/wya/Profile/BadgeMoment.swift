@@ -99,9 +99,13 @@ struct BadgeMomentView: View {
     var body: some View {
         ZStack {
             if let b = moment.current {
-                // the app's one frost over everything, rising with it as a sheet does and going down when the last one
-                // is sent away (laid straight over the page, its name ran through Details' rows)
-                Rectangle().fill(.thinMaterial)
+                // a sheet of clear Liquid Glass over everything, rising as a sheet does and going down when the last
+                // one is sent away
+                let sheet = RoundedRectangle(cornerRadius: L.sheetCorner, style: .continuous)
+                Color.clear
+                    .glassEffect(.clear, in: sheet)
+                    .frame(width: L.W - 2 * L.sheetInset, height: L.H - 2 * L.sheetInset)
+                    .position(x: L.W / 2, y: L.H / 2)
                     .frame(width: L.W, height: L.H)
                     .transition(.move(edge: .bottom))
                 page(b)

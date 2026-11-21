@@ -788,6 +788,11 @@ final class TestDriver {
                     if p.count > 2, p[2] == "list" { break }
                     for k in mine.keys where p.count < 3 || k.id == p[2] { await MarkStore.shared.unstamp(k) }
                 case "undo": await MarkStore.shared.undo()
+                // badgemoment <id>: an earned badge's moment shown again (nothing stamped; it is already seen at its level)
+                case "badgemoment":
+                    if let b = ProfileNumbers.shared.earned.first(where: { $0.id == a }) ?? ProfileNumbers.shared.earned.first {
+                        BadgeMoment.shared.show([b])
+                    }
                 // nationality <id> | none: Profile's first nationality, for the home's centre (1.4)
                 case "nationality":
                     if a == "none" { UserDefaults.standard.removeObject(forKey: MapController.nationalitiesKey) }
