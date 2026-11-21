@@ -1036,6 +1036,12 @@ final class TestDriver {
                                                    from: CGRect(x: 16, y: 500, width: 380, height: 300), photo: h.photo)
                     }
                     else if a == "sources" { PlacePageState.shared.sourcesTest += 1; PlacePageState.shared.toEnd = 5 }
+                    // page key <key> <cc> <name...>: any page by its key (m:wd:Q5788 jo Petra), as its mark's
+                    else if a == "key", p.count > 4, let k = PlaceKey(p[2]) {
+                        ThingStore.shared.load(p[3])
+                        PlacePageState.shared.open(k, name: p.dropFirst(4).joined(separator: " "), country: p[3],
+                                                   from: CGRect(x: 198, y: 456, width: 44, height: 44))
+                    }
                     else if let m = map, let i = m.world?.placeIndex[a], let pl = m.world?.places[i] {
                         PlacePageState.shared.open(.country(pl.id), name: pl.n, country: pl.id, from: m.screenRect(of: i))
                     }

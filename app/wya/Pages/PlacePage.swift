@@ -282,8 +282,12 @@ extension PlacePageState.OnePage {
             }
         }
         let mine = SIMD2(ll.lat, ll.lon)
+        var ownPhotos = Set<String>()
+        if let a = PlacePageState.photo(t.photo) { ownPhotos.insert(a) }
+        if let b = out.photo { ownPhotos.insert(b) }
         let near = lands.flatMap { ThingStore.shared.things($0) ?? [] }.compactMap { o -> (ThingStore.Thing, Double)? in
-            guard o.id != t.id, !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil, !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
+            guard o.id != t.id, !o.photo.isEmpty, let ph = PlacePageState.photo(o.photo), !ownPhotos.contains(ph),
+                  !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
             let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
             let dy = (p.lat - mine.x) * 111.2, dx = (p.lon - mine.y) * 111.2 * cos(mine.x * .pi / 180)
             let km = (dx * dx + dy * dy).squareRoot()
