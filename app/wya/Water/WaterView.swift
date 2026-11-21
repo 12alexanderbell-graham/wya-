@@ -224,6 +224,7 @@ struct SheetContent: View {
                     // back up through its frosted bottom
                     .opacity(cosmosHidden ? 0 : 1)
                     .animation(nil, value: cosmosHidden)
+                    .offset(y: cosmosSunk ? 1.7 * (water.layout.top(.quarter) - water.layout.top(.half)) + 60 : 0)
 
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
@@ -426,6 +427,37 @@ struct SheetContent: View {
         }
         .onChange(of: water.settings || water.details || water.upload) { _, v in DispatchQueue.main.async { takenWas = v } }
         .onChange(of: cosmosHidden, initial: true) { _, h in cosmosWas = !h }
+        .onChange(of: water.settings || water.details) { _, taken in
+            let resting = water.stop == .half && !water.held && form.page < 0.001
+                && abs(form.top - water.layout.top(.half)) < 2
+            // (on show a moment ago: nothing else had the water; the remembered flag has already flipped by now)
+            let shown = !(water.stampedList || water.listLeaving || water.regions || water.menuLeaving || water.pageSheet
+                || water.historyUp || water.upload || map.placesMode || map.pinsMode || map.regionScene != nil
+                || (water.settings && water.details))
+            if taken, resting, shown {
+                cosmosLeaving = true
+                cosmosJob += 1
+                let me = cosmosJob
+                // (begun a moment later: the frame the rows are built in stalls, and a curve begun before it had run
+                // most of its way unseen, so the system stood four frames and then dropped in two)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                    guard me == cosmosJob else { return }
+                    withAnimation(Motion.chrome) { cosmosSunk = true }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.56) { if me == cosmosJob { cosmosLeaving = false } }
+            } else if !taken, resting, !cosmosTaken {
+                // (from under the screen, where it went)
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { cosmosSunk = true }
+                cosmosJob += 1
+                DispatchQueue.main.async { withAnimation(Motion.chrome) { cosmosSunk = false } }
+            } else if !taken {
+                cosmosJob += 1
+                cosmosLeaving = false
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { cosmosSunk = false }
+            }
+        }
         .onChange(of: water.upload) { _, v in DispatchQueue.main.async { uploadWas = v } }
         // PINS AT FULL is a name or note being typed, or a route's colour: when the pin or the colour goes (deleted,
         // done, put away) the water comes back to 50%, where the toolkit and the list are
@@ -442,6 +474,7 @@ struct SheetContent: View {
                     || (!taken && water.stop == .quarter && abs(form.top - L.top(.quarter)) < 1)
                     || (water.upload && water.stop == .quarter && uploadRest)
                     || (fits && uploadWas && !water.upload)
+                    || (fits && takenWas && !taken && water.stop == .half && abs(form.top - L.top(.half)) < 2)
                 if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || (taken != takenWas && !still) { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
@@ -515,6 +548,7 @@ struct SheetContent: View {
     /// way down to 25%, the Map tab), when it goes down with the edge and under the screen
     private var cosmosHidden: Bool {
         guard cosmosOut else { return false }
+        if cosmosLeaving { return false }
         let sinking = !water.held && (water.stop == .quarter || water.stop == .closed) && !cosmosTaken
             && form.top < water.layout.top(.quarter) - 20
         return !(cosmosWas && sinking)
@@ -540,6 +574,11 @@ struct SheetContent: View {
     }
     /// the water near enough its 25% rest for the upload's pair (the spring's last points take long)
     private var uploadRest: Bool { abs(form.top - water.layout.top(.quarter)) < 8 }
+    /// the solar system down under the screen (settings or Details over the water at rest at 50%), and still shown
+    /// while it goes
+    @State private var cosmosSunk = false
+    @State private var cosmosLeaving = false
+    @State private var cosmosJob = 0
     /// whether the solar system was on show when it last looked
     @State private var cosmosWas = true
     @State private var captionShown = false
