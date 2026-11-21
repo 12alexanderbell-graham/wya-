@@ -1030,7 +1030,17 @@ struct SearchResults: View {
         let townHits = Self.timed("towns") { spotSearch && typed ? Self.townsFor(head.query, open: map.placeOpenID)
             : onCountries && typed ? Self.townsFor(head.query, open: nil).filter { t in
                 t.people >= 50_000 || t.people >= 500 && t.name.townFolded == head.query.trimmingCharacters(in: .whitespaces).townFolded
-            } : [] }
+            }.enumerated().sorted { x, y in
+                // (the small ones by how many languages name them, the known one first: Santorini's Oía, named in six,
+                // before Oiã in Portugal, more peopled and named in none)
+                let bx = x.element.people >= 50_000, by = y.element.people >= 50_000
+                if bx != by { return bx }
+                if !bx {
+                    let nx = TownIndex.shared.otherNames(x.element.id).count, ny = TownIndex.shared.otherNames(y.element.id).count
+                    if nx != ny { return nx > ny }
+                }
+                return x.offset < y.offset
+            }.map(\.element) : [] }
         // (and on the Countries map: the best known sights too, the Eiffel Tower, a tap showing them in Places)
         let sightSearch = !placesSearch && !map.pinsMode && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
         let _ = spotSearch || sightSearch ? ThingIndex.shared.load() : ()
@@ -1080,7 +1090,12 @@ struct SearchResults: View {
         // (: a traveller types a city: big towns, 50,000 people and more, found by their own or other names ( is
         // Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country that only looks
         // like it)
-        let bigTowns = countriesSearch && typed ? Array(townHits.prefix(2)) : []
+        let townFold0 = Self.spelledOut(head.query).townFolded
+        let bigTowns = countriesSearch && typed ? Array(townHits.enumerated().sorted { x, y in
+            let a = x.element.name.townFolded, b = y.element.name.townFolded
+            let ax = a == typedFold || a == townFold0, bx = b == typedFold || b == townFold0
+            return ax != bx ? ax : x.offset < y.offset
+        }.map(\.element).prefix(2)) : []
         let w0 = map.world
         let countryStarts = hits.filter { i in w0.map { $0.places[i].n.townFolded.hasPrefix(typedFold) || $0.aliases[typedFold] != nil } ?? false }
         let countryOthers = hits.filter { !countryStarts.contains($0) }
@@ -1432,11 +1447,13 @@ struct SearchResults: View {
         let full = spelledOut(typed).townFolded
         let whole = towns.filter { $0.name.townFolded == typed || $0.name.townFolded == full }.sorted { $0.people > $1.people }
         let begun = towns.filter { $0.name.townFolded != typed && $0.name.townFolded != full }
-        out += whole.map(town)
+        out += whole.filter { $0.people >= 50_000 }.map(town)
         let smallExact = named0.isEmpty ? [] : exact.filter { RegionIndex.shared.people($0) < 100_000 }
         out += exact.filter { !smallExact.contains($0) }.map(region)
         out += named0
         out += smallExact.map(region)
+        // (in the order they came, the known one first: Santorini's Oía before Oiã in Portugal)
+        out += towns.filter { ($0.name.townFolded == typed || $0.name.townFolded == full) && $0.people < 50_000 }.map(town)
         // (a name typed whole and found: its sights before the other regions that only start with it)
         if exact.isEmpty && whole.isEmpty {
             // (a region of under 100,000 people stays after the sights, as before: it never pushes them off the rows)
