@@ -141,9 +141,18 @@ actor TravelStore {
         let name: String
         let cc: String
         let level: Int
+        /// its earliest visit's arrival as written (, "2022" (Stats' first stamp)
+        var firstVisit: String = ""
     }
     func badgeRows(account: String) throws -> [BadgeRow] {
         let rs = try modelContext.fetch(FetchDescriptor<StampRecord>(predicate: #Predicate { $0.account == account && $0.stamped }))
+        let vs = try modelContext.fetch(FetchDescriptor<VisitRecord>(predicate: #Predicate { $0.account == account }))
+        var earliest: [String: String] = [:]
+        for v in vs {
+            guard let a = v.arrived, a.count >= 4 else { continue }
+            if let e = earliest[v.key], e <= a { continue }
+            earliest[v.key] = a
+        }
         return rs.map { r in
             let d = StampDetails(json: r.details)
             var verified = false
@@ -153,7 +162,7 @@ actor TravelStore {
             let words = r.note.trimmingCharacters(in: .whitespacesAndNewlines) + (d.note ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return BadgeRow(key: r.key, at: r.at, when: r.when ?? "", from: d.from ?? "", stars: d.stars ?? 0, lived: r.lived,
                             noted: !words.isEmpty, via: r.via != nil, came: r.came != nil, verified: verified, name: r.name,
-                            cc: r.cc, level: r.level)
+                            cc: r.cc, level: r.level, firstVisit: earliest[r.key] ?? "")
         }
     }
 

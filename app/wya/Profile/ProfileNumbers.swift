@@ -205,10 +205,13 @@ final class ProfileNumbers {
         func name(_ id: String) -> String { byID[id]?.n ?? id }
         let day = ISO8601DateFormatter()
         day.formatOptions = [.withFullDate]
-        // the first: the month you went, else when it was stamped
+        // the first: the day you went (its earliest visit or its details' first day), else the month you went, else
+        // when it was stamped
+        func padded(_ s: String) -> String { s.count == 4 ? s + "-01-01" : s.count == 7 ? s + "-01" : s }
         func went(_ id: String) -> String {
             let r = rows[id]!
-            return r.when.isEmpty ? day.string(from: r.at) : r.when + "-01"
+            let known = [r.firstVisit, r.from, r.when].filter { $0.count >= 4 && $0.prefix(4).allSatisfy(\.isNumber) }.map(padded)
+            return known.min() ?? day.string(from: r.at)
         }
         let first = ids.min { went($0) != went($1) ? went($0) < went($1) : $0 < $1 }
         add("Places", "First stamp", first.map { "\(name($0)), \(went($0).prefix(4))" })
