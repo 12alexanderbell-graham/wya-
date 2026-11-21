@@ -268,6 +268,7 @@ struct ListsWater: View {
                 let (ccs, spots) = Self.planCover(p)
                 guard !ccs.isEmpty else { continue }
                 _ = await ListMapCovers.image(ccs, spots: spots, world: map.world, size: CGSize(width: side, height: side), scale: scale)
+                _ = await ListMapCovers.image(ccs, spots: spots, world: map.world, size: CGSize(width: w, height: 180), scale: scale)
             }
             let pages = [("Wishlist", wishThings)] + store.book.lists.filter { !$0.arch && !$0.hid && !$0.wish }.map { ($0.name, things($0)) }
             for (title, th) in pages {
@@ -716,6 +717,15 @@ struct ListsWater: View {
         ScrollViewReader { reader in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // ITS MAP ON TOP, as a list's page has it: where it goes, or the town its name says; a plan with no
+                // places yet keeps its calendar on the shelf
+                let cover = Self.planCover(p)
+                if !cover.ccs.isEmpty {
+                    ListCover(ccs: cover.ccs, world: map.world, spots: cover.spots)
+                        .frame(height: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .padding(.bottom, 12)
+                }
                 if s.naming || p.name.isEmpty {
                     TextField("", text: Binding(get: { p.name }, set: { v in changePlan(p.id) { $0.name = String(v.prefix(60)) } }),
                               prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
