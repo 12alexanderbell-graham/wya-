@@ -502,11 +502,11 @@ struct HeadView: View {
             // THE TOOLS BUTTON IS THREE DOTS; open, or with search open, it is the cross; on a page, Share
             Group {
                 if share > 0.5 {
-                    Icon5(key: "share", ink: ink, size: 22)
+                    Icon5(key: "share", ink: ink, size: 22).transition(.identity)
                 } else if head.toolsOpen || head.searching {
-                    Icon5(key: "cross", ink: ink, size: 22)
+                    Icon5(key: "cross", ink: ink, size: 22).transition(.identity)
                 } else {
-                    ToolDots(ink: ink)
+                    ToolDots(ink: ink).transition(.identity)
                 }
             }
             .transaction { $0.animation = nil }
