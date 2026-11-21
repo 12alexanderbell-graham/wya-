@@ -204,6 +204,10 @@ extension PlacePageState.OnePage {
         if what.isEmpty, t.line.isEmpty, let l = setLine() { what = l }
         var out = PlacePageState.Facts()
         if !t.photo.isEmpty { out.photo = PlacePageState.photo(t.photo) }
+        if out.photo == nil {
+            out.photo = CollectionStore.shared.all.lazy.compactMap { c in c.items.first { $0.key == self.key }?.photo }
+                .compactMap { PlacePageState.photo($0) }.first
+        }
         // (its own line is already under its name; no prose repeating it) (a set that says what it is names it: Lake
         // Baikal read)
         let kind = setKind() ?? t.kindName
