@@ -50,15 +50,17 @@ final class Water {
         if regions { leaveMenuRows() }
         // THE ROWS COME AND GO WITH THE WATER. The rows are in the water from the first frame and rise with it. Over
         // Regions' list they still wait for its rows to leave.
-        let atOnce = !regions
+        let atRest = stop == .half && !held && !regions && !details
+        let atOnce = !regions && !atRest
         settings = true
         if stop == .closed || stop == .quarter || regions { go(.half) }
         settingsJob += 1
         if atOnce { settingsWords = true; return }
         let me = settingsJob
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + (atRest ? 0.2 : 0.35)) { [weak self] in
             guard let self, self.settings, me == self.settingsJob else { return }
-            self.settingsWords = true
+            // (rolled in, as when they come with the rows: set plainly they stood there in one frame)
+            withAnimation(Motion.quick) { self.settingsWords = true }
         }
     }
     /// MAP SETTINGS CLOSE (A5.2): the water goes back to the stop it was at with the rows still in it, and they give

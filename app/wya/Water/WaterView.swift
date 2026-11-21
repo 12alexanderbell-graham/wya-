@@ -475,6 +475,9 @@ struct SheetContent: View {
                     || (water.upload && water.stop == .quarter && uploadRest)
                     || (fits && uploadWas && !water.upload)
                     || (fits && takenWas && !taken && water.stop == .half && abs(form.top - L.top(.half)) < 2)
+                    // (and out as they take it there: rolled, not cut, as the system now sinks away under their rows)
+                    || (!fits && taken && !takenWas && (water.settings || water.details) && water.stop == .half
+                        && abs(form.top - L.top(.half)) < 2)
                 if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || (taken != takenWas && !still) { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
