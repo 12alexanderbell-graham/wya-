@@ -1858,6 +1858,12 @@ private struct PageLayer: View {
                                 let c = Self.rgb(cg, photo: true)
                                 if !c.isEmpty { groundRGB = c; withAnimation(Motion.quick) { ground = c.map(Self.color) } }
                             }
+                            // DEPTH AS YOU SCROLL: the photo goes up at two thirds of the page's pace, so the words
+                            // pass over a picture further away (pulled down, it grows instead)
+                            .visualEffect { c, g in
+                                let y = g.frame(in: .scrollView(axis: .vertical)).minY
+                                return c.offset(y: y < 0 && !Motion.reduce ? -y * 0.35 : 0)
+                            }
                         }
                         .clipped()
                         // its lower third dissolves into the page along a soft, uneven line, never a straight one (P05 §2)
