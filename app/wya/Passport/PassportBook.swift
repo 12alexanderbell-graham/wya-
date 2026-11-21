@@ -110,6 +110,16 @@ struct PassportBook: View {
         }
     }
 
+    /// a leaf as it lifts: the light it catches toward its free edge, in the page's own shape
+    private func leaf(_ page: PassportPage, size: CGSize, lift: Double) -> some View {
+        page.overlay {
+            LinearGradient(colors: [.white.opacity(0), .white.opacity(0.38 * lift)], startPoint: .leading, endPoint: .trailing)
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: size.width * 0.036,
+                                                  topTrailingRadius: size.width * 0.036, style: .continuous))
+                .allowsHitTesting(false)
+        }
+    }
+
     static func size(_ L: Layout, sheetTop: CGFloat) -> CGSize {
         let room = L.room(sheetTop: sheetTop)
         var h = min(420, room.upperBound - room.lowerBound)
@@ -128,16 +138,25 @@ struct PassportBook: View {
                          menu: b.turn == 0 ? { stampMenu($0) } : nil,
                          name: { id in map.world?.places.first { $0.id == id }?.n ?? id.uppercased() },
                          tap: b.turn == 0 ? { goTo($0) } : nil)
-            // THE LEAF keeps its height the whole way: it narrows toward the spine as it turns (the turn seen straight
-            // on), never growing toward the eye; a flat squeeze keeps the page's glass and its light on every frame
-            // (a 3D turn drops the glass while it moves)
+            // THE LEAF keeps its height the whole way: it narrows toward the spine as it turns (the turn seen
+            // straight on), never growing toward the eye; a flat squeeze keeps the page's glass and its light on
+            // every frame (a 3D turn drops the glass while it moves) THE TURN IN LIGHT: the lifting leaf catches
+            // light toward its free edge, and casts a soft shade on the page under it just past that edge; both grow
+            // with the lift and are gone when the leaf lies flat. Light inks only, never dark.
+            let lift = sin(abs(b.turn) * .pi / 180), edge = w * max(0.001, cos(b.turn * .pi / 180))
+            if b.turn != 0, current > 0 || b.turn > 0 {
+                LinearGradient(colors: [Palette.ink.opacity(0.10 * lift), Palette.ink.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: max(0, min(30 * lift, w - edge)), height: size.height)
+                    .offset(x: edge)
+                    .allowsHitTesting(false)
+            }
             if b.turn > 0 {
                 // the current page turning away about the spine
-                PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current)
+                leaf(PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current), size: size, lift: lift)
                     .scaleEffect(x: max(0.001, cos(b.turn * .pi / 180)), y: 1, anchor: .leading)
             } else if b.turn < 0, current > 0 {
                 // the previous page coming back from edge-on at the spine to flat: the forward turn backwards
-                PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current - 1)
+                leaf(PassportPage(id: "", order: b.order, hidden: nil, size: size, pageIndex: current - 1), size: size, lift: lift)
                     .scaleEffect(x: max(0.001, cos(b.turn * .pi / 180)), y: 1, anchor: .leading)
             }
             // turned leaves stay as a line along the spine, never gone into nothing
