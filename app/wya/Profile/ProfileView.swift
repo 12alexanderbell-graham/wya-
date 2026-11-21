@@ -52,10 +52,13 @@ struct ProfileView: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { edit.open(.ground, water: water) }
             VStack(spacing: 0) {
-                Button { Feel.tap(); edit.open(.picture, water: water) } label: { picture(me) }
+                Button {
+                    Feel.tap()
+                    if edit.sheet == .picture { edit.choosingPhoto = true } else { edit.open(.picture, water: water) }
+                } label: { picture(me) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Picture")
-                    .accessibilityHint("Changes your picture")
+                    .accessibilityHint(edit.sheet == .picture ? "Chooses a photo" : "Changes your picture")
                 nameLine(me)
                     .padding(.top, 20)
                 if !store.handleShown.isEmpty || edit.field == .handle {

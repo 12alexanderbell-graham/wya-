@@ -75,6 +75,30 @@ enum OKLCH {
         return lo
     }
 
+    /// THE WHEEL as a picture in Display P3: hues round it (red at the top, clockwise), the hue's grey in the middle
+    /// out to the most colour P3 holds at the edge, all at one lightness
+    static func wheel(size n: Int, light: Double) -> CGImage? {
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        let r = Double(n) / 2
+        for j in 0 ..< n {
+            for i in 0 ..< n {
+                let dx = Double(i) + 0.5 - r, dy = Double(j) + 0.5 - r
+                let d = (dx * dx + dy * dy).squareRoot() / r
+                guard d <= 1.01 else { continue }
+                var hue = atan2(dx, -dy) * 180 / .pi
+                if hue < 0 { hue += 360 }
+                let v = p3(light: light, chroma: maxChroma(light: light, hue: hue) * min(1, d), hue: hue)
+                let o = (j * n + i) * 4
+                px[o] = UInt8(v.x * 255 + 0.5); px[o + 1] = UInt8(v.y * 255 + 0.5); px[o + 2] = UInt8(v.z * 255 + 0.5); px[o + 3] = 255
+            }
+        }
+        guard let cs = CGColorSpace(name: CGColorSpace.displayP3),
+              let provider = CGDataProvider(data: Data(px) as CFData) else { return nil }
+        return CGImage(width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4, space: cs,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: provider,
+                       decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
     /// the field as a picture in Display P3: hues across, pale to deep down, at this strength
     static func field(width w: Int, height h: Int, strength: Double) -> CGImage? {
         var px = [UInt8](repeating: 255, count: w * h * 4)
@@ -146,43 +170,57 @@ struct ColourPicker: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            field
-            strip.padding(.top, 12)
+            HStack(spacing: 24) {
+                field
+                strip
+            }
+            .frame(width: width)
             row.padding(.top, 16)
         }
         .frame(width: width)
-        .task(id: Int(colour.strength * 20)) { await redraw() }
+        .task(id: Int(colour.light * 40)) { await redraw() }
     }
 
-    // MARK: the field
+    // MARK: the wheel
+
+    /// the wheel's size: as tall as the field and its strip were, so the sheets keep their height
+    static var wheelD: CGFloat { fieldH + 12 + stripH }
+    /// the light-to-deep bar beside it
+    static let barW: CGFloat = 32
 
     private var field: some View {
-        let s = colour.spot
-        let marker = CGPoint(x: min(max(s.x * width, Self.edge), width - Self.edge),
-                             y: min(max(s.y * Self.fieldH, Self.edge), Self.fieldH - Self.edge))
+        let d = Self.wheelD, r = d / 2
+        // the marker: round the wheel at its hue (red at the top, going clockwise), out from the middle by its strength
+        let a = colour.hue * .pi / 180
+        let reach = min(colour.strength * r, r - Self.edge)
+        let marker = CGPoint(x: r + reach * sin(a), y: r - reach * cos(a))
         return ZStack(alignment: .topLeading) {
             Group {
                 if let image { Image(decorative: image, scale: 1).resizable().interpolation(.high) } else { Color.clear }
             }
-            .frame(width: width, height: Self.fieldH)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .frame(width: d, height: d)
+            .clipShape(Circle())
+            .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
             // the marker, which is the loupe while the finger is down (A15.2, A15.3: one disc changing size)
             disc(finger == nil ? 22 : 56)
                 .position(loupeAt(marker))
                 .animation(finger == nil ? .interpolatingSpring(duration: Motion.reduce ? 0.2 : 0.26, bounce: 0) : nil, value: finger)
                 .allowsHitTesting(false)
         }
-        .frame(width: width, height: Self.fieldH)
-        .contentShape(Rectangle())
+        .frame(width: d, height: d)
+        .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
             .onChanged { v in
                 finger = v.location
-                let p = CGPoint(x: v.location.x / width, y: v.location.y / Self.fieldH)
-                // a tick at the field's left or right end (a continuous gesture plays nothing else, Part 0.3)
-                let end = p.x <= 0 ? -1 : p.x >= 1 ? 1 : 0
+                let dx = Double(v.location.x - r), dy = Double(v.location.y - r)
+                var hue = atan2(dx, -dy) * 180 / .pi
+                if hue < 0 { hue += 360 }
+                let s = min(1, (dx * dx + dy * dy).squareRoot() / Double(r))
+                // a tick as the finger reaches the edge (a continuous gesture plays nothing else, Part 0.3)
+                let end = s >= 1 ? 1 : 0
                 if end != 0, end != lastEnd { Feel.tick() }
                 lastEnd = end
-                colour = ColourPick.at(p, strength: colour.strength)
+                colour = ColourPick(hue: hue, light: colour.light, strength: s)
             }
             .onEnded { _ in
                 finger = nil
@@ -194,17 +232,19 @@ struct ColourPicker: View {
         .accessibilityLabel("Colour")
         .accessibilityValue(ColourNames.name(colour))
         .accessibilityAdjustableAction { d in
-            // hue in 24 steps (15.4); lightness and strength have their own adjustables below
+            // hue in 24 steps (15.4); strength and lightness have their own below
             colour.hue = (colour.hue + (d == .increment ? 15 : -15) + 360).truncatingRemainder(dividingBy: 360)
             Feel.tick(); keep()
         }
+        .accessibilityAction(named: "Stronger") { colour.strength = min(1, colour.strength + 0.1); keep() }
+        .accessibilityAction(named: "Softer") { colour.strength = max(0, colour.strength - 0.1); keep() }
     }
 
-    /// the loupe rides 64 pt above the finger, or beside it near the top (A15.2)
+    /// the loupe rides 64 pt above the finger (A15.2)
     private func loupeAt(_ marker: CGPoint) -> CGPoint {
         guard let f = finger else { return marker }
-        let fx = min(width, max(0, f.x)), fy = min(Self.fieldH, max(0, f.y))
-        return CGPoint(x: fx, y: fy - 64)
+        let d = Self.wheelD
+        return CGPoint(x: min(d, max(0, f.x)), y: min(d, max(0, f.y)) - 64)
     }
 
     private func disc(_ d: CGFloat) -> some View {
@@ -214,32 +254,37 @@ struct ColourPicker: View {
             .overlay(Circle().inset(by: -0.5).stroke(Palette.ink.opacity(0.5), lineWidth: 0.5))
     }
 
-    // MARK: the strength strip (the hue's grey at the left, its full colour at the right)
+    // MARK: light to deep (the colour at its palest at the top, its deepest at the foot)
 
     private var strip: some View {
-        let grey = ColourPick(hue: colour.hue, light: colour.light, strength: 0)
-        let full = ColourPick(hue: colour.hue, light: colour.light, strength: 1)
-        return ZStack(alignment: .leading) {
-            Capsule().fill(LinearGradient(colors: [grey.color, full.color], startPoint: .leading, endPoint: .trailing))
-                .frame(width: width, height: Self.stripH)
-            disc(22).position(x: 11 + colour.strength * (width - 22), y: Self.stripH / 2).allowsHitTesting(false)
+        let h = Self.wheelD, w = Self.barW
+        let top = ColourPick(hue: colour.hue, light: ColourPick.lightTop, strength: colour.strength)
+        let mid = ColourPick(hue: colour.hue, light: (ColourPick.lightTop + ColourPick.lightBottom) / 2, strength: colour.strength)
+        let foot = ColourPick(hue: colour.hue, light: ColourPick.lightBottom, strength: colour.strength)
+        let t = (ColourPick.lightTop - colour.light) / (ColourPick.lightTop - ColourPick.lightBottom)
+        return ZStack(alignment: .top) {
+            Capsule().fill(LinearGradient(colors: [top.color, mid.color, foot.color], startPoint: .top, endPoint: .bottom))
+                .frame(width: w, height: h)
+                .overlay(Capsule().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
+            disc(22).position(x: w / 2, y: 11 + t * (h - 22)).allowsHitTesting(false)
         }
-        .frame(width: width, height: Self.stripH)
+        .frame(width: w, height: h)
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { v in
-                let s = min(1, max(0, Double((v.location.x - 11) / (width - 22))))
-                let end = s <= 0 ? -1 : s >= 1 ? 1 : 0
+                let f = min(1, max(0, Double((v.location.y - 11) / (h - 22))))
+                let end = f <= 0 ? -1 : f >= 1 ? 1 : 0
                 if end != 0, end != stripEnd { Feel.tick() }
                 stripEnd = end
-                colour.strength = s
+                colour.light = ColourPick.lightTop - f * (ColourPick.lightTop - ColourPick.lightBottom)
             }
             .onEnded { _ in stripEnd = 0; Feel.tap(); keep() })
         .accessibilityElement()
-        .accessibilityLabel("Strength")
-        .accessibilityValue("\(Int(colour.strength * 100)) percent")
+        .accessibilityLabel("Lightness")
+        .accessibilityValue(colour.light > 0.8 ? "pale" : colour.light < 0.42 ? "deep" : "middle")
         .accessibilityAdjustableAction { d in
-            colour.strength = min(1, max(0, colour.strength + (d == .increment ? 0.1 : -0.1))); Feel.tick(); keep()
+            colour.light = min(ColourPick.lightTop, max(ColourPick.lightBottom, colour.light + (d == .increment ? 0.06 : -0.06)))
+            Feel.tick(); keep()
         }
     }
 
@@ -284,12 +329,12 @@ struct ColourPicker: View {
     }
 
     private func redraw() async {
-        let s = colour.strength
-        guard abs(s - imageStrength) > 0.02 || image == nil else { return }
-        // (drawn at twice the points: at 1x the field was soft on the phone's screen)
-        let w = Int((width * 2).rounded()), h = Int(Self.fieldH * 2)
-        let img = await Task.detached(priority: .userInitiated) { OKLCH.field(width: w, height: h, strength: s) }.value
-        image = img; imageStrength = s
+        let l = colour.light
+        guard abs(l - imageStrength) > 0.02 || image == nil else { return }
+        // (drawn at three times the points: the wheel's edge soft at less)
+        let d = Int((Self.wheelD * 3).rounded())
+        let img = await Task.detached(priority: .userInitiated) { OKLCH.wheel(size: d, light: l) }.value
+        image = img; imageStrength = l
     }
 }
 

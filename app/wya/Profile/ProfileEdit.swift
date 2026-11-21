@@ -26,6 +26,8 @@ final class ProfileEdit {
     private(set) var sheet: Sheet?
     /// the nationalities' search is being typed in (the water goes to full, clear of the keyboard)
     var searching = false
+    /// your photos are open to choose the picture from
+    var choosingPhoto = false
     /// what is typed in the nationalities' search
     var query = ""
     /// the badge shown alone in your badges (nil: all of them)
@@ -393,7 +395,8 @@ struct FlagCircle: View {
 }
 
 /// THE PICTURE SHEET (water at 50%): the colour picker, the picture above taking the colour as the finger moves; then
-/// Upload (Apple's photo picker: no permission asked, the photo's middle square kept) and your nationalities' flags.
+/// your nationalities' flags; a photo by tapping the picture itself while this is up (Apple's photo picker: no permission
+/// asked, the photo's middle square kept).
 /// No preset colours, no premium.
 struct ProfilePictureSheet: View {
     let water: Water
@@ -420,12 +423,6 @@ struct ProfilePictureSheet: View {
                 store.set { $0.colour = c; $0.picture = nil }
             }
             HStack(spacing: 12) {
-                PhotosPicker(selection: $item, matching: .images, photoLibrary: .shared()) {
-                    Text("Upload").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
-                        .padding(.horizontal, 20).frame(height: 44)
-                        .glassEffect(PageGlass.control.interactive(), in: .capsule)
-                }
-                .buttonStyle(.plain)
                 ForEach(edit.nationalities, id: \.self) { cc in
                     Button {
                         Feel.tap()
@@ -439,6 +436,8 @@ struct ProfilePictureSheet: View {
             .frame(width: width, height: 44)
         }
         .frame(width: width, alignment: .leading)
+        // (a photo is chosen by tapping the picture itself while this sheet is up)
+        .photosPicker(isPresented: Bindable(edit).choosingPhoto, selection: $item, matching: .images, photoLibrary: .shared())
         .onChange(of: item) { _, it in
             guard let it else { return }
             Task {
