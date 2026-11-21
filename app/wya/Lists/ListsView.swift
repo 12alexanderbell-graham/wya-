@@ -147,25 +147,20 @@ struct ListsWater: View {
     // MARK: the top row
 
     private func topRow(_ w: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            if s.open != nil {
-                // a list open: its way back where search was, in the same glass circle as search
-                circle("back") { Feel.tap(); withAnimation(Motion.quick) { s.close() } }
-                .accessibilityLabel("Back")
-                Spacer(minLength: 0)
-                // SEE IT ON THE MAP: a list with places, on the Map tab's own mark
-                if let id = s.open, let l = viewable(id) {
-                    circle("tab-map") { viewOnMap(l) }
-                        .accessibilityLabel("View on map")
-                }
-            } else {
-                circle("search") {
-                    Feel.tap()
-                    s.searching.toggle()
-                    if !s.searching { s.query = "" }
-                }
-                .accessibilityLabel(s.searching ? "Close search" : "Search")
-                Spacer(minLength: 8)
+        // ONE CIRCLE IN EACH CORNER THAT STAYS: the circle stays where it is and its mark changes; the wheel in the
+        // middle shrinks away while a list is open and grows back
+        let open = s.open
+        let viewL = open.flatMap { viewable($0) }
+        let rightKey: String? = open == nil ? "plus" : viewL == nil ? nil : "tab-map"
+        return HStack(spacing: 0) {
+            circle(open != nil ? "back" : "search") {
+                Feel.tap()
+                if open != nil { withAnimation(Motion.quick) { s.close() } }
+                else { s.searching.toggle(); if !s.searching { s.query = "" } }
+            }
+            .accessibilityLabel(open != nil ? "Back" : s.searching ? "Close search" : "Search")
+            Spacer(minLength: 8)
+            if open == nil {
                 if s.searching {
                     TextField("", text: $s.query, prompt: Text("Search").foregroundStyle(Palette.ink.opacity(0.5)))
                         .font(.body).foregroundStyle(Palette.ink)
@@ -176,15 +171,21 @@ struct ListsWater: View {
                         .frame(height: 44)
                 } else {
                     ListsWheel(s: s)
+                        .transition(.scale(scale: 0.01))
                 }
-                Spacer(minLength: 8)
-                // the plus makes one of the kind the wheel is on (books' making comes with their page)
-                circle("plus", dim: s.kind > 2) {
+            }
+            Spacer(minLength: 8)
+            // the plus makes one of the kind the wheel is on (books' making comes with their page); a list open with
+            // places: SEE IT ON THE MAP, on the Map tab's own mark
+            if let key = rightKey {
+                circle(key, dim: open == nil && s.kind > 2) {
+                    if let l = viewL { viewOnMap(l); return }
                     guard s.kind <= 2 else { Feel.refuse(); return }
                     Feel.tap()
                     withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
                 }
-                .accessibilityLabel(["New list", "New plan", "New tier list", "New book"][s.kind])
+                .accessibilityLabel(open != nil ? "View on map" : ["New list", "New plan", "New tier list", "New book"][s.kind])
+                .transition(.scale(scale: 0.01))
             }
         }
         .frame(width: w, height: 44)
