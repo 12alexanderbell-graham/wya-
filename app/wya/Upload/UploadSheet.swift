@@ -151,21 +151,23 @@ final class UploadState {
         let me = job
         // at 25% the caption is cut as the upload takes the water, so the pair comes at once; from elsewhere the
         // water arrives first
-        grow(after: at25 ? 0 : 0.45, job: me)
+        grow(after: at25 ? 0.25 : 0.45, job: me)
     }
 
     /// the pair in: both icons and both words in one frame.
     private func grow(after d: Double, job me: Int) {
         let start = { [self] in
             guard me == job else { return }
-            shapes = [true, true]; words = true
+            shapes = [true, true]
+            withAnimation(Motion.quick) { words = true }
             moving = false
         }
         if d <= 0 { start() } else { DispatchQueue.main.asyncAfter(deadline: .now() + d, execute: start) }
     }
     /// the pair out: both icons and both words in one frame
     private func shrink(lead: Int? = nil) {
-        shapes = [false, false]; words = false
+        shapes = [false, false]
+        withAnimation(.smooth(duration: 0.15)) { words = false }
     }
 
     /// A9.3: a tap on step 1's choices goes to its step 2
@@ -254,10 +256,12 @@ final class UploadState {
         if !order.isEmpty {
             if order.allSatisfy({ dropped.contains($0) }) { map?.found = []; forget() } else { save() }
         }
-        closing = false
-        guard me == job else { return }
-        w.closeUpload()
-        step = 0; note = [:]; locating = false; photosBusy = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [self] in
+            closing = false
+            guard me == job else { return }
+            w.closeUpload()
+            step = 0; note = [:]; locating = false; photosBusy = nil
+        }
     }
 
     // MARK: the four sources
@@ -1635,7 +1639,7 @@ struct UploadSheet: View {
                 .foregroundStyle(Palette.ink)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
-                .contentTransition(.identity)
+                .contentTransition(.numericText(value: u.words ? 1 : 0))
         }
         .frame(width: w, height: 96)
         .contentShape(Rectangle())
