@@ -38,6 +38,10 @@ struct PlacesSheet: View {
             // (the rows are there once the sets have been read, and only with room for one whole row at least; the
             // rest scroll, going out softly at the foot)
             let places = picked ? Self.places(map: map) : []
+            // A SET'S ROWS SLIDE WITH THE SWIPE: swiped to the next set, the caption rolled but the rows below were
+            // the next set's in one frame; now the set's rows go out the way the finger went and the next set's come
+            // in from the other side, inside the water's sides, as Lists' shelves do
+            ZStack(alignment: .topLeading) {
             if store.ready, !rows.isEmpty || !places.isEmpty, to - from >= 44 {
                 ScrollView(.vertical) {
                   VStack(spacing: 8) {
@@ -101,7 +105,16 @@ struct PlacesSheet: View {
                 .frame(width: L.W - 2 * L.sheetInset, height: EdgeRows.fit(to - from, cuts: cuts))
                 .position(x: L.W / 2, y: from + EdgeRows.fit(to - from, cuts: cuts) / 2)
                 .allowsHitTesting(water.stop == .half)
+                .id(map.placesSet)
+                .transition(.asymmetric(insertion: .modifier(active: PlacesSlide(on: true, leaving: false, w: L.W),
+                                                             identity: PlacesSlide(on: false, leaving: false, w: L.W)),
+                                        removal: .modifier(active: PlacesSlide(on: true, leaving: true, w: L.W),
+                                                           identity: PlacesSlide(on: false, leaving: true, w: L.W))))
             }
+            }
+            .frame(width: L.W, height: L.H, alignment: .topLeading)
+            .clipShape(SidesBand(inset: L.sheetInset))
+            .animation(Motion.chrome, value: map.placesSet)
             if picked, captionUp, !Self.swipeCaption {
                 // the back arrow, as on Map settings' pages: 22 pt in a 44 pt square, on the caption's name's line
                 // (the menu's rows need the water at 50%: a set that sent it down to 25% brings it back up with them)
@@ -128,6 +141,8 @@ struct PlacesSheet: View {
     /// still turn it off to see the old menu.)
     static var swipeCaption: Bool { UserDefaults.standard.object(forKey: "wya.placesSwipe") as? Bool ?? true }
     /// the set after (1) or before (-1) the one shown, round the menu's order; 0 the last one looked at (or the first)
+    /// the last set step went forward (the next set: rows out to the left, in from the right)
+    @MainActor static var forward = true
     @MainActor static func step(_ by: Int, map: MapController) {
         let menu = CollectionStore.shared.menu
         guard !menu.isEmpty else { return }
@@ -136,6 +151,7 @@ struct PlacesSheet: View {
         let i = menu.firstIndex(of: now) ?? 0
         let next = menu[(i + by + menu.count) % menu.count]
         if by != 0 { Feel.tick() }
+        forward = by >= 0
         map.showPlacesSet(next)
         UserDefaults.standard.set(next, forKey: "wya.placesLast")
     }
@@ -338,4 +354,20 @@ struct SetPlaceThumb: View {
         guard let e = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return nil }
         return URL(string: "https://commons.wikimedia.org/wiki/Special:FilePath/\(e)?width=144")
     }
+}
+
+/// a set's rows coming or going sideways, the side read while they move (as Lists' ShelfSlide)
+struct PlacesSlide: ViewModifier {
+    let on: Bool
+    let leaving: Bool
+    let w: CGFloat
+    func body(content: Content) -> some View {
+        let fwd = PlacesSheet.forward
+        content.offset(x: on ? (leaving ? (fwd ? -w : w) : (fwd ? w : -w)) : 0)
+    }
+}
+/// the water's width, the screen's height: what slides sideways stays inside the water's sides
+struct SidesBand: Shape {
+    let inset: CGFloat
+    func path(in r: CGRect) -> Path { Path(CGRect(x: r.minX + inset, y: r.minY, width: r.width - 2 * inset, height: r.height)) }
 }
