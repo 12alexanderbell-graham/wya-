@@ -30,7 +30,7 @@ final class ThingStore {
 
     func things(_ cc: String) -> [Thing]? { byCC[cc] }
     /// A COUNTRY'S THINGS' FILE
-    nonisolated static func file(_ cc: String) -> String { "native/things/things-\(cc)-6.wyth" }
+    nonisolated static func file(_ cc: String) -> String { "native/things/things-\(cc)-7.wyth" }
 
     /// A THING FOUND BY THE NAME PEOPLE KNOW IT BY: picked in search as, it is called so on the map, its card and its
     /// page for the rest of the session, not; its own name stays everywhere it was not found so (ThingIndex's other

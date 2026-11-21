@@ -35,7 +35,10 @@ final class ThingIndex {
     }
     /// the index: 3 (with the names people know) where the server has it, else 2
     nonisolated private static func file() async -> ServerAnswer<Data> {
-        // (-6: and those sights' English names,,) (-7: and the best known deserts, rivers and falls)
+        // (-6: and those sights' English names,,) (-7: and the best known deserts, rivers and falls) (-8: and the
+        // Great Victoria Desert)
+        let r8 = await Servers.data.file("native/things/things-index-8.wyti")
+        if case .ok(_) = r8 { return r8 }
         let r7 = await Servers.data.file("native/things/things-index-7.wyti")
         if case .ok(_) = r7 { return r7 }
         let r6 = await Servers.data.file("native/things/things-index-6.wyti")
