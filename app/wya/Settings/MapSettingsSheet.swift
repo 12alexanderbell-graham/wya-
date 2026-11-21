@@ -53,9 +53,11 @@ private struct RowWords: View {
         let ink = band ? Color.white : Palette.ink
         HStack(spacing: 8) {
             if let flag, let img = Flags.row(flag) {
-                // shown with the row's words (in one frame: a flag is not a word to roll)
-                img.resizable().frame(width: 28, height: 21).frame(width: 28, height: 28).opacity(shown ? 1 : 0)
-                    .transaction { $0.disablesAnimations = true; $0.animation = nil }
+                // shown with the row's words, rolling with them as the › does
+                img.resizable().frame(width: 28, height: 21).frame(width: 28, height: 28)
+                    .blur(radius: shown ? 0 : 3)
+                    .offset(y: shown ? 0 : 8)
+                    .opacity(shown ? 1 : 0)
                     .padding(.trailing, 4)
             }
             Text(shown ? name : blank(name))
