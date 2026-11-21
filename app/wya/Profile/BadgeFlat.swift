@@ -26,6 +26,7 @@ nonisolated enum BadgeFlat {
         /// a map tile with rounded corners round the box (a range, a sea: their outlines are too rough to cut to; the map
         /// of the place reads), not cut to the rings
         var tile = false
+        var above: Double?
     }
 
     // MARK: the level's inks
@@ -171,6 +172,31 @@ nonisolated enum BadgeFlat {
         r.bytes.withUnsafeBytes { b in
             for k in 0 ..< w * h where !lonlat[k].x.isNaN { z[k] = height(r, b, lon: lonlat[k].x, lat: lonlat[k].y) }
         }
+        // NO FACETS WHEN ZOOMED PAST THE DATA: a range's badge spans a few of the world picture's points per cell,
+        // and the heights between them are flat planes, so the light drew the cells as blocks (the Alps at 300 pt a
+        // pile of square lumps). Smoothed over about one cell first, the folds stay and the blocks go
+        let cell = 40_075_000 / Double(r.width)
+        let reach = Int((cell / metres / 2).rounded())
+        if reach >= 1 {
+            for pass in 0 ..< 2 {
+                var out = z
+                for j in 0 ..< h {
+                    for i in 0 ..< w {
+                        let k = j * w + i
+                        guard !z[k].isNaN else { continue }
+                        var sum = 0.0, n = 0.0
+                        for d in -reach ... reach {
+                            let ii = pass == 0 ? i + d : i, jj = pass == 0 ? j : j + d
+                            guard ii >= 0, ii < w, jj >= 0, jj < h else { continue }
+                            let v = z[jj * w + ii]
+                            if !v.isNaN { sum += v; n += 1 }
+                        }
+                        out[k] = sum / n
+                    }
+                }
+                z = out
+            }
+        }
         // (the relief drawn steeper the wider the badge's land: a range shows its folds, a continent its mountains)
         let lift = min(30, max(4, metres / 420))
         let light = simd_normalize(SIMD3<Double>(-1, -1, 1.35))
@@ -201,10 +227,13 @@ nonisolated enum BadgeFlat {
                     let deep = min(1, -e / 5000)
                     c = simd_mix(SIMD3(repeating: 0.985), inks.light, SIMD3(repeating: 0.35 + 0.45 * deep))
                 }
-                px8[k * 4] = UInt8(max(0, min(255, c.x * 255)))
-                px8[k * 4 + 1] = UInt8(max(0, min(255, c.y * 255)))
-                px8[k * 4 + 2] = UInt8(max(0, min(255, c.z * 255)))
-                px8[k * 4 + 3] = 255
+                // (premultiplied: a range's foot thins out to nothing)
+                let a = plan.above.map { min(1, max(0, (e - $0 * 0.8) / ($0 * 0.2))) } ?? 1
+                guard a > 0 else { continue }
+                px8[k * 4] = UInt8(max(0, min(255, c.x * a * 255)))
+                px8[k * 4 + 1] = UInt8(max(0, min(255, c.y * a * 255)))
+                px8[k * 4 + 2] = UInt8(max(0, min(255, c.z * a * 255)))
+                px8[k * 4 + 3] = UInt8(a * 255)
             }
         }
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
@@ -220,6 +249,9 @@ nonisolated enum BadgeFlat {
 @MainActor
 enum BadgeNatural {
     private static var files: [String: [String: [[SIMD2<Double>]]]] = [:]
+    /// each range's foot, metres: the height its badge is cut at (the Alps' valleys under 1,000, the Himalayas' foothills
+    /// and plains under 3,000)
+    static let heights: [String: Double] = ["Q1286": 1000, "Q5477": 1200, "Q5456": 2000, "Q5451": 3000]
 
     /// the region's outline (longitude, latitude), or nil while it can't be had
     static func rings(file: String, key: String) async -> [[SIMD2<Double>]]? {
@@ -243,6 +275,14 @@ enum BadgeNatural {
               x1 > x0, y1 > y0 else { return nil }
         // (a tile round it with room on every side, never wider than twice its height: the Himalayas in their plains and
         // plateau, the Mediterranean in its lands)
+        // a range: cut to its outline and its high ground, in a box with a little room
+        if !sea, let high = heights[key] {
+            let mx = (x1 - x0) * 0.03, my = (y1 - y0) * 0.03
+            let a = x0 - mx, b = y0 - my, c = x1 + mx, d = y1 + my
+            let unit = pts.map { $0.map { CGPoint(x: ($0.x - a) / (c - a), y: ($0.y - b) / (d - b)) } }
+            return BadgeFlat.Plan(plane: .equalEarth(box: SIMD4(a, b, c, d)), rings: unit, aspect: CGFloat((c - a) / (d - b)),
+                                  above: high)
+        }
         var mx = (x1 - x0) * 0.12, my = (y1 - y0) * 0.12
         let wide = (x1 - x0 + 2 * mx) / (y1 - y0 + 2 * my)
         if wide > 2 { my += ((x1 - x0 + 2 * mx) / 2 - (y1 - y0 + 2 * my)) / 2 }
