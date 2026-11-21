@@ -1264,7 +1264,8 @@ extension PlacePageState {
         let heads = [#"^If you (were|are) looking for [^,.]*, (look|go|see) (here|there)[:.]?\s*"#,
                      #"^(For|For the|For other) [^.]{0,120}?, see [^.]*\.\s*"#,
                      #"^Not to be confused with [^.]*\.\s*"#,
-                     #"^This (article|page) is about [^.]*\.\s*"#]
+                     #"^This (article|page) is about [^.]*\.\s*"#,
+                     #"^See (the )?(main )?[^.]{0,80}? (article|page)( for [^.]*)?\.\s*"#]
         var changed = true
         while changed {
             changed = false
@@ -1597,7 +1598,7 @@ extension PlacePageState {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
             !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b",
+            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b",
                     options: [.regularExpression, .caseInsensitive]) == nil
         }
     }
