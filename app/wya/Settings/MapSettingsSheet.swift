@@ -69,8 +69,10 @@ private struct RowWords: View {
                     .truncationMode(.middle)
             }
             if chevron {
-                Icon5(key: "forward", ink: Palette.ink, size: 15).opacity(shown ? 1 : 0)
-                    .transaction { $0.disablesAnimations = true; $0.animation = nil }
+                Icon5(key: "forward", ink: Palette.ink, size: 15)
+                    .blur(radius: shown ? 0 : 3)
+                    .offset(y: shown ? 0 : 8)
+                    .opacity(shown ? 1 : 0)
             }
         }
         .font(.body)
