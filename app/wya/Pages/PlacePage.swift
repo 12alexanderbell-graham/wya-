@@ -2084,6 +2084,7 @@ private struct PageLayer: View {
         let w = L.W - 32 - 24
         return VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                .risesWhenSeen()
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(all, id: \.self) { h in
@@ -2324,6 +2325,7 @@ private struct InsideList: View {
         if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text(title).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                .risesWhenSeen()
             let alike = all.count > 1 && Set(all.map(\.line)).count == 1
             let heads = Set(all.map { $0.line.components(separatedBy: " · ").first ?? "" })
             let sameHead = all.count > 1 && heads.count == 1 && all.contains { $0.line.contains(" · ") }
@@ -2544,6 +2546,7 @@ private struct ActivitiesList: View {
         if q.isEmpty || !rows.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
             Text("Activities").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                .risesWhenSeen()
             // (the photos' column only where one of the rows shown has a photo)
             let pictured = rows.prefix(limit).contains { $0.wd.map { SetPlaceThumb.file(own: "", thing: $0) != nil } ?? false }
             ForEach(rows.prefix(limit), id: \.self) { a in

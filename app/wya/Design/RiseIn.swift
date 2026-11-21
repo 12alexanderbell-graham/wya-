@@ -49,3 +49,23 @@ extension View {
     /// leans back and settles flat as it scrolls up into view (SettleIn)
     func settlesIn() -> some View { modifier(SettleIn()) }
 }
+
+/// A HEADING RISING AS IT COMES INTO VIEW: the line comes up through its own bounds the first time it is nearly all
+/// on screen, never fading; already in place under Reduce Motion
+struct RiseWhenSeen: ViewModifier {
+    @State private var up = false
+    func body(content: Content) -> some View {
+        content
+            .visualEffect { [up] c, g in c.offset(y: up || Motion.reduce ? 0 : g.size.height * 1.05) }
+            .clipped()
+            .onScrollVisibilityChange(threshold: 0.8) { seen in
+                guard seen, !up else { return }
+                withAnimation(.spring(duration: 0.75, bounce: 0)) { up = true }
+            }
+    }
+}
+
+extension View {
+    /// rises into place from behind its own bounds the first time it scrolls into view (RiseWhenSeen)
+    func risesWhenSeen() -> some View { modifier(RiseWhenSeen()) }
+}
