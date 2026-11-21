@@ -264,6 +264,14 @@ extension PlacePageState.OnePage {
         out.rows.removeAll { r in
             r.0 == "Where" && r.1.split(separator: ",").allSatisfy { what.localizedCaseInsensitiveContains($0.trimmingCharacters(in: .whitespaces)) }
         }
+        out.rows = out.rows.map { r in
+            guard r.0 == "Where" else { return r }
+            let parts = r.1.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            // (whole words only: a short part is not found inside another word)
+            let left = parts.filter { what.range(of: "\\b" + NSRegularExpression.escapedPattern(for: $0) + "\\b",
+                                                 options: [.regularExpression, .caseInsensitive]) == nil }
+            return left.isEmpty || left.count == parts.count ? r : (r.0, left.joined(separator: ", "))
+        }
         // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
         // it is
         let size = Double(setArea())
