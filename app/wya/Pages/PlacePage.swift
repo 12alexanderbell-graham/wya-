@@ -2336,14 +2336,18 @@ private struct InsideList: View {
             let heads = Set(all.map { $0.line.components(separatedBy: " · ").first ?? "" })
             let sameHead = all.count > 1 && heads.count == 1 && all.contains { $0.line.contains(" · ") }
             let pictured = all.contains { !$0.photo.isEmpty }
-            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured, dropHead: sameHead) }
+            ForEach(rows.prefix(limit), id: \.self) { r in row(r, line: !alike, pictured: pictured, dropHead: sameHead).transition(.identity) }
             if rows.count > limit {
-                Button { shown += 10 } label: {
+                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // (straight to its new place at the list's foot, under the cut, uncovered last as the list opens: moving
+                // with the rows, it passed through the first new one's words)
+                .transaction { $0.animation = nil }
             }
         }
+        .clipShape(SideOpenRect())
         }
     }
 
@@ -2569,14 +2573,19 @@ private struct ActivitiesList: View {
                 // after a two-line one sat 10 pt nearer than the others)
                 .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.identity)
             }
             if rows.count > limit {
-                Button { shown += 10 } label: {
+                Button { withAnimation(Motion.quick) { shown += 10 } } label: {
                     Text("Show more").font(.body.weight(.semibold)).foregroundStyle(Palette.ink).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // (straight to its new place at the list's foot, under the cut, uncovered last as the list opens: moving
+                // with the rows, it passed through the first new one's words)
+                .transaction { $0.animation = nil }
             }
         }
+        .clipShape(SideOpenRect())
         }
     }
 }
@@ -2888,4 +2897,9 @@ struct PageOpening: View {
             .accessibilityAddTraits(more ? .isButton : [])
             .accessibilityHint(more ? "Shows the rest" : "")
     }
+}
+
+/// a rectangle cut at the top and bottom only: open to the sides, so a row's glass circle and its light are never cut
+struct SideOpenRect: Shape {
+    func path(in r: CGRect) -> Path { Path(r.insetBy(dx: -80, dy: 0)) }
 }
