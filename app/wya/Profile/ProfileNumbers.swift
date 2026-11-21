@@ -20,6 +20,8 @@ final class ProfileNumbers {
     private(set) var earned: [Badge] = []
 
     @ObservationIgnored private var job = 0
+    /// the places you have as the badges count them (stamped, or counted as one), for a badge's own page
+    var mine: Set<String> { kept.map { $0.input.stamped.union($0.input.counted) } ?? [] }
     @ObservationIgnored private var kept: (input: BadgeInput, tally: (more: [String: Int], fixed: [String: Int], steps: [String: [Int]]))?
     static let continents = ["Europe", "Asia", "Africa", "North America", "South America", "Oceania", "Antarctica"]
     /// what a set's place is, as the badges of the things you marked name it

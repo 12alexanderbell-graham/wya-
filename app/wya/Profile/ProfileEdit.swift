@@ -355,27 +355,68 @@ struct ProfileBadgesList: View {
         .frame(width: width, height: room)
     }
 
+    /// A BADGE'S OWN PAGE: the badge as wide as the page lets it be, its name and level, what you have against the
+    /// next level, the five levels with the one you are at, and, for a badge about a set of places, those places, the
+    /// ones you have in black and the rest at 50%.
     private func one(_ b: Badge) -> some View {
         let next = b.steps.first { $0 > b.have }
-        return VStack(spacing: 0) {
-            BadgeLiveView(badge: b, size: 220)
-                .padding(.top, 4)
-            Text(b.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center).padding(.top, 16)
-            // its level, and the day it was reached where the app saw it
-            Text(Badges.levelName[min(b.level, 5)] + (BadgeMoment.day(b.id, b.level).map { " on " + $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? ""))
-                .font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
-            // what you have, and the next level's number at 50%
-            (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
-             + Text(next.map { " of " + Self.value(b, $0) + " for " + Badges.levelName[min(5, b.level + 1)] } ?? "")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(Palette.ink.opacity(0.5)))
-                .monospacedDigit()
-                .padding(.top, 20)
-            Text(b.what).font(.body).foregroundStyle(Palette.ink)
-                .multilineTextAlignment(.center).padding(.top, 16)
-            Spacer(minLength: 0)
+        let ms = BadgeForm.members(b) ?? []
+        let mine = ProfileNumbers.shared.mine
+        let book = BadgeArt.shared.world.flatMap { BadgeStore.shared.book($0) }
+        let names = ms.compactMap { cc in book?.world.places[cc].map { (cc, $0.s) } }.sorted { $0.1 < $1.1 }
+        return ScrollView {
+            VStack(spacing: 0) {
+                BadgeLiveView(badge: b, size: min(width - 40, 300), hug: true)
+                    .padding(.top, 4)
+                Text(b.name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.center).padding(.top, 20)
+                // its level, and the day it was reached where the app saw it
+                Text(Badges.levelName[min(b.level, 5)] + (BadgeMoment.day(b.id, b.level).map { " on " + $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? ""))
+                    .font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
+                // what you have, and the next level's number at 50%
+                (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
+                 + Text(next.map { " of " + Self.value(b, $0) + " for " + Badges.levelName[min(5, b.level + 1)] } ?? "")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Palette.ink.opacity(0.5)))
+                    .monospacedDigit()
+                    .padding(.top, 20)
+                // THE FIVE LEVELS, each its number over its name: reached in black, still to come at 50%
+                if b.steps.count == 5 {
+                    HStack(alignment: .top, spacing: 0) {
+                        ForEach(0..<5, id: \.self) { i in
+                            VStack(spacing: 2) {
+                                Text(Self.value(b, b.steps[i])).font(.system(.title3, design: .rounded).weight(.semibold)).monospacedDigit()
+                                Text(Badges.levelName[i + 1]).font(.footnote)
+                            }
+                            .foregroundStyle(Palette.ink.opacity(b.level > i ? 1 : 0.5))
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .padding(.top, 28)
+                }
+                // (a set's own sentence named every place again, with no word of which ones are yours)
+                if names.isEmpty || b.family != "groups" {
+                    Text(b.what).font(.body).foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.center).padding(.top, 28)
+                }
+                // THE PLACES IT IS ABOUT: yours in black, the rest at 50%
+                if !names.isEmpty, names.count <= 80 {
+                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                              alignment: .leading, spacing: 12) {
+                        ForEach(names, id: \.0) { cc, n in
+                            Text(n).font(.body).lineLimit(1)
+                                .foregroundStyle(Palette.ink.opacity(mine.contains(cc) ? 1 : 0.5))
+                                .accessibilityLabel(n + (mine.contains(cc) ? ", stamped" : ", not yet"))
+                        }
+                    }
+                    .padding(.top, 28)
+                }
+            }
+            .frame(width: width)
+            .padding(.bottom, 24)
         }
+        .scrollBlur()
+        .scrollIndicators(.hidden)
         .frame(width: width, height: room, alignment: .top)
     }
 }
