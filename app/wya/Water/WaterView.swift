@@ -222,8 +222,8 @@ struct SheetContent: View {
                     // something else the water's content (settings, a list, Details, upload): the system is simply
                     // not there, and simply there again when it goes; no sliding down out of the water and no rising
                     // back up through its frosted bottom
-                    .opacity(cosmosOut ? 0 : 1)
-                    .animation(nil, value: cosmosOut)
+                    .opacity(cosmosHidden ? 0 : 1)
+                    .animation(nil, value: cosmosHidden)
 
             }
             if water.settings { MapSettingsSheet(water: water, map: map, form: form) }
@@ -425,6 +425,8 @@ struct SheetContent: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { PlacesSheet.step(0, map: map) }
         }
         .onChange(of: water.settings || water.details || water.upload) { _, v in DispatchQueue.main.async { takenWas = v } }
+        .onChange(of: cosmosHidden, initial: true) { _, h in cosmosWas = !h }
+        .onChange(of: water.upload) { _, v in DispatchQueue.main.async { uploadWas = v } }
         // PINS AT FULL is a name or note being typed, or a route's colour: when the pin or the colour goes (deleted,
         // done, put away) the water comes back to 50%, where the toolkit and the list are
         .onChange(of: PinStore.shared.selected == nil && PinRoutes.shared.colouring == nil && PinDrawings.shared.colouring == nil) { _, none in
@@ -437,7 +439,9 @@ struct SheetContent: View {
                 // (and a tab coming back: the map's caption is there with the map)
                 let taken = water.settings || water.details || water.upload
                 let still = (StampedList.backFromDetails && water.stop == .full)
-                    || ((water.upload || !taken) && water.stop == .quarter && abs(form.top - L.top(.quarter)) < 1)
+                    || (!taken && water.stop == .quarter && abs(form.top - L.top(.quarter)) < 1)
+                    || (water.upload && water.stop == .quarter && uploadRest)
+                    || (fits && uploadWas && !water.upload)
                 if water.modeSwitching || water.tabSwitching || water.pageUp != pageWasUp || (taken != takenWas && !still) { captionShown = fits }
                 else { withAnimation(fits ? Motion.quick : .smooth(duration: Motion.reduce ? 0.1 : 0.15)) { captionShown = fits } }
             }
@@ -505,11 +509,27 @@ struct SheetContent: View {
     /// the water has room for what sits where the caption does (Pins' tools stay while drawing: they become its controls)
     private var waterFits: Bool {
         form.top <= water.layout.capsule.minY - 134 && !(water.stop == .closed && !water.held) && !water.settings && !water.details
-            && !water.upload && !water.regions && !water.menuLeaving && !water.pageUp
+            && !(water.upload && (water.stop != .quarter || uploadRest)) && !water.regions && !water.menuLeaving && !water.pageUp
+    }
+    /// the solar system shown or not: out, unless it was on show and the water is only sinking by itself (the upload's
+    /// way down to 25%, the Map tab), when it goes down with the edge and under the screen
+    private var cosmosHidden: Bool {
+        guard cosmosOut else { return false }
+        let sinking = !water.held && (water.stop == .quarter || water.stop == .closed) && !cosmosTaken
+            && form.top < water.layout.top(.quarter) - 20
+        return !(cosmosWas && sinking)
     }
     /// the solar system is down out of the water while something else is the water's content
     private var cosmosOut: Bool {
-        water.settings || water.details || water.stampedList || water.listLeaving || water.upload || water.regions || water.menuLeaving
+        cosmosTaken || water.upload
+            // and the water on its way down to 25% by itself (settings, a list or Details closed, the Map tab): the
+            // system is not shown for a moment only to sink away under the caption; under a finger it rises and sinks
+            // with the water as before
+            || (!water.held && (water.stop == .quarter || water.stop == .closed))
+    }
+    /// something else is the water's content
+    private var cosmosTaken: Bool {
+        water.settings || water.details || water.stampedList || water.listLeaving || water.regions || water.menuLeaving
             || water.pageSheet
             // and history's
             || water.historyUp
@@ -517,16 +537,18 @@ struct SheetContent: View {
             || map.placesMode || map.pinsMode
             // and a region map's (the system is the Countries world's; it sat in France's sheet at 50%)
             || map.regionScene != nil
-            // and the water on its way down to 25% by itself (settings, a list or Details closed, the Map tab): the
-            // system is not shown for a moment only to sink away under the caption; under a finger it rises and sinks
-            // with the water as before
-            || (!water.held && (water.stop == .quarter || water.stop == .closed))
     }
+    /// the water near enough its 25% rest for the upload's pair (the spring's last points take long)
+    private var uploadRest: Bool { abs(form.top - water.layout.top(.quarter)) < 8 }
+    /// whether the solar system was on show when it last looked
+    @State private var cosmosWas = true
     @State private var captionShown = false
     /// the page state the caption last saw (a page coming or going swaps the caption at once)
     @State private var pageWasUp = false
     /// whether settings, Details or the upload had the water when the caption last looked
     @State private var takenWas = false
+    /// whether the upload had the water when the caption last looked
+    @State private var uploadWas = false
 }
 
 struct PlasmaStars: View {

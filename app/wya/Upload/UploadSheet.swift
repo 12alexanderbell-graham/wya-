@@ -151,7 +151,7 @@ final class UploadState {
         let me = job
         // at 25% the caption is cut as the upload takes the water, so the pair comes at once; from elsewhere the
         // water arrives first
-        grow(after: at25 ? 0.25 : 0.45, job: me)
+        grow(after: at25 ? 0.25 : 0.7, job: me)
     }
 
     /// the pair in: both icons and both words in one frame.
