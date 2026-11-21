@@ -786,14 +786,14 @@ struct ModeWheel: View {
         }
         // with the tools out a tap on the dot is the first tool; with settings open, a tap on the gear closes them;
         // the wheel itself is never tapped
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             if PlacePageState.shared.isOpen && !tools { Feel.tap(); PlacePageState.shared.close(); return }
             if head.settingsOpen { Feel.tap(); head.closeSettings(); return }
             guard tools else { return }
             if head.filtersMenu { Feel.refuse(); return }
             Feel.tap()
             withAnimation(Motion.chrome) { head.quickStamp.toggle() }
-        }
+        })
         .onAppear { at = CGFloat(head.mode.rawValue); lastTick = head.mode.rawValue; lit = head.quickStamp ? 1 : 0 }
         .onChange(of: head.quickStamp) { _, v in
             // on or off is there at once (no fade, no grow)
