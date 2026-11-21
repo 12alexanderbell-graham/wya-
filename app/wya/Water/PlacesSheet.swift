@@ -180,7 +180,8 @@ struct PlacesSheet: View {
     static func country(_ it: CollectionStore.Item, map: MapController) -> String {
         let named = { (cc: String) -> String? in map.world.flatMap { w in (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n } } }
         let ccs = (it.ccs.isEmpty ? [it.cc] : it.ccs).compactMap(named)
-        return ccs.count <= 2 ? ccs.sorted().joined(separator: ", ") : ""
+        let sorted = ccs.sorted()
+        return sorted.count <= 2 ? sorted.joined(separator: ", ") : sorted.prefix(2).joined(separator: ", ") + " and \(sorted.count - 2) more"
     }
 }
 
