@@ -211,8 +211,8 @@ final class CollectionStore {
             // (18: and for lakes, islands, peaks and the rest, the first photograph in the article named for the
             // place) (19: and the places whose only photo was a render from space, Greenland, the Mediterranean, by
             // hand) (20: the oceans' photos, by hand) (21: the Arctic, Arabian, South China and Sargasso Seas'
-            // photos, by hand)
-            for f in ["native/collections/collections-21.wyco", "native/collections/collections-20.wyco", "native/collections/collections-19.wyco", "native/collections/collections-18.wyco", "native/collections/collections-17.wyco", "native/collections/collections-16.wyco", "native/collections/collections-15.wyco", "native/collections/collections-14.wyco", "native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
+            // photos, by hand) (22: the Southern Ocean's)
+            for f in ["native/collections/collections-22.wyco", "native/collections/collections-21.wyco", "native/collections/collections-20.wyco", "native/collections/collections-19.wyco", "native/collections/collections-18.wyco", "native/collections/collections-17.wyco", "native/collections/collections-16.wyco", "native/collections/collections-15.wyco", "native/collections/collections-14.wyco", "native/collections/collections-13.wyco", "native/collections/collections-12.wyco", "native/collections/collections-11.wyco", "native/collections/collections-9.wyco", "native/collections/collections-8.wyco", "native/collections/collections-5.wyco", "native/collections/collections-2.wyco"] where data == nil {
                 if case .ok(let d) = await Servers.data.file(f) { data = d }
             }
             if let d = data, let raw = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] {

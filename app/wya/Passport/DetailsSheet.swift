@@ -1360,7 +1360,8 @@ struct GapSnap: ScrollTargetBehavior {
         let H = context.containerSize.height
         let top = max(0, context.contentSize.height - H)
         let want = target.rect.minY + H - 8
-        guard let c = cuts.min(by: { abs($0 - want) < abs($1 - want) }) else { return }
+        let ends = cuts + [context.contentSize.height + 8]
+        guard let c = ends.min(by: { abs($0 - want) < abs($1 - want) }) else { return }
         target.rect.origin.y = min(max(0, c - H + 8), top)
     }
 }
