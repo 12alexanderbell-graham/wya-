@@ -219,6 +219,7 @@ struct ProfileStatsList: View {
                             // (a long value goes onto a second line, never cut off:)
                             value(r.value).lineLimit(3).multilineTextAlignment(.trailing)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .layoutPriority(1)
                         }
                         .padding(.vertical, 6)
                         .frame(minHeight: 34)

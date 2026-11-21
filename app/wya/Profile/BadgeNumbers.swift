@@ -311,7 +311,7 @@ nonisolated struct StatRow: Equatable, Sendable, Identifiable {
 nonisolated enum Stats {
     static let layout: [(String, [String])] = [
         ("Places", ["Stamps", "Continents", "Countries in Europe", "Share of the world", "Capitals", "Cities and towns",
-                    "Regions", "Territories", "Lived in", "Wishlist", "Most stamps in one country", "First stamp",
+                    "Regions", "Territories", "Lived in", "Wishlist", "Most stamped", "First stamp",
                     "Latest stamp", "Northernmost", "Southernmost"]),
         ("Time", ["Years travelling", "Weeks in a row", "Months in a row"]),
         ("Things", ["Lists", "Plans", "Planned with the AI", "Tier lists", "Photo books", "Notes", "Badge levels"]),

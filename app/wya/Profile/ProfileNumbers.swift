@@ -226,7 +226,7 @@ final class ProfileNumbers {
             if most[cc] != nil { most[cc, default: 0] += 1 }
         }
         let top = most.max { a, b in a.value != b.value ? a.value < b.value : a.key > b.key }
-        add("Places", "Most stamps in one country", top.flatMap { $0.value > 1 ? "\(name($0.key)), \($0.value.formatted()) stamps" : nil })
+        add("Places", "Most stamped", top.flatMap { $0.value > 1 ? "\(name($0.key)), \($0.value.formatted()) stamps" : nil })
         // the place you went back to most
         let back = ids.compactMap { id -> (String, Int)? in
             let v = marks[.country(id)]?.visits ?? 0
