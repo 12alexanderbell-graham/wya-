@@ -231,7 +231,7 @@ final class UploadState {
         let me = job
         // the next pair takes the old one's place in the same frame
         _ = lead
-        step = s
+        withAnimation(Motion.quick) { step = s }
         locating = false; photosBusy = nil
         grow(after: 0, job: me)
     }
