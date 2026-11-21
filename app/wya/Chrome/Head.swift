@@ -1058,7 +1058,8 @@ struct SearchResults: View {
         // (two sights at most, the known ones, after the countries; a sight found means no country) (sights only:
         // landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region named as typed
         // before them, "paris" the city first, the rest after)
-        let thingSights = sightSearch ? thingHits.filter { $0.fame >= 3 && (1...6).contains($0.kind) }.prefix(2) : []
+        let whole0 = head.query.trimmingCharacters(in: .whitespaces).townFolded
+        let thingSights = sightSearch ? thingHits.filter { ($0.fame >= 3 || $0.fame >= 2 && $0.name.townFolded == whole0) && (1...6).contains($0.kind) }.prefix(2) : []
         let sightIDs = Set(thingSights.map(\.id)), fold0 = head.query.trimmingCharacters(in: .whitespaces).townFolded
         let setSights = sightSearch ? itemHits.filter { f in
             let n = f.item.name.townFolded
