@@ -67,6 +67,9 @@ enum BadgeForm: Hashable {
         if let p = b.place, BadgeArt.shared.world?.contViews[p] != nil { return .continent(p) }
         if let m = members(b), !m.isEmpty {
             let cont = b.family == "world" && b.name.hasSuffix("Europe") ? "Europe" : nil
+            if BadgeRings.placesBoxed(BadgeArt.shared.world, Set(m), in: cont).rings.isEmpty, !b.steps.isEmpty {
+                return .struck(b.steps[min(b.steps.count - 1, max(0, b.level - 1))].formatted())
+            }
             return .places(m.sorted(), in: cont)
         }
         guard !b.steps.isEmpty else { return .medal }
