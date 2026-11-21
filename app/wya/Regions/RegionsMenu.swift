@@ -250,11 +250,12 @@ final class RegionsMenuModel {
         builtFor = ObjectIdentifier(w)
         let cat = RegionCatalog.shared
         var out: [Row] = []
+        let last = UserDefaults.standard.dictionary(forKey: Self.countsKey) as? [String: Int] ?? [:]
         for (i, p) in w.places.enumerated() where !p.junk {
             let id = p.id.lowercased()
             guard let f = cat.first(id), f.level.n > 0 else { continue }
             out.append(Row(id: p.id, place: i, name: p.n, flag: id, row: f.row, total: f.level.n,
-                           one: Self.word(f.level.one), many: Self.word(f.level.many), count: 0))
+                           one: Self.word(f.level.one), many: Self.word(f.level.many), count: last[id] ?? 0))
         }
         rows = out.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         Flags.prewarmRows(rows.map(\.flag))
@@ -289,7 +290,10 @@ final class RegionsMenuModel {
         var next = rows
         for i in next.indices { next[i].count = counted.counts[next[i].flag] ?? 0 }
         if next != rows { rows = next }
+        UserDefaults.standard.set(counted.counts, forKey: Self.countsKey)
     }
+    static let countsKey = "regions.menu.counts"
+
     /// each country's first-level region ids, once read
     @ObservationIgnored private var idsByPlace: [String: Set<String>] = [:]
 
