@@ -1095,10 +1095,18 @@ struct SearchResults: View {
         // Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country that only looks
         // like it)
         let townFold0 = Self.spelledOut(head.query).townFolded
+        // (in tiers: a big town, 50,000 and more, named as typed; a big one whose other name is it ( is Luzern, which
+        // two small Lucernes in California had pushed off); a small one named as typed (Santorini's Oía); then the
+        // rest in their order (Goiânia only holds "oia"))
+        let tier = { (t: TownIndex.Hit) -> Int in
+            let n = t.name.townFolded, own = n == typedFold || n == townFold0, big = t.people >= 50_000
+            if big && own { return 0 }
+            if big && TownIndex.shared.otherNames(t.id).contains(where: { $0 == typedFold || $0 == townFold0 }) { return 1 }
+            return own ? 2 : 3
+        }
         let bigTowns = countriesSearch && typed ? Array(townHits.enumerated().sorted { x, y in
-            let a = x.element.name.townFolded, b = y.element.name.townFolded
-            let ax = a == typedFold || a == townFold0, bx = b == typedFold || b == townFold0
-            return ax != bx ? ax : x.offset < y.offset
+            let tx = tier(x.element), ty = tier(y.element)
+            return tx != ty ? tx < ty : x.offset < y.offset
         }.map(\.element).prefix(2)) : []
         let w0 = map.world
         let countryStarts = hits.filter { i in w0.map { $0.places[i].n.townFolded.hasPrefix(typedFold) || $0.aliases[typedFold] != nil } ?? false }
@@ -1121,9 +1129,8 @@ struct SearchResults: View {
         let exactTowns = bigTowns.filter { !($0.people < 50_000 && sightNames.contains($0.name.townFolded + "|" + $0.file.lowercased())) }
             .filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
             || ($0.people >= 200_000 && ($0.name.townFolded.hasPrefix(typedFold) || $0.name.townFolded.hasPrefix(fullFold)))) }
-        // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
-        let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
-            ? Array(bigTowns.filter { t in !sameAsRegion(t) && !(t.people < 50_000 && sightNames.contains(t.name.townFolded + "|" + t.file.lowercased())) }.prefix(1)) : []
+        let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.allSatisfy({ $0.people < 50_000 })
+            ? Array(bigTowns.filter { t in !sameAsRegion(t) && !exactTowns.contains { $0.id == t.id } && !(t.people < 50_000 && sightNames.contains(t.name.townFolded + "|" + t.file.lowercased())) }.prefix(1)) : []
         let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
         let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits.contains { begins($0.name) } || !setSights.isEmpty
             || townHits.contains { begins($0.name) }

@@ -286,20 +286,34 @@ final class TownIndex {
         ownBytes.withUnsafeBufferPointer { nb in
             qb.withUnsafeBufferPointer { qp in
                 guard let base = nb.baseAddress, let qa = qp.baseAddress else { return }
+                var reached = rows.count
                 for i in 0 ..< rows.count {
                     let a = Int(ownStart[i]), n = Int(ownStart[i + 1]) - a
-                    // (the same tests as the names as strings: all of it, its start, anywhere in it from three letters)
+                    // (the same tests as the names as strings: all of it, its start; anywhere in it below)
                     let starts = n >= ql && memcmp(base + a, qa, ql) == 0
                     if starts && n == ql {
                         if exact.count < limit { exact.append(rows[i].hit) }
                     } else if starts {
                         if rows[i].hit.file == open { home.append(rows[i].hit) } else if away.count < limit { away.append(rows[i].hit) }
-                    } else if inside, n > ql, memmem(base + a, n, qa, ql) != nil {
-                        if rows[i].hit.file == open { if homeIn.count < limit { homeIn.append(rows[i].hit) } }
-                        else if awayIn.count < limit { awayIn.append(rows[i].hit) }
                     }
                     // enough found: the open country's (or, with none open, everywhere's) names starting with what was typed
-                    if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { break }
+                    if home.count >= limit || (open == nil && away.count >= limit && exact.count >= 1) { reached = i + 1; break }
+                }
+                guard inside, reached > 0 else { return }
+                let end = Int(ownStart[reached])
+                var from = 0
+                while from < end, let f = memmem(base + from, end - from, qa, ql) {
+                    let off = base.distance(to: f.assumingMemoryBound(to: UInt8.self))
+                    var lo = 0, hi = reached - 1
+                    while lo < hi { let mid = (lo + hi + 1) / 2; if Int(ownStart[mid]) <= off { lo = mid } else { hi = mid - 1 } }
+                    let i = lo, a = Int(ownStart[i]), n = Int(ownStart[i + 1]) - a
+                    guard off + ql <= a + n else { from = off + 1; continue }
+                    from = a + n
+                    // (one that starts with it is counted above already)
+                    guard off > a else { continue }
+                    if rows[i].hit.file == open { if homeIn.count < limit { homeIn.append(rows[i].hit) } }
+                    else if awayIn.count < limit { awayIn.append(rows[i].hit) }
+                    if homeIn.count >= limit && awayIn.count >= limit { break }
                 }
             }
         }
@@ -311,9 +325,18 @@ final class TownIndex {
                 bar.withUnsafeBufferPointer { bp in
                     whole.withUnsafeBufferPointer { wp in
                         guard let base = ab.baseAddress, let b = bp.baseAddress, let w = wp.baseAddress else { return }
-                        for i in 0 ..< rows.count {
-                            let a = Int(altStart[i]), n = Int(altStart[i + 1]) - a
-                            guard n > bar.count, memmem(base + a, n, b, bar.count) != nil else { continue }
+                        let total = ab.count
+                        var from = 0
+                        while from < total, let f = memmem(base + from, total - from, b, bar.count) {
+                            let off = base.distance(to: f.assumingMemoryBound(to: UInt8.self))
+                            // (its row: the last whose names start at or before the find)
+                            var lo = 0, hi = rows.count - 1
+                            while lo < hi { let mid = (lo + hi + 1) / 2; if Int(altStart[mid]) <= off { lo = mid } else { hi = mid - 1 } }
+                            let i = lo, a = Int(altStart[i]), n = Int(altStart[i + 1]) - a
+                            // (a find running on into the next row's names is none: look again one byte on)
+                            guard off + bar.count <= a + n else { from = off + 1; continue }
+                            from = a + n
+                            guard n > bar.count else { continue }
                             let hit = rows[i].hit
                             if memmem(base + a, n, w, whole.count) != nil {
                                 if exactAlt.count < limit { exactAlt.append(hit) }
