@@ -330,7 +330,7 @@ struct ProfileBadgesList: View {
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap, alignment: .top), count: cols), spacing: 20) {
                 ForEach(all) { b in
                     VStack(spacing: 8) {
-                        BadgeArtView(badge: b, size: min(88, cell - 8))
+                        BadgeArtView(badge: b, size: min(88, cell - 8), trim: true)
                         Text(b.name).font(.subheadline).foregroundStyle(Palette.ink)
                             .multilineTextAlignment(.center).lineLimit(2)
                     }

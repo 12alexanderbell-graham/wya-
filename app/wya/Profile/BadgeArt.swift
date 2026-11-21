@@ -480,13 +480,15 @@ struct BadgeArtView: View {
     let size: CGFloat
     /// its box the picture's own shape (a wide range's tile no longer sits in a square of nothing; its own page)
     var hug = false
+    /// the picture without its clear margin, in its square box (the grid: a set's land fills its cell as a disc does)
+    var trim = false
     @State private var img: UIImage?
     @Environment(\.displayScale) private var scale
 
     var body: some View {
         let form = BadgeArt.shared.form(badge), level = BadgeLevel.of(badge)
         let px = Int((size * scale).rounded())
-        let shown = (img ?? BadgeArt.shared.cached(form, level, px: px)).map { hug ? Self.trim($0) : $0 }
+        let shown = (img ?? BadgeArt.shared.cached(form, level, px: px)).map { hug || trim ? Self.trim($0) : $0 }
         let h = hug ? shown.map { size * min(1, $0.size.height / max(1, $0.size.width)) } ?? size * 0.6 : size
         ZStack {
             if let shown { Image(uiImage: shown).resizable().interpolation(.high).scaledToFit() }
