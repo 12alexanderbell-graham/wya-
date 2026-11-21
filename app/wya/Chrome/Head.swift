@@ -1448,8 +1448,17 @@ struct SearchResults: View {
         PlacePageState.shared.closeAll()
         if let h, let sc = map.regionScene { map.openRegions(sc.place, row: h.row, focus: h.id) }
     }
-    /// the Countries map's rows in their order, eight at most (made in steps: one long sum of them took the
-    /// compiler minutes)
+    /// the Countries map's rows in their order, eight at most (made in steps: one long sum of them took the compiler
+    /// minutes) the cities people know (Places' famous cities), as folded name and country, kept while the set is the
+    /// same
+    private static var famousCache: (count: Int, names: Set<String>) = (0, [])
+    private static func famousCityNames() -> Set<String> {
+        guard let c = CollectionStore.shared.collection(CollectionStore.famousCities) else { return [] }
+        if famousCache.count == c.items.count { return famousCache.names }
+        let names = Set(c.items.map { $0.name.townFolded + "|" + $0.cc.lowercased() })
+        famousCache = (c.items.count, names)
+        return names
+    }
     private static func countryKeys(typed: String, starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
                                     named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
                                     small: [RegionIndex.Hit], rest: [RegionIndex.Hit], named0: [ResultKey] = [], low: Set<ResultKey> = []) -> [ResultKey] {
@@ -1471,9 +1480,12 @@ struct SearchResults: View {
         if exact.isEmpty && whole.allSatisfy({ $0.people < 50_000 }) {
             // (a region of under 100,000 people stays after the sights, as before: it never pushes them off the rows)
             let peopled = named.map { ($0, RegionIndex.shared.people($0)) }
-            // (the regions keep their own order, the best known first: "par" is Paris before Paraná; each town goes in
-            // before the first of them with fewer people than it)
-            var weighed = peopled.filter { $0.1 >= 100_000 }.map { ($0.1, region($0.0)) }
+            // (the regions keep their own order, the best known first: "par" is Paris before Paraná; each town goes
+            // in before the first of them with fewer people than it)
+            let famous = famousCityNames()
+            let known = { (r: RegionIndex.Hit) in famous.contains(r.name.townFolded + "|" + r.place.lowercased()) }
+            let big = peopled.filter { $0.1 >= 100_000 }
+            var weighed = (big.filter { known($0.0) } + big.filter { !known($0.0) }).map { ($0.1, region($0.0)) }
             for t in begun {
                 let at = weighed.firstIndex { $0.0 < t.people } ?? weighed.count
                 weighed.insert((t.people, town(t)), at: at)
