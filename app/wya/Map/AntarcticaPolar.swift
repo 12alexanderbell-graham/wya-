@@ -121,7 +121,7 @@ struct AntarcticaPolar: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Antarctica, from above the South Pole")
-        .transition(.opacity)
+        .transition(.move(edge: .bottom))
     }
 
     /// the middle kept within the islands' reach of the pole (it can't be dragged off into empty ocean)

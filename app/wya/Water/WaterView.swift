@@ -243,7 +243,7 @@ struct SheetContent: View {
             // (never under a place's page: the water there is only the tab capsule or the page's sheet) THE DRAW BAR
             // (Map/DrawTool.swift) in the caption's place while a shape or line is drawn (in Pins its controls are
             // the tools' own circles, changing in place: PinsDock)
-            if DrawTool.shared.on, !water.settings, !map.pinsMode { DrawBar(water: water).transition(.opacity.animation(Motion.quick)) }
+            if DrawTool.shared.on, !water.settings, !map.pinsMode { DrawBar(water: water).transition(.move(edge: .bottom).animation(Motion.quick)) }
             if map.placesMode, !water.settings, !water.details, !water.stampedList, !water.upload, !water.pageSheet,
                !water.historyUp, !PlacePageState.shared.isOpen, map.regionScene == nil, !DrawTool.shared.on {
                 PlacesSheet(water: water, map: map, captionY: max(L.headBottom + 12 + 52, form.top + 72), top: form.top, captionUp: captionShown)
