@@ -109,6 +109,7 @@ final class RegionIndex {
         guard ready, q.count >= 2 else { return [] }
         // (read first, so the list is made again when the towns' index comes)
         let townsIn = TownIndex.shared.ready && peopleReady
+        if TownIndex.shared.ready, !peopleReady { buildPeople() }
         if let l = last, l.q == q, l.towns == townsIn { return l.hits }
         let lives = people()
         var starts: [(f: String, h: Hit)] = [], inside: [Hit] = []

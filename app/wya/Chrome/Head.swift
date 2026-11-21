@@ -1465,8 +1465,10 @@ struct SearchResults: View {
         out += exact.filter { !smallExact.contains($0) }.map(region)
         out += named0
         out += smallExact.map(region)
-        // (a name typed whole and found: its sights before the other regions that only start with it)
-        if exact.isEmpty && whole.isEmpty {
+        // (a name typed whole and found: its sights before the other regions that only start with it) (in the order
+        // they came, the known one first: Santorini's Oía before Oiã)
+        let wholeSmall = towns.filter { ($0.name.townFolded == typed || $0.name.townFolded == full) && $0.people < 50_000 }
+        if exact.isEmpty && whole.allSatisfy({ $0.people < 50_000 }) {
             // (a region of under 100,000 people stays after the sights, as before: it never pushes them off the rows)
             let peopled = named.map { ($0, RegionIndex.shared.people($0)) }
             // (the regions keep their own order, the best known first: "par" is Paris before Paraná; each town goes in
@@ -1477,7 +1479,11 @@ struct SearchResults: View {
                 weighed.insert((t.people, town(t)), at: at)
             }
             out += weighed.map(\.1)
-            out += sights
+            // (a small town of the name after the best known sights and before the less known: the bridge before the
+            // town in Florida, the village before its World Heritage site, "oia" Oía before Oiapoque)
+            out += sights.filter { !low.contains($0) }
+            out += wholeSmall.map(town)
+            out += sights.filter { low.contains($0) }
             out += peopled.filter { $0.1 < 100_000 }.map { region($0.0) }
         } else {
             out += begun.map(town); out += sights.filter { !low.contains($0) }
