@@ -176,6 +176,7 @@ struct PinsDock: View {
                     .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                    .animation(Motion.quick, value: maps.shown)
                     .lineLimit(1)
                     .frame(width: L.W - 2 * L.sheetInset - (t.on ? 200 : 120))
                     .allowsHitTesting(false)
