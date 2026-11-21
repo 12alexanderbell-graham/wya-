@@ -120,7 +120,8 @@ struct BadgeMomentView: View {
     /// sends it into the Profile tab's mark, then the next one comes
     private func page(_ b: Badge) -> some View {
         let w = L.W - 2 * L.side
-        let size = min(type.isAccessibilitySize ? 160 : 260, w)
+        // (as wide as the page lets it be, in its own shape: a range's tile was a small strip in a square of nothing)
+        let size = min(type.isAccessibilitySize ? 200 : 320, w)
         // the triangle's middle in the tab capsule (the third of three across it)
         let tri = CGPoint(x: L.capsule.minX + 4 + (L.capsule.width - 8) / 3 * 2.5, y: L.capsule.midY)
         let mid = CGPoint(x: L.W / 2, y: L.H * 0.46)
@@ -128,7 +129,7 @@ struct BadgeMomentView: View {
             // (every touch is the moment's while it is up)
             Color.clear.contentShape(Rectangle())
             VStack(spacing: 0) {
-                BadgeLiveView(badge: b, size: size, intro: true)
+                BadgeLiveView(badge: b, size: size, intro: true, hug: true)
                 Text(b.name).font(.title.weight(.semibold)).foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.center).padding(.top, 16)
                 Text(Badges.levelName[min(b.level, 5)]).font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))

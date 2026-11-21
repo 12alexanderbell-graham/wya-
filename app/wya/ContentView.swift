@@ -1536,7 +1536,7 @@ private struct SheetWatch: View {
 struct AppleLens: ViewModifier {
     let searching: Bool
     func body(content: Content) -> some View {
-        let on = !MapRenderer.lensOff && (CardState.shared.shown || BookState.shared.shown || searching)
+        let on = !MapRenderer.lensOff && (CardState.shared.shown || BookState.shared.shown || searching || BadgeMoment.shared.current != nil)
         content
             .blur(radius: on ? 7 : 0, opaque: true)
             .animation(.smooth(duration: 0.45), value: on)
