@@ -1598,7 +1598,7 @@ extension PlacePageState {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
             !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b",
+            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b|(real|true)[ -]colou?r",
                     options: [.regularExpression, .caseInsensitive]) == nil
         }
     }

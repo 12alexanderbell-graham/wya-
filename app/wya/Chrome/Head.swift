@@ -1082,7 +1082,8 @@ struct SearchResults: View {
             return !twin && !sightIDs.contains(f.item.id) && (n.hasPrefix(fold0) || n.contains(" " + fold0)) && (n == fold0 || fold0.count >= 4 || f.item.fame >= 3)
         } : []
         let setNamed = setSights.filter { $0.item.name.townFolded == fold0 }
-        let sights = Array((setNamed.map { ResultKey.item($0.key) } + thingSights.map { ResultKey.thing($0.key) }
+        let thingNamed = thingSights.filter { $0.name.townFolded == fold0 }
+        let sights = Array((setNamed.map { ResultKey.item($0.key) } + thingSights.filter { $0.name.townFolded != fold0 }.map { ResultKey.thing($0.key) }
             + setSights.filter { $0.item.name.townFolded != fold0 }.map { ResultKey.item($0.key) }).prefix(2))
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
@@ -1126,11 +1127,11 @@ struct SearchResults: View {
             : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) })).prefix(8))
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) })).prefix(8))
             : Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) })
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) })
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
