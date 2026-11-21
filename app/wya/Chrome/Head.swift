@@ -1114,16 +1114,18 @@ struct SearchResults: View {
         // region of that name in its country, Paris, is shown once, as the region)
         let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
         let fullFold = Self.spelledOut(head.query).townFolded
-        let exactTowns = bigTowns.filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
+        let sightNames = Set(thingSights.map { $0.name.townFolded + "|" + $0.file.lowercased() })
+        let exactTowns = bigTowns.filter { !($0.people < 50_000 && sightNames.contains($0.name.townFolded + "|" + $0.file.lowercased())) }
+            .filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
             || ($0.people >= 200_000 && ($0.name.townFolded.hasPrefix(typedFold) || $0.name.townFolded.hasPrefix(fullFold)))) }
         // (only when nothing is named as typed: "bali" found Bari and Barrie by their other names)
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.isEmpty
-            ? Array(bigTowns.filter { t in !sameAsRegion(t) }.prefix(1)) : []
+            ? Array(bigTowns.filter { t in !sameAsRegion(t) && !(t.people < 50_000 && sightNames.contains(t.name.townFolded + "|" + t.file.lowercased())) }.prefix(1)) : []
         let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
         let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits.contains { begins($0.name) } || !setSights.isEmpty
             || townHits.contains { begins($0.name) }
         let guessLead: [ResultKey] = hits.isEmpty && !anyBegins ? guess.map { [ResultKey.place($0)] } ?? [] : []
-        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
+        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && thingNamed.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
             : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
