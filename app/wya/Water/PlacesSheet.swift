@@ -21,6 +21,8 @@ struct PlacesSheet: View {
     static let rowH: CGFloat = 52
     /// the gaps between the rows, measured (EdgeRows): the list's visible height ends in one
     @State private var cuts: [CGFloat] = []
+    /// the list is scrolled (its top goes out softly)
+    @State private var scrolled = false
 
     var body: some View {
         let L = water.layout
@@ -88,11 +90,14 @@ struct PlacesSheet: View {
                 .scrollIndicators(.hidden)
                 .mask(alignment: .top) {
                     VStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: scrolled ? 20 : 0)
                         Color.black
                         LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
                     }
                 }
                 .scrollTargetBehavior(GapSnap(cuts: cuts))
+                .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
                 .frame(width: L.W - 2 * L.sheetInset, height: EdgeRows.fit(to - from, cuts: cuts))
                 .position(x: L.W / 2, y: from + EdgeRows.fit(to - from, cuts: cuts) / 2)
                 .allowsHitTesting(water.stop == .half)
