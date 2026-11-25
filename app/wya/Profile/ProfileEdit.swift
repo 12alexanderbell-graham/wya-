@@ -339,6 +339,9 @@ struct ProfileBadgesList: View {
                         BadgeArtView(badge: b, size: min(88, cell - 8), trim: true)
                         Text(b.name).font(.subheadline).foregroundStyle(Palette.ink)
                             .multilineTextAlignment(.center).lineLimit(2)
+                            // (a name may use half the gap on each side: "The Mediterranean" went onto two lines in
+                            // its 128 pt cell while every other name was one; never smaller type, 25 Nov)
+                            .frame(width: cell + gap)
                     }
                     .frame(width: cell)
                     .contentShape(Rectangle())
