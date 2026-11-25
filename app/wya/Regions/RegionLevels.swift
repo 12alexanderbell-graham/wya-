@@ -45,7 +45,11 @@ struct RegionLevels: View {
                 let i = levels.firstIndex { $0.row == current } ?? 0
                 let mid = ws.prefix(i).reduce(0, +) + gap * CGFloat(i) + ws[i] / 2
                 let fits = total <= width - 32
-                let x: CGFloat = fits ? (width - total) / 2 : width / 2 - mid
+                // (the wheel never slides past its own ends, 25 Nov: centred on Regions, the first, the left half stood
+                // empty and the third level was one faint letter at the right edge; now the line starts at the left
+                // margin near its start, ends at the right one near its end, and centres the level shown in between,
+                // so as many levels as fit are on the screen)
+                let x: CGFloat = fits ? (width - total) / 2 : min(16, max(width - 16 - total, width / 2 - mid))
                 HStack(spacing: gap) {
                     ForEach(Array(levels.enumerated()), id: \.element.id) { k, l in
                         let here = l.row == current
@@ -97,10 +101,12 @@ struct RegionLevels: View {
                 .animation(Motion.quick, value: current)
                 .animation(Motion.quick, value: loading)
                 .clipped()
-                // (the ends go out softly, never cut by a hard line, when the line is wider than the sheet)
-                .mask(LinearGradient(stops: fits ? [.init(color: .black, location: 0), .init(color: .black, location: 1)]
-                                     : [.init(color: .clear, location: 0), .init(color: .black, location: 0.14),
-                                        .init(color: .black, location: 0.86), .init(color: .clear, location: 1)],
+                // (an end goes out softly, never cut by a hard line, only where levels run on past it: the line held at
+                // its start has its first level whole at the left margin)
+                .mask(LinearGradient(stops: [.init(color: x < 15.9 ? .clear : .black, location: 0),
+                                             .init(color: .black, location: x < 15.9 ? 0.14 : 0),
+                                             .init(color: .black, location: x + total > width - 15.9 ? 0.86 : 1),
+                                             .init(color: x + total > width - 15.9 ? .clear : .black, location: 1)],
                                      startPoint: .leading, endPoint: .trailing))
                 .contentShape(Rectangle())
                 // a swipe along the line turns it by one level
