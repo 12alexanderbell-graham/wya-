@@ -93,11 +93,15 @@ struct StampedList: View {
             // continent) never reflows the rows while they leave. Every stamp is a row; under Count = Countries the
             // caption's number leaves territories out
             if let c = scope, !w.inCont(i, c) { return nil }
-            var line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
+
+            // "Lived" / "Twice" / "<n> times", the latest visit's year, "Verified" (no tick), joined by " · "; one visit
+            // says nothing
+            var parts = [s.lived ? "Lived" : s.visits <= 1 ? "" : s.visits == 2 ? "Twice" : "\(s.visits) times"]
             if let x = info[k.description] {
-                if let y = x.year { line += " · \(y)" }
-                if x.verified { line += " · Verified" }
+                if let y = x.year { parts.append("\(y)") }
+                if x.verified { parts.append("Verified") }
             }
+            let line = parts.filter { !$0.isEmpty }.joined(separator: " · ")
             return Row(id: k.id, name: w.places[i].n, place: i, line: line)
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -109,7 +113,7 @@ struct StampedList: View {
         let flag = sc.place < w.places.count ? w.places[sc.place].id : ""
         return marks.marks.compactMap { k, s -> Row? in
             guard k.kind == .region, s.stamped, let u = index[k.id], u < sc.unitNames.count else { return nil }
-            let line = s.lived ? "Lived" : s.visits <= 1 ? "Once" : s.visits == 2 ? "Twice" : "\(s.visits) times"
+            let line = s.lived ? "Lived" : s.visits <= 1 ? "" : s.visits == 2 ? "Twice" : "\(s.visits) times"
             return Row(id: k.id, name: RegionNames.english(sc.id, sc.unitNames[u]), place: sc.place, line: line, kind: .region, flag: flag)
         }
     }
@@ -388,9 +392,11 @@ struct StampedList: View {
                 Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .contentTransition(.identity)
-                Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                    .lineLimit(1)
-                    .contentTransition(.identity)
+                if !r.line.isEmpty {
+                    Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                        .lineLimit(1)
+                        .contentTransition(.identity)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -401,7 +407,7 @@ struct StampedList: View {
         .contentShape(Rectangle())
         .onTapGesture { open(r) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(r.name), \(r.line)")
+        .accessibilityLabel(r.line.isEmpty ? r.name : "\(r.name), \(r.line)")
         .accessibilityAddTraits(.isButton)
     }
 
