@@ -670,7 +670,12 @@ extension PlacePageState.OnePage {
         }
         // the guide's own main cities first (Rome, then Bologna ... for Italy), the rest after
         let mainCities = ((j["guide"] as? [String: Any])?["cities"] as? [[String: Any]])?.compactMap { $0["n"] as? String } ?? []
-        out.activities = await PlacePageState.activities(cc, town: nil, first: mainCities)
+        // (the country's things, to put its best known sights first: read here too, as a country with eight World Heritage
+        // cards never read them above)
+        ThingStore.shared.load(cc)
+        for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        out.activities = PlacePageState.knownFirst(await PlacePageState.activities(cc, town: nil, first: mainCities),
+                                                   things: ThingStore.shared.things(cc) ?? [])
         // a country whose own picture is a map (most are): its first sight's photo at the top instead
         if out.photo == nil { out.photo = await PlacePageState.bestSightPhoto(cc) }
         if out.photo == nil { out.photo = out.highlights.lazy.filter { !$0.shared }.compactMap { PlacePageState.photo($0.photo) }.first }
@@ -1101,6 +1106,26 @@ extension PlacePageState {
         NSLog("wya activities built: %d countries", made)
     }
     #endif
+
+    /// a country's best known sights first, in the order they are known: the rows of the best known sights (fame 3)
+    /// by their place in the things file, no more than two from one town before every other town's; the rest as they were
+    static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing]) -> [Activity] {
+        var at: [String: Int] = [:]
+        for (i, t) in things.enumerated() where t.fame >= 3 && at[t.id] == nil { at[t.id] = i }
+        let top = acts.enumerated().compactMap { e -> (i: Int, at: Int, a: Activity)? in
+            guard let wd = e.element.wd, let a = at[wd] else { return nil }
+            return (e.offset, a, e.element)
+        }.sorted { $0.at != $1.at ? $0.at < $1.at : $0.i < $1.i }
+        guard top.count > 1 else { return acts }
+        let town = { (a: Activity) in a.line.components(separatedBy: " \u{00B7} ").first ?? a.line }
+        var n: [String: Int] = [:], lead: [Activity] = [], later: [Activity] = []
+        for t in top {
+            let c = town(t.a)
+            if n[c, default: 0] < 2 { lead.append(t.a); n[c, default: 0] += 1 } else { later.append(t.a) }
+        }
+        let used = Set(top.map(\.i))
+        return lead + later + acts.enumerated().filter { !used.contains($0.offset) }.map(\.element)
+    }
 
     /// a sports ground (its name or Wikidata's line says so): as well known as a cathedral it still comes after it,
     /// as a sight to travel for A LIST OF THINGS TO DO IN A TRAVELLER'S ORDER: each venue six places further down,
