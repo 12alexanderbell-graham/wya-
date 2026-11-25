@@ -62,17 +62,24 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private var gridCount = 0
     private var reliefTex: MTLTexture?
     private var texel = SIMD2<Float>(0, 0)
-    /// A COUNTRY'S FINER RELIEF (Store/ReliefDetail.swift): the open country's own picture, eight times the world's
-    /// detail, laid over the world's inside its box (the hills stay sharp zoomed into a country); asked of the data
-    /// server when a country opens, kept for the session
-    private var detailTex: MTLTexture?
-    private var detailBox = SIMD4<Float>(0, 0, 0, 0)
-    private var detailTexel = SIMD2<Float>(0, 0)
-    private var detailFor: String?
-    /// the last two countries' pictures, made into textures off the main thread (a big country's is 32 MB: never
-    /// more than two kept, and none of the files' own bytes)
-    private var detailKept: [(cc: String, tex: MTLTexture, box: SIMD4<Float>, texel: SIMD2<Float>)] = []
+    /// A COUNTRY'S FINER RELIEF (Store/ReliefDetail.swift): a country's own picture, eight times the world's detail,
+    /// laid over the world's inside its box (the hills stay sharp zoomed in); asked of the data server, kept for the
+    /// session. Up to `MapController.fineSlots` at once: the open country first, then the one under the middle
+    /// of the screen, then those filling most of it, so the land round a country is never flat beside it
+    private struct DetailPic { let cc: String; let tex: MTLTexture; let box: SIMD4<Float>; let texel: SIMD2<Float> }
+    private var detailSlots: [DetailPic] = []
+    /// the countries the slots were made for (made again when this changes or a picture comes)
+    private var detailWanted: [String] = []
+    private var detailDirty = true
+    /// countries with no finer relief on the server, and those that couldn't be reached (asked again in a few seconds):
+    /// Apple's map comes in over them at the usual zoom
+    private var detailNone: Set<String> = []
+    private var detailOffline: Set<String> = []
+    /// the pictures made into textures off the main thread, the oldest let go past `detailBudget` bytes (a big
+    /// country's is 32 MB; none of the files' own bytes kept)
+    private var detailKept: [DetailPic] = []
     private var detailAsked: Set<String> = []
+    private static let detailBudget = 120 << 20
 
     private var last: CFTimeInterval = 0
     private let start = CACurrentMediaTime()
@@ -331,41 +338,58 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         controller.needsFrame = true
     }
 
-    /// the open country's finer relief: asked for when the country changes, laid in when it comes
+    /// the finer relief for the open country and the land on screen: asked for as they change, laid in as they come
     private func wantDetail(_ w: World) {
-        let i = controller.focusPlace ?? controller.regionScene?.place ?? controller.placeOpen
-        let cc = i.flatMap { $0 >= 0 && $0 < w.places.count ? w.places[$0].id.lowercased() : nil }
-        guard cc != detailFor else { return }
-        detailFor = cc
-        detailTex = nil
-        guard let cc else { return }
-        if let k = detailKept.firstIndex(where: { $0.cc == cc }) {
-            let d = detailKept.remove(at: k)
-            detailKept.append(d)
-            (detailTex, detailBox, detailTexel) = (d.tex, d.box, d.texel)
-            return
+        func cc(_ i: Int?) -> String? { i.flatMap { $0 >= 0 && $0 < w.places.count ? w.places[$0].id.lowercased() : nil } }
+        let first = cc(controller.focusPlace ?? controller.regionScene?.place ?? controller.placeOpen)
+        let mid = cc(controller.underCentre)
+        var want: [String] = []
+        for c in [first, mid].compactMap({ $0 }) + controller.inView.compactMap({ cc($0) })
+        where !want.contains(c) && want.count < MapController.fineSlots { want.append(c) }
+        if want != detailWanted { detailWanted = want; detailDirty = true }
+        if detailDirty {
+            detailDirty = false
+            detailSlots = want.compactMap { c in detailKept.first { $0.cc == c } }
+            for c in want where !detailKept.contains(where: { $0.cc == c }) { askDetail(c) }
+            controller.needsFrame = true
         }
-        // (one ask a country at a time: back and forth before it comes asks once)
-        guard !detailAsked.contains(cc) else { return }
+        // how much finer the relief under the middle is than the world picture: Apple's map comes in that much later
+        // (kept as it was while that country's relief is still coming, so the map never goes to Apple's and back)
+        if let mid, let d = detailSlots.first(where: { $0.cc == mid }), d.texel.x > 0 {
+            controller.setFine(Double(texel.x / d.texel.x))
+        } else if mid == nil || detailNone.contains(mid!) || detailOffline.contains(mid!) {
+            controller.setFine(1)
+        } else { controller.setFine(nil) }
+    }
+    private func askDetail(_ cc: String) {
+        // (one ask a country at a time: back and forth before it comes asks once; none again for one the server hasn't)
+        guard !detailAsked.contains(cc), !detailNone.contains(cc) else { return }
         detailAsked.insert(cc)
         nonisolated(unsafe) let device = self.device
         Task { [weak self] in
             let got = await Self.detailTexture(cc, device: device)
-            // (no connection: asked again in a few seconds while the country is still open, never only on the next
+            // (no connection: asked again in a few seconds while the country is still wanted, never only on the next
             // visit; the renderer not held through the wait)
-            if got.made == nil, got.offline { try? await Task.sleep(for: .seconds(5)) }
+            if got.made == nil, got.offline {
+                self?.detailOffline.insert(cc)
+                try? await Task.sleep(for: .seconds(5))
+            }
             guard let self else { return }
             self.detailAsked.remove(cc)
             guard let made = got.made else {
-                if got.offline, self.detailFor == cc { self.detailFor = nil }
+                if !got.offline { self.detailNone.insert(cc) }
+                self.detailDirty = true
                 return
             }
-            self.detailKept.append((cc, made.tex, made.box, made.texel))
-            if self.detailKept.count > 2 { self.detailKept.removeFirst() }
-            if self.detailFor == cc {
-                (self.detailTex, self.detailBox, self.detailTexel) = (made.tex, made.box, made.texel)
-                self.controller.needsFrame = true
+            self.detailOffline.remove(cc)
+            self.detailKept.append(DetailPic(cc: cc, tex: made.tex, box: made.box, texel: made.texel))
+            // (over the budget: the oldest not on screen let go)
+            var bytes = self.detailKept.reduce(0) { $0 + $1.tex.width * $1.tex.height * 2 }
+            while bytes > Self.detailBudget, let k = self.detailKept.firstIndex(where: { !self.detailWanted.contains($0.cc) }) {
+                bytes -= self.detailKept[k].tex.width * self.detailKept[k].tex.height * 2
+                self.detailKept.remove(at: k)
             }
+            self.detailDirty = true
         }
     }
     /// a country's picture read and made into a texture away from the main thread
@@ -805,13 +829,20 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             if pattern > 0 { look.clip2.z = pattern; look.clip2.x = Float(view.contentScaleFactor) }
             // clip2.y: Map settings' Style Simple (flat cream land, blue 25% on cream sea)
             look.clip2.y = controller.simple ? 1 : 0
-            look.det = detailBox
-            look.det2 = SIMD4(detailTexel.x, detailTexel.y, detailTex == nil ? 0 : 1, 0)
+            look.det2.z = detailSlots.isEmpty ? 0 : 1
             look.sun = sunNow
             enc.setRenderPipelineState(reliefPipe)
             enc.setVertexBuffer(grid, offset: 0, index: 0)
             enc.setFragmentTexture(reliefTex, index: 0)
-            enc.setFragmentTexture(detailTex ?? reliefTex, index: 1)
+            // the finer pictures (slots past the last filled with the world's own, never read), their boxes and texels
+            var dets = [SIMD4<Float>](repeating: .zero, count: 2 * MapController.fineSlots + 1)
+            for k in 0 ..< MapController.fineSlots {
+                let d = k < detailSlots.count ? detailSlots[k] : nil
+                enc.setFragmentTexture(d?.tex ?? reliefTex, index: 1 + k)
+                if let d { dets[k] = d.box; dets[MapController.fineSlots + k] = SIMD4(d.texel.x, d.texel.y, 0, 0) }
+            }
+            dets[2 * MapController.fineSlots] = SIMD4(Float(detailSlots.count), 0, 0, 0)
+            enc.setFragmentBytes(dets, length: dets.count * MemoryLayout<SIMD4<Float>>.stride, index: 2)
             enc.setFragmentSamplerState(sampler, index: 0)
             enc.setFragmentBytes(&look, length: MemoryLayout<Look>.stride, index: 0)
             enc.drawIndexedPrimitives(type: .triangle, indexCount: gridCount, indexType: .uint32, indexBuffer: gridIndex!, indexBufferOffset: 0)

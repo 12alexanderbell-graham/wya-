@@ -156,12 +156,39 @@ inline float valleyShade(texture2d<float> rel, sampler s, float2 uv, float h0, f
     return smoothstep(0.0, 0.12, sum / 8.0 - h0);
 }
 
+// THE FINER RELIEF'S SLOTS: up to twelve countries' own pictures at once (the open one, then the land filling
+// the screen), each with its box in the world picture and its texel; n how many are in
+#define DET_N 12
+struct Dets { float4 box[DET_N]; float4 texel[DET_N]; float4 n; };
+inline float2 detSample(int i, sampler s, float2 uv, texture2d<float> d0, texture2d<float> d1, texture2d<float> d2, texture2d<float> d3, texture2d<float> d4, texture2d<float> d5, texture2d<float> d6, texture2d<float> d7, texture2d<float> d8, texture2d<float> d9, texture2d<float> d10, texture2d<float> d11) {
+    switch (i) {
+        case 0: return d0.sample(s, uv).rg;
+        case 1: return d1.sample(s, uv).rg;
+        case 2: return d2.sample(s, uv).rg;
+        case 3: return d3.sample(s, uv).rg;
+        case 4: return d4.sample(s, uv).rg;
+        case 5: return d5.sample(s, uv).rg;
+        case 6: return d6.sample(s, uv).rg;
+        case 7: return d7.sample(s, uv).rg;
+        case 8: return d8.sample(s, uv).rg;
+        case 9: return d9.sample(s, uv).rg;
+        case 10: return d10.sample(s, uv).rg;
+        default: return d11.sample(s, uv).rg;
+    }
+}
+
 fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> rel [[texture(0)]],
-                               texture2d<float> det [[texture(1)]],
+                               texture2d<float> d0 [[texture(1)]], texture2d<float> d1 [[texture(2)]],
+                               texture2d<float> d2 [[texture(3)]], texture2d<float> d3 [[texture(4)]],
+                               texture2d<float> d4 [[texture(5)]], texture2d<float> d5 [[texture(6)]],
+                               texture2d<float> d6 [[texture(7)]], texture2d<float> d7 [[texture(8)]],
+                               texture2d<float> d8 [[texture(9)]], texture2d<float> d9 [[texture(10)]],
+                               texture2d<float> d10 [[texture(11)]], texture2d<float> d11 [[texture(12)]],
                                sampler s [[sampler(0)]],
                                constant Look& look [[buffer(0)]],
-                               constant Cam& cam [[buffer(1)]]) {
+                               constant Cam& cam [[buffer(1)]],
+                               constant Dets& D [[buffer(2)]]) {
     // a fill front: only inside its circle, with a 1 pt edge (an edge, not a fade)
     float front = 1.0;
     if (look.clip.w > 0.5) {
@@ -178,18 +205,27 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // THE OPEN COUNTRY'S FINER RELIEF: inside its box its own picture, eased in over the box's outer edge so no seam;
     // its own land only (plain and coloured): the sea and the world round it keep the world's picture, so the box
     // never shows as a patch on them
+    // (each slot's box tried; the one the point is deepest inside wins, so where two boxes overlap the hand-over is
+    // where the first fades, no seam; both pictures are the same heights)
     float wd = 0.0;
     float2 du = float2(0.0);
+    int di = 0;
+    int dn = int(D.n.x + 0.5);
     if (look.det2.z > 0.5 && (kind == 1 || kind == 2)) {
-        float2 span = look.det.zw - look.det.xy;
-        du = (in.uv - look.det.xy) / span;
-        // (a country across the date line has its box past u = 1: its far side, drawn at u near 0, found a world
-        // over)
-        if (du.x < 0.0) { float x = (in.uv.x + 1.0 - look.det.x) / span.x; if (x <= 1.0) du.x = x; }
-        else if (du.x > 1.0) { float x = (in.uv.x - 1.0 - look.det.x) / span.x; if (x >= 0.0) du.x = x; }
-        float2 e = min(du, 1.0 - du);
-        wd = smoothstep(0.0, 0.04, min(e.x, e.y));
-        if (wd > 0.0) dh = mix(dh, det.sample(s, du).rg, wd);
+        for (int i = 0; i < DET_N; i++) {
+            if (i >= dn) break;
+            float4 bx = D.box[i];
+            float2 span = bx.zw - bx.xy;
+            float2 u = (in.uv - bx.xy) / span;
+            // (a country across the date line has its box past u = 1: its far side, drawn at u near 0, found a world
+            // over)
+            if (u.x < 0.0) { float x = (in.uv.x + 1.0 - bx.x) / span.x; if (x <= 1.0) u.x = x; }
+            else if (u.x > 1.0) { float x = (in.uv.x - 1.0 - bx.x) / span.x; if (x >= 0.0) u.x = x; }
+            float2 e = min(u, 1.0 - u);
+            float w = smoothstep(0.0, 0.04, min(e.x, e.y));
+            if (w > wd + 0.001) { wd = w; du = u; di = i; }
+        }
+        if (wd > 0.0) dh = mix(dh, detSample(di, s, du, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11), wd);
     }
     // MAP SETTINGS' STYLE SIMPLE (Part 1.4): no relief; the sea blue 25% on cream, unmarked land cream, your colours
     // on white as on Detailed (so lime and blue read the same in both styles)
@@ -234,10 +270,13 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     if (wd > 0.0) {
         // the finer picture's slopes, across its own (smaller) texels, lifted part of the way back to the world's
         // strength so the hills read alike in both
-        float2 dt = look.det2.xy / (look.det.zw - look.det.xy);
-        float2 g2 = float2(det.sample(s, du - float2(dt.x, 0)).g - det.sample(s, du + float2(dt.x, 0)).g,
-                           det.sample(s, du - float2(0, dt.y)).g - det.sample(s, du + float2(0, dt.y)).g);
-        g2 *= pow(max(look.texelU / max(look.det2.x, 1e-9), 1.0), 0.45);
+        float2 dtx = D.texel[di].xy;
+        float2 dt = dtx / (D.box[di].zw - D.box[di].xy);
+        float2 g2 = float2(detSample(di, s, du - float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g
+                           - detSample(di, s, du + float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g,
+                           detSample(di, s, du - float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g
+                           - detSample(di, s, du + float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g);
+        g2 *= pow(max(look.texelU / max(dtx.x, 1e-9), 1.0), 0.45);
         grad = mix(grad, g2, wd);
     }
     float3 n = normalize(float3(grad.x * 7.0, grad.y * 7.0, 1.0));
@@ -251,7 +290,7 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // alone it overstated the detail and Chukotka's coarse heights came out as grey patches
     float texelsPerPixel = min(fw.x / look.texelU, fw.y / look.texelV);
     // (inside the open country the finer picture's own texels)
-    if (wd > 0.0) texelsPerPixel = mix(texelsPerPixel, min(fw.x / look.det2.x, fw.y / look.det2.y), wd);
+    if (wd > 0.0) texelsPerPixel = mix(texelsPerPixel, min(fw.x / D.texel[di].x, fw.y / D.texel[di].y), wd);
     float detail = smoothstep(0.15, 0.5, texelsPerPixel);
     // zoomed in, the heights go almost all the way to calm land: a third of the height colour left there drew the
     // coarse heights as grey blotches

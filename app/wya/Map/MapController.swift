@@ -303,9 +303,57 @@ final class MapController {
     /// camera rests, ours or Apple's, so a pinch never changes map under the fingers
     private(set) var closeUp = false
     static let closeIn: Double = 7, closeOut: Double = 5
+    /// RELIEF STAYS CLOSE UP: the country under the middle of the screen, found as the camera rests from `fineFrom` in,
+    /// so its finer relief (ReliefDetail, eight times the world picture) is on the phone before the zoom gets close
+    @ObservationIgnored private(set) var underCentre: Int?
+    static let fineFrom: Double = 3
+    /// how much finer than the world picture the relief under the middle of the screen is (set by the renderer when that
+    /// country's own relief is in; 1 without it): ours holds that much deeper in before Apple's map takes over, so a
+    /// country card's flight never ends on a flat map once the card is closed. Capped, as the land round the country
+    /// keeps the world picture
+    @ObservationIgnored private(set) var fineHere: Double = 1
+    /// the middle country changed at this rest and the renderer hasn't yet said how fine its relief is: the choice of
+    /// map waits for it (deciding on the old value showed Apple's map for a frame and then ours again)
+    @ObservationIgnored private var finePending = false
+    /// the renderer's word on the relief under the middle (nil: still coming, the choice waits)
+    func setFine(_ f: Double?) {
+        guard let f else { return }
+        let changed = f != fineHere || finePending
+        fineHere = f
+        finePending = false
+        if changed, flight == nil, !touching { checkCloseUp() }
+    }
+    static let fineMax: Double = 2.5
+    /// the countries that fill most of the screen as the camera rests (their pieces' boxes over the view, biggest
+    /// first, at most `fineSlots`): the renderer lays in their finer relief too, so the land round the middle country is
+    /// never flat beside it
+    @ObservationIgnored private(set) var inView: [Int] = []
+    static let fineSlots = 12
+    private func mostInView(_ w: World) -> [Int] {
+        let hw = Float(view.width / 2 / k), hh = Float(view.height / 2 / k)
+        let v = SIMD4(Float(c.x) - hw, Float(c.y) - hh, Float(c.x) + hw, Float(c.y) + hh)
+        let whole = (v.z - v.x) * (v.w - v.y)
+        var area: [Int: Float] = [:]
+        for r in w.rings where r.unit >= 0 {
+            let o = w.unitOwner[r.unit]
+            guard o >= 0 else { continue }
+            let x = min(r.box.z, v.z) - max(r.box.x, v.x), y = min(r.box.w, v.w) - max(r.box.y, v.y)
+            if x > 0, y > 0 { area[o, default: 0] += x * y }
+        }
+        // (a sliver at the screen's edge isn't worth a picture: at least half a percent of the view)
+        return area.filter { $0.value > whole * 0.005 }.sorted { $0.value > $1.value }.prefix(Self.fineSlots).map(\.key)
+    }
     func checkCloseUp() {
-        guard afterFlight == nil, !CardState.shared.shown else { return }
-        let want = closeUp ? k > Self.closeOut : k >= Self.closeIn
+        // (the land under the camera is worked out at every rest, a flight with a card to come and under a card too, so
+        // its finer relief is asked for at once; only the choice of map waits)
+        if let w = world {
+            let mid = k >= Self.fineFrom ? w.place(at: SIMD2(Float(c.x), Float(c.y))) : nil
+            inView = k >= Self.fineFrom ? mostInView(w) : []
+            if mid != underCentre { underCentre = mid; finePending = true; needsFrame = true }
+        }
+        guard afterFlight == nil, !CardState.shared.shown, !finePending else { return }
+        let f = min(max(fineHere, 1), Self.fineMax)
+        let want = closeUp ? k > Self.closeOut * f : k >= Self.closeIn * f
         #if DEBUG
         NSLog("wya closeup k %.1f -> %d", k, want ? 1 : 0)
         #endif
