@@ -1357,12 +1357,15 @@ struct Star: Shape {
 /// chips that wrap to the next line
 struct FlowLayout: SwiftUI.Layout {
     var spacing: CGFloat = 8
+    /// the gap between lines, the same as between things unless asked (wrapped lines sat touching, 25 Nov)
+    var lineSpacing: CGFloat? = nil
+    private var lineGap: CGFloat { lineSpacing ?? spacing }
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let w = proposal.width ?? .infinity
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
         for v in subviews {
             let s = v.sizeThatFits(.unspecified)
-            if x > 0, x + s.width > w { y += row; x = 0; row = 0 }
+            if x > 0, x + s.width > w { y += row + lineGap; x = 0; row = 0 }
             x += s.width + spacing; row = max(row, s.height); widest = max(widest, x - spacing)
         }
         return CGSize(width: min(w, widest), height: y + row)
@@ -1371,7 +1374,7 @@ struct FlowLayout: SwiftUI.Layout {
         var x = b.minX, y = b.minY, row: CGFloat = 0
         for v in subviews {
             let s = v.sizeThatFits(.unspecified)
-            if x > b.minX, x + s.width > b.maxX { y += row; x = b.minX; row = 0 }
+            if x > b.minX, x + s.width > b.maxX { y += row + lineGap; x = b.minX; row = 0 }
             v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
             x += s.width + spacing; row = max(row, s.height)
         }

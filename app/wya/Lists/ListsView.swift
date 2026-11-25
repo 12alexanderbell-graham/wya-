@@ -1326,12 +1326,11 @@ struct TierPage: View {
                                 .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { tierOpen = tierOpen == i ? nil : i } }
                                 .accessibilityLabel("Tier \(r.t)")
                                 .accessibilityHint("Its name and colour")
-                            ScrollView(.horizontal) {
-                                HStack(spacing: 6) { ForEach(r.items, id: \.self) { chip($0) } }
-                                    .padding(.horizontal, 6).frame(minHeight: 52)
-                            }
-                            .scrollIndicators(.hidden)
-                            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                            // (a full tier wraps to more lines, every place in it seen: one line scrolled sideways cut
+                            // its second place in half at the screen's edge, 25 Nov)
+                            FlowLayout(spacing: 6) { ForEach(r.items, id: \.self) { chip($0) } }
+                                .padding(.horizontal, 6).padding(.vertical, r.items.isEmpty ? 0 : 8)
+                                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                         }
                         .padding(.horizontal, m)
                         .background(Self.colour(t.colour(i)))
