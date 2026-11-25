@@ -644,7 +644,7 @@ struct PassportPage: View {
                 .position(x: size.width / 2, y: size.height - 16)
         }
         .frame(width: size.width, height: size.height)
-        .glassEffect(PageGlass.surface, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
+        .glassEffect(.clear, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
                                                          bottomTrailingRadius: corner, topTrailingRadius: corner,
                                                          style: .continuous))
     }

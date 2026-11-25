@@ -33,7 +33,8 @@ struct WaterView: View {
                             // over a place's page, the page's frosted glass like the head's (16.3)
                             // (clear Liquid Glass always: in the capsule it is the system's minimized tab bar; the
                             // frost under it says how much of a sheet it is)
-                            .glassEffect(.regular, in: shape)
+                            // (clear, 25 Nov evening: the frosted water read as a yellow-grey slab over the map)
+                            .glassEffect(.clear, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)
@@ -76,7 +77,7 @@ struct WaterView: View {
                 let c = L.capsule(mini: water.mini)
                 Color.clear
                     .frame(width: c.width, height: c.height)
-                    .glassEffect(.regular, in: .capsule)
+                    .glassEffect(.clear, in: .capsule)
                     .position(x: c.midX, y: c.midY)
                     .allowsHitTesting(false)
             }

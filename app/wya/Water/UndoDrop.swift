@@ -49,7 +49,7 @@ struct UndoDrop: View {
             // its words at the standard sizes only: the pill is 36 pt high
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             // the water's own kind of glass, so inside the water it merges away
-            .glassEffect(.regular, in: .capsule)
+            .glassEffect(.clear, in: .capsule)
             // touched over 44 pt (the pill is drawn 36 pt high)
             .frame(minHeight: 44)
             .contentShape(Capsule())

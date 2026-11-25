@@ -559,8 +559,10 @@ extension MapController {
     /// THE COUNTRIES MAP'S CITY NAMES (25 Nov): close up, our own map with its relief now stays where Apple's map with
     /// its names came in before (MapController.fineHere), so the bigger cities of the countries in view are named as
     /// Places names them (no town shapes, no things), from the zoom Apple's names came in at
+    /// (taken off the same evening: the map read as covered in text; the Countries map names no cities)
+    static let cityNamesOn = false
     var countryNames: Bool {
-        !placesMode && !pinsMode && !regionsMenu && regionScene == nil && !appleWorld && k >= Self.closeIn
+        Self.cityNamesOn && !placesMode && !pinsMode && !regionsMenu && regionScene == nil && !appleWorld && k >= Self.closeIn
     }
     /// worked out again when the camera has moved a fifth of a screen or zoomed by a fifth (called by the renderer)
     func updateNearbyTowns() {
