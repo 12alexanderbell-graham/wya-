@@ -30,6 +30,8 @@ final class RegionCardState {
         self.key = key; self.name = name; self.parents = parents; self.place = place; self.day = day
         stampedHere = false
         map.kept = place
+        // (the world leans in toward it, as a country's card does; back as it goes)
+        map.leanAtLastTap()
         p = 0
         Feel.tap()
         // THE WATER HIGHER THAN 25%: the card stands on the 25% water, so the water goes down first and the card
@@ -47,6 +49,7 @@ final class RegionCardState {
     /// `instant`: gone in this frame, no fold (a mode change moves nothing)
     func close(map: MapController, instant: Bool = false) {
         guard key != nil else { return }
+        map.unlean()
         // (a set's place stays darkened while its card is up, as a region does; it is let go as the card goes)
         // (and a thing found by search on the towns' map)
         if map.markCollection != nil || key?.kind == .thing, map.thingPressed != nil { map.thingPressed = nil; map.needsFrame = true }

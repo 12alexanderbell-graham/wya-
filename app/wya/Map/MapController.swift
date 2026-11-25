@@ -1206,6 +1206,7 @@ final class MapController {
         // halfway from one continent to another: the new one is there at once, where the camera is
         if let then = afterFlight { afterFlight = nil; then() }
         flight = nil; touching = true
+        grabbedAt = (c, k)
         needsFrame = true
     }
     /// moved by the fingers, in points
@@ -1229,14 +1230,26 @@ final class MapController {
         leanFrom = (c, k, to, nk)
         fly(to: to, k: nk, dur: 0.6)
     }
+    /// where and when a place on the map was last tapped: a card opened by that tap leans about it (one opened from
+    /// search, with no tap of its own, does not lean)
+    @ObservationIgnored var lastTap: (p: CGPoint, t: CFTimeInterval)?
+    func leanAtLastTap() {
+        guard let l = lastTap, CACurrentMediaTime() - l.t < 1.5 else { return }
+        lean(toward: l.p)
+    }
     func unlean() {
         guard let l = leanFrom else { return }
         leanFrom = nil
         // (back only from where it leaned to, or on its way there: a map moved by a finger stays where it was put)
         let still = flight != nil || (simd_distance(c, l.to) * k < 1 && abs(log(k / l.tk)) < 0.001)
         guard still else { return }
+        // (kept a moment: the touch that closed the card stops this flight as it lands; a tap, lifted unmoved, then
+        // eases back after all, a drag keeps the map where the finger put it)
+        leanBack = (l.c, l.k, CACurrentMediaTime())
         fly(to: l.c, k: l.k, dur: 0.45)
     }
+    @ObservationIgnored private var leanBack: (c: SIMD2<Double>, k: Double, at: CFTimeInterval)?
+    @ObservationIgnored private var grabbedAt: (c: SIMD2<Double>, k: Double)?
 
     func zoom(by f: Double, about s: CGPoint) {
         let anchor = mapPoint(s)
@@ -1259,6 +1272,15 @@ final class MapController {
     /// the fingers are off. A quick one-finger flick glides on (never after a pinch); the glide's end is inside the world
     func release(velocity v: SIMD2<Double>?) {
         touching = false
+        // (a card closed by this touch: the map eases back from its lean if the touch was a tap, not a drag)
+        if let b = leanBack {
+            leanBack = nil
+            if CACurrentMediaTime() - b.at < 1.0, let g = grabbedAt, simd_distance(c, g.c) * k < 2, abs(log(k / g.k)) < 0.001 {
+                fly(to: b.c, k: b.k, dur: 0.45)
+                needsFrame = true
+                return
+            }
+        }
         if let v, simd_length(v) > 250 {
             let target = clamped(c - v * 0.26 / k, k)
             fly(to: target, k: k, dur: 0.62, glide: true)

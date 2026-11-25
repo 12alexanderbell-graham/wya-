@@ -300,6 +300,7 @@ struct ContentView: View {
             }
             // a confirmed tap on a place opens its stamping card (Part 4.2.1)
             map.onPlaceTap = { [head, map, water] i, p in
+                map.lastTap = (p, CACurrentMediaTime())
                 // the upload sheet up: finding owns the map's presses, a tap while choosing has closed it (9.3, 9.4), and
                 // at the review a found country's tap drops or keeps it (9.5)
                 // (the second round's rows are regions: a tap on the map leaves it, its regions waiting, 9.5)
