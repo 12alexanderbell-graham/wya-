@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import PencilKit
 
 /// BOOKS (25 Nov, step one): a book works like a book without having to look like one; it is its pages, each one photo
 /// or up to six, with words on it if you like. Pages turn by
@@ -12,6 +13,16 @@ enum BookPhotos {
             .appendingPathComponent("book-photos").appendingPathComponent(name)
     }
     static func image(_ name: String) -> UIImage? { url(name).flatMap { UIImage(contentsOfFile: $0.path) } }
+    /// a page's sketch (PencilKit's own drawing, kept as its data)
+    static func drawing(_ name: String) -> PKDrawing? {
+        guard let u = url(name), let d = try? Data(contentsOf: u) else { return nil }
+        return try? PKDrawing(data: d)
+    }
+    static func saveDrawing(_ d: PKDrawing, as name: String) {
+        guard let u = url(name) else { return }
+        try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? d.dataRepresentation().write(to: u)
+    }
     /// a picked photo kept (no bigger than a page needs); its file name, or nil
     static func save(_ data: Data) -> String? {
         guard let img = UIImage(data: data) else { return nil }
@@ -67,6 +78,11 @@ struct BookPageView: View {
                         }
                     }
                 }
+                // ITS SKETCH, over whatever else is on the page
+                if let d = page.drawing, let dr = BookPhotos.drawing(d), !dr.bounds.isEmpty {
+                    Image(uiImage: dr.image(from: CGRect(origin: .zero, size: g.size), scale: UIScreen.main.scale))
+                        .resizable().frame(width: g.size.width, height: g.size.height)
+                }
                 if let t = page.text, !t.isEmpty {
                     Text(t)
                         .font(p.isEmpty ? .title2.weight(.semibold) : .body.weight(.semibold))
@@ -108,8 +124,13 @@ struct BookOpenView: View {
     @State private var picked: [PhotosPickerItem] = []
     /// every page shown at once, small, to go to one or put them in order
     @State private var overview = false
+    /// the page being drawn on (its id): the page becomes Apple's canvas with Apple's tools
+    @State private var sketching: String?
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
+    /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
+    /// Photos, Words, Sketch) is above the tabs at rest (they sat half under the capsule, 25 Nov)
+    private var pageH: CGFloat { min(w * 4 / 3, UIScreen.main.bounds.height * 0.5) }
     private func change(_ f: (inout PhotoBook) -> Void) {
         ListsStore.shared.change { b in if let i = b.books.firstIndex(where: { $0.id == id }) { f(&b.books[i]) } }
     }
@@ -135,6 +156,22 @@ struct BookOpenView: View {
                     if b.pages.isEmpty {
                         // (no pages yet: the first is made from photos, one or many, or words)
                         addPage
+                    } else if let sid = sketching, let pg = b.pages.first(where: { $0.id == sid }) {
+                        // A SKETCH: Apple's canvas over the page, Apple's tool picker (any colour, the rubber, thickness)
+                        // under it; Done keeps it
+                        ZStack {
+                            BookPageView(page: BookPage(photos: pg.photos, text: pg.text))
+                            SketchCanvas(name: pg.drawing ?? (pg.id + ".drawing")) { name in
+                                change { bk in if let i = bk.pages.firstIndex(where: { $0.id == sid }) { bk.pages[i].drawing = name } }
+                            }
+                        }
+                        .frame(width: w, height: pageH)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        HStack {
+                            pill("Done") { withAnimation(Motion.quick) { sketching = nil } }
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: 52)
                     } else if overview {
                         // ALL PAGES, to go to one or put them in order: small, three
                         // across, in order; tapped, that page; held, earlier, later, out
@@ -164,6 +201,10 @@ struct BookOpenView: View {
                             }
                         }
                         .transition(.blurReplace)
+                        HStack {
+                            Spacer(minLength: 0)
+                            lineButton("Back to the page") { overview = false }
+                        }
                         addPage
                     } else {
                         // THE PAGES, TURNED AS APPLE BOOKS TURNS THEM: the page curls over under the finger; a page
@@ -178,6 +219,8 @@ struct BookOpenView: View {
                                                     // THE COVER, changed any time
                                                     Button("Make it the cover") { Feel.tap(); change { $0.cover = first } }
                                                 }
+                                                // (any page drawn on, a photo's too)
+                                                Button("Draw on it") { withAnimation(Motion.quick) { sketching = pid } }
                                                 Button("Take out page", role: .destructive) {
                                                     Feel.lift()
                                                     let n = book?.pages.count ?? 1
@@ -189,12 +232,17 @@ struct BookOpenView: View {
                                 }
                             )
                         }
-                        .frame(width: w, height: w * 4 / 3)
+                        .frame(width: w, height: pageH)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        // where you are, in words (no dots)
-                        Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
-                            .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                            .contentTransition(.numericText(value: Double(at)))
+                        // where you are, in words (no dots), and All pages at its right (four pills in a row wrapped
+                        // "All pages" onto two lines, 25 Nov)
+                        HStack {
+                            Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
+                                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                .contentTransition(.numericText(value: Double(at)))
+                            Spacer(minLength: 8)
+                            if b.pages.count > 1 { lineButton("All pages") { overview = true } }
+                        }
                         // THE WORDS ON THIS PAGE, typed here
                         if b.pages.indices.contains(at) {
                             let pid = b.pages[at].id
@@ -250,13 +298,23 @@ struct BookOpenView: View {
                 withAnimation(Motion.quick) { change { $0.pages.append(BookPage(text: "")) } }
                 at = (book?.pages.count ?? 1) - 1
             }
-            Spacer(minLength: 0)
-            if (book?.pages.count ?? 0) > 1 {
-                // (back from all pages: the word says where you would go)
-                pill(overview ? "Back to the page" : "All pages") { withAnimation(Motion.quick) { overview.toggle() } }
+            pill("Sketch") {
+                let pg = BookPage()
+                withAnimation(Motion.quick) { change { $0.pages.append(pg) } }
+                at = (book?.pages.count ?? 1) - 1
+                withAnimation(Motion.quick) { sketching = pg.id }
             }
+            Spacer(minLength: 0)
         }
         .frame(minHeight: 52)
+    }
+    /// a quiet word to tap, on a line of its own words (All pages, Back to the page)
+    private func lineButton(_ t: String, _ act: @escaping () -> Void) -> some View {
+        Button { Feel.tap(); withAnimation(Motion.quick) { act() } } label: {
+            Text(t).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                .frame(minHeight: 44).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
     private func pill(_ t: String, _ act: @escaping () -> Void) -> some View {
         Button { Feel.tap(); act() } label: {
@@ -331,6 +389,43 @@ struct PageCurl: UIViewControllerRepresentable {
             guard done, let v = pvc.viewControllers?.first, let i = index(of: v) else { return }
             Feel.tick()
             parent.at = i
+        }
+    }
+}
+
+/// APPLE'S CANVAS (PencilKit) with Apple's tool picker: pens, colours (any colour, its own picker), the rubber,
+/// thickness, undo; a finger draws. Each stroke kept as it is made.
+struct SketchCanvas: UIViewRepresentable {
+    let name: String
+    let saved: (String) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> PKCanvasView {
+        let v = PKCanvasView()
+        v.backgroundColor = .clear
+        v.isOpaque = false
+        v.drawingPolicy = .anyInput
+        v.tool = PKInkingTool(.pen, color: .black, width: 4)
+        if let d = BookPhotos.drawing(name) { v.drawing = d }
+        v.delegate = context.coordinator
+        let picker = PKToolPicker()
+        picker.setVisible(true, forFirstResponder: v)
+        picker.addObserver(v)
+        context.coordinator.picker = picker
+        DispatchQueue.main.async { v.becomeFirstResponder() }
+        return v
+    }
+    func updateUIView(_ v: PKCanvasView, context: Context) {}
+    static func dismantleUIView(_ v: PKCanvasView, coordinator: Coordinator) {
+        coordinator.picker?.setVisible(false, forFirstResponder: v)
+        v.resignFirstResponder()
+    }
+    final class Coordinator: NSObject, PKCanvasViewDelegate {
+        let parent: SketchCanvas
+        var picker: PKToolPicker?
+        init(_ p: SketchCanvas) { parent = p }
+        func canvasViewDrawingDidChange(_ v: PKCanvasView) {
+            BookPhotos.saveDrawing(v.drawing, as: parent.name)
+            parent.saved(parent.name)
         }
     }
 }
