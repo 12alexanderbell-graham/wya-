@@ -921,3 +921,60 @@ struct BookWordsBox: View {
             .frame(maxWidth: width)
     }
 }
+
+/// A BOOK SHARED AS A BOOK: a PDF of its pages, the cover first, each page as it is on the phone (its photos, words where
+/// you put them, its sketch, where it was), three by four, for Apple's share sheet (send it, save it to Files, print it).
+/// A video page is its first frame.
+@MainActor
+enum BookPDF {
+    static let page = CGSize(width: 600, height: 800)
+
+    static func file(_ b: PhotoBook) -> URL? {
+        let name = (b.name.isEmpty ? "Book" : b.name).replacingOccurrences(of: "/", with: "-")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name + ".pdf")
+        let rect = CGRect(origin: .zero, size: page)
+        let pdf = UIGraphicsPDFRenderer(bounds: rect)
+        do {
+            try pdf.writePDF(to: url) { ctx in
+                ctx.beginPage()
+                draw(BookPDFCover(book: b), in: rect)
+                for p in b.pages {
+                    ctx.beginPage()
+                    draw(BookPageView(page: p), in: rect)
+                }
+            }
+        } catch { return nil }
+        return url
+    }
+
+    private static func draw(_ v: some View, in rect: CGRect) {
+        let r = ImageRenderer(content: v.frame(width: rect.width, height: rect.height))
+        r.scale = 2
+        // (kept in the PDF as a JPEG: drawn as it was, a page took over a megabyte, a book of thirty some forty)
+        guard let img = r.uiImage else { return }
+        if let j = img.jpegData(compressionQuality: 0.85), let small = UIImage(data: j) { small.draw(in: rect) }
+        else { img.draw(in: rect) }
+    }
+}
+
+/// the book's cover page: its cover picture (or its first page) filling it, its name at the foot as a photo's words are
+struct BookPDFCover: View {
+    let book: PhotoBook
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            Palette.white
+            BookCover(book: book)
+            if !book.name.isEmpty {
+                Text(book.name)
+                    .font(.largeTitle.weight(.semibold))
+                    .foregroundStyle(Palette.white)
+                    .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(alignment: .bottom) {
+                        LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+                    }
+            }
+        }
+        .clipped()
+    }
+}

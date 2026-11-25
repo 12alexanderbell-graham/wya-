@@ -595,6 +595,13 @@ struct ListsWater: View {
                     ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].hid.toggle() } }
                 }
             }
+            // A BOOK'S: shared as a book, a PDF of its pages (BookPDF)
+            if let b = store.book.books.first(where: { $0.id == id }), !b.pages.isEmpty {
+                Button("Share as a book") {
+                    Feel.tap()
+                    if let u = BookPDF.file(b) { ShareSheet.present([u]) }
+                }
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name + (n > 0 ? ", " + sub : ""))
