@@ -322,6 +322,14 @@ extension PlacePageState.OnePage {
         let landsNow = lands
         Task { @MainActor in
             var d = await PlacePageState.listingText(cc, wd: wd, name: name)
+            var fromWikipedia = false
+            // (a listing that opens on a notice, tickets or hours or "closed", 25 Nov: Big Ben's page began "Strictly
+            // limited numbers of tickets are available"): Wikipedia's opening first, which says what it is; else the
+            // listing with its notice moved to the end
+            if let x = d, PlacePageState.leadsWithNotice(x) {
+                if let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
+                else { d = PlacePageState.noticeLast(x, name: name) }
+            }
             if d == nil {
                 // (and by its name without and the like: the Grand Canyon's article is)
                 let bare = name.replacingOccurrences(of: " (National Park|National Monument|National Historical Park|Nature Reserve|Biosphere Reserve)$", with: "", options: .regularExpression)
@@ -366,7 +374,6 @@ extension PlacePageState.OnePage {
                art.townFolded.split(separator: " ").contains(where: { w in w.count >= 4 && name.townFolded.split(separator: " ").contains(w) }) {
                 d = await PlacePageState.guideIntro(cc, name: art, lat: ll.lat, lon: ll.lon, within: 30)
             }
-            var fromWikipedia = false
             if d == nil, let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
             if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
                 self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
@@ -1518,6 +1525,31 @@ extension PlacePageState {
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
         return all.keys.sorted().first { k in (all[k] ?? []).contains { ($0["wd"] as? String) == wd } }
     }
+    /// A NOTICE FIRST: a guide's listing whose first words are about tickets, booking, hours or being closed rather
+    /// than what the place is ("Open daily May to October", "Admission prices run about $17", "Temporarily closed")
+    static let noticeStart = try! NSRegularExpression(pattern:
+        "^(strictly limited|limited numbers? of|tickets?\\b|ticket prices|admission\\b|entry (is|fee|costs|to)\\b|entrance (is|fee|costs)\\b|"
+        + "(advance )?booking\\b|book (online|ahead|in advance|tickets)|reservations?\\b|opening hours|"
+        + "open (daily|every|from|year|mon|tue|wed|thu|fri|sat|sun)|closed (on|for|until|since|due|mon|tue|wed|thu|fri|sat|sun)|"
+        + "(currently|temporarily) closed|note:|visits? (are|is|must|by)\\b|guided tours? (only|are|is|must|run|leave)\\b|"
+        + "you (must|need|have to|can only|will need) (book|buy|reserve|pay|register))", options: [.caseInsensitive])
+    static func isNotice(_ t: String) -> Bool {
+        let s = t.trimmingCharacters(in: .whitespaces)
+        return noticeStart.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
+    }
+    static func leadsWithNotice(_ t: String) -> Bool { isNotice(t) }
+    /// the listing's sentences with the notices it opens on moved after the rest; all notices: as it was. An "It" it
+    /// now opens on is its name ("It contains the Great Bell" is "Big Ben contains the Great Bell")
+    static func noticeLast(_ t: String, name: String) -> String {
+        let ends = try! NSRegularExpression(pattern: "([.!?])\\s+(?=[A-Z0-9\"“(])")
+        let marked = ends.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: "$1\u{1}")
+        let parts = marked.split(separator: "\u{1}").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let first = parts.firstIndex(where: { !isNotice($0) }), first > 0 else { return t }
+        var out = (parts[first...] + parts[..<first]).joined(separator: " ")
+        if out.hasPrefix("It "), let c = out.dropFirst(3).first, c.isLowercase { out = name + out.dropFirst(2) }
+        return out
+    }
+
     static func listingText(_ cc: String, wd: String?, name: String) async -> String? {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
