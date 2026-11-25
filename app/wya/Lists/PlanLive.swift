@@ -63,7 +63,21 @@ enum PlanLive {
         let i = min(max(0, -toStart), max(0, p.days.count - 1))
         let day = p.days.indices.contains(i) ? p.days[i].items : []
         let place = places(day).first ?? first ?? p.name
-        let things = day.map(\.what).filter { !$0.isEmpty }
+        // (the day's things in their order by time, each with its time as the plan has it, "14:00 Grand Palace"; the
+        // ones with no time after, as they are in the plan)
+        let ordered = day.enumerated().sorted { a, b in
+            switch (PlanItem.minutes(a.element.at), PlanItem.minutes(b.element.at)) {
+            case let (x?, y?): return x != y ? x < y : a.offset < b.offset
+            case (.some, .none): return true
+            case (.none, .some): return false
+            default: return a.offset < b.offset
+            }
+        }.map(\.element)
+        let things = ordered.compactMap { it -> String? in
+            guard !it.what.isEmpty else { return nil }
+            guard let m = PlanItem.minutes(it.at) else { return it.what }
+            return "\(m / 60):" + String(format: "%02d", m % 60) + " " + it.what
+        }
         let len = max(p.days.count, PlanDates.length(p.start, p.end.isEmpty ? p.start : p.end))
         return .init(big: place, dates: "Day \(i + 1) of \(len)", line: things.joined(separator: ", "), short: "Day \(i + 1)")
     }
