@@ -143,4 +143,12 @@ enum ListTicks {
         }
         return (been, of)
     }
+    /// one place of a list: true when you have stamped it, false when not yet, nil when it is not a place we count
+    static func been(name: String, cc: String?) -> Bool? {
+        guard let cc = cc?.lowercased(), !cc.isEmpty else { return nil }
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        if fold(CountryEntity(id: cc).name) == fold(name) { return MarkStore.shared.state(.country(cc)).stamped }
+        if let t = TownIndex.shared.named(name, in: cc), t.people >= 1_000 { return MarkStore.shared.state(PlaceKey(.town, t.id)).stamped }
+        return nil
+    }
 }

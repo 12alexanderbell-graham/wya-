@@ -622,6 +622,14 @@ struct ListsWater: View {
                     }
                 }
                 .padding(.bottom, 8)
+                // HOW MANY OF ITS PLACES YOU'VE BEEN TO: under its name, "All 20 been" once every one is stamped
+                if let list, !list.wish, case let tk = ListTicks.count(list.items), tk.of > 0 {
+                    Text(tk.been == tk.of ? "All \(tk.of) been" : "\(tk.been) of \(tk.of) been")
+                        .font(tk.been == tk.of ? .body.weight(.semibold) : .body)
+                        .foregroundStyle(Palette.ink.opacity(tk.been == tk.of ? 1 : 0.5))
+                        .contentTransition(.numericText(value: Double(tk.been)))
+                        .padding(.bottom, 12)
+                }
                 // WHAT IT'S FOR AND ITS NOTE, under its name, when it has them (both set in its page, 25 Nov)
                 if let list, !list.what.isEmpty || !list.note.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
@@ -659,6 +667,11 @@ struct ListsWater: View {
                                 Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
                             }
                             Spacer(minLength: 0)
+                            // (a place you have been to: ticked)
+                            if t.ref == nil, ListTicks.been(name: t.name, cc: t.cc) == true {
+                                Icon5(key: "tick", ink: Palette.ink, size: 18).frame(width: 44, height: 44)
+                                    .accessibilityLabel("Been")
+                            }
                         }
                         // OPENED: its note, and for a place, Open, which takes it to the map (morning Q12)
                         if s.noted == t.id {
