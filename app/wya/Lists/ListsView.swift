@@ -215,10 +215,11 @@ struct ListsWater: View {
     }
     /// its name, and "List" with how many things are in it
     private func innerLabel(_ r: String, name: String) -> some View {
-        let n = store.book.lists.first { $0.id == r }.map { things($0).count } ?? 0
+        let names = store.book.lists.first { $0.id == r }.map { things($0).map(\.name) } ?? []
         return VStack(alignment: .leading, spacing: 1) {
             Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-            Text("List · \(n) " + (n == 1 ? "thing" : "things")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            Text(names.isEmpty ? "List" : "List · " + Self.whatsIn(names)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                .lineLimit(1)
         }
     }
     /// a plan's thing put away: back to the plan, and a thing left with no words taken out
@@ -496,7 +497,14 @@ struct ListsWater: View {
         return tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
              ccs: ccs, ticks: ListTicks.count(l.items.filter { $0.k != .section }), cover: listOwnCover(l),
              spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
-             places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
+             places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place }, names: things(l).map(\.name))
+    }
+    /// what a list holds, in words: its first two and how many more ("Ramen, Seoul and 2 more"), as Pins' maps say
+    /// their countries
+    static func whatsIn(_ names: [String]) -> String {
+        let n = names.filter { !$0.isEmpty }
+        guard !n.isEmpty else { return "" }
+        return n.prefix(2).joined(separator: ", ") + (n.count > 2 ? " and \(n.count - 2) more" : "")
     }
     /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil A LIST PAGE'S
     /// COVER'S PLACES: its first four countries and its things where they are; with no places yet, the town or
@@ -554,10 +562,12 @@ struct ListsWater: View {
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
     private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil,
                       cover: AnyView? = nil, words: String? = nil, spots: [String] = [], places: Bool = true,
-                      tap: (() -> Void)? = nil) -> some View {
-        let unit = places ? (n == 1 ? "place" : "places") : (n == 1 ? "thing" : "things")
+                      names: [String] = [], tap: (() -> Void)? = nil) -> some View {
+        // (a list of places only says how many you've been to, or how many places; a list of other things says what is
+        // in it, its first two and how many more, as Pins' maps say their countries)
+        let unit = n == 1 ? "place" : "places"
         let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
-            .flatMap { $0 } ?? "\(n) \(unit)")
+            .flatMap { $0 } ?? (places || names.isEmpty ? "\(n) \(unit)" : Self.whatsIn(names)))
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
             Color.clear
