@@ -1125,7 +1125,9 @@ struct ListsWater: View {
                                 // (a thing with no time on a day with times says so, as Apple's calendar does, never a gap)
                                 Text(it.at ?? "All day").font(it.at == nil ? .subheadline : .body.monospacedDigit())
                                     .foregroundStyle(Palette.ink.opacity(0.5))
-                                    .lineLimit(1).minimumScaleFactor(0.8)
+                                    // (never smaller type: "14:30" and "All day" fit the 58 pt column as they are)
+                                    .lineLimit(1)
+                                    .fixedSize()
                                     .frame(width: 58, alignment: .leading)
                             }
                             VStack(alignment: .leading, spacing: 1) {
