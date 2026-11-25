@@ -165,7 +165,12 @@ struct ProfileGroundSheet: View {
             }), suggested: store.me.picture == nil ? store.me.colour : nil, width: width) { c in set(c, keep: true) }
             // THE STRENGTH, calm to strong, the page behind following the finger; kept when it lifts
             Slider(value: Binding(get: { store.me.groundStrength ?? 0.5 }, set: { v in store.set({ $0.groundStrength = v }, keep: false) }),
-                   in: 0 ... 1) { Text("Strength") } onEditingChanged: { on in
+                   in: 0 ... 1) { Text("Strength") } minimumValueLabel: {
+                // (two plain words at the ends say what the drag does, as good sliders do, 25 Nov)
+                Text("Calm").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            } maximumValueLabel: {
+                Text("Strong").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+            } onEditingChanged: { on in
                 if !on { store.set({ $0.groundStrength = store.me.groundStrength ?? 0.5 }, keep: true) }
             }
             .tint(Palette.ink)
