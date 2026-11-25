@@ -112,7 +112,8 @@ final class CardState {
         stampedHere = false
         landing = false
         map.kept = i
-        map.lean(toward: point)
+        // (the map never moves as the card rises: no movement of the map over a card; the lean toward the place,
+        // 25 Nov, taken out)
         p = 0
         Task {
             order = await MarkStore.shared.passportOrder()

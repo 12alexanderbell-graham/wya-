@@ -30,8 +30,7 @@ final class RegionCardState {
         self.key = key; self.name = name; self.parents = parents; self.place = place; self.day = day
         stampedHere = false
         map.kept = place
-        // (the world leans in toward it, as a country's card does; back as it goes)
-        map.leanAtLastTap()
+        // (the map never moves as the card rises, A6.11; the lean, 25 Nov, taken out)
         p = 0
         Feel.tap()
         // THE WATER HIGHER THAN 25%: the card stands on the 25% water, so the water goes down first and the card
