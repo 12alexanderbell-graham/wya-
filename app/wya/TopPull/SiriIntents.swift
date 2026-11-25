@@ -257,6 +257,20 @@ struct ListQuery: EntityStringQuery {
     func suggestedEntities() async throws -> [ListEntity] { await mine() }
 }
 
+/// OPEN A LIST (in Shortcuts and Siri's suggestions; Apple's ten spoken phrases are taken): the list open in Lists,
+/// through its link
+struct OpenListIntent: AppIntent {
+    static let title: LocalizedStringResource = "Open a list"
+    static let description = IntentDescription("Open one of your wya lists.")
+    static let openAppWhenRun = false
+
+    @Parameter(title: "List") var list: ListEntity
+
+    func perform() async throws -> some IntentResult & OpensIntent {
+        .result(opensIntent: OpenURLIntent(URL(string: "wya://list/\(list.id)")!))
+    }
+}
+
 /// : the thing goes in the list (a country's name gets its flag)
 struct AddToListIntent: AppIntent {
     static let title: LocalizedStringResource = "Add to a list"

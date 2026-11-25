@@ -6,7 +6,7 @@ import CoreGraphics
 /// first, keeping its changes, as a tab change does; a locked map still flies (looking is allowed); no haptic (no
 /// finger touched the app). From a cold launch the camera is framed on the place before the loading screen lifts, so
 /// no flight from home is seen. An unknown id or kind leaves the app where it was and is logged.
-/// `wya://plan/<id>` opens that plan in Lists. Not here yet (logged): lists and books, settings links, universal links.
+/// `wya://list|plan|tier|book/<id>` open that one in Lists. Not here yet (logged): settings links, universal links.
 @MainActor
 enum DeepLink {
     /// a link that came before the map was ready (a cold launch): opened once it is, under the loading screen
@@ -23,16 +23,24 @@ enum DeepLink {
     @discardableResult
     static func open(_ url: URL, map: MapController, close: () -> Void) async -> Bool {
         guard map.ready else { waiting = url; return false }
-        // A PLAN'S LINK (`wya://plan/<id>`, the lock screen's plan tapped, PlanLive): Lists, its Plans, that plan open
-        if url.scheme?.lowercased() == "wya", url.host?.lowercased() == "plan" {
+        // A LIST'S, PLAN'S, TIER LIST'S OR BOOK'S LINK (`wya://plan/<id>`, the lock screen's plan tapped, PlanLive;
+        // `wya://list/<id>`, Siri's Open a list; `wya://tier/<id>`, `wya://book/<id>`): Lists, that kind, that one open
+        if url.scheme?.lowercased() == "wya", let host = url.host?.lowercased(), ["list", "plan", "tier", "book"].contains(host) {
             let id = url.pathComponents.dropFirst().first ?? ""
-            guard ListsStore.shared.book.plans.contains(where: { $0.id == id }) else {
+            let b = ListsStore.shared.book
+            let kind: Int? = switch host {
+            case "list": b.lists.contains { $0.id == id } ? 0 : nil
+            case "plan": b.plans.contains { $0.id == id } ? 1 : nil
+            case "tier": b.tiers.contains { $0.id == id } ? 2 : nil
+            default: b.books.contains { $0.id == id } ? 3 : nil
+            }
+            guard let kind else {
                 NSLog("wya link not opened: %@", url.absoluteString)
                 return false
             }
             close()
             NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
-            ListsState.shared.kind = 1
+            ListsState.shared.kind = kind
             ListsState.shared.open = id
             return true
         }
