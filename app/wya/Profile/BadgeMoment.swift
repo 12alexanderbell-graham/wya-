@@ -143,7 +143,8 @@ struct BadgeMomentView: View {
         .contentShape(Rectangle())
         .onTapGesture { leave() }
         .onAppear {
-            Feel.stamp()
+            // (the knock only: a badge is not a stamp landing)
+            Feel.stamp(sound: false)
             UIAccessibility.post(notification: .screenChanged, argument: nil)
         }
         .accessibilityElement(children: .contain)

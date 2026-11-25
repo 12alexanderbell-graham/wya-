@@ -35,9 +35,8 @@ final class CardState {
                 guard let self, self.flying else { return }
                 withAnimation(.spring(response: 0.12 * k, dampingFraction: 1)) { self.press = 1 } completion: { [weak self] in
                     guard let self, self.flying else { return }
+                    // (felt and heard, a real stamp's sound, on the same contact: Feel.stamp)
                     Feel.stamp()
-                    // (and its sound, a real stamp's, on the same contact)
-                    Sound.play(.stamp)
                     self.flying = false
                 }
             }

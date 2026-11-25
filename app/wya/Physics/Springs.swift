@@ -63,10 +63,14 @@ enum Feel {
     static func tap() {
         trace("tap"); light.impactOccurred(intensity: 0.7) }
     /// a stamp landing: heavy, then light 70 ms later (Part 0.3, proposal)
-    static func stamp() {
+    /// a stamp landing: felt, and heard as a real stamp (the found stamp sound), wherever it lands: the card, a page, a
+    /// region, a town, Upload, a pin's town; `sound: false`
+    /// where only the knock is wanted (a badge arriving)
+    static func stamp(sound: Bool = true) {
         trace("stamp")
         heavy.impactOccurred(intensity: 1)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) { light.impactOccurred(intensity: 0.6) }
+        if sound { Sound.play(.stamp) }
     }
     /// a stamp or wish removed
     static func lift() {
