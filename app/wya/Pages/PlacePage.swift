@@ -328,7 +328,7 @@ extension PlacePageState.OnePage {
             // listing with its notice moved to the end
             // (and one that opens on the way there from its guide's town, 25 Nov: Lake Baikal's "lies about an hour
             // away by train", from Irkutsk's guide; an airport's "About five minutes away by car")
-            if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) {
+            if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) || PlacePageState.leadsAsTip(x) {
                 if let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
                 else if PlacePageState.leadsWithNotice(x) { d = PlacePageState.noticeLast(x, name: name) }
             }
@@ -1546,6 +1546,15 @@ extension PlacePageState {
         "\\b((an?|one|half an?|\\d+(\\.\\d+)?|a few|several|two|three|four|five|ten|twenty|thirty)[ -](hours?|minutes?|mins?|km|kilomet(re|er)s?|miles?)"
         + "( and a half)?\\b[^.]{0,25}\\b(away|from (here|town|the (town|city|centre|center|station|village))|by (train|bus|car|boat|taxi|ferry|foot)|"
         + "(walk|drive|ride) (from|away))|from (here|the (city|town) (centre|center)))", options: [.caseInsensitive])
+    /// AS A TIP: a listing that opens talking to the reader ("If you have a car, it is worth driving up", "Take a stroll
+    /// around this park", "You can find out about"), a guide's advice rather than what the place is (346 of 57,818)
+    static let tip = try! NSRegularExpression(pattern:
+        "^(if you\\b|you\\b|you'll\\b|you're\\b|your\\b|visitors (can|may|should|must)\\b|don't\\b|do not\\b|make sure\\b|be sure\\b|try\\b|"
+        + "take (the|a|bus)\\b|get there\\b)", options: [.caseInsensitive])
+    static func leadsAsTip(_ t: String) -> Bool {
+        let s = t.trimmingCharacters(in: .whitespaces)
+        return tip.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
+    }
     static func leadsFromElsewhere(_ t: String) -> Bool {
         let first = t.components(separatedBy: ". ").first ?? t
         return elsewhere.firstMatch(in: first, range: NSRange(first.startIndex..., in: first)) != nil
