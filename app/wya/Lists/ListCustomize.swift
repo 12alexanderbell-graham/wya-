@@ -142,7 +142,7 @@ enum ListCoverPhotos {
 @MainActor func listCoverOrGlass(_ l: MyList) -> AnyView {
     if let own = listOwnCover(l) { return own }
     let ccs = Array(l.countries.prefix(4))
-    if ccs.isEmpty { return AnyView(Color.clear.glassEffect(PageGlass.on, in: .rect(cornerRadius: 12))) }
+    if ccs.isEmpty { return AnyView(Color.clear.glassEffect(.clear, in: .rect(cornerRadius: 12))) }
     return AnyView(ListCover(ccs: ccs, world: AIContext.map?.world, spots: []))
 }
 

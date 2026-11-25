@@ -584,8 +584,8 @@ struct ListsWater: View {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay { if let cover { cover } else { ListCover(ccs: ccs, world: map.world, spots: spots) } }
                 .clipShape(shape)
-                // (glass only for a tile with nothing of its own to show: over the map it washed Apple's colours out)
-                .glassEffect(ccs.isEmpty && cover == nil ? PageGlass.on : .clear, in: shape)
+                // (clear glass on every tile, a blank one too: frost only where words must be read, 25 Nov)
+                .glassEffect(.clear, in: shape)
                 .padding(.bottom, 6)
             // (a list's name may take two lines, never cut mid-word, 14 Oct)
             Text(name).font(.body.weight(.semibold))
@@ -1161,7 +1161,7 @@ struct ListsWater: View {
                         }
                         // MADE BY THE AI, NOT KEPT YET: each thing on lime glass until Keep
                         .padding(.leading, p.ai ? 14 : 0)
-                        .glassEffect(p.ai ? .regular.tint(Palette.lime.opacity(0.55)) : .identity,
+                        .glassEffect(p.ai ? .clear.tint(Palette.lime.opacity(0.55)) : .identity,
                                      in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .padding(.vertical, p.ai ? 3 : 0)
                     }

@@ -51,7 +51,7 @@ struct PlanDayHours: View {
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .frame(maxWidth: .infinity, minHeight: h, maxHeight: h, alignment: .topLeading)
                     .background(ai ? Color.clear : fill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .glassEffect(ai ? .regular.tint(Palette.lime.opacity(0.55)) : .identity,
+                    .glassEffect(ai ? .clear.tint(Palette.lime.opacity(0.55)) : .identity,
                                  in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .onTapGesture { Feel.tap(); open(it) }

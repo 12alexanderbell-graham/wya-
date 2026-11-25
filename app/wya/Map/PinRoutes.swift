@@ -109,10 +109,10 @@ final class RouteLabel: NSObject, MKAnnotation {
     init(id: UUID, at c: CLLocationCoordinate2D, words: String) { self.id = id; coordinate = c; self.words = words }
 }
 
-/// its view: 13 pt semibold words in a 28 pt frosted capsule (a surface over the map)
+/// its view: 13 pt semibold words in a 28 pt clear glass capsule (a map label: clear, 25 Nov)
 final class RouteLabelView: MKAnnotationView {
     static let id = "route"
-    private let glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let glass = UIVisualEffectView(effect: UIGlassEffect(style: .clear))
     private let label = UILabel()
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)

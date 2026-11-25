@@ -394,7 +394,7 @@ struct PickerTestHost: View {
             }
             .padding(16)
             .frame(width: w)
-            .glassEffect(.regular, in: .rect(cornerRadius: L.sheetCorner))
+            .glassEffect(.clear, in: .rect(cornerRadius: L.sheetCorner))
             .position(x: L.W / 2, y: L.capsule.minY - 220)
         }
     }
