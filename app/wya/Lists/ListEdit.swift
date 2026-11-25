@@ -70,6 +70,17 @@ struct ListAddRow: View {
         let starts = CountryEntity.all.filter { fold($0.name).hasPrefix(fq) }
         let inside = CountryEntity.all.filter { !fold($0.name).hasPrefix(fq) && fold($0.name).contains(fq) }
         for c in (starts + inside).prefix(2) { out.append(Found(name: c.name, cc: c.id, line: "Country")) }
+        // THE PLACE BEFORE WHAT IS IN IT (17 Sep spec: country, region, place first, then deeper; 25 Nov: typing the
+        // start of a city found its sights and never the city): a big town right after the countries; smaller towns
+        // after the sights, as before
+        _ = TownIndex.shared.ready
+        let towns = TownIndex.shared.hits(q, open: nil, limit: 4)
+        // (only by size: a village named as typed stood before the city)
+        let big = towns.filter { $0.people >= 100_000 }.sorted { $0.people > $1.people }
+        for t in big.prefix(2) {
+            let cc = t.file.lowercased()
+            out.append(Found(name: t.name, cc: cc, line: PlacePageState.countryName(cc)))
+        }
         _ = ThingIndex.shared.ready
         let fs = q.townFolded
         let sets: [(Found, Bool)] = CollectionStore.shared.find(q, first: nil, limit: 3).compactMap { f in
@@ -88,7 +99,7 @@ struct ListAddRow: View {
         out += sets.filter { !$0.1 }.prefix(2).map(\.0)
         _ = RegionIndex.shared.ready; _ = TownIndex.shared.ready
         // (towns before regions: Tbilisi the city before Tbilisi the region; both shown, each saying what it is)
-        for t in TownIndex.shared.hits(q, open: nil, limit: 3) {
+        for t in towns.filter({ t in !big.contains(t) }).prefix(3) {
             let cc = t.file.lowercased()
             out.append(Found(name: t.name, cc: cc, line: PlacePageState.countryName(cc)))
         }
