@@ -1124,6 +1124,8 @@ struct SearchResults: View {
         // (a town leads only by its own name, typed whole or a big town's start; one found by another name, Luzern
         // for, comes after the sights: Bari's other name "Bali" never put it before Bali. A town that is also a
         // region of that name in its country, Paris, is shown once, as the region)
+        // (the cities of 100,000 and more found, as name and country: a region of one's name is never a small one)
+        let cityNamed = Set(townHits.filter { $0.people >= 100_000 }.map { $0.name.townFolded + "|" + $0.file.lowercased() })
         let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
         let fullFold = Self.spelledOut(head.query).townFolded
         let sightNames = Set(thingSights.map { $0.name.townFolded + "|" + $0.file.lowercased() })
@@ -1143,11 +1145,13 @@ struct SearchResults: View {
             : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights)).prefix(8))
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights,
+                               cityNamed: cityNamed)).prefix(8))
             : Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
-                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights)
+                               small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights,
+                               cityNamed: cityNamed)
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
         let pinsSearch = map.pinsMode && !head.settingsOpen
@@ -1465,7 +1469,8 @@ struct SearchResults: View {
     }
     private static func countryKeys(typed: String, starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
                                     named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
-                                    small: [RegionIndex.Hit], rest: [RegionIndex.Hit], named0: [ResultKey] = [], low: Set<ResultKey> = []) -> [ResultKey] {
+                                    small: [RegionIndex.Hit], rest: [RegionIndex.Hit], named0: [ResultKey] = [], low: Set<ResultKey> = [],
+                                    cityNamed: Set<String> = []) -> [ResultKey] {
         let town = { (t: TownIndex.Hit) -> ResultKey in ResultKey.town(t.key) }
         let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
         var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
@@ -1478,7 +1483,12 @@ struct SearchResults: View {
         out += whole.filter { $0.people >= 100_000 }.map(town)
         if whole.contains(where: { $0.people >= 50_000 && $0.people < 100_000 }) { out += sights.filter { !low.contains($0) } }
         out += whole.filter { $0.people >= 50_000 && $0.people < 100_000 }.map(town)
-        let smallExact = named0.isEmpty ? [] : exact.filter { RegionIndex.shared.people($0) < 100_000 }
+        // (never a region named for a city of 100,000 and more in its own country, 25 Nov: "porto" put a set's place in
+        // France first, Porto's district and municipality counted small, having no people of their own in the index,
+        // and the city itself is shown as them)
+        let smallExact = named0.isEmpty ? [] : exact.filter {
+            RegionIndex.shared.people($0) < 100_000 && !cityNamed.contains($0.name.townFolded + "|" + $0.place.lowercased())
+        }
         out += exact.filter { !smallExact.contains($0) }.map(region)
         out += named0
         out += smallExact.map(region)
