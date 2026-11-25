@@ -240,6 +240,11 @@ struct BookPageView: View {
                             LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
                         }
                     }
+                } else if let place = page.place, !place.isEmpty {
+                    // (a page of words or a sketch: where it was, small, in 50% ink at its foot)
+                    Text(place).font(.footnote.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                        .padding(16).padding(.bottom, foot)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -268,6 +273,10 @@ struct BookOpenView: View {
     @State private var at = 0
     @State private var picking = false
     @State private var picked: [PhotosPickerItem] = []
+    /// the page whose place is being set by hand (its id), what is typed, and the field's focus
+    @State private var whereFor: String?
+    @State private var whereQuery = ""
+    @FocusState private var whereTyping: Bool
     /// the cover being picked (a book's first step after its name)
     @State private var coverPicking = false
     @State private var coverItem: PhotosPickerItem?
@@ -345,6 +354,10 @@ struct BookOpenView: View {
                             }
                         }
                         addPage
+                    } else if let wid = whereFor {
+                        // WHERE IT WAS, BY HAND: for a page of words or a sketch, or a photo
+                        // with none of its own; the app's own towns, as Places' search finds them, offline
+                        whereSetter(wid)
                     } else if let mid = placing, let pg = b.pages.first(where: { $0.id == mid }) {
                         // THE WORDS MOVED: the page alone (no turning under the finger), its words dragged where you
                         // want them; Done keeps the place
@@ -488,6 +501,10 @@ struct BookOpenView: View {
                                                 if !(pg.text ?? "").isEmpty {
                                                     Button("Move the words") { withAnimation(Motion.quick) { placing = pid } }
                                                 }
+                                                Button(pg.place == nil ? "Where it was" : "Change the place") {
+                                                    Feel.tap(); whereQuery = ""
+                                                    withAnimation(Motion.quick) { whereFor = pid }
+                                                }
                                                 if pg.place != nil {
                                                     Button("Take off the place") {
                                                         Feel.tap()
@@ -583,6 +600,52 @@ struct BookOpenView: View {
                     at = (book?.pages.count ?? 1) - new.count
                 }
             }
+        }
+    }
+
+    /// the field and the towns it finds; a town tapped names the page ("Lisbon, Portugal")
+    private func whereSetter(_ pid: String) -> some View {
+        let world = AIContext.map?.world
+        let q = whereQuery.trimmingCharacters(in: .whitespaces)
+        let found = q.count >= 2 ? TownIndex.shared.hits(q, open: nil, limit: 6) : []
+        func country(_ h: TownIndex.Hit) -> String {
+            guard let w = world, let i = w.placeIndex[h.file] ?? w.placeIndex[h.file.uppercased()] else { return "" }
+            return w.places[i].n
+        }
+        return VStack(alignment: .leading, spacing: 0) {
+            TextField("", text: $whereQuery, prompt: Text("Where it was").foregroundStyle(Palette.ink.opacity(0.5)))
+                .font(.body).foregroundStyle(Palette.ink)
+                .autocorrectionDisabled()
+                .focused($whereTyping)
+                .submitLabel(.done)
+                .frame(minHeight: 52)
+                .onAppear { TownIndex.shared.load(); whereTyping = true }
+            ForEach(found, id: \.self) { h in
+                let c = country(h)
+                Button {
+                    Feel.tap()
+                    let name = c.isEmpty || c == h.name ? h.name : "\(h.name), \(c)"
+                    change { bk in if let i = bk.pages.firstIndex(where: { $0.id == pid }) { bk.pages[i].place = name } }
+                    whereTyping = false
+                    withAnimation(Motion.quick) { whereFor = nil }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                        if !c.isEmpty {
+                            Text(h.region.isEmpty ? c : "\(h.region), \(c)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            HStack {
+                pill("Done") { whereTyping = false; withAnimation(Motion.quick) { whereFor = nil } }
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 52)
+            .padding(.top, 8)
         }
     }
 
