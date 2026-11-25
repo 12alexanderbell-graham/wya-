@@ -1,10 +1,8 @@
 import SwiftUI
 import PhotosUI
 
-/// BOOKS (25 Nov, step one; his 16 Sep: "It doesn't have to look like a goddamn book. Like it has to work like a book";
-/// 26 Sep R2: "first page ... information, then you pick the cover, and then ... the other pages", "pick photo, words,
-/// video, sketch ... one photo or many", "definitely be allowed to put six"; 3 Oct: "a full screen photo book would be
-/// really really cool"): a book is its pages, each one photo or up to six, with words on it if you like. Pages turn by
+/// BOOKS (25 Nov, step one): a book works like a book without having to look like one; it is its pages, each one photo
+/// or up to six, with words on it if you like. Pages turn by
 /// a swipe; a page held: words, take out.
 
 /// where a book's photos are kept: their own copies, so a book stays whole when a photo leaves your library
@@ -41,7 +39,7 @@ struct BookPhoto: View {
 
 /// ONE PAGE: its photos laid out to fill it (one whole; two side by side; three, one big and two; four in a square;
 /// five or six in pairs), its words over the foot of it; a page of words alone is white with its words in the middle
-/// (his 26 Sep: "the blank page should ... be white")
+/// (a blank page is white)
 struct BookPageView: View {
     let page: BookPage
     var body: some View {
@@ -133,7 +131,7 @@ struct BookOpenView: View {
                             .onTapGesture { Feel.tap(); s.naming = true }
                     }
                     if b.pages.isEmpty {
-                        // (no pages yet: the first is made from photos, his "pick photo ... one photo or many")
+                        // (no pages yet: the first is made from photos, one or many, or words)
                         addPage
                     } else {
                         // THE PAGES, one at a time, a swipe turning them; a page held: its words, take it out
