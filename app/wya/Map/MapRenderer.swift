@@ -431,7 +431,16 @@ final class MapRenderer: NSObject, MTKViewDelegate {
     private func lensNow(_ now: CFTimeInterval) -> Float {
         lensFrom + (lensTo - lensFrom) * Float(Motion.blend((now - lensAt) / 0.45))
     }
-    static var lensOff = false
+    /// off (25 Nov): the map behind a card, the passport or search is no longer put out of focus; it read as a frost
+    /// laid over everything that opens; the rule is clear glass and no blur behind what opens. The lens's code stays
+    /// (the test driver's "lens on" shows it again)
+    static var lensOff = true
+    /// the city names step back behind a card or the passport on their own (the lens no longer does it for them): they
+    /// crowded the card's name and buttons when sharp
+    private var namesFrom: Float = 0, namesTo: Float = 0, namesAt: CFTimeInterval = -10
+    private func namesAway(_ now: CFTimeInterval) -> Float {
+        namesFrom + (namesTo - namesFrom) * Float(Motion.blend((now - namesAt) / 0.45))
+    }
     /// the set whose marks were last drawn, and when it came (its marks settle in, see the set's marks)
     private var setArrivedFor: String?
     private var setArrivedAt: CFTimeInterval = 0
@@ -586,7 +595,11 @@ final class MapRenderer: NSObject, MTKViewDelegate {
                 if names.isHidden { names.isHidden = false }
                 // (the names go out of focus with the map they name: they recede as the lens pulls in behind a card or
                 // the passport, and come back as it lets go; sharp over a soft map they crowded the card, 25 Nov)
-                names.focus = CGFloat(1 - lensNow(now))
+                let away: Float = CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown ? 1 : 0
+                if away != namesTo { namesFrom = namesAway(now); namesTo = away; namesAt = now }
+                let n = namesAway(now)
+                if abs(n - namesTo) > 0.001 { controller.needsFrame = true }
+                names.focus = CGFloat(1 - max(n, lensNow(now)))
                 names.update(controller, moving: moving || controller.touching)
             }
         }
