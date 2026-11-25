@@ -168,7 +168,7 @@ struct ListsWater: View {
                             .frame(width: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
                     } else if let id = infoFor {
-                        ListInfoSheet(id: id) { withAnimation(Motion.quick) { infoFor = nil } }
+                        ListInfoSheet(id: id, close: { withAnimation(Motion.quick) { infoFor = nil } }, rowW: w)
                             .frame(width: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
                     } else if archiveOpen {

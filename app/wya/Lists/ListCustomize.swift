@@ -158,6 +158,9 @@ struct ListInfoSheet: View {
     @State private var piece = 2
     @State private var confirmDelete = false
     @FocusState private var naming: Bool
+    /// the page's width, given by the shelf: its pills are a third of it each, never as wide as their words (14 Sep
+    /// rule; measured from inside, the pills' own widths fed back into the measure and held the screen, 25 Nov)
+    var rowW: CGFloat = 0
 
     private var l: MyList? { store.book.lists.first { $0.id == id } }
     private func change(_ f: (inout MyList) -> Void) {
@@ -341,7 +344,9 @@ struct ListInfoSheet: View {
     private func pill(_ t: String, on: Bool, _ act: @escaping () -> Void) -> some View {
         Button { Feel.tap(); act() } label: {
             Text(t).font(.body.weight(.semibold)).foregroundStyle(on ? Palette.white : Palette.ink)
-                .padding(.horizontal, 16).frame(height: 44)
+                .lineLimit(1)
+                .padding(.horizontal, rowW > 0 ? 0 : 16)
+                .frame(width: rowW > 0 ? (rowW - 24) / 3 : nil, height: 44)
                 .background { if on { Capsule().fill(Palette.ink) } }
                 .glassEffect(on ? .clear : PageGlass.control.interactive(), in: .capsule)
         }
@@ -350,7 +355,9 @@ struct ListInfoSheet: View {
     private func choices(_ words: [String: String], order: [String], on: String, set: @escaping (String) -> Void) -> some View {
         HStack(spacing: 12) {
             ForEach(order, id: \.self) { k in pill(words[k] ?? k, on: on == k) { set(k) } }
-            Spacer(minLength: 0)
+            // (no spacer once the pills are thirds: its own 12 pt gap made the row wider than the page, which then
+            // sat 6 pt left of the shelf)
+            if rowW == 0 { Spacer(minLength: 0) }
         }
     }
     private func rowButton(_ t: String, red: Bool = false, _ act: @escaping () -> Void) -> some View {
