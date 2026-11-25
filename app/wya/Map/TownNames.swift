@@ -91,6 +91,11 @@ final class TownNamesView: UIView {
 
     /// called every frame the map draws; `moving`: the camera or a finger is moving it
     func update(_ m: MapController, moving: Bool) {
+        #if DEBUG
+        // (the test driver's `names`/`nametap` read the layer over our own map: the one over Apple's, made last, was
+        // what `current` held)
+        if !marksHere, Self.current !== self { Self.current = self }
+        #endif
         // (the list up at full: the map's names and marks step back under its rows and caption, gone by the time the
         // water passes half way to full, back as it comes down)
         let half = m.layout.top(.half)
