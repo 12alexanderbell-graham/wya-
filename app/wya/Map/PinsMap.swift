@@ -2027,9 +2027,11 @@ struct PinsList: View {
             Spacer(minLength: 0)
         }
         .frame(minHeight: Self.rowH)
-        .padding(.horizontal, 16)
-        .background { Rectangle().fill(on ? Palette.ink : .clear) }
-        .padding(.horizontal, -16)
+        // (the band 8 pt in from the sheet's edges, its corners round its picture's, 12 + 8: square ends ran across the
+        // sheet's round glass)
+        .padding(.horizontal, 8)
+        .background { RoundedRectangle(cornerRadius: 20, style: .continuous).fill(on ? Palette.ink : .clear) }
+        .padding(.horizontal, -8)
         .contentShape(Rectangle())
         .onTapGesture {
             Feel.tap()
@@ -2087,9 +2089,10 @@ struct PinsList: View {
             if l.hidden { Text("Hidden").font(.body).foregroundStyle(ink.opacity(0.5)).lineLimit(1) }
         }
         .frame(minHeight: 52)
-        .padding(.horizontal, 16)
-        .background { Rectangle().fill(on ? Palette.ink : .clear) }
-        .padding(.horizontal, -16)
+        // (the chosen layer's band as the chosen map's: 8 pt in from the sheet's edges, round ends)
+        .padding(.horizontal, 8)
+        .background { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(on ? Palette.ink : .clear) }
+        .padding(.horizontal, -8)
         .padding(.top, first ? 0 : 8)
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); maps.pick(l.id, in: m.id) }
