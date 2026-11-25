@@ -65,7 +65,7 @@ struct CountryQuery: EntityStringQuery {
 
 struct AskWyaIntent: AppIntent {
     static let title: LocalizedStringResource = "Ask wya"
-    static let description = IntentDescription("Ask wya's AI anything. It knows where you've been.")
+    static let description = IntentDescription("Ask wya's AI anything. It knows what you stamped.")
     static let openAppWhenRun = false
 
     @Parameter(title: "Question", requestValueDialog: "What do you want to know?")
