@@ -26,6 +26,16 @@ final class ProfileStore {
         var groundStrength: Double? = nil
         /// when the handle was changed (seconds since 1970): twice in any 14 days (W06 #42)
         var handleChanges: [Double]? = nil
+        /// YOUR HOME BASE (13 Sep "a thing you pick"; 17 Sep, in v1's Profile): the town you live in, picked from the
+        /// towns; nil until picked (then the badges' "far from home" measure from your first passport's middle)
+        var home: Home? = nil
+    }
+    struct Home: Codable, Equatable {
+        var id: String
+        var name: String
+        var cc: String
+        var lat: Double
+        var lon: Double
     }
     private(set) var me = Me()
     /// the uploaded photo, read once

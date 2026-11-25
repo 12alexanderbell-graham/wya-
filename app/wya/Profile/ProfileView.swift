@@ -19,7 +19,7 @@ struct ProfileView: View {
     static let picture: CGFloat = 132
     static let gap: CGFloat = 16
     /// the column the page is placed for: the picture, the name's line, the handle's, the code's, two lines of bio
-    static let column: CGFloat = picture + 20 + 41 + 2 + 20 + 16 + 2 * 22 + 4 + 44
+    static let column: CGFloat = picture + 20 + 41 + 2 + 20 + 16 + 2 * 22 + 4 + 44 + 32
     /// the gradient's strength (saturation, power): the stronger pair the first app kept for a picture's gradient; at
     /// the field's own (1.16, 2.0) the page was pale. The test driver can set it to compare (0 0 = the field's own)
     static var look = SIMD2<Double>(1.42, 2.9)
@@ -77,6 +77,7 @@ struct ProfileView: View {
                     .padding(.top, 16)
                 nationalitiesLine
                     .padding(.top, 4)
+                homeLine(me)
             }
             .multilineTextAlignment(.center)
             .frame(width: L.W - 2 * L.circle)
@@ -229,7 +230,7 @@ struct ProfileView: View {
     private var nationalitiesLine: some View {
         Group {
             if edit.nationalities.isEmpty {
-                Text("Nationality").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                Text("Passport").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
             } else {
                 HStack(spacing: 8) {
                     ForEach(edit.nationalities, id: \.self) { FlagCircle(cc: $0, size: 24) }
@@ -240,8 +241,24 @@ struct ProfileView: View {
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); edit.open(.nationalities, water: water) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Nationalities")
+        .accessibilityLabel("Passports")
         .accessibilityAddTraits(.isButton)
+    }
+
+    /// your home town, under your passports; none yet, the word at 50% (a tap: the towns to pick it from)
+    private func homeLine(_ me: ProfileStore.Me) -> some View {
+        Text(me.home?.name ?? "Home")
+            .font(.subheadline)
+            .foregroundStyle(me.home == nil ? Palette.ink.opacity(0.5) : Palette.ink)
+            .lineLimit(1)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            // (both lines keep their 44 pt touch, overlapping: as two lines of one block, 32 pt apart, not 44)
+            .padding(.top, -12)
+            .onTapGesture { Feel.tap(); edit.open(.home, water: water) }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(me.home.map { "Home, " + $0.name } ?? "Home")
+            .accessibilityAddTraits(.isButton)
     }
 
     /// the picture: a full circle with no outline. Your photo, or a flag of yours, or your initial on the colour you
@@ -381,10 +398,12 @@ struct ProfileWater: View {
                     case .stats, .badges: EmptyView()
                     case .nationalities:
                         NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop + 8)))
+                    case .home:
+                        HomeSheet(water: water, width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop + 8)))
                     }
                 }
                 .offset(x: L.sheetInset + 16, y: s == .stats || s == .badges ? max(form.top + 16, L.safeTop)
-                        : max(form.top + (s == .nationalities ? 16 : 24), L.safeTop + 8))
+                        : max(form.top + (s == .nationalities || s == .home ? 16 : 24), L.safeTop + 8))
             }
         }
         // (the water pulled down from 50%: the sheet is put away with it)
@@ -402,7 +421,7 @@ struct ProfileWater: View {
         }
         // (counted again when your marks change, and when the map's own count does: the Count setting, the borders)
         .task(id: numbers.asks + " \(map.shares["World"]?.have ?? -1)/\(map.shares["World"]?.total ?? -1) \(CountKind.current) "
-              + edit.nationalities.joined(separator: ",")) {
+              + edit.nationalities.joined(separator: ",") + "|" + (ProfileStore.shared.me.home?.id ?? "")) {
             await numbers.count(map: map)
         }
         .task(id: numbers.ready) {

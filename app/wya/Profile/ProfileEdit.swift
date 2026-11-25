@@ -10,7 +10,7 @@ import PhotosUI
 final class ProfileEdit {
     static let shared = ProfileEdit()
     enum Field: Hashable { case name, handle, bio }
-    enum Sheet { case picture, nationalities, ground, stats, badges }
+    enum Sheet { case picture, nationalities, home, ground, stats, badges }
     /// the line being typed in
     var field: Field? {
         didSet {
@@ -575,7 +575,7 @@ struct NationalitiesSheet: View {
                     }
                 }
                 TextField("", text: Binding(get: { edit.query }, set: { edit.query = $0 }),
-                          prompt: Text("Add a nationality").foregroundStyle(Palette.ink.opacity(0.5)))
+                          prompt: Text("Add a passport").foregroundStyle(Palette.ink.opacity(0.5)))
                     .font(.body).foregroundStyle(Palette.ink)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled()
@@ -613,5 +613,119 @@ struct NationalitiesSheet: View {
         Feel.tap()
         edit.query = ""
         withAnimation(Motion.quick) { edit.setNationalities(edit.nationalities + [cc], map: map) }
+    }
+}
+
+
+/// YOUR HOME (water at 50%, full while typing): the town you live in. Picked, it is its own row (its flag, its name,
+/// "Home" under it, × to take it away) and the sheet goes; typed, the towns that match, the biggest first, as search
+/// finds them
+struct HomeSheet: View {
+    let water: Water
+    let width: CGFloat
+    let room: CGFloat
+    @State private var edit = ProfileEdit.shared
+    @State private var store = ProfileStore.shared
+    @State private var towns = TownIndex.shared
+    @FocusState private var typing: Bool
+
+    private var found: [TownIndex.Hit] {
+        let q = edit.query.trimmingCharacters(in: .whitespaces)
+        guard towns.ready else { return [] }
+        if !q.isEmpty {
+            // (a town's own districts, "Zürich (Kreis 11)", only when the town itself is not there: they took five of
+            // the six rows under Zürich)
+            let all = towns.hits(q, open: nil, limit: 12)
+            let names = Set(all.map(\.name))
+            return Array(all.filter { t in
+                guard let i = t.name.firstIndex(of: "(") else { return true }
+                return !names.contains(t.name[..<i].trimmingCharacters(in: .whitespaces))
+            }.prefix(6))
+        }
+        // NOTHING TYPED: the likeliest homes at once, never one line on an empty sheet: the biggest towns of the
+        // passport you show, else of a country you have lived in
+        guard let cc = Self.likelyCountry, store.me.home == nil else { return [] }
+        return towns.biggest(in: cc, count: 6)
+    }
+    private static var likelyCountry: String? {
+        if let n = ProfileEdit.shared.nationalities.first { return n.lowercased() }
+        return MarkStore.shared.marks.first { $0.key.kind == .country && $0.value.lived }?.key.id.lowercased()
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                if let h = store.me.home {
+                    HStack(spacing: 12) {
+                        FlagCircle(cc: h.cc, size: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(h.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                            Text("Home").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                        }
+                        Spacer(minLength: 8)
+                        Button {
+                            Feel.lift()
+                            withAnimation(Motion.quick) { store.set { $0.home = nil } }
+                        } label: {
+                            Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
+                                .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
+                                .frame(width: 44, height: 44).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Remove")
+                    }
+                    .frame(minHeight: NationalitiesSheet.rowH)
+                }
+                TextField("", text: Binding(get: { edit.query }, set: { edit.query = $0 }),
+                          prompt: Text(store.me.home == nil ? "Your town" : "Another town").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(.body).foregroundStyle(Palette.ink)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .focused($typing)
+                    .submitLabel(.done)
+                    .onSubmit { if let f = found.first { pick(f) } }
+                    .frame(minHeight: NationalitiesSheet.rowH)
+                ForEach(found, id: \.id) { t in
+                    let cc = String(t.id.prefix { $0 != "/" }).lowercased()
+                    HStack(spacing: 12) {
+                        FlagCircle(cc: cc, size: 28)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(t.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                            let country = Pin.countryNames[cc] ?? cc.uppercased()
+                            Text(t.region.isEmpty || t.region == t.name ? country : "\(t.region), \(country)")
+                                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(minHeight: NationalitiesSheet.rowH)
+                    .contentShape(Rectangle())
+                    .onTapGesture { pick(t) }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                }
+            }
+            .scrollTargetLayout()
+            .frame(width: width)
+        }
+        .scrollTargetBehavior(.viewAligned)
+        .scrollBlur()
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: width, height: room)
+        .onAppear { towns.load() }
+        .onChange(of: typing) { _, t in
+            edit.searching = t
+            water.go(t ? .full : .half)
+        }
+    }
+
+    private func pick(_ t: TownIndex.Hit) {
+        Feel.tap()
+        let cc = String(t.id.prefix { $0 != "/" }).lowercased()
+        edit.query = ""
+        typing = false
+        withAnimation(Motion.quick) { store.set { $0.home = .init(id: t.id, name: t.name, cc: cc, lat: t.lat, lon: t.lon) } }
+        // (one home: picked, the sheet goes and the line under your passports says it)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { edit.close(water: water) }
     }
 }
