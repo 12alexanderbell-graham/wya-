@@ -382,6 +382,8 @@ final class TestDriver {
                             ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == ls.open }) { b.lists[i].items.append(item) } }
                         }
                     case "kind": ls.kind = min(3, max(0, Int(p.count > 2 ? p[2] : "0") ?? 0))
+                    // lists pull <pt>|off: a list page held pulled down past its top by that much (its cover stretching)
+                    case "pull": ListsWater.testPull = p.count > 2 && p[2] != "off" ? CGFloat(Double(p[2]) ?? 0) : nil; ls.kind = ls.kind
                     // lists dial <at>|off: the kinds' wheel held mid-turn
                     case "dial": ls.testDial = p.count > 2 && p[2] != "off" ? CGFloat(Double(p[2]) ?? 0) : nil
                     case "name":

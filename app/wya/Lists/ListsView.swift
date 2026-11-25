@@ -128,6 +128,12 @@ struct ListsWater: View {
     @State private var removed: (list: String, item: ListItem, at: Int)?
     /// the list whose own sheet is up (name, cover, who can see it, archive, hide, delete)
     @State private var infoFor: String?
+    /// how far a list's page is pulled down past its top: its cover grows up into it and springs back with the scroll
+    @State private var pagePull: CGFloat = 0
+    #if DEBUG
+    /// the test driver's `lists pull <pt>`: a pull held, as a finger would (the simulator's dragged touches don't scroll it)
+    nonisolated(unsafe) static var testPull: CGFloat?
+    #endif
     /// the archive sheet is up (archived and hidden lists)
     @State private var archiveOpen = false
 
@@ -675,6 +681,12 @@ struct ListsWater: View {
     /// A LIST (LS03): its cover at the top, wide, square corners, the list's name large on it at the bottom left (a
     /// list of no countries yet: the name alone, no cover); then its things, each its square flag at 44, its name.
     /// A note shows when its row is tapped. Taking a thing out is in the row's hold menu, never a button on every row.
+    private var shownPull: CGFloat {
+        #if DEBUG
+        if let t = Self.testPull { return t }
+        #endif
+        return pagePull
+    }
     private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat, list: MyList? = nil) -> some View {
         let (ccs, spots) = Self.pageCover(title: title, things: things, naming: s.naming)
         let own = list.flatMap { listOwnCover($0) }
@@ -710,8 +722,15 @@ struct ListsWater: View {
                         Group {
                             if let own { own } else { ListCover(ccs: ccs, world: map.world, spots: spots) }
                         }
+                        // (pulled down past its top, the cover grows up into the gap and springs back as the page does:
+                        // felt, not looked at)
+                        // (the map stays drawn at its own size and is zoomed up from its foot into the taller card, as a
+                        // photo header stretches: drawn again at every height, it asked Apple's map for a picture a frame)
                         .frame(height: 180)
+                        .scaleEffect((180 + shownPull) / 180, anchor: .bottom)
+                        .frame(height: 180 + shownPull, alignment: .bottom)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .offset(y: -shownPull)
                         // (its cover tapped: the list on the map, where the corner circle was, 25 Nov)
                         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .onTapGesture { if let l = s.open.flatMap({ viewable($0) }) { viewOnMap(l) } else { Feel.refuse() } }
@@ -851,6 +870,9 @@ struct ListsWater: View {
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: CGFloat.self, of: { max(0, -($0.contentOffset.y + $0.contentInsets.top)) }) { _, v in
+            if abs(v - pagePull) > 0.5 || v == 0 { pagePull = v }
+        }
         // UNDO, for a few seconds after something is taken out
         .overlay(alignment: .bottom) {
             if let r = removed, r.list == s.open {
