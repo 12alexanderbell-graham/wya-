@@ -176,6 +176,21 @@ struct ListsWater: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
     }
 
+    /// a thing's note in the open list, typed in place under it
+    private func itemNote(_ t: ListsThing) -> some View {
+        TextField("", text: Binding(get: { t.note }, set: { v in
+            let n = String(v.prefix(500))
+            ListsStore.shared.change { b in
+                guard let li = b.lists.firstIndex(where: { $0.id == s.open }),
+                      let ii = b.lists[li].items.firstIndex(where: { $0.id == t.id }) else { return }
+                b.lists[li].items[ii].note = n
+            }
+        }), prompt: Text("Note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+            .font(.subheadline).foregroundStyle(Palette.ink)
+            .lineLimit(1 ... 5)
+            .frame(minHeight: 36)
+            .padding(.leading, 56)
+    }
     /// A LIST INSIDE A LIST: its own cover, small, rounded as its tile
     private func innerThumb(_ r: String) -> some View {
         let inner = store.book.lists.first { $0.id == r }
@@ -623,7 +638,10 @@ struct ListsWater: View {
                 }
                 .padding(.bottom, 8)
                 // HOW MANY OF ITS PLACES YOU'VE BEEN TO: under its name, "All 20 been" once every one is stamped
-                if let list, !list.wish, case let tk = ListTicks.count(list.items), tk.of > 0 {
+                // (only a list of places: as its tile, every thing in it a place counted; a list of dishes said "0 of 2
+                // been" for Seoul and a town called Pasta, 25 Nov)
+                if let list, !list.wish, case let tk = ListTicks.count(list.items), tk.of > 0,
+                   tk.of == list.items.filter({ $0.k != .section }).count {
                     Text(tk.been == tk.of ? "All \(tk.of) been" : "\(tk.been) of \(tk.of) been")
                         .font(tk.been == tk.of ? .body.weight(.semibold) : .body)
                         .foregroundStyle(Palette.ink.opacity(tk.been == tk.of ? 1 : 0.5))
@@ -675,7 +693,11 @@ struct ListsWater: View {
                         }
                         // OPENED: its note, and for a place, Open, which takes it to the map (morning Q12)
                         if s.noted == t.id {
-                            if !t.note.isEmpty {
+                            // ITS NOTE, written here in your own lists; read
+                            // only in the wishlist
+                            if editable {
+                                itemNote(t)
+                            } else if !t.note.isEmpty {
                                 Text(t.note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                                     .padding(.leading, 56)
                             }
@@ -696,7 +718,7 @@ struct ListsWater: View {
                     .onTapGesture {
                         // (a list inside opens, pushed in as any list)
                         if let r = t.ref { Feel.tap(); withAnimation(Motion.quick) { s.openInner(r) }; return }
-                        guard !t.note.isEmpty || !(t.cc ?? "").isEmpty else { return }
+                        guard editable || !t.note.isEmpty || !(t.cc ?? "").isEmpty else { return }
                         Feel.tap()
                         withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id }
                     }
