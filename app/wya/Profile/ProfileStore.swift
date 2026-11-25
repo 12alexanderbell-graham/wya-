@@ -19,6 +19,8 @@ final class ProfileStore {
         var picture: String?
         /// the picture's colour, picked on the colour picker (no presets)
         var colour: ColourPick?
+        /// THE LETTER'S COLOUR (20 Oct #30), picked as the picture's is; nil: white, black on a pale picture
+        var letter: ColourPick? = nil
         /// THE BACKGROUND'S FOUR COLOURS, picked on the colour picker; nil is the app's own living gradient
         var ground: [ColourPick]?
         /// THE BACKGROUND'S STRENGTH, 0 calm to 1 strong (nil: the middle, the picture's gradient of the first app);

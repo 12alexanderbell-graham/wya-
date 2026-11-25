@@ -456,6 +456,9 @@ struct ProfilePictureSheet: View {
     @State private var edit = ProfileEdit.shared
     @State private var item: PhotosPickerItem?
     @State private var pick = ProfileStore.shared.me.colour ?? ProfilePictureSheet.start
+    /// what the picker colours: the picture (false) or its letter (true)
+    @State private var letter = false
+    @State private var letterPick = ProfileStore.shared.me.letter ?? ColourPick(hue: 250, light: ColourPick.lightTop, strength: 0)
 
     /// THE SUGGESTED COLOUR, from what your profile already has: the strongest of your background's four
     private var suggested: ColourPick? {
@@ -467,12 +470,23 @@ struct ProfilePictureSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ColourPicker(colour: Binding(get: { pick }, set: { c in
-                pick = c
-                store.set({ $0.colour = c; $0.picture = nil }, keep: false)
-            }), suggested: suggested, width: width) { c in
-                store.set { $0.colour = c; $0.picture = nil }
+            // PICTURE OR LETTER: which of the two the picker colours, while the picture is your letter on a colour
+            // (two chips a third of the row each, the chosen one black, as the app's chosen chips are)
+            if store.me.picture == nil {
+                HStack(spacing: 12) {
+                    target("Picture", on: !letter) { letter = false }
+                    target("Letter", on: letter) { letter = true }
+                    Spacer(minLength: 0)
+                }
+                .frame(width: width)
             }
+            ColourPicker(colour: Binding(get: { letter ? letterPick : pick }, set: { c in
+                if letter { letterPick = c; store.set({ $0.letter = c }, keep: false) }
+                else { pick = c; store.set({ $0.colour = c; $0.picture = nil }, keep: false) }
+            }), suggested: suggested, width: width) { c in
+                if letter { store.set { $0.letter = c } } else { store.set { $0.colour = c; $0.picture = nil } }
+            }
+            .id(letter)
             HStack(spacing: 12) {
                 ForEach(edit.nationalities, id: \.self) { cc in
                     Button {
@@ -487,6 +501,7 @@ struct ProfilePictureSheet: View {
             .frame(width: width, height: 44)
         }
         .frame(width: width, alignment: .leading)
+        .animation(Motion.quick, value: letter)
         // (a photo is chosen by tapping the picture itself while this sheet is up)
         .photosPicker(isPresented: Bindable(edit).choosingPhoto, selection: $item, matching: .images, photoLibrary: .shared())
         .onChange(of: item) { _, it in
@@ -497,6 +512,20 @@ struct ProfilePictureSheet: View {
                 item = nil
             }
         }
+    }
+}
+
+extension ProfilePictureSheet {
+    /// one of the two chips: a third of the row, black when chosen
+    func target(_ t: String, on: Bool, _ act: @escaping () -> Void) -> some View {
+        Button { if !on { Feel.tap(); act() } } label: {
+            Text(t).font(.body.weight(.semibold)).foregroundStyle(on ? Palette.white : Palette.ink)
+                .frame(width: (width - 24) / 3, height: 44)
+                .background { if on { Capsule().fill(Palette.ink) } }
+                .glassEffect(on ? .clear : PageGlass.control.interactive(), in: .capsule)
+        }
+        .buttonStyle(.press)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 

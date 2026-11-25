@@ -275,7 +275,7 @@ struct ProfileView: View {
                 if let first = me.name.trimmingCharacters(in: .whitespaces).first ?? me.handle.first(where: { $0.isLetter }) {
                     Text(String(first).uppercased())
                         .font(Typeface.nature(Self.picture * 0.5, relativeTo: .largeTitle))
-                        .foregroundStyle((me.colour?.light ?? 1) > 0.72 ? Palette.ink : Palette.white)
+                        .foregroundStyle(me.letter?.color ?? ((me.colour?.light ?? 1) > 0.72 ? Palette.ink : Palette.white))
                         .dynamicTypeSize(.large)
                 } else if me.colour == nil {
                     Icon5(key: "plus", ink: Palette.ink.opacity(0.5), size: Self.picture * 0.22)
