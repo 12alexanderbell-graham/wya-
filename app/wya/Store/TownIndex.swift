@@ -175,15 +175,17 @@ final class TownIndex {
         guard ready, q.count >= 4, q.count <= 60 else { return nil }
         if let g = lastGuess, g.q == q { return g.hit }
         let a = Array(q.unicodeScalars)
+        // (how many slips: one in a short name, two from seven letters, as the countries' own guess, a third of them)
+        let cap = a.count >= 7 ? 2 : 1
         var best: (Hit, Int)?
         for r in rows.prefix(40_000) {
             // its whole name, or its first word when what was typed is one ( for Frankfurt am Main)
             let whole = Array(r.folded.unicodeScalars)
             let first = q.contains(" ") ? whole : Array((r.folded.split(separator: " ").first.map(String.init) ?? r.folded).unicodeScalars)
             let b = abs(a.count - first.count) < abs(a.count - whole.count) ? first : whole
-            guard abs(a.count - b.count) <= 2 else { continue }
-            let d = Self.distance(a, b, cap: 2)
-            if d <= 2, best == nil || d < best!.1 { best = (r.hit, d); if d == 1 { break } }
+            guard abs(a.count - b.count) <= cap else { continue }
+            let d = Self.distance(a, b, cap: cap)
+            if d <= cap, best == nil || d < best!.1 { best = (r.hit, d); if d == 1 { break } }
         }
         lastGuess = (q, best?.0)
         return best?.0
