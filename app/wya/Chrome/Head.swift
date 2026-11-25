@@ -543,8 +543,9 @@ struct HeadView: View {
         withAnimation(Motion.settle) { head.pull = 0 }
     }
 
+    @ViewBuilder
     private func toolButton(_ i: Int, ink: Color, slot: CGFloat) -> some View {
-        // in Pins the first tool is the quick route: one stroke of the finger, kept as a line as it lifts
+        // in Pins the first tool is the quick route (2 Oct): one stroke of the finger, kept as a line as it lifts
         let pins = head.mode == .pins
         let names = [pins ? "Quick route" : "Quick stamping", "Your passport", "Your history", "Upload"]
         let on = (i == 0 && !pins && head.quickStamp) || (i == 0 && pins && DrawTool.shared.on) || (i == 1 && BookState.shared.isOpen) || (i == 2 && head.history)
@@ -563,6 +564,8 @@ struct HeadView: View {
             case 0: if head.filtersMenu { Feel.refuse() } else { head.quickStamp.toggle() }
             // the passport tool: the book out of it and back into it (4.3); the tool shows filled while it is out
             case 1: BookState.shared.toggle()
+            // (a map-wide view: an open card goes first; with Russia's card up the journey turned the card, its
+            // buttons and the whole map lime, 18 Nov)
             case 2:
                 if !head.history { Self.putAwayCard(map: map, water: water) }
                 head.history.toggle()
@@ -570,6 +573,8 @@ struct HeadView: View {
             // one is in the head, the other at the bottom)
             default:
                 head.toolsOpen = false
+                // (the journey goes as the upload comes: its line and its label were left on the map under the sheet;
+                // and an open card goes too: Russia's passport stayed over the upload, 18 Nov)
                 if head.history { head.history = false }
                 Self.putAwayCard(map: map, water: water)
                 UploadState.shared.open(water: water, map: map)
@@ -579,27 +584,58 @@ struct HeadView: View {
         let row = [pins ? "Quick route" : head.quickStamp ? "Quick stamping off" : "Quick stamping on",
                    BookState.shared.isOpen ? "Put the passport away" : "Passport",
                    head.history ? "History off" : "History on", "Upload"][i]
-        return Button {
-            Feel.tap()
-            act()
-        } label: {
-            let key = [pins ? "route" : "quick", "passport", "history", "cal-out"][i]
-            ZStack {
-                Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
-                Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
-            }
-            .frame(width: slot, height: 44)
-            .contentShape(Rectangle())
+        // the icons (31 Oct 11:47): quick stamping his stamp, the passport his book, history the two ends joined, upload
+        // his arrow up out of a line; on, a filled circle behind it and the icon in the other colour, there at once
+        // (no grow, no fade)
+        let key = [pins ? "route" : "quick", "passport", "history", "cal-out"][i]
+        let face = ZStack {
+            Circle().fill(ink).frame(width: 30 * 8 / 9, height: 30 * 8 / 9).opacity(on ? 1 : 0)
+            Icon5(key: key, ink: on ? (ink == Palette.white ? Palette.ink : Palette.white) : ink, size: 17)
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Section(names[i]) {
-                // once Apple's menu has closed, so the two never cross
-                Button(row) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { act() } }
+        .frame(width: slot, height: 44)
+        .contentShape(Rectangle())
+        if i == 3 {
+            // UPLOAD IS APPLE'S MENU (25 Nov evening): a tap opens
+            // the menu, and Photos opens Apple's Photos picker at once; each source goes straight into finding.
+            // (it replaced a pair of two icons and two words over an empty water)
+            Menu {
+                // (not while their review is already up: the row would do nothing)
+                if UploadState.shared.hasWaiting, !UploadState.shared.isOpen {
+                    Button("Found places") { uploadFrom { UploadState.shared.open(water: water, map: map) } }
+                }
+                Button("Photos") { uploadFrom { UploadState.shared.pickerUp = true } }
+                Button("All photos") { uploadFrom { UploadState.shared.begin(.all, water: water, map: map) } }
+                Button("Location history") { uploadFrom { UploadState.shared.importerUp = true } }
+                Button("Where I am now") { uploadFrom { UploadState.shared.begin(.here, water: water, map: map) } }
+            } label: { face }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded { Feel.tap() })
+            .accessibilityLabel(names[i])
+        } else {
+            Button {
+                Feel.tap()
+                act()
+            } label: { face }
+            .buttonStyle(.plain)
+            .contextMenu {
+                Section(names[i]) {
+                    // once Apple's menu has closed, so the two never cross
+                    Button(row) { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { act() } }
+                }
             }
+            .accessibilityLabel(names[i])
+            .accessibilityAddTraits(on ? .isSelected : [])
         }
-        .accessibilityLabel(names[i])
-        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// a source picked from the Upload menu: the tools go back into the plus, the journey and an open card go, then the
+    /// source opens (once Apple's menu has closed, so the two never cross)
+    private func uploadFrom(_ go: @escaping () -> Void) {
+        head.toolsOpen = false
+        if head.history { head.history = false }
+        Self.putAwayCard(map: map, water: water)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { go() }
     }
 }
 

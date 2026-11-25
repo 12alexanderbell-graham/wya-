@@ -46,6 +46,66 @@ final class UploadState {
     var picking = false
     var importing = false
     var picked: [PhotosPickerItem] = []
+    /// THE UPLOAD TOOL'S MENU (25 Nov evening; the pair of two icons
+    /// and two words over an empty water is gone): Apple's own menu from the tool, its Photos opening Apple's Photos
+    /// picker at once, and every source going straight into finding, the working mark on, no page in between
+    var pickerUp = false
+    var importerUp = false
+    var pickerItems: [PhotosPickerItem] = []
+    /// opened from the tool's menu: no pair, finding starts at once with the working mark while the source is read
+    @ObservationIgnored private var direct = false
+    /// finds or a round of regions waiting: the menu's first row opens their review
+    var hasWaiting: Bool { !order.isEmpty || waitingRound() != nil }
+    enum Source { case all, here }
+    func begin(_ s: Source, water w: Water, map m: MapController) {
+        guard openDirect(w, m) else { return }
+        switch s {
+        case .all: all()
+        case .here: here()
+        }
+    }
+    func beginPicked(_ items: [PhotosPickerItem], water w: Water, map m: MapController) {
+        guard !items.isEmpty, openDirect(w, m) else { return }
+        picked(items)
+    }
+    func beginFile(_ urls: [URL], water w: Water, map m: MapController) {
+        guard !urls.isEmpty, openDirect(w, m) else { return }
+        imported(urls)
+    }
+    /// the water takes the upload with nothing chosen on it yet. With the review up, the new read joins it (what Add
+    /// more did through the pair): its finds kept, a × on the new read puts them back; false while anything else is up
+    private func openDirect(_ w: Water, _ m: MapController) -> Bool {
+        if w.upload {
+            guard phase == .review, round == nil, !busy, !moving else { Feel.refuse(); return false }
+            readToken += 1
+            job += 1
+            kept = (finds, order, dropped, droppedTrips)
+            keptRound = (roundAhead, regionsSoFar, samples)
+            opened = []; datesIn = []
+            if w.stop != .quarter { w.go(.quarter) }
+            withAnimation(Motion.quick) { goIn = false; captionIn = false }
+            phase = .choosing; step = 0; note = [:]; locating = false; photosBusy = nil
+            shapes = [false, false]; words = false
+            direct = true
+            return true
+        }
+        closing = false
+        readToken += 1
+        moving = false; reading = false; pending = nil; lineShown = false; fileShare = 0
+        water = w; map = m
+        phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
+        step = 0; note = [:]; locating = false; photosBusy = nil
+        shapes = [false, false]; words = false
+        direct = true
+        w.openUpload()
+        job += 1
+        return true
+    }
+    /// a direct read: finding's row (World / 0 / found, the working mark, the ×) at once while the source is read
+    private func readingNow() {
+        reading = true
+        startFinding()
+    }
     /// the last read's samples and where they came from (finding, 9.4, starts from these)
     private(set) var samples: [HistoryReader.Sample] = []
     private(set) var source: MarkSource = .photos
@@ -145,6 +205,7 @@ final class UploadState {
         phase = .choosing; captionIn = false; markIn = false; xIn = false; goIn = false; count = 0; message = nil
         step = 0; note = [:]; locating = false; photosBusy = nil
         shapes = [false, false]; words = false
+        direct = false
         let at25 = w.stop == .quarter
         w.openUpload()
         job += 1
@@ -271,7 +332,7 @@ final class UploadState {
     func picked(_ items: [PhotosPickerItem]) {
         guard !items.isEmpty else { return }
         let t = readToken
-        withAnimation(Motion.quick) { photosBusy = 2 }
+        if direct { readingNow() } else { withAnimation(Motion.quick) { photosBusy = 2 } }
         Task {
             defer { if t == readToken { withAnimation(Motion.quick) { photosBusy = nil } } }
             var out: [HistoryReader.Sample] = []
@@ -294,10 +355,14 @@ final class UploadState {
     private func all() {
         if note[3] != nil { openSettings(); return }
         let t = readToken
-        withAnimation(Motion.quick) { photosBusy = 3 }
+        if direct { readingNow() } else { withAnimation(Motion.quick) { photosBusy = 3 } }
         Task {
             defer { if t == readToken { withAnimation(Motion.quick) { photosBusy = nil } } }
-            guard await PhotosReader.ask() else { if t == readToken { refuse(3, "Allow Photos in Settings") }; return }
+            guard await PhotosReader.ask() else {
+                // (from the menu there is no pair to say it on: finding's row says it in the number's place)
+                if t == readToken { if direct { Feel.refuse(); found([], from: .photos, read: 0, why: "Allow Photos in Settings", token: t) } else { refuse(3, "Allow Photos in Settings") } }
+                return
+            }
             let (s, skipped) = await PhotosReader.samples()
             found(s, from: .photos, read: s.count + skipped, token: t)
         }
@@ -352,6 +417,7 @@ final class UploadState {
         guard !locating else { return }
         withAnimation(Motion.quick) { note[5] = nil; locating = true }
         let t = readToken
+        if direct { readingNow() }
         Task {
             let r = await OneFix.shared.get()
             guard t == readToken else { return }
@@ -361,8 +427,10 @@ final class UploadState {
                 Feel.land(speed: 0)
                 found([HistoryReader.Sample(lat: l.coordinate.latitude, lon: l.coordinate.longitude, at: l.timestamp,
                                             offset: nil, end: nil, asset: nil)], from: .history, read: 1, token: t)
-            case .refused: refuse(5, "Allow Location in Settings")
-            case .none: refuse(5, "Can't find you")
+            case .refused:
+                if direct { Feel.refuse(); found([], from: .history, read: 0, why: "Allow Location in Settings", token: t) } else { refuse(5, "Allow Location in Settings") }
+            case .none:
+                if direct { Feel.refuse(); found([], from: .history, read: 0, why: "Can't find you", token: t) } else { refuse(5, "Can't find you") }
             }
         }
     }
@@ -1335,7 +1403,10 @@ final class UploadState {
             if close {
                 if !order.isEmpty { save() }
                 water?.closeUpload(); step = 0
-            } else if !order.isEmpty { reviewAgain(me) } else { grow(after: 0, job: me) }
+            } else if !order.isEmpty { reviewAgain(me) }
+            // (from the tool's menu there is no pair to come back to: the water is given back)
+            else if direct { water?.closeUpload(); step = 0 }
+            else { grow(after: 0, job: me) }
         }
     }
 }
@@ -1370,7 +1441,7 @@ struct UploadSheet: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
         // a swipe right (more than 60 pt, mostly sideways) goes back from step 2; a tick as it passes the point
         .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { g in
-            guard (u.phase == .choosing && u.step != 0) || u.phase == .review, !onRows(g.startLocation, L),
+            guard u.phase == .choosing && u.step != 0, !onRows(g.startLocation, L),
                   abs(g.translation.width) > abs(g.translation.height) else { return }
             let past = g.translation.width > 60
             if past != (swipe > 60) { if past { Feel.tick() } }
@@ -1381,8 +1452,9 @@ struct UploadSheet: View {
             guard !onRows(g.startLocation, L) else { return }
             guard g.translation.width > 60 || g.predictedEndTranslation.width > 300,
                   abs(g.translation.width) > abs(g.translation.height) else { return }
-            // from the review: Add more (back to step 1, finds kept); from step 2: back to step 1
-            if u.phase == .review { u.addMore() } else if u.step != 0 { u.back() }
+            // from step 2: back to step 1 (the review's Add more is the Upload menu now: a source picked there joins
+            // the review, no pair in between)
+            if u.phase == .choosing, u.step != 0 { u.back() }
         })
         .photosPicker(isPresented: $u.picking, selection: $u.picked, maxSelectionCount: 0, selectionBehavior: .ordered,
                       matching: .any(of: [.images, .livePhotos, .videos]), photoLibrary: .shared())
@@ -1394,7 +1466,6 @@ struct UploadSheet: View {
             if case .success(let urls) = r { u.imported(urls) }
         }
         .accessibilityAction(named: "Back") { u.back() }
-        .accessibilityAction(named: "Add more") { u.addMore() }
         .fullScreenCover(isPresented: $u.calendarOpen) {
             if let e = u.calendarEdit() {
                 UploadCalendar(edit: e, close: { u.calendarOpen = false }, add: { u.addFromCalendar($0) })

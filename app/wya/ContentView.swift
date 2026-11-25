@@ -1,6 +1,8 @@
 import SwiftUI
 import AppIntents
 import MapKit
+import PhotosUI
+import UniformTypeIdentifiers
 
 /// The Map tab: the world edge to edge under everything, the head on top, the zoom column on the right, and the
 /// water (the tab capsule and its sheet) at the bottom. Everything is placed from this phone's own screen (Layout).
@@ -14,6 +16,7 @@ struct ContentView: View {
     @State private var launch = Launch.shared
     @State private var side = Sideways.shared
     @State private var pageStack = PlacePageState.shared
+    @State private var uploadState = UploadState.shared
     /// THE SESSION (19.2), for when the system ends the app in the background (Apple's scene storage: discarded when
     /// the person quits the app, so a cold launch opens fresh): the tab, the mode, the continent, the camera, the sheet
     /// stop, the lock
@@ -111,6 +114,19 @@ struct ContentView: View {
                 // (the Profile's top is empty: no head on it)
                 if !Perf.shared.off.contains("head"), tab == 0 {
                     HeadView(map: map, water: water, head: head)
+                        // THE UPLOAD MENU'S SOURCES (25 Nov evening): Photos is Apple's own Photos picker, Location
+                        // history the Files picker; what they hand back goes straight into finding
+                        .photosPicker(isPresented: $uploadState.pickerUp, selection: $uploadState.pickerItems, maxSelectionCount: 0,
+                                      selectionBehavior: .ordered, matching: .any(of: [.images, .livePhotos, .videos]),
+                                      photoLibrary: .shared())
+                        .onChange(of: uploadState.pickerItems) { _, items in
+                            guard !items.isEmpty else { return }
+                            UploadState.shared.beginPicked(items, water: water, map: map)
+                            uploadState.pickerItems = []
+                        }
+                        .fileImporter(isPresented: $uploadState.importerUp, allowedContentTypes: [.json], allowsMultipleSelection: true) { r in
+                            if case .success(let urls) = r { UploadState.shared.beginFile(urls, water: water, map: map) }
+                        }
                         .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
                 }
                 if side.on { SidewaysMarks(map: map, L: water.layout) }
