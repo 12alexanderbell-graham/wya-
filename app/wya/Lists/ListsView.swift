@@ -953,21 +953,22 @@ struct ListsWater: View {
                                 }
                             }
                             Spacer(minLength: 0)
-                            Button {
-                                Feel.lift()
-                                withAnimation(Motion.quick) { changePlan(p.id) { $0.days[i].items.removeAll { $0.id == it.id } } }
-                            } label: {
-                                Icon5Still(key: "cross", progress: 0, ink: Palette.white, size: 13)
-                                    .frame(width: 24, height: 24).background(Palette.ink, in: .circle)
-                                    .frame(width: 44, height: 44).contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Take out")
                         }
                         .frame(minHeight: 44)
-                        // a tap on the thing opens its sheet (all day or a time, where, link, note, colour)
+                        // a tap on the thing opens its page (all day or a time, where, link, note, colour, Take out)
                         .contentShape(Rectangle())
                         .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } }
+                        // TAKING IT OUT IS IN ITS HOLD MENU (and its page), never a black cross on every row (25 Nov; as a
+                        // list's rows)
+                        .contextMenu {
+                            Button("Take out", role: .destructive) {
+                                Feel.lift()
+                                withAnimation(Motion.quick) { changePlan(p.id) { $0.days[i].items.removeAll { $0.id == it.id } } }
+                            }
+                        }
+                        .accessibilityAction(named: "Take out") {
+                            withAnimation(Motion.quick) { changePlan(p.id) { $0.days[i].items.removeAll { $0.id == it.id } } }
+                        }
                         // MADE BY THE AI, NOT KEPT YET: each thing on lime glass until Keep
                         .padding(.leading, p.ai ? 14 : 0)
                         .glassEffect(p.ai ? .regular.tint(Palette.lime.opacity(0.55)) : .identity,
