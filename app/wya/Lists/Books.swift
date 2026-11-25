@@ -256,7 +256,21 @@ struct BookCover: View {
     let book: PhotoBook
     var body: some View {
         let first = book.cover ?? book.pages.first(where: { $0.picture != nil })?.picture
-        if let first { BookPhoto(name: first) } else { Color.clear }
+        if let first { BookPhoto(name: first) }
+        else if let page = book.pages.first {
+            // NO PHOTO ANYWHERE: its first page as it is (words, a sketch), drawn at a page's size and taken down into
+            // the tile from its top, as a thumbnail of the page; an empty glass tile read as broken (critic, 25 Nov)
+            GeometryReader { g in
+                let pw: CGFloat = 300, ph: CGFloat = 400
+                let k = max(g.size.width / pw, g.size.height / ph)
+                BookPageView(page: page)
+                    .frame(width: pw, height: ph)
+                    .scaleEffect(k, anchor: .topLeading)
+                    .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+                    .allowsHitTesting(false)
+            }
+            .clipped()
+        } else { Color.clear }
     }
 }
 
@@ -297,6 +311,9 @@ struct BookOpenView: View {
     /// the book read full screen, grown out of its page (Apple's zoom, as a photo opens in Photos)
     @State private var reading = false
     @Namespace private var zoom
+    /// the page whose words are being changed from its hold menu (a page with words shows them once, on itself)
+    @State private var wordsFor: String?
+    @FocusState private var wordsTyping: Bool
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
     /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
@@ -499,6 +516,7 @@ struct BookOpenView: View {
                                                 // (any page drawn on, a photo's too)
                                                 Button("Draw on it") { withAnimation(Motion.quick) { sketching = pid } }
                                                 if !(pg.text ?? "").isEmpty {
+                                                    Button("Change the words") { Feel.tap(); wordsFor = pid }
                                                     Button("Move the words") { withAnimation(Motion.quick) { placing = pid } }
                                                 }
                                                 Button(pg.place == nil ? "Where it was" : "Change the place") {
@@ -528,9 +546,12 @@ struct BookOpenView: View {
                         // where you are, in words (no dots), and All pages at its right (four pills in a row wrapped
                         // "All pages" onto two lines, 25 Nov); FULL SCREEN beside it
                         HStack(spacing: 20) {
-                            Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
-                                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                                .contentTransition(.numericText(value: Double(at)))
+                            // (a book of one page says nothing of where you are: its count was noise)
+                            if b.pages.count > 1 {
+                                Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
+                                    .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                    .contentTransition(.numericText(value: Double(at)))
+                            }
                             Spacer(minLength: 0)
                             Button { Feel.tap(); reading = true } label: {
                                 Text("Full screen").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
@@ -539,8 +560,11 @@ struct BookOpenView: View {
                             .buttonStyle(.plain)
                             if b.pages.count > 1 { lineButton("All pages") { overview = true } }
                         }
-                        // THE WORDS ON THIS PAGE, typed here
-                        if b.pages.indices.contains(at) {
+                        // THE WORDS ON THIS PAGE, typed here while the page has none (or they are being changed: its hold
+                        // menu's Change the words); once it has them they are on the page alone, not again under it
+                        // (shown twice, critic 25 Nov)
+                        if b.pages.indices.contains(at),
+                           (b.pages[at].text ?? "").isEmpty || wordsFor == b.pages[at].id || wordsTyping {
                             let pid = b.pages[at].id
                             TextField("", text: Binding(get: { book?.pages.first { $0.id == pid }?.text ?? "" }, set: { v in
                                 change { bk in if let i = bk.pages.firstIndex(where: { $0.id == pid }) { bk.pages[i].text = String(v.prefix(300)) } }
@@ -548,6 +572,11 @@ struct BookOpenView: View {
                                 .font(.body).foregroundStyle(Palette.ink)
                                 .lineLimit(1 ... 4)
                                 .frame(minHeight: 44)
+                                .focused($wordsTyping)
+                                .onAppear { if wordsFor == pid { wordsTyping = true } }
+                                .onChange(of: wordsFor) { _, v in if v == pid { wordsTyping = true } }
+                                .onChange(of: wordsTyping) { _, t in if !t { wordsFor = nil } }
+                                .submitLabel(.done)
                         }
                         addPage
                     }
