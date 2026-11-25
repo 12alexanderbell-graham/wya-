@@ -63,6 +63,12 @@ enum PlanLive {
     /// the plan's map square for the lock screen, from the same map its cover is made from
     static func writeMap(_ p: Plan) async {
         guard let u = PlanLiveAttributes.mapURL(p.id) else { return }
+        // (the towns and sights read first, a few seconds at most: drawn as the app came up, before them, each place
+        // stood at its country's middle and Bangkok, Chiang Mai and Krabi were one dot, 25 Nov)
+        TownIndex.shared.load(); ThingIndex.shared.load()
+        for _ in 0 ..< 60 where !(TownIndex.shared.ready && ThingIndex.shared.ready) { try? await Task.sleep(for: .milliseconds(100)) }
+        // (the world too: its outlines frame the countries)
+        for _ in 0 ..< 60 where AIContext.map?.world == nil { try? await Task.sleep(for: .milliseconds(100)) }
         let c = ListsWater.planCover(p)
         guard let img = await ListMapCovers.image(c.ccs, spots: c.spots, world: AIContext.map?.world,
                                                   size: CGSize(width: 64, height: 64), scale: 2),
