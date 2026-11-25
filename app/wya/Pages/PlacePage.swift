@@ -1746,7 +1746,12 @@ extension PlacePageState {
         return j
     }()
     static func zones(_ raw: Any?, cc: String) -> (String, String)? {
-        func text(_ m: Int) -> String { String(format: "UTC%@%02d:%02d", m < 0 ? "-" : "+", abs(m) / 60, abs(m) % 60) }
+        // (short, as a traveller reads it: "UTC+1", "UTC+5:30", and a range or a list "UTC\u{2212}10 to \u{2212}5", 25 Nov:
+        // "UTC-10:00 to UTC-05:00" wrapped onto two lines in the United States' table)
+        func off(_ m: Int) -> String {
+            (m < 0 ? "\u{2212}" : "+") + "\(abs(m) / 60)" + (abs(m) % 60 == 0 ? "" : String(format: ":%02d", abs(m) % 60))
+        }
+        func text(_ m: Int) -> String { "UTC" + off(m) }
         func minutes(_ s: String) -> Int? {
             guard s.hasPrefix("UTC") else { return nil }
             let rest = s.dropFirst(3)
@@ -1766,7 +1771,7 @@ extension PlacePageState {
             return every.isEmpty ? nil : (every.count == 1 ? "Time zone" : "Time zones", every.prefix(3).joined(separator: ", "))
         }
         if m.count == 1 { return ("Time zone", text(first)) }
-        return ("Time zones", m.count <= 3 ? m.map(text).joined(separator: ", ") : "\(text(first)) to \(text(last))")
+        return ("Time zones", m.count <= 3 ? text(first) + ", " + m.dropFirst().map(off).joined(separator: ", ") : "\(text(first)) to \(off(last))")
     }
     /// THE PLUGS BY THEIR LETTERS, as travellers and adapters name them. The server's words are Wikidata's labels, a
     /// mix of trade names and standards ( on Monaco's page). The British family's label alone is the old round-pin D
