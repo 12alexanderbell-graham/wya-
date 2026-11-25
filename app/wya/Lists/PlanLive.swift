@@ -47,15 +47,22 @@ enum PlanLive {
 
     static func state(_ p: Plan, toStart: Int) -> PlanLiveAttributes.ContentState {
         let all = places(p.days.flatMap(\.items))
-        let first = all.first ?? p.name
+        // (no places in it yet: the town or country its name says, as its cover; else none: "3 days to Our honeymoon
+        // across Southeast Asia" read as a sentence gone wrong, so it is "3 days to go" with the plan's name under)
+        let named = all.isEmpty ? (ListsWater.namedTown(p.name)?.name
+            ?? ListsWater.namedCountry(p.name).flatMap { cc in AIContext.map?.world.flatMap { w in w.placeIndex[cc].map { w.places[$0].n } } }) : nil
+        let first = all.first ?? named
         if toStart > 0 {
-            let big = toStart == 1 ? "1 day to \(first)" : "\(toStart) days to \(first)"
-            return .init(big: big, dates: dates(p), line: all.dropFirst().joined(separator: ", "), short: "\(toStart)d")
+            let days = toStart == 1 ? "1 day" : "\(toStart) days"
+            guard let first else {
+                return .init(big: "\(days) to go", dates: dates(p), line: p.name, short: "\(toStart)d")
+            }
+            return .init(big: "\(days) to \(first)", dates: dates(p), line: all.dropFirst().joined(separator: ", "), short: "\(toStart)d")
         }
         // on the trip: the day it is, its place and its things
         let i = min(max(0, -toStart), max(0, p.days.count - 1))
         let day = p.days.indices.contains(i) ? p.days[i].items : []
-        let place = places(day).first ?? first
+        let place = places(day).first ?? first ?? p.name
         let things = day.map(\.what).filter { !$0.isEmpty }
         let len = max(p.days.count, PlanDates.length(p.start, p.end.isEmpty ? p.start : p.end))
         return .init(big: place, dates: "Day \(i + 1) of \(len)", line: things.joined(separator: ", "), short: "Day \(i + 1)")
