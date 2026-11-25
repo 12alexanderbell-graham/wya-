@@ -115,12 +115,12 @@ nonisolated enum BadgeFlat {
         } else {
             // a disc, flat, its number printed in black (the app's ink)
             let disc = CGRect(x: pad, y: pad, width: side - 2 * pad, height: side - 2 * pad)
-            ctx.setFillColor(cg(inks.body)); ctx.fillEllipse(in: disc)
+            if level == .diamond { cut(ctx, disc, inks: inks) } else { ctx.setFillColor(cg(inks.body)); ctx.fillEllipse(in: disc) }
             // (the text upright: the context is turned for the plans' y down)
             ctx.saveGState(); ctx.translateBy(x: 0, y: side); ctx.scaleBy(x: 1, y: -1)
             defer { ctx.restoreGState() }
             if let number, !number.isEmpty {
-                let size = side * (number.count <= 2 ? 0.40 : number.count == 3 ? 0.31 : 0.24)
+                let size = side * (number.count <= 2 ? 0.40 : number.count == 3 ? 0.31 : 0.24) * (level == .diamond ? 0.84 : 1)
                 let base = UIFont.systemFont(ofSize: size, weight: .semibold)
                 let font = base.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? base
                 let text = NSAttributedString(string: number, attributes: [.font: font, .foregroundColor: UIColor.black])
@@ -132,6 +132,56 @@ nonisolated enum BadgeFlat {
         }
         guard let out = ctx.makeImage() else { return nil }
         return UIImage(cgImage: out, scale: scale, orientation: .up)
+    }
+
+    /// THE DIAMOND'S DISC, CUT (the level read as a pale grey disc): a brilliant seen from above, still flat. An octagon table in the middle for the number,
+    /// eight star facets round it, eight kites out to the girdle and sixteen girdle facets, each one flat tone of the
+    /// level's ice, lighter where it faces the north-west light, with fine white seams between them. No gradient, no shine.
+    static func cut(_ ctx: CGContext, _ disc: CGRect, inks: (light: SIMD3<Double>, body: SIMD3<Double>, deep: SIMD3<Double>)) {
+        let c = CGPoint(x: disc.midX, y: disc.midY), R = disc.width / 2
+        let tableR = R * 0.64, starR = R * 0.84
+        func at(_ deg: Double, _ r: CGFloat) -> CGPoint {
+            CGPoint(x: c.x + CGFloat(cos(deg * .pi / 180)) * r, y: c.y + CGFloat(sin(deg * .pi / 180)) * r)
+        }
+        // (y runs down here: the light from the top left is the direction (-1, -1))
+        func tone(_ deg: Double, _ lift: Double = 0) -> CGColor {
+            let face = cos((deg - 225) * .pi / 180)           // 1 facing the light, -1 away
+            let t = min(1, max(0, 0.42 - 0.34 * face - lift))  // 0 light ... 1 deep
+            let v = t < 0.5 ? inks.light + (inks.body - inks.light) * (t * 2) : inks.body + (inks.deep - inks.body) * ((t - 0.5) * 2)
+            return CGColor(srgbRed: v.x, green: v.y, blue: v.z, alpha: 1)
+        }
+        func fill(_ pts: [CGPoint], _ col: CGColor) {
+            ctx.beginPath(); ctx.addLines(between: pts); ctx.closePath(); ctx.setFillColor(col); ctx.fillPath()
+        }
+        ctx.saveGState()
+        ctx.addEllipse(in: disc); ctx.clip()
+        ctx.setFillColor(tone(45)); ctx.fill(disc)
+        let seams = CGMutablePath()
+        for k in 0 ..< 8 {
+            let a = Double(k) * 45                // a star's point
+            let tPrev = at(a - 22.5, tableR), tNext = at(a + 22.5, tableR)
+            let s = at(a, starR), sNext = at(a + 45, starR)
+            // two girdle facets under the star, split at the star's own direction; each half its own tone
+            let left = [s] + (0 ... 6).map { at(a - 22.5 + Double($0) * 22.5 / 6, R * 1.02) }
+            let right = [s] + (0 ... 6).map { at(a + Double($0) * 22.5 / 6, R * 1.02) }
+            fill(left, tone(a - 11, 0.06)); fill(right, tone(a + 11, -0.06))
+            // the kite from the table's corner out to the girdle
+            let g = at(a + 22.5, R * 1.02)
+            fill([tNext, s, g, sNext], tone(a + 22.5, 0.04))
+            // the star facet on the table's edge
+            fill([tPrev, tNext, s], tone(a, -0.12))
+            seams.addLines(between: [tPrev, s, tNext]); seams.addLines(between: [s, g, sNext])
+            seams.move(to: s); seams.addLine(to: at(a, R * 1.02))
+            seams.move(to: tNext); seams.addLine(to: g)
+        }
+        // the table: the lightest, so the number reads on it
+        let table = (0 ..< 8).map { at(Double($0) * 45 + 22.5, tableR) }
+        fill(table, CGColor(srgbRed: inks.light.x * 0.97, green: inks.light.y * 0.985, blue: inks.light.z, alpha: 1))
+        seams.addLines(between: table + [table[0]])
+        ctx.addPath(seams)
+        ctx.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.75)); ctx.setLineWidth(max(1, disc.width * 0.006))
+        ctx.setLineJoin(.round); ctx.strokePath()
+        ctx.restoreGState()
     }
 
     /// the relief of a plan's box as a picture (y down): every point's height read through the plane, shaded from the
