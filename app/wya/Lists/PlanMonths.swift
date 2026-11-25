@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A DATED PLAN AS ITS CALENDAR:
-/// the plan's months, a week to a row from Monday, each day its number; the plan's days under one black capsule a week,
-/// their numbers white, a day with something planned in semibold. A plan day tapped opens that day hour by hour; a day
+/// the plan's months, a week to a row from Monday, each day its number; the plan's days under one black shape, its weeks
+/// melted together, their numbers white, a day with something planned in semibold. A plan day tapped opens that day hour by hour; a day
 /// before or after the plan tapped makes the plan reach to it. The month before and after the plan are there by name, a
 /// tap opening them, so there is always a day to reach to.
 struct PlanMonths: View {
@@ -74,29 +74,30 @@ struct PlanMonths: View {
                 VStack(spacing: 6) {
                     ForEach(weeks.indices, id: \.self) { w in week(weeks[w], first: first) }
                 }
+                // THE PLAN'S DAYS ARE ONE SHAPE (25 Nov): its weeks melt into each other where they meet, one black
+                // form for the whole trip, not a capsule a week
+                .background(alignment: .topLeading) {
+                    GeometryReader { g in
+                        let cw = g.size.width / 7
+                        let rects: [CGRect] = weeks.indices.compactMap { w in
+                            let inPlan = weeks[w].map { i in i.map { PlanDates.key(first, $0) }.map { $0 >= plan.start && $0 <= plan.end } ?? false }
+                            guard let lo = inPlan.firstIndex(of: true), let hi = inPlan.lastIndex(of: true) else { return nil }
+                            return CGRect(x: CGFloat(lo) * cw + 2, y: CGFloat(w) * 46, width: CGFloat(hi - lo + 1) * cw - 4, height: 40)
+                        }
+                        DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.ink)
+                    }
+                }
                 .transition(.blurReplace)
             }
         }
     }
 
-    /// one week: the plan's run of days in it under one black capsule, every day a tap
+    /// one week: every day a tap (the plan's days are drawn under the month as one shape)
     private func week(_ days: [Int?], first: String) -> some View {
-        let inPlan = days.map { i in i.map { PlanDates.key(first, $0) }.map { $0 >= plan.start && $0 <= plan.end } ?? false }
-        let lo = inPlan.firstIndex(of: true), hi = inPlan.lastIndex(of: true)
-        return HStack(spacing: 0) {
+        HStack(spacing: 0) {
             ForEach(0 ..< 7, id: \.self) { j in
                 if let i = days[j] { day(PlanDates.key(first, i), number: i + 1) }
                 else { Color.clear.frame(maxWidth: .infinity).frame(height: 40) }
-            }
-        }
-        .background(alignment: .leading) {
-            if let lo, let hi {
-                GeometryReader { g in
-                    let cw = g.size.width / 7
-                    Capsule().fill(Palette.ink)
-                        .frame(width: CGFloat(hi - lo + 1) * cw - 4, height: 38)
-                        .offset(x: CGFloat(lo) * cw + 2, y: (g.size.height - 38) / 2)
-                }
             }
         }
     }

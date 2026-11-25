@@ -161,7 +161,9 @@ struct UploadCalendar: View {
             // the bars as Apple's bars: the list's own soft edge runs under them, no strip of white (one blur everywhere)
             .safeAreaBar(edge: .top) { bar }
             .safeAreaBar(edge: .bottom) { addButton }
-            .background { Palette.white.ignoresSafeArea() }
+            // the app's own ground (the living field, as Lists has it), not a white sheet: a flag's white reads as part
+            // of the flag, and the calendar is the app's (25 Nov)
+            .background { LivingField().ignoresSafeArea() }
         }
         .onPreferenceChange(CellFrames.self) { cells = $0 }
         .onChange(of: edit.filling) { _, now in if now == nil { finger = nil; drift?.cancel(); drift = nil } }
@@ -285,13 +287,58 @@ struct UploadCalendar: View {
         .buttonStyle(.plain)
         .accessibilityHint(folded ? "Opens the month" : "Folds the month away")
         if !folded {
+            let gridW = 7 * side + 6 * Self.gap
+            let rows = (cells.count + 6) / 7
+            let gridH = CGFloat(rows) * (side + Self.gap) - Self.gap
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(side), spacing: Self.gap), count: 7), spacing: Self.gap) {
                 ForEach(cells.indices, id: \.self) { i in
                     if let d = cells[i] { cell(d, side: side) } else { Color.clear.frame(width: side, height: side) }
                 }
             }
+            .frame(width: gridW, alignment: .leading)
+            // A TRIP IS ONE SHAPE (25 Nov): the days in a row in one place are one flag, their rows melted together,
+            // never a box a day with white between
+            .background(alignment: .topLeading) {
+                ZStack(alignment: .topLeading) {
+                    ForEach(Self.trips(cells, edit), id: \.first) { t in
+                        trip(t.place, t.cells, side: side, size: CGSize(width: gridW, height: gridH))
+                    }
+                }
+                .frame(width: gridW, height: gridH, alignment: .topLeading)
+                .animation(Motion.quick, value: edit.days)
+                .animation(Motion.quick, value: edit.crossed)
+            }
             .padding(.bottom, 8)
         }
+    }
+
+    /// the month's trips: runs of days one after another in one place and not crossed out (grid cell indices)
+    private static func trips(_ cells: [LocalDay?], _ edit: CalendarEdit) -> [(place: String, cells: [Int], first: Int)] {
+        var out: [(place: String, cells: [Int], first: Int)] = []
+        for (i, d) in cells.enumerated() {
+            guard let d, let p = edit.days[d], !edit.crossed.contains(d) else { continue }
+            if let last = out.last, last.place == p, last.cells.last == i - 1 { out[out.count - 1].cells.append(i) }
+            else { out.append((p, [i], i)) }
+        }
+        return out
+    }
+
+    /// one trip: its flag laid over the box round its days, seen only through their joined shape
+    private func trip(_ place: String, _ cells: [Int], side: CGFloat, size: CGSize) -> some View {
+        let rects = DayGoo.rows(cells, side: side, gapX: Self.gap, gapY: Self.gap)
+        let box = DayGoo.box(rects)
+        // (a long trip takes the flag's own shape; a day or a block of rows the square crop, centred on its emblem)
+        let flag = box.width > box.height * 1.3 ? (Flags.wide(place) ?? Flags.square(place)) : Flags.square(place)
+        return ZStack(alignment: .topLeading) {
+            Group {
+                if let flag { flag.resizable().interpolation(.high).scaledToFill() } else { Palette.grey }
+            }
+            .frame(width: box.width, height: box.height)
+            .clipped()
+            .offset(x: box.minX, y: box.minY)
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .mask { DayGoo(rects: rects, soft: 4, corner: 9) }
     }
 
     /// folded months with nothing found, as one line; a tap opens them all
@@ -326,12 +373,16 @@ struct UploadCalendar: View {
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         ZStack {
             if let place {
-                Group {
-                    if let f = Flags.square(place) { f.resizable().interpolation(.high).scaledToFill() } else { Palette.grey }
+                // (a kept day's flag is its trip's, drawn under the grid as one shape; a crossed-out day keeps its own
+                // faint square so the cross has something to lie on)
+                if off {
+                    Group {
+                        if let f = Flags.square(place) { f.resizable().interpolation(.high).scaledToFill() } else { Palette.grey }
+                    }
+                    .frame(width: side, height: side)
+                    .clipShape(shape)
+                    .opacity(0.25)
                 }
-                .frame(width: side, height: side)
-                .clipShape(shape)
-                .opacity(off ? 0.25 : 1)
                 if off {
                     // crossed out: one line corner to corner
                     Path { p in p.move(to: CGPoint(x: 8, y: side - 8)); p.addLine(to: CGPoint(x: side - 8, y: 8)) }
