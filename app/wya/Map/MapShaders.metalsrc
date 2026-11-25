@@ -212,6 +212,13 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         float d = out > 0.0 ? mix(dh.r, 0.9, smoothstep(0.0, 0.07, out)) : dh.r;
         // on a continent's map the sea goes into the flat blue (tint.rgb, by tint.a)
         float3 sea = mix(seaColour(d), look.tint.rgb, look.tint.a);
+        // THE SUN ON THE WATER (25 Nov, the world's light): round the point where the sun stands overhead the sea
+        // catches its light, a soft sheen about twelve degrees wide that crosses the oceans with the day
+        if (look.sun.z > 0.5 && out <= 0.0) {
+            float lon = in.uv.x * 6.2831853 - 3.1415927, lat = 1.5707963 - in.uv.y * 3.1415927;
+            float cz = sin(lat) * sin(look.sun.x) + cos(lat) * cos(look.sun.x) * cos(lon - look.sun.y);
+            sea = mix(sea, WHITE, 0.32 * pow(max(cz, 0.0), 28.0));
+        }
         if (look.sun.z > 0.5) sea = nightSide(sea, sunL, look.sun.w);
         return float4(sea, 1.0);
     }
