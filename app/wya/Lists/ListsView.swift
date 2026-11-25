@@ -765,11 +765,21 @@ struct ListsWater: View {
                             } else if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
                                 SetPlaceThumb(own: own, thing: wd ?? "", cc: cc)
                             } else {
+                                // (one picture shape in every row, 25 Nov: a flag is its square crop in the same 44 pt
+                                // rounded square as a photo, never a hard 4:3 strip beside them; a thing with no place
+                                // has its first letter on clear glass, never an empty gap before its name)
                                 Group {
-                                    if let cc = t.cc, let f = Flags.row(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                                    if let cc = t.cc, let f = Flags.square(cc.lowercased()) {
+                                        f.resizable().interpolation(.high).scaledToFill()
+                                    } else {
+                                        Text(String(t.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                                            .font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                                            .frame(width: 44, height: 44)
+                                            .glassEffect(.clear, in: .rect(cornerRadius: 10))
+                                    }
                                 }
-                                .frame(width: 44, height: 33)
                                 .frame(width: 44, height: 44)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .onAppear { if let cc = t.cc, !cc.isEmpty { ThingStore.shared.load(cc.lowercased()); ThingIndex.shared.load() } }
                             }
                             if let r = t.ref {

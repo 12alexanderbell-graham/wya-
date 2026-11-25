@@ -195,11 +195,12 @@ struct ListSuggestions: View {
                     } else if let f = Self.setPlace(pk.what, pk.cc), SetPlaceThumb.file(own: f.item.photo, thing: f.item.id) != nil {
                         SetPlaceThumb(own: f.item.photo, thing: f.item.id, cc: pk.cc)
                     } else {
+                        // (its flag's square crop in the rows' one picture shape, 25 Nov)
                         Group {
-                            if let f = Flags.row(pk.cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                            if let f = Flags.square(pk.cc.lowercased()) { f.resizable().interpolation(.high).scaledToFill() } else { Color.clear }
                         }
-                        .frame(width: 44, height: 33)
                         .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(pk.what).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)

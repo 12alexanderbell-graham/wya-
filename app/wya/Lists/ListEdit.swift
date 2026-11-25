@@ -28,10 +28,12 @@ struct ListAddRow: View {
                             .overlay { listCoverOrGlass(l) }
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     } else {
+                        // (its flag's square crop in the rows' one picture shape, 25 Nov)
                         Group {
-                            if let fl = Flags.row(f.cc) { fl.resizable().interpolation(.high) } else { Color.clear }
+                            if let fl = Flags.square(f.cc) { fl.resizable().interpolation(.high).scaledToFill() } else { Color.clear }
                         }
-                        .frame(width: 44, height: 33).frame(width: 44, height: 44)
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(f.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
