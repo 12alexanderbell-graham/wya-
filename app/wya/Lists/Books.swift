@@ -3,6 +3,7 @@ import PhotosUI
 import PencilKit
 import AVFoundation
 import UniformTypeIdentifiers
+import ImageIO
 
 /// BOOKS (25 Nov, step one): a book works like a book without having to look like one; it is its pages, each one photo
 /// or up to six, with words on it if you like. Pages turn by
@@ -24,6 +25,48 @@ enum BookPhotos {
         guard let u = url(name) else { return }
         try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? d.dataRepresentation().write(to: u)
+    }
+    /// WHERE A PHOTO WAS TAKEN, from its own GPS (as Photos keeps it); nil when it has none
+    static func whereTaken(_ data: Data) -> (lat: Double, lon: Double)? {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let gps = props[kCGImagePropertyGPSDictionary] as? [CFString: Any],
+              var lat = gps[kCGImagePropertyGPSLatitude] as? Double, var lon = gps[kCGImagePropertyGPSLongitude] as? Double
+        else { return nil }
+        if (gps[kCGImagePropertyGPSLatitudeRef] as? String) == "S" { lat = -lat }
+        if (gps[kCGImagePropertyGPSLongitudeRef] as? String) == "W" { lon = -lon }
+        return (lat, lon)
+    }
+    /// where a video was filmed, from its ISO 6709 location ("+38.7139-009.1394+012.000/")
+    static func whereFilmed(_ url: URL) async -> (lat: Double, lon: Double)? {
+        let asset = AVURLAsset(url: url)
+        guard let items = try? await asset.load(.commonMetadata),
+              let item = AVMetadataItem.metadataItems(from: items, filteredByIdentifier: .commonIdentifierLocation).first,
+              let iso = try? await item.load(.stringValue) else { return nil }
+        let nums = iso.matches(of: /[+-][0-9.]+/).compactMap { Double(String($0.output)) }
+        return nums.count >= 2 ? (nums[0], nums[1]) : nil
+    }
+    /// A PLACE'S NAME FOR A SPOT, from the app's own towns (offline): the biggest town within 12 km and its country
+    /// ("Lisbon, Portugal"), else the country under it; nil at sea or before the map is there
+    @MainActor
+    static func placeName(lat: Double, lon: Double) async -> String? {
+        let towns = TownIndex.shared
+        towns.load()
+        for _ in 0 ..< 40 where !towns.ready { try? await Task.sleep(for: .milliseconds(150)) }
+        guard let w = AIContext.map?.world else { return nil }
+        let land = w.place(at: EqualEarth.project(lon: lon, lat: lat))
+        // (the biggest town within 12 km, not the nearest name: a photo at the Sagrada Família is "Barcelona", one in
+        // the Baixa is "Lisbon", as a person says it)
+        let k = cos(lat * .pi / 180), reach = 12.0 / 111.2
+        let near = towns.nearest(lat: lat, lon: lon, count: 40).filter { h in
+            let dx = (h.lon - lon) * k, dy = h.lat - lat
+            return dx * dx + dy * dy <= reach * reach
+        }
+        if let t = near.max(by: { $0.people < $1.people }) {
+            let c = (w.placeIndex[t.file] ?? w.placeIndex[t.file.uppercased()]).map { w.places[$0].n }
+            return [t.name, c].compactMap { $0 }.joined(separator: ", ")
+        }
+        return land.map { w.places[$0].n }
     }
     /// a picked video kept as its own copy, and its first frame kept as a photo (the page's picture while it is not
     /// playing, and a cover); their file names, or nil
@@ -166,21 +209,37 @@ struct BookPageView: View {
                 if !noWords, let t = page.text, !t.isEmpty, let at = page.words {
                     BookWordsBox(text: t, onPhoto: pictured, width: g.size.width * 0.8)
                         .position(x: at.tx * g.size.width, y: at.ty * g.size.height)
-                } else if !noWords, let t = page.text, !t.isEmpty {
+                } else if !noWords, let t = page.text, !t.isEmpty, !pictured {
                     Text(t)
-                        .font(!pictured ? .title2.weight(.semibold) : .body.weight(.semibold))
-                        .foregroundStyle(!pictured ? Palette.ink : Palette.white)
-                        .multilineTextAlignment(!pictured ? .center : .leading)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.center)
                         .padding(16)
-                        .padding(.bottom, pictured ? foot : 0)
-                        .frame(maxWidth: .infinity, maxHeight: !pictured ? .infinity : nil,
-                               alignment: !pictured ? .center : .leading)
-                        // (white words on a photo read by a soft dark foot, as Photos' memories do)
-                        .background(alignment: .bottom) {
-                            if pictured {
-                                LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                // A PHOTO'S FOOT: where it was, small, and
+                // its words under it when they are not put somewhere else; white, read by a soft dark foot, as Photos'
+                // memories do
+                if pictured {
+                    let words = !noWords && page.words == nil ? (page.text ?? "") : ""
+                    let place = page.place ?? ""
+                    if !words.isEmpty || !place.isEmpty {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if !place.isEmpty {
+                                Text(place).font(.footnote.weight(.semibold)).foregroundStyle(Palette.white.opacity(0.85))
+                            }
+                            if !words.isEmpty {
+                                Text(words).font(.body.weight(.semibold)).foregroundStyle(Palette.white)
                             }
                         }
+                        .multilineTextAlignment(.leading)
+                        .padding(16)
+                        .padding(.bottom, foot)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(alignment: .bottom) {
+                            LinearGradient(colors: [.clear, .black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+                        }
+                    }
                 }
             }
         }
@@ -385,6 +444,12 @@ struct BookOpenView: View {
                                                 if !(pg.text ?? "").isEmpty {
                                                     Button("Move the words") { withAnimation(Motion.quick) { placing = pid } }
                                                 }
+                                                if pg.place != nil {
+                                                    Button("Take off the place") {
+                                                        Feel.tap()
+                                                        change { bk in if let i = bk.pages.firstIndex(where: { $0.id == pid }) { bk.pages[i].place = nil } }
+                                                    }
+                                                }
                                                 Button("Take out page", role: .destructive) {
                                                     Feel.lift()
                                                     let n = book?.pages.count ?? 1
@@ -441,22 +506,28 @@ struct BookOpenView: View {
                 guard !items.isEmpty else { return }
                 Task {
                     // the photos picked share one page; each video picked is a page of its own, after them
+                    // (each page named where its first photo, or its video, was taken: the app's own towns)
                     var names: [String] = []
+                    var photoAt: (lat: Double, lon: Double)?
                     var videos: [BookPage] = []
                     for it in items {
                         if it.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
                             if let m = try? await it.loadTransferable(type: BookMovie.self) {
+                                let at = await BookPhotos.whereFilmed(m.url)
                                 if let v = await BookPhotos.saveVideo(from: m.url) {
-                                    videos.append(BookPage(video: v.video, poster: v.poster))
+                                    let place = if let at { await BookPhotos.placeName(lat: at.lat, lon: at.lon) } else { String?.none }
+                                    videos.append(BookPage(video: v.video, poster: v.poster, place: place))
                                 }
                                 try? FileManager.default.removeItem(at: m.url)
                             }
                         } else if let d = try? await it.loadTransferable(type: Data.self), let n = BookPhotos.save(d) {
                             names.append(n)
+                            if photoAt == nil { photoAt = BookPhotos.whereTaken(d) }
                         }
                     }
                     picked = []
-                    let new = (names.isEmpty ? [] : [BookPage(photos: names)]) + videos
+                    let photoPlace = if let photoAt { await BookPhotos.placeName(lat: photoAt.lat, lon: photoAt.lon) } else { String?.none }
+                    let new = (names.isEmpty ? [] : [BookPage(photos: names, place: photoPlace)]) + videos
                     guard !new.isEmpty else { Feel.refuse(); return }
                     Feel.tap()
                     withAnimation(Motion.quick) { change { $0.pages.append(contentsOf: new) } }

@@ -304,6 +304,14 @@ final class TestDriver {
                 // own words are taken away again with clear)
                 // lists open <id>|new|close|kind <n>|name <words>|drop: the Lists tab's state, as its taps set it
                 // (drop: the open list taken away, test residue)
+                // bookplace <lat> <lon>: the name a book page gets for a photo taken there (written to bookplace.txt)
+                case "bookplace":
+                    if p.count > 2, let la = Double(p[1]), let lo = Double(p[2]) {
+                        Task { @MainActor in
+                            let n = await BookPhotos.placeName(lat: la, lon: lo) ?? "(none)"
+                            try? n.write(toFile: Snap.dir + "/bookplace.txt", atomically: true, encoding: .utf8)
+                        }
+                    }
                 case "lists":
                     let ls = ListsState.shared
                     switch a {
