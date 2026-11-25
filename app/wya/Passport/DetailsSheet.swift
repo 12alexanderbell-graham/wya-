@@ -316,7 +316,7 @@ struct DetailsSheet: View {
                 row("How badly") { wishStars }
                 choiceWords("When", [("someday", "Someday"), ("soon", "Sometime soon"), ("next", "Next trip")],
                             chosen: s.wd.prio) { s.wd.prio = $0 }
-                wishField("When, in your words", id: "wishWhen", max: 40, \.when)
+                wishField("When", id: "wishWhen", max: 40, \.when)
             }
             section("Notes") {
                 wishField("What you'd do there", id: "why", max: 600, lines: true, \.why)
@@ -470,15 +470,15 @@ struct DetailsSheet: View {
             if !aThing {
             choice("How", Self.modes, chosen: s.d[keyPath: mode], blank: gone) { s.d[keyPath: mode] = $0 }
             drawer(s.d[keyPath: mode] == "other") {
-                if plain { fieldWords("How, in your words", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
-                else { field("How, in your words", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
+                if plain { fieldWords("How", s.d[keyPath: tk(i, \.modeOther)], gone: gone) }
+                else { field("How", id: "modeOther\(i)", max: 60, tk(i, \.modeOther)) }
             }
             choice("Why", Self.purposes, chosen: s.d[keyPath: purpose], blank: gone) { s.d[keyPath: purpose] = $0 }
             }
             if !aThing {
             drawer(s.d[keyPath: purpose] == "other") {
-                if plain { fieldWords("Why, in your words", s.d[keyPath: tk(i, \.purposeOther)], gone: gone) }
-                else { field("Why, in your words", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
+                if plain { fieldWords("Why", s.d[keyPath: tk(i, \.purposeOther)], gone: gone) }
+                else { field("Why", id: "purposeOther\(i)", max: 60, tk(i, \.purposeOther)) }
             }
             }
         }
@@ -683,8 +683,8 @@ struct DetailsSheet: View {
                 s.d.livedWhy = $0
             }
             drawer(s.d.livedWhy == "other") {
-                if out || shownLived != nil { fieldWords("Why, in your words", s.d.livedWhyOther, gone: out) }
-                else { field("Why, in your words", id: "whyOther", max: 60, \.livedWhyOther) }
+                if out || shownLived != nil { fieldWords("Why", s.d.livedWhyOther, gone: out) }
+                else { field("Why", id: "whyOther", max: 60, \.livedWhyOther) }
             }
         }
     }

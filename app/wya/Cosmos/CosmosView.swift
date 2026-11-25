@@ -204,11 +204,11 @@ struct CosmosView: View {
                     // 11.5: Your streak (as its tap); sharing it waits for its picture. Given before .position, so the
                     // lift is the sun's circle, not the whole system's frame
                     .contentShape(.contextMenuPreview, Circle())
-                    .contextMenu { Button("Your streak") { if !map.sunPicked { pickSun() } } }
+                    .contextMenu { Button("Streak") { if !map.sunPicked { pickSun() } } }
                     .position(sunC)
                     .onTapGesture { pickSun() }
                     .accessibilityElement()
-                    .accessibilityLabel("Your streak")
+                    .accessibilityLabel("Streak")
                     .accessibilityAddTraits(.isButton)
                 // NO LINE FOR THE MOON'S PATH: while it moves, a short tail of the stops' colours follows it along
                 // its path, as long as it is fast, and draws back into the moon as it stops (it shortens, it never

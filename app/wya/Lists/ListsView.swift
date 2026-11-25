@@ -223,7 +223,7 @@ struct ListsWater: View {
     private func innerLabel(_ r: String, name: String) -> some View {
         let names = store.book.lists.first { $0.id == r }.map { things($0).map(\.name) } ?? []
         return VStack(alignment: .leading, spacing: 1) {
-            Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+            Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
             Text(names.isEmpty ? "List" : "List · " + Self.whatsIn(names)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                 .lineLimit(1)
         }
@@ -575,7 +575,8 @@ struct ListsWater: View {
         // (a list of places only says how many you've been to, or how many places; a list of other things says what is
         // in it, its first two and how many more, as Pins' maps say their countries)
         let unit = n == 1 ? "place" : "places"
-        let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
+        // (an empty list says nothing under its name: no "nothing yet" words, 26 Sep)
+        let sub = words ?? (n == 0 ? "" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
             .flatMap { $0 } ?? (places || names.isEmpty ? "\(n) \(unit)" : Self.whatsIn(names)))
         let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
         return VStack(alignment: .leading, spacing: 2) {
@@ -586,16 +587,19 @@ struct ListsWater: View {
                 // (glass only for a tile with nothing of its own to show: over the map it washed Apple's colours out)
                 .glassEffect(ccs.isEmpty && cover == nil ? PageGlass.on : .clear, in: shape)
                 .padding(.bottom, 6)
+            // (a list's name may take two lines, never cut mid-word, 14 Oct)
             Text(name).font(.body.weight(.semibold))
-                .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1)
+                .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(2)
             // (what is in it says as much as fits: two names and how many more, else one, so the count is never cut off
             // at a big type size, "Ramen, Seoul and..." at XXXL, 25 Nov)
+            if !sub.isEmpty {
             ViewThatFits(in: .horizontal) {
                 Text(sub)
                 if !places, !names.isEmpty, words == nil, names.count > 1 { Text(Self.whatsIn(names, show: 1)) }
                 Text(sub).lineLimit(1)
             }
             .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); if let tap { tap(); return }; s.parents = []; withAnimation(Motion.quick) { s.open = id } }
