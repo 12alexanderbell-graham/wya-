@@ -443,9 +443,24 @@ struct ListsWater: View {
         default:
             // BOOKS AS TILES, as every kind: its cover (its first photo), its name, how many pages
             let books = store.book.books.filter { !$0.arch && !$0.hid && match($0.name) }
-            if books.isEmpty { if q.isEmpty { none("No books yet") } else { noResults } }
-            if !books.isEmpty {
+            // YOUR PASSPORT, FIRST AMONG BOOKS: its
+            // first page as its cover; tapped, the map with the passport open on it
+            let passportShown = q.isEmpty || match("Passport")
+            if books.isEmpty && !passportShown { noResults }
+            if !books.isEmpty || passportShown {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
+                    if passportShown {
+                        tile("passport", name: "Passport", dim: false, count: map.stamped.count, ccs: [],
+                             cover: AnyView(PassportCover()),
+                             words: "\(map.stamped.count) " + (map.stamped.count == 1 ? "stamp" : "stamps"),
+                             tap: {
+                                 // (on Countries, where the passport is at home)
+                                 if let h = AIContext.head, h.mode != .countries { h.mode = .countries }
+                                 NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)
+                                 Task { try? await Task.sleep(for: .milliseconds(450)); BookState.shared.open() }
+                             })
+                            .settlesIn()
+                    }
                     ForEach(books) { b in
                         tile(b.id, name: b.name.isEmpty ? "New book" : b.name, dim: b.name.isEmpty, count: b.pages.count, ccs: [],
                              cover: AnyView(BookCover(book: b)),
@@ -535,7 +550,8 @@ struct ListsWater: View {
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
     /// glass. Its name under it, one line, and how many things in 50%, as Apple's albums.
     private func tile(_ id: String, name: String, dim: Bool, count n: Int, ccs: [String], ticks: (been: Int, of: Int)? = nil,
-                      cover: AnyView? = nil, words: String? = nil, spots: [String] = [], places: Bool = true) -> some View {
+                      cover: AnyView? = nil, words: String? = nil, spots: [String] = [], places: Bool = true,
+                      tap: (() -> Void)? = nil) -> some View {
         let unit = places ? (n == 1 ? "place" : "places") : (n == 1 ? "thing" : "things")
         let sub = words ?? (n == 0 ? "Nothing yet" : ticks.map { $0.of == n ? "\($0.been) of \($0.of) been" : nil }
             .flatMap { $0 } ?? "\(n) \(unit)")
@@ -554,7 +570,7 @@ struct ListsWater: View {
                 .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
         }
         .contentShape(Rectangle())
-        .onTapGesture { Feel.tap(); s.parents = []; withAnimation(Motion.quick) { s.open = id } }
+        .onTapGesture { Feel.tap(); if let tap { tap(); return }; s.parents = []; withAnimation(Motion.quick) { s.open = id } }
         // A LIST'S HOLD MENU (25 Nov): its own sheet, and archive / hide straight from the shelf
         .contextMenu {
             if let l = store.book.lists.first(where: { $0.id == id }) {

@@ -429,3 +429,19 @@ struct SketchCanvas: UIViewRepresentable {
         }
     }
 }
+
+/// YOUR PASSPORT AS A BOOK ON THE SHELF: its first page, as the passport book shows it
+struct PassportCover: View {
+    @State private var order: [String] = []
+    var body: some View {
+        GeometryReader { g in
+            ZStack {
+                Palette.white.opacity(0.6)
+                if !order.isEmpty {
+                    PassportPage(id: "", order: order, hidden: nil, size: g.size, pageIndex: 0)
+                }
+            }
+        }
+        .task { order = await MarkStore.shared.passportOrder() }
+    }
+}
