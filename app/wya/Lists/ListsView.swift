@@ -847,7 +847,7 @@ struct ListsWater: View {
                     .draggable(t.id) {
                         Text(t.name).font(.body).foregroundStyle(Palette.ink)
                             .padding(.horizontal, 16).frame(height: 44)
-                            .glassEffect(PageGlass.surface, in: .capsule)
+                            .glassEffect(.clear, in: .capsule)
                     }
                     .dropDestination(for: String.self) { ids, _ in
                         guard editable, let id = ids.first, id != t.id else { return false }
@@ -889,7 +889,7 @@ struct ListsWater: View {
                 } label: {
                     Text("Undo").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                         .padding(.horizontal, 24).frame(height: 44)
-                        .glassEffect(PageGlass.surface.interactive(), in: .capsule)
+                        .glassEffect(.clear.interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 12)

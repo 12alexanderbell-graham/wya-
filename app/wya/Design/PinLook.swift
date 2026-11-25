@@ -128,7 +128,7 @@ struct MapCapsule: View {
     var body: some View {
         Text(s).font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.ink)
             .padding(.horizontal, 10).frame(height: 26)
-            .glassEffect(.regular, in: .capsule)
+            .glassEffect(.clear, in: .capsule)
             .fixedSize()
     }
 }

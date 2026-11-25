@@ -1331,7 +1331,7 @@ struct RatingStar: View {
     var on: Bool
     var body: some View {
         ZStack {
-            Color.clear.glassEffect(.regular, in: Star()).opacity(on ? 0 : 1)
+            Color.clear.glassEffect(.clear, in: Star()).opacity(on ? 0 : 1)
             Star().fill(Palette.yellow).opacity(on ? 1 : 0)
         }
         .animation(.easeOut(duration: 0.15), value: on)

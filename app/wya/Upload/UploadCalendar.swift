@@ -227,7 +227,7 @@ struct UploadCalendar: View {
             Icon5(key: icon, ink: Palette.ink.opacity(dim ? 0.5 : 1), size: 20)
                 .scaleEffect(x: flip ? -1 : 1, y: 1)
                 .frame(width: 44, height: 44)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .glassEffect(.clear.interactive(), in: .circle)
         }
         .buttonStyle(.plain)
         .disabled(dim)
@@ -249,7 +249,7 @@ struct UploadCalendar: View {
                 .contentTransition(.numericText(value: Double(n)))
                 .padding(.horizontal, 28)
                 .frame(height: 50)
-                .glassEffect(.regular.tint(n > 0 ? Palette.lime : .clear).interactive(), in: .capsule)
+                .glassEffect((n > 0 ? Glass.clear.tint(Palette.lime) : .clear).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
         .animation(Motion.quick, value: n)

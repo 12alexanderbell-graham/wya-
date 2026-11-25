@@ -481,8 +481,9 @@ struct ContentView: View {
         // (What's here? goes back into its point too: its name no longer stands under the search or settings)
         .onChange(of: head.searching, initial: true) { _, v in
             if v { closeCard(); WhatsHere.shared.close() }
-            // (search's results over the map: the map behind them out of focus, the same lens as behind a card)
-            map.lensAsked = v
+            // (no blur behind search: the map stays sharp under its results, 25 Nov; his rule since October, no blur
+            // on the search screen unless it is scrolled)
+            map.lensAsked = false
         }
         // a shake undoes the store's last step (Part 3.10)
         .modifier(ShakeToUndo())
@@ -1537,7 +1538,7 @@ private struct SheetWatch: View {
 struct AppleLens: ViewModifier {
     let searching: Bool
     func body(content: Content) -> some View {
-        let on = !MapRenderer.lensOff && (CardState.shared.shown || BookState.shared.shown || searching || BadgeMoment.shared.current != nil)
+        let on = !MapRenderer.lensOff && (CardState.shared.shown || BookState.shared.shown || BadgeMoment.shared.current != nil)
         content
             .blur(radius: on ? 7 : 0, opaque: true)
             .animation(.smooth(duration: 0.45), value: on)
