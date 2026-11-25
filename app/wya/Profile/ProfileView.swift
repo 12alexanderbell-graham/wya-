@@ -165,7 +165,8 @@ struct ProfileView: View {
                 // (twice in 14 days: a tap while it is shut says from when, in the handle's place, for 2 s)
                 Text(edit.handleLockedNote ? store.handleFreeFrom.map { "Again from " + $0.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "en_GB"))) } ?? store.handleShown : store.handleShown)
                     .lineLimit(1)
-                    .contentTransition(.opacity)
+                    // (words change at once, as everywhere: the note was cross-faded into the handle and back)
+                    .contentTransition(.identity)
                     .onTapGesture {
                         if store.handleFreeFrom != nil {
                             Feel.refuse()
