@@ -1013,9 +1013,13 @@ struct ListsWater: View {
                 // places yet keeps its calendar on the shelf
                 let cover = Self.planCover(p)
                 if !cover.ccs.isEmpty {
+                    // (stretching into a pull past the top as a list's cover does)
                     ListCover(ccs: cover.ccs, world: map.world, spots: cover.spots)
                         .frame(height: 180)
+                        .scaleEffect((180 + shownPull) / 180, anchor: .bottom)
+                        .frame(height: 180 + shownPull, alignment: .bottom)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .padding(.top, -shownPull)
                         .padding(.bottom, 12)
                 }
                 if s.naming || p.name.isEmpty {
@@ -1193,6 +1197,9 @@ struct ListsWater: View {
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: CGFloat.self, of: { max(0, -($0.contentOffset.y + $0.contentInsets.top)) }) { _, v in
+            if abs(v - pagePull) > 0.5 || v == 0 { pagePull = v }
+        }
         // opened on a day (the next trip's line, during the trip): that day hour by hour, scrolled to
         .task(id: p.id) {
             guard let i = s.showDay else { return }
