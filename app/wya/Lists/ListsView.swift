@@ -1693,7 +1693,10 @@ enum ListMapCovers {
             var r = MKMapRect.null
             for q in [SIMD2(f.x, f.y), SIMD2(f.z, f.w)] {
                 let ll = EqualEarth.unproject(SIMD2(Double(q.x), Double(q.y)))
-                let p = MKMapPoint(CLLocationCoordinate2D(latitude: max(-80, min(80, ll.lat)), longitude: ll.lon))
+                // (framed between 60 S and 78 N, where people are: Chile's frame down to its Antarctic claim made a list
+                // of Portugal, Peru and Chile so tall the cover was capped at the world's width and cut Portugal off its
+                // top, 25 Nov)
+                let p = MKMapPoint(CLLocationCoordinate2D(latitude: max(-60, min(78, ll.lat)), longitude: ll.lon))
                 r = r.union(MKMapRect(origin: p, size: MKMapSize(width: 0, height: 0)))
             }
             frames[cc.lowercased()] = r
@@ -1724,7 +1727,14 @@ enum ListMapCovers {
         if w / h < aspect { w = h * aspect } else { h = w / aspect }
         if w > MKMapSize.world.width { w = MKMapSize.world.width; h = w / aspect }
         if h > MKMapSize.world.height { h = MKMapSize.world.height; w = h * aspect }
-        let o = MKMapPoint(x: rect.midX - w / 2, y: max(0, rect.midY - h / 2))
+        // (kept inside the world across too: a wide cover nearly the world's width began west of its edge, and Apple's map
+        // then shifted the view and cut Portugal off a list of Portugal, Peru and Chile, 25 Nov)
+        // (centred on its places, not on its countries' whole outlines: Apple's map goes only so far out, showing the
+        // middle of what was asked, and Chile's outline down to Tierra del Fuego pulled that middle south of Portugal)
+        let pts = mids.map { MKMapPoint($0) }
+        let cx = pts.isEmpty ? rect.midX : (pts.map(\.x).min()! + pts.map(\.x).max()!) / 2
+        let cy = pts.isEmpty ? rect.midY : (pts.map(\.y).min()! + pts.map(\.y).max()!) / 2
+        let o = MKMapPoint(x: min(max(0, cx - w / 2), MKMapSize.world.width - w), y: max(0, cy - h / 2))
         let opt = MKMapSnapshotter.Options()
         opt.mapRect = MKMapRect(origin: o, size: MKMapSize(width: w, height: h))
         opt.size = size
