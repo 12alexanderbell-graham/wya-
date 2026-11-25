@@ -551,17 +551,33 @@ extension MapController {
         if regionTowns, let cc = placeOpenID { return [cc] }
         guard placesCollection == nil, placesPicked || !placesMode else { return [] }
         if let cc = placeOpenID { return [cc] }
+        // (the Countries map close up on our own map: the countries in view, for their cities' names only)
+        if countryNames { return nearbyTowns }
         guard placesMode, regionScene == nil else { return [] }
         return nearbyTowns
     }
+    /// THE COUNTRIES MAP'S CITY NAMES (25 Nov): close up, our own map with its relief now stays where Apple's map with
+    /// its names came in before (MapController.fineHere), so the bigger cities of the countries in view are named as
+    /// Places names them (no town shapes, no things), from the zoom Apple's names came in at
+    var countryNames: Bool {
+        !placesMode && !pinsMode && !regionsMenu && regionScene == nil && !appleWorld && k >= Self.closeIn
+    }
     /// worked out again when the camera has moved a fifth of a screen or zoomed by a fifth (called by the renderer)
     func updateNearbyTowns() {
-        guard placesMode, placeOpen == nil, placesCollection == nil, regionScene == nil, let w = world, k >= townsK else {
+        guard countryNames || (placesMode && placeOpen == nil && placesCollection == nil && regionScene == nil && k >= townsK),
+              let w = world else {
             if !nearbyTowns.isEmpty { nearbyTowns = []; nearbyAt = .zero }
             return
         }
         // (not on the way: a flight to Belgium over the Alps loads no Swiss towns; worked out where it lands)
         guard flight == nil else { return }
+        // (the Countries map: every country filling the screen as the camera rests, the same as its relief, so all its
+        // cities are named or none; never the nearest few, which named France's cities and none of Spain's beside them)
+        if countryNames {
+            let list = inView.map { w.places[$0].id.lowercased() }.filter { $0 != "aq" }
+            if list != nearbyTowns { nearbyTowns = list; for cc in list { loadTowns(cc) }; needsFrame = true }
+            return
+        }
         let span = Double(view.width) / k
         let now = SIMD3(c.x, c.y, k)
         guard abs(now.x - nearbyAt.x) > span / 5 || abs(now.y - nearbyAt.y) > span / 5 || abs(now.z / max(1, nearbyAt.z) - 1) > 0.2 else { return }
@@ -577,7 +593,7 @@ extension MapController {
         }
         let list = found.sorted { $0.1 < $1.1 }.prefix(6).map(\.0)
         nearbyTowns = list
-        for cc in list { loadTowns(cc); ThingStore.shared.load(cc) }
+        for cc in list { loadTowns(cc); if placesMode { ThingStore.shared.load(cc) } }
         needsFrame = true
     }
 

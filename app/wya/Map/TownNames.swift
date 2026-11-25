@@ -151,14 +151,16 @@ final class TownNamesView: UIView {
     /// a big town with none, or every town with Town dots on; sections from 10x), and their things (or a collection's
     /// places), all in one plan so a thing's name and a town's never overlap
     private func ensurePlan(_ m: MapController) {
-        let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
+        let ccs = (m.placesMode || m.regionTowns || m.countryNames) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
         let near = m.placesMode && m.placeOpen == nil
-        let k0 = near ? m.townsK / 3 : m.continentK
+        // (the Countries map close up: cities of 500,000 from where Apple's names came in, 100,000 a little nearer)
+        let cities = m.countryNames
+        let k0 = cities ? MapController.closeIn / 2 : near ? m.townsK / 3 : m.continentK
         let collection = m.markCollection
         let kThing: Double? = collection != nil ? (m.continentK ?? m.worldKMin) : nil
         let dotsOn = MapSettingsStore.shared.value.townDots
         let thingsCount = ccs.reduce(0) { $0 + (ThingStore.shared.things($1)?.count ?? 0) }
-        let pk = "\(ccs.joined(separator: ","))|\(dotsOn)|\(k0 ?? -1)|\(kThing ?? -1)|\(collection?.id ?? "")|\(collection?.items.count ?? 0)|\(thingsCount)|\(m.placeOpen ?? -1)|\(m.setScene == nil ? 0 : 1)|\(m.regionTowns)"
+        let pk = "\(cities)|\(ccs.joined(separator: ","))|\(dotsOn)|\(k0 ?? -1)|\(kThing ?? -1)|\(collection?.id ?? "")|\(collection?.items.count ?? 0)|\(thingsCount)|\(m.placeOpen ?? -1)|\(m.setScene == nil ? 0 : 1)|\(m.regionTowns)"
         guard pk != planKey else { return }
         planKey = pk
         var items: [LabelPlan.Item] = []
@@ -170,6 +172,8 @@ final class TownNamesView: UIView {
                     let t = sc.towns[i]
                     let whole = t.part.isEmpty
                     guard dotsOn || sc.runs[i] != nil || (whole && Self.bigShapeless(sc, i)) else { continue }
+                    // (only cities on the Countries map, at their points: its towns aren't drawn)
+                    if cities, !whole || t.people < 100_000 { continue }
                     let size = Self.measure(t.name)
                     // a name once its shape is 12 pt across (a big shapeless city at its point by the zoom alone), from 3x
                     // the framing zoom; a city's sections from 10x
@@ -177,7 +181,7 @@ final class TownNamesView: UIView {
                     let across = Double(max(b.z - b.x, b.w - b.y))
                     let atPoint = sc.runs[i] == nil
                     var th = (t.people >= 500_000 ? 2 : t.people >= 100_000 ? 2.5 : 3) * k0
-                    if m.regionTowns { th = k0 * (t.people >= 500_000 ? 1 : t.people >= 100_000 ? 1.00001 : 1.00002) } else if !atPoint, across > 0 { th = max(th, 12 / across) }
+                    if m.regionTowns { th = k0 * (t.people >= 500_000 ? 1 : t.people >= 100_000 ? 1.00001 : 1.00002) } else if !cities, !atPoint, across > 0 { th = max(th, 12 / across) }
                     if !whole { th = max(th, 10 * k0) }
                     let id = "t:\(cc)#\(i)"
                     townPick[id] = Pick(cc: cc, i: i)
@@ -629,12 +633,12 @@ final class TownNamesView: UIView {
     @discardableResult
     private func names(_ m: MapController, moving: Bool, taken own: [CGRect]) -> [CGRect] {
         // the open country's towns, or (Places close in with none open) the towns of the countries in view
-        let ccs = (m.placesMode || m.regionTowns) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
+        let ccs = (m.placesMode || m.regionTowns || m.countryNames) ? m.townCountries.filter { m.townScenes[$0] != nil } : []
         // (close in with none open, the same zoom whatever framed the camera last: a country flown to, a continent or the world)
         let near = m.placesMode && m.placeOpen == nil
         // (over Apple's map Apple names the towns itself: none of ours over its own, as in the old app; a town still
         // answers a tap through its shape)
-        guard !marksHere, !ccs.isEmpty, let k0 = near ? m.townsK / 3 : m.continentK else { clear(); return own }
+        guard !marksHere, !ccs.isEmpty, let k0 = m.countryNames ? MapController.closeIn / 2 : near ? m.townsK / 3 : m.continentK else { clear(); return own }
         let setKey = ccs.joined(separator: ",")
         if key != setKey { clear(); key = setKey }
         let k = m.k

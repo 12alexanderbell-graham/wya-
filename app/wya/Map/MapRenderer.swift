@@ -1150,7 +1150,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
             }
         }
 
-        if placesOn { controller.updateNearbyTowns() }
+        if placesOn || controller.countryNames || !controller.nearbyTowns.isEmpty { controller.updateNearbyTowns() }
         for cc in (placesOn || controller.regionTowns ? controller.townCountries : []) {
             guard let sc = controller.townScenes[cc] else { continue }
             if townBuffers[cc]?.scene !== sc, !sc.fans.isEmpty,
