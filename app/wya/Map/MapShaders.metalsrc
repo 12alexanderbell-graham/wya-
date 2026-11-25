@@ -122,6 +122,27 @@ inline float3 seaColour(float d) {
     return mix(shallow, BLUE, t);
 }
 
+
+// THE WORLD'S LIGHT, ITS SHADOWS (25 Nov, direction A's next step): from a point, steps toward the sun over the world's
+// heights; where higher ground stands in the way the point is in its shade, softened by how far above the light's path
+// the ground came. The heights are drawn about two and a half times taller for the shadows than for the slopes (one
+// unit of height 36 texels across, the slopes' 14): at the true scale a mountain's shade was too short to see at any
+// zoom the relief shows, so, as a painter would, the shadows are lengthened. 0 lit, 1 in full shade.
+inline float castShade(texture2d<float> rel, sampler s, float2 uv, float h0, float3 L, float2 texel) {
+    float2 flat = L.xy;
+    float run = length(flat);
+    if (run < 1e-4) return 0.0;
+    float2 dir = flat / run;
+    float rise = (L.z / run) / 36.0;          // the light's path climbs this much height a texel
+    float over = 0.0;
+    for (int i = 1; i <= 28; i++) {
+        float d = float(i) * 2.0;
+        float hh = rel.sample(s, uv + dir * texel * d).g;
+        over = max(over, hh - (h0 + rise * d));
+    }
+    return smoothstep(0.0, 0.08, over);
+}
+
 fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> rel [[texture(0)]],
                                texture2d<float> det [[texture(1)]],
@@ -216,6 +237,12 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // coarse heights as grey blotches
     float3 land = mix(WHITE, BEIGE_DARK, clamp(pow(h, 1.15) * 1.05, 0.0, 1.0) * mix(0.10, 1.0, detail));
     land *= mix(1.0, clamp(shade, 0.6, 1.25), 0.55 * detail);
+    // the mountains' shadows by day, cool and soft (a painter's shade, a little blue, never black); gone at night and
+    // where the relief itself eases out zoomed in
+    if (look.sun.z > 0.5 && sunL.w > 0.0 && detail > 0.0) {
+        float sh = castShade(rel, s, in.uv, rel.sample(s, in.uv).g, L, float2(look.texelU, look.texelV)) * sunL.w * detail;
+        land *= mix(float3(1.0), float3(0.80, 0.84, 0.93), sh);
+    }
     land = clamp(land, 0.0, 1.0);
     if (kind == 2) land = pattern(land * look.tint.rgb, look.clip2.z, in.position.xy, look.clip2.x);   // stamped lime soaks into the land; the Alps still show
     // YOUR LAND AS A MATERIAL, NOT PAINT: by day a slight sheen where its slopes face the sun, as a lacquered surface
