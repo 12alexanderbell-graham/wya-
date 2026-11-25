@@ -54,6 +54,13 @@ final class ListsState {
         open = pl.id
         naming = true
     }
+    /// a new book: no pages yet, its name typed at once (25 Nov)
+    func newBook() {
+        let b = PhotoBook(name: "")
+        ListsStore.shared.change { $0.books.append(b) }
+        open = b.id
+        naming = true
+    }
     /// a new tier list: S to D, nothing ranked yet, its name typed at once
     func newTier() {
         let t = TierList.blank()
@@ -63,6 +70,11 @@ final class ListsState {
     }
     /// leaving a list: one left with no name and nothing in it is not kept
     func close() {
+        // (a book never named and with no pages is not kept)
+        if let id = open, let bk = ListsStore.shared.book.books.first(where: { $0.id == id }),
+           bk.name.trimmingCharacters(in: .whitespaces).isEmpty, bk.pages.isEmpty {
+            ListsStore.shared.change { $0.books.removeAll { $0.id == id } }
+        }
         if let id = open, let t = ListsStore.shared.book.tiers.first(where: { $0.id == id }),
            t.name.trimmingCharacters(in: .whitespaces).isEmpty, t.has.isEmpty {
             ListsStore.shared.change { $0.tiers.removeAll { $0.id == id } }
@@ -256,11 +268,10 @@ struct ListsWater: View {
             // the plus makes one of the kind the wheel is on (books' making comes with their page); a list open with
             // places: SEE IT ON THE MAP, on the Map tab's own mark
             if let key = rightKey {
-                circle(key, dim: open == nil && s.kind > 2) {
+                circle(key) {
                     if let l = viewL { viewOnMap(l); return }
-                    guard s.kind <= 2 else { Feel.refuse(); return }
                     Feel.tap()
-                    withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
+                    withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier, s.newBook][min(s.kind, 3)]() }
                     // A NEW LIST STARTS ON ITS OWN PAGE OF INFORMATION (you can always just continue): its sheet,
                     // name first, over the empty list
                     if s.kind == 0, let id = s.open { s.naming = false; withAnimation(Motion.quick) { infoFor = id } }
@@ -430,9 +441,20 @@ struct ListsWater: View {
                 .padding(.top, 4)
             }
         default:
-            let books = store.book.books.filter { match($0.name) }
+            // BOOKS AS TILES, as every kind: its cover (its first photo), its name, how many pages
+            let books = store.book.books.filter { !$0.arch && !$0.hid && match($0.name) }
             if books.isEmpty { if q.isEmpty { none("No books yet") } else { noResults } }
-            ForEach(books) { b in row(nil, b.name, "") { Feel.refuse() } }
+            if !books.isEmpty {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], alignment: .leading, spacing: 20) {
+                    ForEach(books) { b in
+                        tile(b.id, name: b.name.isEmpty ? "New book" : b.name, dim: b.name.isEmpty, count: b.pages.count, ccs: [],
+                             cover: AnyView(BookCover(book: b)),
+                             words: b.pages.isEmpty ? "No pages yet" : "\(b.pages.count) " + (b.pages.count == 1 ? "page" : "pages"))
+                            .settlesIn()
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
     }
     /// a search that found nothing says so, as the map's search does
@@ -581,6 +603,8 @@ struct ListsWater: View {
             planPage(pl, w: w)
         } else if let t = store.book.tiers.first(where: { $0.id == id }) {
             TierPage(t: t, w: w, naming: $naming)
+        } else if store.book.books.contains(where: { $0.id == id }) {
+            BookOpenView(id: id, w: w, naming: $naming)
         } else if id == "wish" {
             page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w,
                  list: store.book.lists.first { $0.wish })
