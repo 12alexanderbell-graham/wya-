@@ -1117,6 +1117,7 @@ struct DetailsSheet: View {
     /// Times: an exact number from 1; drag on the number or its − / + circles (36 pt drawn, 44 pt touch, solid black,
     /// white glyphs); the number rolls; refuse at the floor
     @State private var dragFrom: Int?
+    static let valueSlot: CGFloat = 72
     @State private var atFloor = false
     /// the visit's length in days: minus, the number, plus; minus at one day clears it (nothing picked)
     private func longStepper(_ i: Int, blank: Bool) -> some View {
@@ -1133,7 +1134,9 @@ struct DetailsSheet: View {
                 .foregroundStyle(Palette.ink.opacity(n == nil ? 0.5 : 1))
                 .contentTransition(.numericText(value: Double(n ?? 0)))
                 .animation(Motion.quick, value: n)
-                .frame(minWidth: 64, minHeight: 44)
+                // (one 72 pt slot for the value in both steppers, so Times' and How long's circles share their
+                // columns: "1" and "0 days" put the minuses 28 pt apart, 25 Nov)
+                .frame(minWidth: Self.valueSlot, minHeight: 44)
             circle("plus", blank: blank) { Feel.tap(); s.d[keyPath: k] = String((n ?? 0) + 1) }
         }
         .padding(.trailing, -4)
@@ -1152,7 +1155,7 @@ struct DetailsSheet: View {
             Text(out ? Caption.blank("\(s.times)", "\u{2002}") : "\(s.times)").font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                 .contentTransition(.numericText(value: out ? -1 : Double(s.times)))
                 .animation(Motion.quick, value: s.times)
-                .frame(minWidth: 36, minHeight: 44).edgeRow()
+                .frame(minWidth: Self.valueSlot, minHeight: 44).edgeRow()
                 .contentShape(Rectangle())
                 .highPriorityGesture(DragGesture(minimumDistance: 4).onChanged { g in
                     let base = dragFrom ?? s.times
