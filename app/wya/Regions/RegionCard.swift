@@ -185,6 +185,15 @@ struct RegionCard: View {
         case .region: what = "Region of \(country)"
         default: what = card.parents
         }
+        // (a region on its country's region map: its level's own word and its code, as the hold menu gives them, 25 Nov:
+        // Lisboa's page said "Region of Portugal" and had no words, where its hold menu's page says "District of Portugal")
+        if key.kind == .region, let sc = map.regionScene, sc.place == place {
+            let word = RegionCatalog.shared.used(sc.id).first { $0.row == sc.row }.map { RegionsMenuModel.word($0.level.one) } ?? "region"
+            let code = RegionCatalog.shared.file(sc.id, row: sc.row)?.units.first { $0.id == key.id }?.code
+            PlacePageState.shared.open(key, name: card.name, what: "\(word.prefix(1).uppercased() + word.dropFirst()) of \(country)",
+                                       country: sc.id, code: code, from: nameFrame)
+            return
+        }
         PlacePageState.shared.open(key, name: card.name, what: what, country: cc, from: nameFrame)
     }
 
