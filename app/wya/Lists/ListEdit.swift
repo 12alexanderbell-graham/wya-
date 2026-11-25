@@ -9,7 +9,13 @@ struct ListAddRow: View {
     @State private var text = ""
     @FocusState private var typing: Bool
 
-    struct Found: Hashable { let name: String; let cc: String; let line: String; var ref: String? = nil }
+    struct Found: Hashable {
+        let name: String; let cc: String; let line: String; var ref: String? = nil
+        /// A READY-MADE SET (17 Sep spec: all of a continent, all regions of a place): "cont:Europe" or
+        /// "regions:it", every place of it going in at once; its picture is its count on glass
+        var set: String? = nil
+        var count = 0
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,7 +29,12 @@ struct ListAddRow: View {
                 .padding(.leading, 56)
             ForEach(found, id: \.self) { f in
                 HStack(spacing: 12) {
-                    if let r = f.ref, let l = ListsStore.shared.book.lists.first(where: { $0.id == r }) {
+                    if f.set != nil {
+                        Text("\(f.count)").font(.subheadline.weight(.semibold).monospacedDigit())
+                            .foregroundStyle(Palette.ink.opacity(0.5))
+                            .frame(width: 44, height: 44)
+                            .glassEffect(.clear, in: .rect(cornerRadius: 10))
+                    } else if let r = f.ref, let l = ListsStore.shared.book.lists.first(where: { $0.id == r }) {
                         Color.clear.frame(width: 44, height: 44)
                             .overlay { listCoverOrGlass(l) }
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -67,9 +78,24 @@ struct ListAddRow: View {
                 if out.count >= 2 { break }
             }
         }
-        let starts = CountryEntity.all.filter { fold($0.name).hasPrefix(fq) }
-        let inside = CountryEntity.all.filter { !fold($0.name).hasPrefix(fq) && fold($0.name).contains(fq) }
+        // (only places the map has: the phone's region list holds "European Union", "Eurozone" and "United Nations",
+        // which went in as countries with no flag, 25 Nov)
+        let onMap = { (c: CountryEntity) in AIContext.map?.world.map { $0.placeIndex[c.id] != nil } ?? true }
+        let starts = CountryEntity.all.filter { fold($0.name).hasPrefix(fq) && onMap($0) }
+        let inside = CountryEntity.all.filter { !fold($0.name).hasPrefix(fq) && fold($0.name).contains(fq) && onMap($0) }
         for c in (starts + inside).prefix(2) { out.append(Found(name: c.name, cc: c.id, line: "Country")) }
+        // READY-MADE SETS: a continent named, all its countries; a country named in full, all its regions
+        if fq.count >= 3, let w = AIContext.map?.world {
+            for k in MapController.continents where fold(k).hasPrefix(fq) {
+                let n = Self.continentCountries(k, w).count
+                if n > 0 { out.append(Found(name: "All of " + k, cc: "", line: "\(n) countries", set: "cont:" + k, count: n)) }
+            }
+        }
+        _ = RegionIndex.shared.ready
+        if let c = starts.first(where: { fold($0.name) == fq }) {
+            let n = RegionIndex.shared.firstLevel(c.id).count
+            if n > 1 { out.append(Found(name: "All regions of " + c.name, cc: c.id, line: "\(n) regions", set: "regions:" + c.id, count: n)) }
+        }
         // THE PLACE BEFORE WHAT IS IN IT (17 Sep spec: country, region, place first, then deeper; 25 Nov: typing the
         // start of a city found its sights and never the city): a big town right after the countries; smaller towns
         // after the sights, as before
@@ -111,9 +137,35 @@ struct ListAddRow: View {
         return Array(out.filter { seen.insert($0.name.lowercased() + "|" + $0.cc + "|" + $0.line).inserted }.prefix(5))
     }
 
+    /// a continent's countries (not its territories), A to Z
+    static func continentCountries(_ k: String, _ w: World) -> [World.Place] {
+        w.places.filter { $0.cont == k && $0.k == "country" && !$0.junk }
+            .sorted { $0.n.localizedStandardCompare($1.n) == .orderedAscending }
+    }
+
     private func add(_ f: Found) {
         Feel.tap()
         if let r = f.ref { put(ListItem.mine(.list, r)); return }
+        if let set = f.set {
+            // every place of the set, but none the list has already (by name and country)
+            var items: [ListItem] = []
+            if set.hasPrefix("cont:"), let w = AIContext.map?.world {
+                items = Self.continentCountries(String(set.dropFirst(5)), w).map { ListItem(n: $0.n, cc: $0.id) }
+            } else if set.hasPrefix("regions:") {
+                let cc = String(set.dropFirst(8))
+                items = RegionIndex.shared.firstLevel(cc).map { ListItem(n: $0.name, cc: cc) }
+            }
+            withAnimation(Motion.quick) {
+                ListsStore.shared.change { b in
+                    guard let i = b.lists.firstIndex(where: { $0.id == listID }) else { return }
+                    let have = Set(b.lists[i].items.map { $0.n.lowercased() + "|" + ($0.cc ?? "") })
+                    b.lists[i].items += items.filter { !have.contains($0.n.lowercased() + "|" + ($0.cc ?? "")) }
+                }
+            }
+            text = ""
+            typing = true
+            return
+        }
         put(ListItem(n: f.name, cc: f.cc))
     }
 

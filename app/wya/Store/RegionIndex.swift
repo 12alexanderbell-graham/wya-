@@ -26,6 +26,24 @@ final class RegionIndex {
     @ObservationIgnored private var nameBytes: [UInt8] = []
     @ObservationIgnored private var nameStart: [Int32] = []
 
+    /// a place's regions as people name them (its states, provinces), one each, A to Z: a list's "All regions of".
+    /// The first level, unless it is a handful of groupings over a level of at most 40 (Italy's five macro-areas over
+    /// its 20 regions); the UK keeps its four nations over its 216 council areas
+    func firstLevel(_ place: String) -> [Hit] {
+        let p = place.lowercased()
+        func level(_ r: Int) -> [Hit] {
+            var seen = Set<String>()
+            return rows.lazy.map(\.hit).filter { $0.row == r && $0.place.lowercased() == p && seen.insert($0.id).inserted }
+                .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        }
+        let one = level(1)
+        if one.count < 8 {
+            let two = level(2)
+            if two.count > one.count, two.count <= 40 { return two }
+        }
+        return one
+    }
+
     func load() {
         if ready { buildPeople() }
         guard !ready, !loading else { return }
