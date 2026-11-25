@@ -268,6 +268,9 @@ struct BookOpenView: View {
     @State private var at = 0
     @State private var picking = false
     @State private var picked: [PhotosPickerItem] = []
+    /// the cover being picked (a book's first step after its name)
+    @State private var coverPicking = false
+    @State private var coverItem: PhotosPickerItem?
     /// every page shown at once, small, to go to one or put them in order
     @State private var overview = false
     /// the page being drawn on (its id): the page becomes Apple's canvas with Apple's tools
@@ -313,7 +316,34 @@ struct BookOpenView: View {
                             .onTapGesture { Feel.tap(); s.naming = true }
                     }
                     if b.pages.isEmpty {
-                        // (no pages yet: the first is made from photos, one or many, or words)
+                        // A NEW BOOK: ITS NAME, ITS COVER, THEN ITS PAGES: the cover's place as big as a page, tapped for a
+                        // photo; under it the first page's kinds
+                        Button { Feel.tap(); coverPicking = true } label: {
+                            ZStack {
+                                if b.cover != nil {
+                                    BookCover(book: b)
+                                } else {
+                                    Text("Pick a cover").font(.title3.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                                }
+                            }
+                            .frame(width: w, height: pageH)
+                            .glassEffect(PageGlass.control, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        }
+                        .buttonStyle(.press)
+                        .accessibilityLabel(b.cover == nil ? "Pick a cover" : "Change the cover")
+                        .photosPicker(isPresented: $coverPicking, selection: $coverItem, matching: .images, photoLibrary: .shared())
+                        .onChange(of: coverItem) { _, it in
+                            guard let it else { return }
+                            Task {
+                                if let d = try? await it.loadTransferable(type: Data.self), let n = BookPhotos.save(d) {
+                                    Feel.tap()
+                                    withAnimation(Motion.quick) { change { $0.cover = n } }
+                                } else { Feel.refuse() }
+                                coverItem = nil
+                            }
+                        }
                         addPage
                     } else if let mid = placing, let pg = b.pages.first(where: { $0.id == mid }) {
                         // THE WORDS MOVED: the page alone (no turning under the finger), its words dragged where you
