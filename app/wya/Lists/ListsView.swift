@@ -147,7 +147,10 @@ struct ListsWater: View {
                 .frame(width: L.W, height: L.H)
                 .allowsHitTesting(false)
             VStack(spacing: gap) {
-                topRow(w)
+                // (its circles where every tab's head has them, 16 pt in from the screen: in the shelf's own 24 pt they
+                // stood 8 pt in from where they are on the Map and Profile, and jumped as the tabs changed, 25 Nov)
+                topRow(w + 16)
+                    .padding(.horizontal, -8)
                 // A LIST OPENS AS A PAGE PUSHED IN: the list comes in from the right while the shelf goes out to the
                 // left, and back the other way
                 ZStack(alignment: .top) {

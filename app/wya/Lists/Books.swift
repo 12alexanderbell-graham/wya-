@@ -667,7 +667,8 @@ struct BookFullView: View {
                     .glassEffect(PageGlass.head.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
-            .padding(.leading, 24)
+            // (16 pt in, where every tab's head circles are)
+            .padding(.leading, 16)
             .accessibilityLabel("Back")
         }
         .statusBarHidden()
