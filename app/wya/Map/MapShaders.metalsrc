@@ -265,6 +265,12 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         float sh = castShade(rel, s, in.uv, rel.sample(s, in.uv).g, L, float2(look.texelU, look.texelV)) * sunL.w * detail;
         land *= mix(float3(1.0), float3(0.80, 0.84, 0.93), sh);
     }
+    // ALPENGLOW (25 Nov, the world's light): near sunrise and sunset the high ground keeps a faint warm rose while the
+    // low ground is already in the cool dusk, as real peaks do
+    if (look.sun.z > 0.5) {
+        float warm = length(sunL.xyz) - 1.0;
+        land *= mix(float3(1.0), float3(1.06, 0.97, 0.93), warm * smoothstep(0.3, 0.7, dh.g) * detail);
+    }
     land = clamp(land, 0.0, 1.0);
     if (kind == 2) land = pattern(land * look.tint.rgb, look.clip2.z, in.position.xy, look.clip2.x);   // stamped lime soaks into the land; the Alps still show
     // YOUR LAND AS A MATERIAL, NOT PAINT: by day a slight sheen where its slopes face the sun, as a lacquered surface
