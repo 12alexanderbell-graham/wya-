@@ -131,7 +131,12 @@ struct ListsWater: View {
                 ZStack(alignment: .top) {
                     // A LIST'S OWN PAGE AND THE ARCHIVE PUSHED IN THE SAME WAY (25 Nov: never Apple's pop-up sheet with
                     // its grabber line): over the list or the shelf, from the right, the back circle taking it away
-                    if let id = infoFor {
+                    // (a thing of a plan, its page, 25 Nov: it was Apple's pop-up sheet)
+                    if let r = editingItem {
+                        PlanItemSheet(planID: r.plan, day: r.day, itemID: r.item) { closeItem() }
+                            .frame(width: w)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
+                    } else if let id = infoFor {
                         ListInfoSheet(id: id) { withAnimation(Motion.quick) { infoFor = nil } }
                             .frame(width: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
@@ -161,6 +166,13 @@ struct ListsWater: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
     }
 
+    /// a plan's thing put away: back to the plan, and a thing left with no words taken out
+    private func closeItem() {
+        guard let r = editingItem else { return }
+        withAnimation(Motion.quick) { editingItem = nil }
+        changePlan(r.plan) { pl in for k in pl.days.indices { pl.days[k].items.removeAll { $0.what.trimmingCharacters(in: .whitespaces).isEmpty } } }
+    }
+
     // MARK: the top row
 
     private func topRow(_ w: CGFloat) -> some View {
@@ -171,12 +183,13 @@ struct ListsWater: View {
         // (a list open: nothing in the right corner, 25 Nov; it was View on map, the Map tab's circle in a glass circle;
         // the list's own cover at its top is now what you tap to see it on the map)
         // (a list's own page or the archive pushed in: back, as for a list)
-        let inner = infoFor != nil || archiveOpen
+        let inner = infoFor != nil || archiveOpen || editingItem != nil
         let rightKey: String? = open == nil && !inner ? "plus" : nil
         return HStack(spacing: 0) {
             circle(open != nil || inner ? "back" : "search") {
                 Feel.tap()
-                if infoFor != nil { withAnimation(Motion.quick) { infoFor = nil } }
+                if editingItem != nil { closeItem() }
+                else if infoFor != nil { withAnimation(Motion.quick) { infoFor = nil } }
                 else if archiveOpen { withAnimation(Motion.quick) { archiveOpen = false } }
                 else if open != nil { withAnimation(Motion.quick) { s.close() } }
                 else { s.searching.toggle(); if !s.searching { s.query = "" } }
@@ -905,14 +918,14 @@ struct ListsWater: View {
                         ForEach(d.items.filter { $0.at == nil }) { it in
                             Text(it.what).font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44, alignment: .leading)
                                 .contentShape(Rectangle())
-                                .onTapGesture { Feel.tap(); editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) }
+                                .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } }
                         }
                         PlanDayHours(items: d.items, ai: p.ai,
-                                     open: { it in editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) },
+                                     open: { it in withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } },
                                      add: { m in
                                          let item = PlanItem(at: String(format: "%02d:%02d", m / 60, m % 60), what: "", place: "")
                                          changePlan(p.id) { $0.days[i].items.append(item); $0.sortDay(i) }
-                                         editingItem = PlanItemRef(plan: p.id, day: i, item: item.id)
+                                         withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: item.id) }
                                      })
                     }
                     ForEach(hourly ? [] : d.items) { it in
@@ -954,7 +967,7 @@ struct ListsWater: View {
                         .frame(minHeight: 44)
                         // a tap on the thing opens its sheet (all day or a time, where, link, note, colour)
                         .contentShape(Rectangle())
-                        .onTapGesture { Feel.tap(); editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) }
+                        .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } }
                         // MADE BY THE AI, NOT KEPT YET: each thing on lime glass until Keep
                         .padding(.leading, p.ai ? 14 : 0)
                         .glassEffect(p.ai ? .regular.tint(Palette.lime.opacity(0.55)) : .identity,
@@ -1019,13 +1032,6 @@ struct ListsWater: View {
         }
         .onChange(of: p.id) { _, _ in icsWords = nil }
         // (a thing made by tapping an hour and left without words is not kept)
-        .sheet(item: $editingItem, onDismiss: {
-            changePlan(p.id) { pl in for k in pl.days.indices { pl.days[k].items.removeAll { $0.what.trimmingCharacters(in: .whitespaces).isEmpty } } }
-        }) { r in
-            PlanItemSheet(planID: r.plan, day: r.day, itemID: r.item)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.hidden)
-        }
     }
 
     /// the plan as a calendar file, written where the share sheet can hand it on

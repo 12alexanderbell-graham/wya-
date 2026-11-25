@@ -7,7 +7,8 @@ struct PlanItemSheet: View {
     let day: Int
     let itemID: String
     @State private var store = ListsStore.shared
-    @Environment(\.dismiss) private var dismiss
+    /// back to the plan (25 Nov: a page pushed in on the Lists screen, never Apple's pop-up sheet)
+    var close: () -> Void = {}
     /// a new thing (no words yet) starts with the words being typed
     @FocusState private var naming: Bool
 
@@ -62,7 +63,8 @@ struct PlanItemSheet: View {
                             Button { Feel.tap(); change { $0.c = c } } label: {
                                 Circle()
                                     .fill(c.isEmpty ? Palette.white : Self.colour(c))
-                                    .overlay { if c.isEmpty { Circle().strokeBorder(Palette.ink.opacity(0.2), lineWidth: 1) } }
+                                    // (a hairline round every swatch, as Apple's: the teal one vanished into a teal ground, 25 Nov)
+                                    .overlay { Circle().strokeBorder(Palette.ink.opacity(c.isEmpty ? 0.2 : 0.12), lineWidth: c.isEmpty ? 1 : 0.5) }
                                     .frame(width: 26, height: 26)
                                     .padding(4)
                                     .overlay { if it.c == c { Circle().strokeBorder(Palette.ink, lineWidth: 2.5) } }
@@ -82,7 +84,7 @@ struct PlanItemSheet: View {
                             guard let pi = b.plans.firstIndex(where: { $0.id == planID }), b.plans[pi].days.indices.contains(day) else { return }
                             b.plans[pi].days[day].items.removeAll { $0.id == itemID }
                         }
-                        dismiss()
+                        close()
                     } label: {
                         Text("Take out").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
                             .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
@@ -91,9 +93,8 @@ struct PlanItemSheet: View {
                     .buttonStyle(.plain)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.top, 28)
-                .padding(.bottom, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 140)
             }
             .scrollIndicators(.hidden)
         }

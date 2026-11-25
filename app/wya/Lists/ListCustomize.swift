@@ -201,6 +201,7 @@ struct ListInfoSheet: View {
                         HStack(spacing: 8) {
                             ForEach(ListColours.names.filter { $0 != "ink" && $0 != "grey" }, id: \.self) { n in
                                 Circle().fill(ListColours.colour(n))
+                                    .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
                                     .frame(width: 30, height: 30)
                                     .overlay { if l.mapc == n { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 38, height: 38) } }
                                     .frame(width: 40, height: 40)
@@ -300,6 +301,7 @@ struct ListInfoSheet: View {
                     ForEach([2, 1, 0], id: \.self) { i in
                         let c = i < l.cols.count ? l.cols[i] : "lime"
                         Circle().fill(ListColours.colour(c))
+                            .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
                             .frame(width: 36, height: 36)
                             .overlay { Circle().fill(i == 2 ? Palette.white : i == 1 ? Palette.grey : .clear).frame(width: 10, height: 10) }
                             .overlay { if piece == i { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 44, height: 44) } }
@@ -314,6 +316,7 @@ struct ListInfoSheet: View {
                     ForEach(ListColours.names, id: \.self) { n in
                         let on = piece < l.cols.count && l.cols[piece] == n
                         Circle().fill(ListColours.colour(n))
+                            .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
                             .frame(width: 30, height: 30)
                             .overlay { if on { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 38, height: 38) } }
                             .frame(width: 40, height: 40)
