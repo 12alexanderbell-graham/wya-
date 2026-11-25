@@ -1993,6 +1993,12 @@ private struct PageLayer: View {
         .mask {
             let f = Double(min(1, max(0, (endBelow - 40) / 220)))
             VStack(spacing: 0) {
+                // THE TOP EDGE, scrolled (Apple's soft scroll edge, which never reaches this page drawn over the whole
+                // screen, 25 Nov: "Toulouse" read under the search circle and a row's plus under the share circle): the
+                // rows fade out as they go up under the head's circles; at the top nothing is faded (the photo stays whole)
+                LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.62),
+                                       .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: under ? L.headBottom + 40 : 0)
                 Color.black
                 LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black.opacity(1 - f), location: 0.55),
                                        .init(color: .black.opacity(1 - f), location: 1)], startPoint: .top, endPoint: .bottom)
