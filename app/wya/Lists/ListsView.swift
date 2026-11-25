@@ -964,7 +964,10 @@ struct ListsWater: View {
                     .onChange(of: naming) { _, f in if !f { s.naming = false } }
                     .frame(minHeight: 44)
                 } else {
+                    // (two lines at most, as a list's: a long plan name ran to four lines of large title, 25 Nov;
+                        // tapped, the whole of it to edit)
                     Text(p.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                        .lineLimit(2)
                         .frame(minHeight: 44)
                         .onTapGesture { Feel.tap(); s.naming = true }
                 }
@@ -1293,6 +1296,7 @@ struct TierPage: View {
                 } else {
                     HStack(alignment: .center, spacing: 8) {
                         Text(t.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                            .lineLimit(2)
                             .frame(minHeight: 44)
                             .onTapGesture { Feel.tap(); s.naming = true }
                         Spacer(minLength: 0)
