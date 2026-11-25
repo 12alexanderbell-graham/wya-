@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var side = Sideways.shared
     @State private var pageStack = PlacePageState.shared
     @State private var uploadState = UploadState.shared
+    @State private var onboarding = Onboarding.shared
     /// THE SESSION (19.2), for when the system ends the app in the background (Apple's scene storage: discarded when
     /// the person quits the app, so a cold launch opens fresh): the tab, the mode, the continent, the camera, the sheet
     /// stop, the lock
@@ -200,6 +201,11 @@ struct ContentView: View {
             }
             if !launch.settled {
                 Color.clear.contentShape(Rectangle()).ignoresSafeArea()
+            }
+            // THE FIRST OPEN, over the held loading screen (its first page is that screen); the screen lifts once it
+            // is over, as on every launch
+            if !onboarding.done, !launch.done {
+                OnboardingView()
             }
         }
         .frame(width: water.layout.model.isEmpty ? nil : water.layout.W, height: water.layout.model.isEmpty ? nil : water.layout.H,
@@ -465,6 +471,8 @@ struct ContentView: View {
                 DeepLink.waiting = nil
                 if await DeepLink.open(url, map: map, close: {}) { try? await Task.sleep(for: .milliseconds(850)) }
             }
+            // (the first open, if this is one: the loading screen holds as its first page until it is over)
+            await Onboarding.shared.wait()
             // the map's first frame drawn under the loading screen, then the screen fades away (0.5 s, eased both ends)
             try? await Task.sleep(for: .milliseconds(80))
             #if DEBUG
