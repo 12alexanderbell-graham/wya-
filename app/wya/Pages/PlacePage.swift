@@ -326,9 +326,11 @@ extension PlacePageState.OnePage {
             // (a listing that opens on a notice, tickets or hours or "closed", 25 Nov: Big Ben's page began "Strictly
             // limited numbers of tickets are available"): Wikipedia's opening first, which says what it is; else the
             // listing with its notice moved to the end
-            if let x = d, PlacePageState.leadsWithNotice(x) {
+            // (and one that opens on the way there from its guide's town, 25 Nov: Lake Baikal's "lies about an hour
+            // away by train", from Irkutsk's guide; an airport's "About five minutes away by car")
+            if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) {
                 if let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
-                else { d = PlacePageState.noticeLast(x, name: name) }
+                else if PlacePageState.leadsWithNotice(x) { d = PlacePageState.noticeLast(x, name: name) }
             }
             if d == nil {
                 // (and by its name without and the like: the Grand Canyon's article is)
@@ -1538,6 +1540,16 @@ extension PlacePageState {
         return noticeStart.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
     }
     static func leadsWithNotice(_ t: String) -> Bool { isNotice(t) }
+    /// FROM ELSEWHERE: a listing whose first sentence is the way there from the guide's own town ("a 30-minute drive
+    /// from Griffith", "about an hour away by train"), true only seen from that town
+    static let elsewhere = try! NSRegularExpression(pattern:
+        "\\b((an?|one|half an?|\\d+(\\.\\d+)?|a few|several|two|three|four|five|ten|twenty|thirty)[ -](hours?|minutes?|mins?|km|kilomet(re|er)s?|miles?)"
+        + "( and a half)?\\b[^.]{0,25}\\b(away|from (here|town|the (town|city|centre|center|station|village))|by (train|bus|car|boat|taxi|ferry|foot)|"
+        + "(walk|drive|ride) (from|away))|from (here|the (city|town) (centre|center)))", options: [.caseInsensitive])
+    static func leadsFromElsewhere(_ t: String) -> Bool {
+        let first = t.components(separatedBy: ". ").first ?? t
+        return elsewhere.firstMatch(in: first, range: NSRange(first.startIndex..., in: first)) != nil
+    }
     /// the listing's sentences with the notices it opens on moved after the rest; all notices: as it was. An "It" it
     /// now opens on is its name ("It contains the Great Bell" is "Big Ben contains the Great Bell")
     static func noticeLast(_ t: String, name: String) -> String {
