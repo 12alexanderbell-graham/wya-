@@ -157,7 +157,7 @@ final class TownNamesView: UIView {
         let near = m.placesMode && m.placeOpen == nil
         // (the Countries map close up: cities of 500,000 from where Apple's names came in, 100,000 a little nearer)
         let cities = m.countryNames
-        let k0 = cities ? MapController.closeIn / 2 : near ? m.townsK / 3 : m.continentK
+        let k0 = cities ? MapController.namesFrom : near ? m.townsK / 3 : m.continentK
         let collection = m.markCollection
         let kThing: Double? = collection != nil ? (m.continentK ?? m.worldKMin) : nil
         let dotsOn = MapSettingsStore.shared.value.townDots
@@ -175,7 +175,7 @@ final class TownNamesView: UIView {
                     let whole = t.part.isEmpty
                     guard dotsOn || sc.runs[i] != nil || (whole && Self.bigShapeless(sc, i)) else { continue }
                     // (only cities on the Countries map, at their points: its towns aren't drawn)
-                    if cities, !whole || t.people < 100_000 { continue }
+                    if cities, !whole || (t.people < 100_000 && t.kind != 2) { continue }
                     let size = Self.measure(t.name)
                     // a name once its shape is 12 pt across (a big shapeless city at its point by the zoom alone), from 3x
                     // the framing zoom; a city's sections from 10x
@@ -184,6 +184,8 @@ final class TownNamesView: UIView {
                     let atPoint = sc.runs[i] == nil
                     var th = (t.people >= 500_000 ? 2 : t.people >= 100_000 ? 2.5 : 3) * k0
                     if m.regionTowns { th = k0 * (t.people >= 500_000 ? 1 : t.people >= 100_000 ? 1.00001 : 1.00002) } else if !cities, !atPoint, across > 0 { th = max(th, 12 / across) }
+                    // (the Countries map: a capital from where its names start, the cities from twice that and on)
+                    if cities, t.kind == 2 { th = k0 }
                     if !whole { th = max(th, 10 * k0) }
                     let id = "t:\(cc)#\(i)"
                     townPick[id] = Pick(cc: cc, i: i)
@@ -640,13 +642,13 @@ final class TownNamesView: UIView {
         let near = m.placesMode && m.placeOpen == nil
         // (over Apple's map Apple names the towns itself: none of ours over its own, as in the old app; a town still
         // answers a tap through its shape)
-        guard !marksHere, !ccs.isEmpty, let k0 = m.countryNames ? MapController.closeIn / 2 : near ? m.townsK / 3 : m.continentK else { clear(); return own }
+        guard !marksHere, !ccs.isEmpty, let k0 = m.countryNames ? MapController.namesFrom : near ? m.townsK / 3 : m.continentK else { clear(); return own }
         let setKey = ccs.joined(separator: ",")
         if key != setKey { clear(); key = setKey }
         let k = m.k
         // from 3x the country's framing zoom (each name rolling in across its own band from there); the Towns level
         // names its towns from the framing zoom itself
-        guard m.regionTowns || k >= 2 * k0 * 0.999 else { clear(); return own }
+        guard m.regionTowns || m.countryNames || k >= 2 * k0 * 0.999 else { clear(); return own }
         let W = bounds.width
         let room = m.layout.room(sheetTop: m.layout.top(.quarter))
         let box = CGRect(x: 6, y: room.lowerBound, width: W - 6 - 64, height: room.upperBound - room.lowerBound)
