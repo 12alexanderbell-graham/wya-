@@ -196,7 +196,10 @@ final class TownNamesView: UIView {
                     townPick[id] = Pick(cc: cc, i: i)
                     let own = CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height)
                     var item = LabelPlan.Item(id: id, at: SIMD2(Double(sc.at[i].x), Double(sc.at[i].y)), box: own,
-                                              threshold: th, rank: Double(t.kind) * 1e9 + Double(t.people))
+                                              threshold: th,
+                                              // (on the Countries map the country's capital, then by people: a state's capital
+                                              // kept Cologne, a million people, unnamed beside Düsseldorf, 25 Nov)
+                                              rank: cities ? (t.kind == 2 ? 1e10 : 0) + Double(t.people) : Double(t.kind) * 1e9 + Double(t.people))
                     // (the Towns level: a name kept back by a bigger one's may stand just over or under its town, so
                     // Nice is named beside Marseille, and Nagoya and Yokohama beside Osaka and Tokyo, from the framing zoom)
                     if m.regionTowns { item.alts = [own.offsetBy(dx: 0, dy: -size.height * 0.8), own.offsetBy(dx: 0, dy: size.height * 0.8)] }
