@@ -4,6 +4,10 @@ enum TopPull {
     /// how long the dot has to be held, still, before it starts to become the gear, and how long it takes to become it
     static let holdDelay: Double = 0.18
     static let holdForm: Double = 0.42
+    /// OFF (25 Nov): a pull down from the top of the screen is the system's (Notification Center, Siri), not the
+    /// app's; the AI is reached through Siri (19 Nov), so the in-app pull that grew the lime circle and led nowhere is
+    /// gone. The dot's hold into the gear stays.
+    static let pullOn = false
 }
 
 /// The dot at the head's middle, on its way to the AI (`ai` 0 to 1) or to the gear (`gear` 0 to 1). At 0 and 0 it is
@@ -157,7 +161,7 @@ struct TopPullView: View {
                 }
                 // sideways (1.11) the strip would be one of the map's side edges: the map's own; over a page the top
                 // is the page's
-                .allowsHitTesting(!head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on && !pages.isOpen)
+                .allowsHitTesting(TopPull.pullOn && !head.searching && !head.toolsOpen && !sheetHigh && !Sideways.shared.on && !pages.isOpen)
                 .onChange(of: sheetHigh) { _, high in if high { head.putAwayAI() } }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
