@@ -582,7 +582,13 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // (Apple's map up: its own names' layer is over it, Map/AppleWorld.swift; ours under it rests)
         if let names = (view as? MapMTKView)?.townNames {
             if controller.appleWorld { if !names.isHidden { names.isHidden = true } }
-            else { if names.isHidden { names.isHidden = false }; names.update(controller, moving: moving || controller.touching) }
+            else {
+                if names.isHidden { names.isHidden = false }
+                // (the names go out of focus with the map they name: they recede as the lens pulls in behind a card or
+                // the passport, and come back as it lets go; sharp over a soft map they crowded the card, 25 Nov)
+                names.focus = CGFloat(1 - lensNow(now))
+                names.update(controller, moving: moving || controller.touching)
+            }
         }
         // the history line (Part 13), drawn along for this frame
         controller.stepHistory(now)

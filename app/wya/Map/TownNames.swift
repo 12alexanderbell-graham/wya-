@@ -94,7 +94,7 @@ final class TownNamesView: UIView {
         // (the list up at full: the map's names and marks step back under its rows and caption, gone by the time the
         // water passes half way to full, back as it comes down)
         let half = m.layout.top(.half)
-        let a = m.sheetTop <= 0 ? 1 : min(1, max(0, (m.sheetTop - half * 0.4) / (half * 0.6)))
+        let a = (m.sheetTop <= 0 ? 1 : min(1, max(0, (m.sheetTop - half * 0.4) / (half * 0.6)))) * focus
         if abs(alpha - a) > 0.001 { alpha = a }
         // (the journey's capsules are clear glass: names under them read through as a muddle, so they keep clear)
         let own = ownMarks(m) + (HistoryLineView.current?.capsuleFrames ?? [])
@@ -109,6 +109,8 @@ final class TownNamesView: UIView {
     // pressed half as big again; one that is yours and big enough to see is its shape, one named on its middle its name
     /// this layer is the one over Apple's map
     var marksHere = false
+    /// how far in focus the map under the names is (1 sharp, 0 a card's or the passport's lens fully in)
+    var focus: CGFloat = 1
     private var setMarkViews: [String: UIView] = [:]
     private var setMarkKey: [Double] = []
     private func setMarks(_ m: MapController) {
