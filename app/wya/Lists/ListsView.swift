@@ -111,13 +111,16 @@ struct ListsWater: View {
         let top = max(form.top + 12, L.safeTop)
         // the next trip's line, under the square on the shelves (NextTripLine)
         let trip = s.open == nil && !s.searching ? NextTripLine.current() : nil
-        let room = max(56, L.capsule.minY - 8 - (top + 56))
+        // (24 pt under the row of circles, as a place page's words start 24 under the head; it was 8, the shelf's tiles
+        // and a list's map pressed up against the circles, 25 Nov)
+        let gap: CGFloat = 24
+        let room = max(56, L.capsule.minY - 8 - (top + 44 + gap))
         ZStack(alignment: .topLeading) {
             // THE GROUND: the living gradient, the app's own (never the map: the Lists tab is not the map)
             LivingField()
                 .frame(width: L.W, height: L.H)
                 .allowsHitTesting(false)
-            VStack(spacing: 8) {
+            VStack(spacing: gap) {
                 topRow(w)
                 // A LIST OPENS AS A PAGE PUSHED IN: the list comes in from the right while the shelf goes out to the
                 // left, and back the other way
@@ -138,7 +141,7 @@ struct ListsWater: View {
             if let (t, p) = trip {
                 NextTripLine(trip: t, plan: p)
                     .frame(width: w, height: 40)
-                    .offset(x: L.sheetInset + 16, y: top + 52)
+                    .offset(x: L.sheetInset + 16, y: top + 44 + gap)
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
