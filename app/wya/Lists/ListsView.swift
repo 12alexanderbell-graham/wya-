@@ -1150,6 +1150,10 @@ struct TierPage: View {
     var naming: FocusState<Bool>.Binding
     @State private var s = ListsState.shared
     @State private var adding = ""
+    /// the tier whose own strip is open under it (its name, its colour, Remove)
+    @State private var tierOpen: Int?
+    /// a thing is being dragged over the bin
+    @State private var overBin = false
 
     private func change(_ f: (inout TierList) -> Void) {
         ListsStore.shared.change { b in if let i = b.tiers.firstIndex(where: { $0.id == t.id }) { f(&b.tiers[i]) } }
@@ -1172,9 +1176,25 @@ struct TierPage: View {
                     .onAppear { naming.wrappedValue = true }
                     .frame(minHeight: 44)
                 } else {
-                    Text(t.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
-                        .frame(minHeight: 44)
-                        .onTapGesture { Feel.tap(); s.naming = true }
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(t.name).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                            .frame(minHeight: 44)
+                            .onTapGesture { Feel.tap(); s.naming = true }
+                        Spacer(minLength: 0)
+                        // THE BIN, by the name: a thing dragged from anywhere and dropped on it is taken out; red while
+                        // one is over it
+                        Icon5(key: "bin", ink: overBin ? Palette.white : Palette.ink, size: 22)
+                            .frame(width: 44, height: 44)
+                            .background { Circle().fill(overBin ? Palette.red : .clear) }
+                            .animation(Motion.quick, value: overBin)
+                            .dropDestination(for: String.self) { names, _ in
+                                guard let n = names.first else { return false }
+                                Feel.lift()
+                                withAnimation(Motion.quick) { change { _ = $0.move(n, to: nil) } }
+                                return true
+                            } isTargeted: { on in if on != overBin { overBin = on; if on { Feel.tick() } } }
+                            .accessibilityLabel("Bin: drop a thing here to take it out")
+                    }
                 }
                 // EDGE TO EDGE, FULL COLOUR: each tier's whole row is its colour, from one side of the screen to the
                 // other; its letter in line with the title
@@ -1184,7 +1204,13 @@ struct TierPage: View {
                     ForEach(Array(t.rows.enumerated()), id: \.offset) { i, r in
                         HStack(alignment: .top, spacing: 0) {
                             Text(r.t).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
+                                .lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center)
                                 .frame(width: 52, height: 52)
+                                .contentShape(Rectangle())
+                                // (its letter tapped: its own strip opens under it)
+                                .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { tierOpen = tierOpen == i ? nil : i } }
+                                .accessibilityLabel("Tier \(r.t)")
+                                .accessibilityHint("Its name and colour")
                             ScrollView(.horizontal) {
                                 HStack(spacing: 6) { ForEach(r.items, id: \.self) { chip($0) } }
                                     .padding(.horizontal, 6).frame(minHeight: 52)
@@ -1201,8 +1227,25 @@ struct TierPage: View {
                             withAnimation(Motion.quick) { change { _ = $0.move(n, to: .row(i)) } }
                             return true
                         }
+                        if tierOpen == i { tierStrip(i, r) }
                     }
                 }
+                // ADD A TIER (two at least, as many as wanted)
+                Button {
+                    Feel.tap()
+                    withAnimation(Motion.quick) {
+                        change { tl in
+                            let letters = ["S", "A", "B", "C", "D", "E", "F", "G", "H"]
+                            let next = letters.first { l in !tl.rows.contains { $0.t == l } } ?? "\(tl.rows.count + 1)"
+                            tl.rows.append(TierRow(t: next, items: []))
+                        }
+                    }
+                } label: {
+                    Text("Add a tier").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
                 .padding(.top, 8)
                 // the things not ranked yet
                 FlowRow(items: t.pool) { chip($0) }
@@ -1235,8 +1278,60 @@ struct TierPage: View {
         .scrollClipDisabled()
     }
 
+    /// A TIER'S OWN STRIP, under it: its name, its colour from the app's, and Remove (two tiers at least stay)
+    @ViewBuilder private func tierStrip(_ i: Int, _ r: TierRow) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField("", text: Binding(get: { r.t }, set: { v in change { tl in if tl.rows.indices.contains(i) { tl.rows[i].t = String(v.prefix(24)) } } }),
+                      prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                .font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                .submitLabel(.done)
+                .frame(minHeight: 44)
+            HStack(spacing: 6) {
+                ForEach(TierList.colours, id: \.self) { c in
+                    let on = t.colour(i) == c
+                    Circle().fill(Self.colour(c))
+                        .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
+                        .frame(width: 30, height: 30)
+                        .overlay { if on { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 38, height: 38) } }
+                        .frame(width: 40, height: 40)
+                        .contentShape(Rectangle())
+                        .onTapGesture { Feel.tap(); change { tl in if tl.rows.indices.contains(i) { tl.rows[i].c = c } } }
+                        .accessibilityLabel(c)
+                }
+                Spacer(minLength: 0)
+            }
+            if t.rows.count > 2 {
+                Button {
+                    Feel.lift()
+                    withAnimation(Motion.quick) {
+                        tierOpen = nil
+                        change { tl in
+                            guard tl.rows.indices.contains(i) else { return }
+                            // (its things go back to the ones not ranked yet, never lost)
+                            tl.pool.append(contentsOf: tl.rows[i].items)
+                            tl.rows.remove(at: i)
+                        }
+                    }
+                } label: {
+                    Text("Remove tier").font(.body).foregroundStyle(Palette.red)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 8)
+        .transition(.blurReplace)
+    }
+
     private func chip(_ n: String) -> some View {
-        Text(n).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1)
+        HStack(spacing: 6) {
+            // (a place keeps its flag in the tier list)
+            if let cc = t.cc[n], let f = Flags.row(cc.lowercased()) {
+                f.resizable().interpolation(.high).frame(width: 20, height: 15)
+            }
+            Text(n).font(.subheadline).foregroundStyle(Palette.ink).lineLimit(1)
+        }
             .padding(.horizontal, 10).frame(height: 36)
             .background(Palette.cream, in: .rect(cornerRadius: 6))
             .draggable(n)
