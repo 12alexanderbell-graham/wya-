@@ -116,6 +116,9 @@ struct RegionsMenu: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
+        // (6 pt over and under: at the biggest type a row outgrew its 56 pt and its grey line touched the next name;
+        // at the normal size the row is still 56, 25 Nov)
+        .padding(.vertical, 6)
         .frame(minHeight: Self.rowH)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .contentShape(Rectangle())
@@ -155,6 +158,9 @@ struct RegionsMenu: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
+        // (6 pt over and under: at the biggest type a row outgrew its 56 pt and its grey line touched the next name;
+        // at the normal size the row is still 56, 25 Nov)
+        .padding(.vertical, 6)
         .frame(minHeight: Self.rowH)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .contentShape(Rectangle())

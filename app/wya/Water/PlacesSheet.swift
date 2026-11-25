@@ -48,9 +48,12 @@ struct PlacesSheet: View {
                     if !rows.isEmpty {
                     // (25 Nov alignment pass: three, six or nine of them go three a line, each word over a tab's icon,
                     // when every one fits a tab's part: World Heritage's Cultural, Natural stood over Mixed alone)
-                    let tab = (L.capsule.width - 8) / 3
-                    let three = rows.count % 3 == 0 && !rows.contains { Self.wide($0.title, small: picked, part: tab) }
-                    let w = three ? 3 * tab : L.W - 2 * L.sheetInset - 24
+                    // (at big type sizes, too wide for the tabs' parts, they stay three a line across the water before
+                    // ever going two over one, 25 Nov)
+                    let tab = (L.capsule.width - 8) / 3, full = L.W - 2 * L.sheetInset - 24
+                    let onTabs = rows.count % 3 == 0 && !rows.contains { Self.wide($0.title, small: picked, part: tab) }
+                    let three = onTabs || (rows.count % 3 == 0 && !rows.contains { Self.wide($0.title, small: picked, part: full / 3) })
+                    let w = onTabs ? 3 * tab : full
                     setGrid(rows, columns: three ? 3 : rows.contains { Self.wide($0.title, small: picked, part: w / 2) } ? 1 : 2, width: w, small: picked)
                     .padding(.vertical, 4)
                     .edgeRow()
