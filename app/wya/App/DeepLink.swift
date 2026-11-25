@@ -6,8 +6,7 @@ import CoreGraphics
 /// first, keeping its changes, as a tab change does; a locked map still flies (looking is allowed); no haptic (no
 /// finger touched the app). From a cold launch the camera is framed on the place before the loading screen lifts, so
 /// no flight from home is seen. An unknown id or kind leaves the app where it was and is logged.
-/// Not here yet (logged): `wya://page/<id>` (place pages, Step 12), plans, lists and books (Lists), settings links,
-/// universal links.
+/// `wya://plan/<id>` opens that plan in Lists. Not here yet (logged): lists and books, settings links, universal links.
 @MainActor
 enum DeepLink {
     /// a link that came before the map was ready (a cold launch): opened once it is, under the loading screen
@@ -24,6 +23,19 @@ enum DeepLink {
     @discardableResult
     static func open(_ url: URL, map: MapController, close: () -> Void) async -> Bool {
         guard map.ready else { waiting = url; return false }
+        // A PLAN'S LINK (`wya://plan/<id>`, the lock screen's plan tapped, PlanLive): Lists, its Plans, that plan open
+        if url.scheme?.lowercased() == "wya", url.host?.lowercased() == "plan" {
+            let id = url.pathComponents.dropFirst().first ?? ""
+            guard ListsStore.shared.book.plans.contains(where: { $0.id == id }) else {
+                NSLog("wya link not opened: %@", url.absoluteString)
+                return false
+            }
+            close()
+            NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 1)
+            ListsState.shared.kind = 1
+            ListsState.shared.open = id
+            return true
+        }
         // A PAGE'S LINK (16.6's Share, 19.6): `wya://page/<key>` (c:it, t:de/2925533, m:wd:Q19675): the page opened over
         // the Map as it is, growing from the screen's middle
         if url.scheme?.lowercased() == "wya", url.host?.lowercased() == "page" {
