@@ -197,6 +197,8 @@ struct StampCard: View {
     @ScaledMetric(relativeTo: .body) private var pillMin: CGFloat = 104
     @State private var wishTapAt: CFTimeInterval = 0
     @State private var stampTapAt: CFTimeInterval = 0
+    /// the name's frame on screen: its page grows from it
+    @State private var nameFrame: CGRect = .zero
     /// what the Verify? button reads for this card's place (Verify? / In process / Verified)
     @State private var proofWord = "Verify?"
 
@@ -225,6 +227,14 @@ struct StampCard: View {
             let half = max((g.bookW - 12) / 2, pillMin)
             VStack(spacing: 12) {
                 nameCapsule(w.places[i].n, width: g.bookW)
+                    // THE NAME OPENS ITS PAGE (16): as the hold menu's Open its page, grown from the name
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { nameFrame = $0 }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        PlacePageState.shared.open(key, name: w.places[i].n, country: w.places[i].id, from: nameFrame)
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Opens its page")
                 HStack(spacing: 12) {
                     stampButton(state, key: key, name: w.places[i].n, w: half)
                     wishButton(state, key: key, name: w.places[i].n, w: half)

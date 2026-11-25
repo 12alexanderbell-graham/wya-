@@ -87,6 +87,8 @@ struct RegionCard: View {
     @State private var marks = MarkStore.shared
     @State private var details = DetailsState.shared
     @State private var tapAt: CFTimeInterval = 0
+    /// the name's frame on screen: its page grows from it
+    @State private var nameFrame: CGRect = .zero
 
     var body: some View {
         if let key = card.key {
@@ -136,6 +138,11 @@ struct RegionCard: View {
                 .multilineTextAlignment(.center)
                 .frame(width: w + 32)
                 .fixedSize(horizontal: false, vertical: true)
+                // THE NAME OPENS ITS PAGE (16): as the hold menu's Open its page, grown from the name (your own places
+                // have no page)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { nameFrame = $0 }
+                .contentShape(Rectangle())
+                .onTapGesture { openPage(key) }
                 .frame(width: w + 32, height: 160, alignment: .bottom)
                 .scaleEffect(max(0.001, c), anchor: .bottom)
                 .position(x: L.W / 2, y: base - 2 * (44 + 12) - 8 - 80)
@@ -167,6 +174,18 @@ struct RegionCard: View {
                 .glassEffect(.clear.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
+    }
+
+    private func openPage(_ key: PlaceKey) {
+        guard key.kind != .yours, let place = card.place, let w = map.world, w.places.indices.contains(place) else { return }
+        let cc = w.places[place].id, country = w.places[place].n
+        let what: String
+        switch key.kind {
+        case .town: what = card.parents.isEmpty ? "Town in \(country)" : "Town in \(card.parents)"
+        case .region: what = "Region of \(country)"
+        default: what = card.parents
+        }
+        PlacePageState.shared.open(key, name: card.name, what: what, country: cc, from: nameFrame)
     }
 
     private func stampButton(_ s: MarkState, key: PlaceKey, w: CGFloat, words: Bool) -> some View {
