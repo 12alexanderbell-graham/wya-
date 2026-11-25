@@ -2377,7 +2377,8 @@ private struct InsideList: View {
                               cc: country, flag: false)
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(r.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                // (a row's name semibold over its grey line, as Highlights, Regions, Pins and Places, 25 Nov)
+                Text(r.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                 let said = dropHead ? r.line.components(separatedBy: " · ").dropFirst().joined(separator: " · ") : r.line
                 if line, !said.isEmpty { Text(PlacePageState.mended(said)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2) }
             }
@@ -2588,7 +2589,8 @@ private struct ActivitiesList: View {
                 HStack(alignment: .top, spacing: 12) {
                     if pictured { SetPlaceThumb(own: "", thing: a.wd ?? "", cc: country, flag: false) }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(a.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                        // (a row's name semibold over its grey line, as Highlights, Regions, Pins and Places, 25 Nov)
+                Text(a.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                         if case let at = Self.where_(a.line), !at.isEmpty {
                             Text(at).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
                         }
