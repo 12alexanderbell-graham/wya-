@@ -899,7 +899,7 @@ struct PassportCover: View {
             ZStack {
                 Palette.white.opacity(0.6)
                 if !order.isEmpty {
-                    PassportPage(id: "", order: order, hidden: nil, size: g.size, pageIndex: 0)
+                    PassportPage(id: "", order: order, hidden: nil, size: g.size, pageIndex: 0, number: false)
                 }
             }
         }

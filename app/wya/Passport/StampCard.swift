@@ -591,6 +591,8 @@ struct PassportPage: View {
     let size: CGSize
     /// a page given by number (the passport book's pages, 4.3); nil: the page of `id`
     var pageIndex: Int? = nil
+    /// its number at the bottom (not on the shelf's cover, 25 Nov: a "1" stood under the stamps of a book's picture)
+    var number: Bool = true
     /// the book's stamps answer a hold with Apple's menu (4.3.3); the card's page does not
     var menu: ((String) -> [StampMenuItem])? = nil
     /// a place's name as the map spells it (the hold menu's title)
@@ -638,10 +640,12 @@ struct PassportPage: View {
                         .position(at.center)
                 }
             }
-            Text("\(page + 1)")
-                .font(.subheadline)
-                .foregroundStyle(Palette.ink.opacity(0.5))
-                .position(x: size.width / 2, y: size.height - 16)
+            if number {
+                Text("\(page + 1)")
+                    .font(.subheadline)
+                    .foregroundStyle(Palette.ink.opacity(0.5))
+                    .position(x: size.width / 2, y: size.height - 16)
+            }
         }
         .frame(width: size.width, height: size.height)
         .glassEffect(.clear, in: UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
