@@ -106,6 +106,8 @@ struct BookOpenView: View {
     @State private var at = 0
     @State private var picking = false
     @State private var picked: [PhotosPickerItem] = []
+    /// every page shown at once, small, to go to one or put them in order
+    @State private var overview = false
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
     private func change(_ f: (inout PhotoBook) -> Void) {
@@ -132,6 +134,36 @@ struct BookOpenView: View {
                     }
                     if b.pages.isEmpty {
                         // (no pages yet: the first is made from photos, one or many, or words)
+                        addPage
+                    } else if overview {
+                        // ALL PAGES, to go to one or put them in order: small, three
+                        // across, in order; tapped, that page; held, earlier, later, out
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                            ForEach(Array(b.pages.enumerated()), id: \.element.id) { i, pg in
+                                VStack(spacing: 4) {
+                                    BookPageView(page: pg)
+                                        .aspectRatio(3 / 4, contentMode: .fit)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                .strokeBorder(Palette.ink, lineWidth: i == at ? 2 : 0)
+                                        }
+                                    Text("\(i + 1)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture { Feel.tap(); at = i; withAnimation(Motion.quick) { overview = false } }
+                                .contextMenu {
+                                    if i > 0 { Button("Move earlier") { move(pg.id, by: -1) } }
+                                    if i < b.pages.count - 1 { Button("Move later") { move(pg.id, by: 1) } }
+                                    Button("Take out page", role: .destructive) {
+                                        Feel.lift()
+                                        withAnimation(Motion.quick) { change { $0.pages.removeAll { $0.id == pg.id } } }
+                                        at = max(0, min(at, b.pages.count - 2))
+                                    }
+                                }
+                            }
+                        }
+                        .transition(.blurReplace)
                         addPage
                     } else {
                         // THE PAGES, TURNED AS APPLE BOOKS TURNS THEM: the page curls over under the finger; a page
@@ -198,7 +230,19 @@ struct BookOpenView: View {
         }
     }
 
-    /// a page of up to six photos, or a page of words alone
+    /// a page moved one place earlier (-1) or later (+1), the place you are on following it
+    private func move(_ pid: String, by d: Int) {
+        Feel.tap()
+        withAnimation(Motion.quick) {
+            change { bk in
+                guard let i = bk.pages.firstIndex(where: { $0.id == pid }), bk.pages.indices.contains(i + d) else { return }
+                bk.pages.swapAt(i, i + d)
+                at = i + d
+            }
+        }
+    }
+
+    /// a page of up to six photos, or a page of words alone; and every page at once
     private var addPage: some View {
         HStack(spacing: 12) {
             pill("Photos") { picking = true }
@@ -207,6 +251,10 @@ struct BookOpenView: View {
                 at = (book?.pages.count ?? 1) - 1
             }
             Spacer(minLength: 0)
+            if (book?.pages.count ?? 0) > 1 {
+                // (back from all pages: the word says where you would go)
+                pill(overview ? "Back to the page" : "All pages") { withAnimation(Motion.quick) { overview.toggle() } }
+            }
         }
         .frame(minHeight: 52)
     }
