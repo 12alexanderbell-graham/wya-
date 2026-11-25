@@ -75,7 +75,7 @@ struct ContentView: View {
                 // the bottom edge
                 if !Perf.shared.off.contains("zoom") {
                     ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
-                        .offset(x: side.chromeOut ? 90 : 0)
+                        .offset(x: side.chromeOut || !onboarding.done ? 90 : 0)
                         // no zoom column under Regions' menu (6.3): off the right edge while the menu is up (no slide on a
                         // mode change; with the water's own move otherwise)
                         .offset(x: water.regions ? 90 : 0)
@@ -111,6 +111,11 @@ struct ContentView: View {
 
                 WaterView(water: water, map: map, tab: $tab)
                     .offset(y: side.chromeOut ? water.layout.H - water.layout.capsule.minY + 24 : 0)
+                    // (the first open's pages over the map hold its card in the sheet's very place; the sheet is
+                    // there the moment they are over, no fade)
+                    .opacity(onboarding.done ? 1 : 0)
+                    .animation(nil, value: onboarding.done)
+                    .allowsHitTesting(onboarding.done)
 
                 // (the Profile's top is empty: no head on it)
                 if !Perf.shared.off.contains("head"), tab == 0 {
@@ -128,7 +133,7 @@ struct ContentView: View {
                         .fileImporter(isPresented: $uploadState.importerUp, allowedContentTypes: [.json], allowsMultipleSelection: true) { r in
                             if case .success(let urls) = r { UploadState.shared.beginFile(urls, water: water, map: map) }
                         }
-                        .offset(y: side.chromeOut ? -(water.layout.headBottom + 24) : 0)
+                        .offset(y: side.chromeOut || !onboarding.done ? -(water.layout.headBottom + 24) : 0)
                 }
                 if side.on { SidewaysMarks(map: map, L: water.layout) }
                 // a badge earned: its moment over everything
@@ -202,10 +207,10 @@ struct ContentView: View {
             if !launch.settled {
                 Color.clear.contentShape(Rectangle()).ignoresSafeArea()
             }
-            // THE FIRST OPEN, over the held loading screen (its first page is that screen); the screen lifts once it
-            // is over, as on every launch
-            if !onboarding.done, !launch.done {
-                OnboardingView()
+            // THE FIRST OPEN, over the held loading screen (its first page is that screen); the screen lifts unseen
+            // behind its second page, and the pages after that are over the map
+            if !onboarding.done {
+                OnboardingView(water: water, map: map)
             }
         }
         .frame(width: water.layout.model.isEmpty ? nil : water.layout.W, height: water.layout.model.isEmpty ? nil : water.layout.H,
@@ -485,10 +490,14 @@ struct ContentView: View {
             let settled = {
                 launch.done = true
                 launch.settled = true
-                // the start credit once all is at rest (A1.20)
-                water.showCredit()
-                // the first-time hints, once nothing has been touched for 1.2 s (A3.15)
-                Hints.shared.start(water: water, head: head)
+                Task {
+                    // (after the first open, if this is one)
+                    await Onboarding.shared.over()
+                    // the start credit once all is at rest (A1.20)
+                    water.showCredit()
+                    // the first-time hints, once nothing has been touched for 1.2 s (A3.15)
+                    Hints.shared.start(water: water, head: head)
+                }
             }
             withAnimation(.easeInOut(duration: landing ? 0.38 : 0.5)) { launch.reveal = 1 } completion: {
                 if !landing { settled() }
