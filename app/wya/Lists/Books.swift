@@ -134,23 +134,31 @@ struct BookOpenView: View {
                         // (no pages yet: the first is made from photos, one or many, or words)
                         addPage
                     } else {
-                        // THE PAGES, one at a time, a swipe turning them; a page held: its words, take it out
-                        TabView(selection: $at) {
-                            ForEach(Array(b.pages.enumerated()), id: \.element.id) { i, pg in
-                                BookPageView(page: pg)
-                                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                                    .contextMenu {
-                                        Button("Take out page", role: .destructive) {
-                                            Feel.lift()
-                                            withAnimation(Motion.quick) { change { $0.pages.removeAll { $0.id == pg.id } } }
-                                            at = max(0, min(at, b.pages.count - 2))
-                                        }
+                        // THE PAGES, TURNED AS APPLE BOOKS TURNS THEM: the page curls over under the finger; a page
+                        // held: make it the cover, take it out
+                        PageCurl(pages: b.pages.map(\.id), at: $at) { pid in
+                            AnyView(
+                                Group {
+                                    if let pg = book?.pages.first(where: { $0.id == pid }) {
+                                        BookPageView(page: pg)
+                                            .contextMenu {
+                                                if let first = pg.photos.first {
+                                                    // THE COVER, changed any time
+                                                    Button("Make it the cover") { Feel.tap(); change { $0.cover = first } }
+                                                }
+                                                Button("Take out page", role: .destructive) {
+                                                    Feel.lift()
+                                                    let n = book?.pages.count ?? 1
+                                                    withAnimation(Motion.quick) { change { $0.pages.removeAll { $0.id == pid } } }
+                                                    at = max(0, min(at, n - 2))
+                                                }
+                                            }
                                     }
-                                    .tag(i)
-                            }
+                                }
+                            )
                         }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
                         .frame(width: w, height: w * 4 / 3)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                         // where you are, in words (no dots)
                         Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
                             .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
@@ -209,5 +217,72 @@ struct BookOpenView: View {
                 .glassEffect(PageGlass.control.interactive(), in: .capsule)
         }
         .buttonStyle(.press)
+    }
+}
+
+/// APPLE'S PAGE CURL (UIPageViewController, .pageCurl): each page a hosted SwiftUI page, keyed by its id, turned by a
+/// drag at its edge or a tap at its side, as in Books
+struct PageCurl: UIViewControllerRepresentable {
+    let pages: [String]
+    @Binding var at: Int
+    let content: (String) -> AnyView
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIViewController(context: Context) -> UIPageViewController {
+        let pvc = UIPageViewController(transitionStyle: .pageCurl, navigationOrientation: .horizontal,
+                                       options: [.spineLocation: NSNumber(value: UIPageViewController.SpineLocation.min.rawValue)])
+        pvc.dataSource = context.coordinator
+        pvc.delegate = context.coordinator
+        pvc.isDoubleSided = false
+        pvc.view.backgroundColor = .clear
+        if let first = context.coordinator.page(at: min(at, pages.count - 1)) {
+            pvc.setViewControllers([first], direction: .forward, animated: false)
+        }
+        return pvc
+    }
+    func updateUIViewController(_ pvc: UIPageViewController, context: Context) {
+        let c = context.coordinator
+        c.parent = self
+        // (a page added or taken out, or the place moved from outside: shown at once, the other pages rebuilt)
+        let shown = (pvc.viewControllers?.first as? Hosted)?.pid
+        let want = pages.indices.contains(at) ? pages[at] : pages.last
+        if shown != want || c.lastPages != pages, let w = want, let i = pages.firstIndex(of: w), let vc = c.page(at: i) {
+            let back = shown.flatMap { pages.firstIndex(of: $0) }.map { $0 > i } ?? false
+            pvc.setViewControllers([vc], direction: back ? .reverse : .forward, animated: shown != nil && c.lastPages == pages)
+        }
+        c.lastPages = pages
+        // (the page on show drawn again with what changed on it: its words typed below, the cover made; a hosted page
+        // otherwise keeps what it was first made with)
+        if let h = pvc.viewControllers?.first as? Hosted { h.rootView = content(h.pid) }
+    }
+
+    final class Hosted: UIHostingController<AnyView> {
+        var pid = ""
+    }
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+        var parent: PageCurl
+        var lastPages: [String] = []
+        init(_ p: PageCurl) { parent = p }
+        func page(at i: Int) -> Hosted? {
+            guard parent.pages.indices.contains(i) else { return nil }
+            let id = parent.pages[i]
+            let h = Hosted(rootView: parent.content(id))
+            h.pid = id
+            h.view.backgroundColor = .white
+            return h
+        }
+        private func index(of vc: UIViewController) -> Int? { (vc as? Hosted).flatMap { parent.pages.firstIndex(of: $0.pid) } }
+        func pageViewController(_ pvc: UIPageViewController, viewControllerBefore vc: UIViewController) -> UIViewController? {
+            index(of: vc).flatMap { page(at: $0 - 1) }
+        }
+        func pageViewController(_ pvc: UIPageViewController, viewControllerAfter vc: UIViewController) -> UIViewController? {
+            index(of: vc).flatMap { page(at: $0 + 1) }
+        }
+        func pageViewController(_ pvc: UIPageViewController, didFinishAnimating finished: Bool,
+                                previousViewControllers: [UIViewController], transitionCompleted done: Bool) {
+            guard done, let v = pvc.viewControllers?.first, let i = index(of: v) else { return }
+            Feel.tick()
+            parent.at = i
+        }
     }
 }
