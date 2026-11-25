@@ -352,7 +352,9 @@ final class MapController {
             if mid != underCentre { underCentre = mid; finePending = true; needsFrame = true }
         }
         guard afterFlight == nil, !CardState.shared.shown, !finePending else { return }
-        let f = min(max(fineHere, 1), Self.fineMax)
+        // (the Countries map only: Places close up keeps Apple's map from the usual zoom, its city names under the
+        // famous cities' marks; ours there named none of them between 7 and its own towns at 17.6)
+        let f = placesMode ? 1 : min(max(fineHere, 1), Self.fineMax)
         let want = closeUp ? k > Self.closeOut * f : k >= Self.closeIn * f
         #if DEBUG
         NSLog("wya closeup k %.1f -> %d", k, want ? 1 : 0)
@@ -504,6 +506,8 @@ final class MapController {
         didSet {
             guard placesMode != oldValue else { return }
             needsFrame = true; townPressed = nil
+            // (the zoom Apple's map comes in at differs between Countries and Places: decided again where the camera is)
+            defer { if flight == nil, !touching { checkCloseUp() } }
             if !placesMode { closePlace(); placesArea = nil; placesCollection = nil; placesType = nil; placesPicked = false; return }
             CollectionStore.shared.load()
             ThingIndex.shared.load()
