@@ -214,6 +214,9 @@ struct BookOpenView: View {
     @State private var placeFrom: CGPoint?
     /// the video page whose sound is on (its id); a video plays without it until asked
     @State private var soundFor: String?
+    /// the sketch's ink, from our colours (nil: whatever Apple's tool picker has), and a count bumped to clear it
+    @State private var sketchInk: String?
+    @State private var sketchClears = 0
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
     /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
@@ -286,15 +289,36 @@ struct BookOpenView: View {
                         // under it; Done keeps it
                         ZStack {
                             BookPageView(page: BookPage(photos: pg.photos, text: pg.text, poster: pg.poster))
-                            SketchCanvas(name: pg.drawing ?? (pg.id + ".drawing")) { name in
+                            SketchCanvas(name: pg.drawing ?? (pg.id + ".drawing"),
+                                         ink: sketchInk.map { UIColor(ListColours.colour($0)) }, clears: sketchClears) { name in
                                 change { bk in if let i = bk.pages.firstIndex(where: { $0.id == sid }) { bk.pages[i].drawing = name } }
                             }
                         }
                         .frame(width: w, height: pageH)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        HStack {
-                            pill("Done") { withAnimation(Motion.quick) { sketching = nil } }
+                        // OUR COLOURS FIRST, Apple's picker for the rest: tapped, the pen you hold takes it; any other colour is in
+                        // Apple's picker below
+                        HStack(spacing: 10) {
+                            ForEach(Self.inks, id: \.self) { n in
+                                Button { Feel.tap(); sketchInk = n } label: {
+                                    Circle().fill(ListColours.colour(n))
+                                        .overlay(Circle().strokeBorder(Palette.ink.opacity(0.18), lineWidth: 0.5))
+                                        .padding(4)
+                                        .overlay(Circle().strokeBorder(Palette.ink, lineWidth: sketchInk == n ? 1.5 : 0))
+                                        .frame(width: 36, height: 36)
+                                        .contentShape(Circle())
+                                }
+                                .buttonStyle(.press)
+                                .accessibilityLabel(n)
+                            }
                             Spacer(minLength: 0)
+                        }
+                        .transaction { $0.animation = nil }
+                        HStack {
+                            pill("Done") { withAnimation(Motion.quick) { sketching = nil; sketchInk = nil } }
+                            Spacer(minLength: 8)
+                            // (Clear: the drawing taken off this page)
+                            lineButton("Clear") { sketchClears += 1 }
                         }
                         .frame(minHeight: 52)
                     } else if overview {
@@ -426,6 +450,9 @@ struct BookOpenView: View {
         }
     }
 
+    /// our colours for a sketch, ink first
+    static let inks = ["ink", "lime", "teal", "blue", "yellow", "red", "brown", "grey"]
+
     /// a page moved one place earlier (-1) or later (+1), the place you are on following it
     private func move(_ pid: String, by d: Int) {
         Feel.tap()
@@ -545,6 +572,9 @@ struct PageCurl: UIViewControllerRepresentable {
 /// thickness, undo; a finger draws. Each stroke kept as it is made.
 struct SketchCanvas: UIViewRepresentable {
     let name: String
+    /// one of our colours for the pen held (its kind and thickness kept), and a count that clears the page when it grows
+    var ink: UIColor? = nil
+    var clears = 0
     let saved: (String) -> Void
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeUIView(context: Context) -> PKCanvasView {
@@ -562,7 +592,18 @@ struct SketchCanvas: UIViewRepresentable {
         DispatchQueue.main.async { v.becomeFirstResponder() }
         return v
     }
-    func updateUIView(_ v: PKCanvasView, context: Context) {}
+    func updateUIView(_ v: PKCanvasView, context: Context) {
+        let c = context.coordinator
+        if let ink, ink != c.ink {
+            let held = v.tool as? PKInkingTool
+            v.tool = PKInkingTool(held?.inkType ?? .pen, color: ink, width: held?.width ?? 4)
+        }
+        c.ink = ink
+        if clears != c.clears {
+            c.clears = clears
+            v.drawing = PKDrawing()
+        }
+    }
     static func dismantleUIView(_ v: PKCanvasView, coordinator: Coordinator) {
         coordinator.picker?.setVisible(false, forFirstResponder: v)
         v.resignFirstResponder()
@@ -570,7 +611,9 @@ struct SketchCanvas: UIViewRepresentable {
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         let parent: SketchCanvas
         var picker: PKToolPicker?
-        init(_ p: SketchCanvas) { parent = p }
+        var ink: UIColor?
+        var clears: Int
+        init(_ p: SketchCanvas) { parent = p; clears = p.clears }
         func canvasViewDrawingDidChange(_ v: PKCanvasView) {
             BookPhotos.saveDrawing(v.drawing, as: parent.name)
             parent.saved(parent.name)
