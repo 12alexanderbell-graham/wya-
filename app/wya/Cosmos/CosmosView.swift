@@ -332,7 +332,7 @@ struct CosmosView: View {
             .position(it.pos)
             .allowsHitTesting(form.page < 0.5)
             .accessibilityElement()
-            .accessibilityLabel("\(pl.k == "World" ? "The world" : pl.k), \(Int((share * 100).rounded())) percent")
+            .accessibilityLabel("\(pl.k), \(Int((share * 100).rounded())) percent")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { select(it.i) }
     }
@@ -371,7 +371,7 @@ struct CosmosView: View {
                     Button(Self.planets[j].k) { select(j) }
                 }
             }
-            Button("The world") { select(i) }
+            Button("World") { select(i) }
         } else {
             Section(Self.planets[i].k) {
                 Button("Open \(Self.planets[i].k)") { select(i) }

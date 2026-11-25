@@ -519,7 +519,7 @@ struct BookOpenView: View {
                                                     Button("Change the words") { Feel.tap(); wordsFor = pid }
                                                     Button("Move the words") { withAnimation(Motion.quick) { placing = pid } }
                                                 }
-                                                Button(pg.place == nil ? "Where it was" : "Change the place") {
+                                                Button(pg.place == nil ? "Location" : "Change the location") {
                                                     Feel.tap(); whereQuery = ""
                                                     withAnimation(Motion.quick) { whereFor = pid }
                                                 }
@@ -642,7 +642,7 @@ struct BookOpenView: View {
             return w.places[i].n
         }
         return VStack(alignment: .leading, spacing: 0) {
-            TextField("", text: $whereQuery, prompt: Text("Where it was").foregroundStyle(Palette.ink.opacity(0.5)))
+            TextField("", text: $whereQuery, prompt: Text("Location").foregroundStyle(Palette.ink.opacity(0.5)))
                 .font(.body).foregroundStyle(Palette.ink)
                 .autocorrectionDisabled()
                 .focused($whereTyping)

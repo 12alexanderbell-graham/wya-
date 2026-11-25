@@ -88,7 +88,7 @@ struct ZoomColumn: View {
     @ViewBuilder private var resetMenu: some View {
         let after = { (f: @escaping @MainActor () -> Void) in DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: f) }
         if map.regionScene == nil {
-            Button("The world") {
+            Button("World") {
                 after {
                     if map.onApple { map.appleHome() } else { map.closePlace(); map.goHome() }
                 }
