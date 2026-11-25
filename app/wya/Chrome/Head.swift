@@ -1473,7 +1473,11 @@ struct SearchResults: View {
         let full = spelledOut(typed).townFolded
         let whole = towns.filter { $0.name.townFolded == typed || $0.name.townFolded == full }.sorted { $0.people > $1.people }
         let begun = towns.filter { $0.name.townFolded != typed && $0.name.townFolded != full }
-        out += whole.filter { $0.people >= 50_000 }.map(town)
+        // (the best known sights of the name before a town of it under 100,000, 25 Nov: "st peters" listed Saint Peters
+        // in England and in Missouri, and a parish in Jamaica, before St. Peter's Basilica; a city of it still leads)
+        out += whole.filter { $0.people >= 100_000 }.map(town)
+        if whole.contains(where: { $0.people >= 50_000 && $0.people < 100_000 }) { out += sights.filter { !low.contains($0) } }
+        out += whole.filter { $0.people >= 50_000 && $0.people < 100_000 }.map(town)
         let smallExact = named0.isEmpty ? [] : exact.filter { RegionIndex.shared.people($0) < 100_000 }
         out += exact.filter { !smallExact.contains($0) }.map(region)
         out += named0
@@ -1511,7 +1515,9 @@ struct SearchResults: View {
         out += others.map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += small.map(region)
         out += rest.map(region)
-        return Array(out.prefix(8))
+        // (each once: a best known sight brought up before the small towns is not listed again in its usual place)
+        var seen = Set<ResultKey>()
+        return Array(out.filter { seen.insert($0).inserted }.prefix(8))
     }
     /// the towns for what was typed, as typed and with its short words in full, the group with the bigger town first
     static func townsFor(_ q: String, open: String?, limit: Int = 6) -> [TownIndex.Hit] {
