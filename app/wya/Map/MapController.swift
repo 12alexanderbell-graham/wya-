@@ -90,6 +90,8 @@ final class MapController {
         let name: String; let places: Set<Int>; let been: Int
         /// the list's own map colour; nil: lime
         var tint: SIMD4<Float>? = nil
+        /// a colour for each place (a tier list: each tier's places in its own colour); empty: all in `tint`
+        var tints: [Int: SIMD4<Float>] = [:]
     }
     var viewing: Viewing? { didSet { if viewing != oldValue { needsFrame = true } } }
     func look(of i: Int, stamped s: Set<Int>, wished w: Set<Int>, filter f: Int) -> Look {

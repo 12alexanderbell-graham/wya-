@@ -1300,6 +1300,16 @@ struct TierPage: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 8)
+                // A TIER LIST ON THE MAP: its places, each in its
+                // tier's colour, everything else plain, "Viewing" its name
+                if !mapPlaces().isEmpty {
+                    Button { seeOnMap() } label: {
+                        Text("See on the map").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
                 // the things not ranked yet
                 FlowRow(items: t.pool) { chip($0) }
                     .frame(minHeight: 52, alignment: .topLeading)
@@ -1329,6 +1339,34 @@ struct TierPage: View {
         .scrollIndicators(.hidden)
         // (the tiers run past the page's margins to the water's edges)
         .scrollClipDisabled()
+    }
+
+    /// its ranked things that are countries, with their tier's colour: a thing's own country where it has one, else a
+    /// country of exactly its name
+    private func mapPlaces() -> [Int: SIMD4<Float>] {
+        guard let w = AIContext.map?.world else { return [:] }
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        var out: [Int: SIMD4<Float>] = [:]
+        for (i, r) in t.rows.enumerated() {
+            let v = Palette.named[t.colour(i)] ?? SIMD3(0.5, 0.5, 0.5)
+            let c = SIMD4<Float>(Float(v.x), Float(v.y), Float(v.z), 1)
+            for n in r.items {
+                let cc = t.cc[n]?.lowercased() ?? CountryEntity.all.first { fold($0.name) == fold(n) }?.id.lowercased()
+                if let cc, let pi = w.placeIndex[cc], out[pi] == nil { out[pi] = c }
+            }
+        }
+        return out
+    }
+    private func seeOnMap() {
+        guard let map = AIContext.map else { return }
+        let tints = mapPlaces()
+        guard !tints.isEmpty else { Feel.refuse(); return }
+        Feel.tap()
+        let places = Set(tints.keys)
+        map.viewing = MapController.Viewing(name: t.name.isEmpty ? "Tier list" : t.name, places: places,
+                                            been: places.filter { map.stamped.contains($0) }.count, tints: tints)
+        if let h = AIContext.head, h.mode != .countries { h.mode = .countries }
+        NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)
     }
 
     /// A TIER'S OWN STRIP, under it: its name, its colour from the app's, and Remove (two tiers at least stay)
