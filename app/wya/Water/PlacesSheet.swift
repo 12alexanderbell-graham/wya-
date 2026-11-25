@@ -207,7 +207,11 @@ struct PlacesSheet: View {
     static func places(map: MapController) -> [CollectionStore.Item] {
         // (the capitals are their own list, each keyed as its town)
         let kind = map.placesKind, capitals = kind == CollectionStore.capitals
-        guard let c = CollectionStore.shared.collection(capitals ? CollectionStore.capitals : map.placesSet) else { return [] }
+        // (Cities has no list of its own, every town being one: the cities people know, the marks its map shows, 25 Nov:
+        // "Cities 2" stood over one word and empty glass, where every other set listed its places)
+        let id = capitals ? CollectionStore.capitals
+            : map.placesSet == CollectionStore.towns ? CollectionStore.famousCities : map.placesSet
+        guard let c = CollectionStore.shared.collection(id) else { return [] }
         return Array(c.items.lazy.filter { capitals || kind == nil || $0.type == kind }.prefix(300))
     }
     /// its country, or the two it lies between; a sea or a range says none
