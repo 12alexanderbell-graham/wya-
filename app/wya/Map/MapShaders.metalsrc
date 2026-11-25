@@ -143,6 +143,19 @@ inline float castShade(texture2d<float> rel, sampler s, float2 uv, float h0, flo
     return smoothstep(0.0, 0.08, over);
 }
 
+
+// THE VALLEYS' SHADE (25 Nov, the world's light): ground lower than the ground round it gets less of the sky, so it is a
+// little darker whatever the sun does (what renderers call ambient occlusion). Eight heights on a ring about four
+// texels out; how far the point sits below their mean, 0 open ground to 1 deep in a valley.
+inline float valleyShade(texture2d<float> rel, sampler s, float2 uv, float h0, float2 texel) {
+    float sum = 0.0;
+    for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785398;
+        sum += rel.sample(s, uv + float2(cos(a), sin(a)) * texel * 4.0).g;
+    }
+    return smoothstep(0.0, 0.12, sum / 8.0 - h0);
+}
+
 fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> rel [[texture(0)]],
                                texture2d<float> det [[texture(1)]],
@@ -237,6 +250,8 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
     // coarse heights as grey blotches
     float3 land = mix(WHITE, BEIGE_DARK, clamp(pow(h, 1.15) * 1.05, 0.0, 1.0) * mix(0.10, 1.0, detail));
     land *= mix(1.0, clamp(shade, 0.6, 1.25), 0.55 * detail);
+    // the valleys' shade, day and night, as soft as the shadows and the same cool colour, a little less
+    land *= mix(float3(1.0), float3(0.84, 0.87, 0.94), valleyShade(rel, s, in.uv, rel.sample(s, in.uv).g, float2(look.texelU, look.texelV)) * detail);
     // the mountains' shadows by day, cool and soft (a painter's shade, a little blue, never black); gone at night and
     // where the relief itself eases out zoomed in
     if (look.sun.z > 0.5 && sunL.w > 0.0 && detail > 0.0) {
