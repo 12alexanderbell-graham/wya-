@@ -27,7 +27,13 @@ final class Onboarding {
         var d = UserDefaults.standard.bool(forKey: Self.key) || !me.name.isEmpty || !me.handle.isEmpty
         #if DEBUG
         // (a test's first open: -wyaOnboard shows it whatever the account has)
-        if ProcessInfo.processInfo.arguments.contains("-wyaOnboard") { d = false }
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-wyaOnboard") { d = false }
+        // (-wyaOnboardPage N opens it on page N, for a look at a page on a phone the test cannot swipe)
+        if let i = args.firstIndex(of: "-wyaOnboardPage"), i + 1 < args.count, let n = Int(args[i + 1]) {
+            d = false
+            page = max(0, min(Self.pages - 1, n))
+        }
         #endif
         done = d
     }
@@ -63,7 +69,9 @@ struct OnboardingView: View {
     @State private var drag: CGFloat = 0
     @State private var shake: CGFloat = 0
     @State private var name = ""
+    @State private var bio = ""
     @FocusState private var typing: Bool
+    @FocusState private var typingBio: Bool
     @State private var asking = false
     @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
@@ -72,13 +80,14 @@ struct OnboardingView: View {
         GeometryReader { g in
             let W = g.size.width, H = g.size.height
             HStack(spacing: 0) {
-                hello(W, H).frame(width: W, height: H)
+                hello(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 0)
                 // (the blank Profile's own ground: the field at the Profile's middle strength)
                 who(W, H).frame(width: W, height: H)
                     .background(LivingField(saturation: ProfileView.look.x, power: ProfileView.look.y).ignoresSafeArea())
-                borders(W, H).frame(width: W, height: H)
-                whichMap(W, H).frame(width: W, height: H)
-                location(W, H).frame(width: W, height: H)
+                    .accessibilityHidden(ob.page != 1)
+                borders(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 2)
+                whichMap(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 3)
+                location(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 4)
             }
             .frame(width: W, alignment: .leading)
             .offset(x: -CGFloat(ob.page) * W + drag)
@@ -92,9 +101,15 @@ struct OnboardingView: View {
                 .onEnded { v in
                     let go = v.translation.width < -W * 0.25 || v.predictedEndTranslation.width < -W * 0.5
                     let back = v.translation.width > W * 0.25 || v.predictedEndTranslation.width > W * 0.5
-                    if go { next() } else if back, ob.page > first { typing = false; Feel.tick(); withAnimation(Motion.chrome) { ob.page -= 1; drag = 0 }; return }
+                    if go { next() } else if back, ob.page > first { previous(); return }
                     withAnimation(Motion.chrome) { drag = 0 }
                 })
+            // (VoiceOver: the three-finger swipe turns the pages as the drag does; only the page on screen is read)
+            .accessibilityElement(children: .contain)
+            .accessibilityScrollAction { edge in
+                if edge == .trailing { next() }
+                else if edge == .leading, ob.page > first { previous() }
+            }
         }
         .ignoresSafeArea()
         .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images, photoLibrary: .shared())
@@ -111,6 +126,13 @@ struct OnboardingView: View {
     /// the first page a swipe back can reach (the first one's ground, the loading screen, goes once it is left)
     private var first: Int { ob.pastHello ? 1 : 0 }
 
+    /// back a page (the drag's, or VoiceOver's)
+    private func previous() {
+        typing = false; typingBio = false
+        Feel.tick()
+        withAnimation(Motion.chrome) { ob.page -= 1; drag = 0 }
+    }
+
     /// on to the next page, unless this one needs something first (an empty name shakes, with a refusing feel)
     private func next() {
         if ob.page == 1, name.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -120,8 +142,14 @@ struct OnboardingView: View {
             typing = true
             return
         }
-        if ob.page == 1 { store.set { $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(ProfileStore.nameMax)) } }
-        typing = false
+        if ob.page == 1 {
+            let b = bio.trimmingCharacters(in: .whitespacesAndNewlines)
+            store.set {
+                $0.name = String(name.trimmingCharacters(in: .whitespaces).prefix(ProfileStore.nameMax))
+                if !b.isEmpty { $0.bio = String(b.prefix(ProfileStore.bioMax)) }
+            }
+        }
+        typing = false; typingBio = false
         guard ob.page < Onboarding.pages - 1 else { withAnimation(Motion.chrome) { drag = 0 }; return }
         Feel.tick()
         withAnimation(Motion.chrome) { ob.page += 1; drag = 0 }
@@ -196,20 +224,38 @@ struct OnboardingView: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel("Picture")
             .accessibilityHint("Chooses a photo")
-            TextField("", text: $name, prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
-                .font(Typeface.nature(34, relativeTo: .title))
-                .multilineTextAlignment(.center)
-                .textContentType(.name)
-                .submitLabel(.done)
-                .focused($typing)
-                .onSubmit { next() }
-                .onChange(of: name) { o, n in if n.count > ProfileStore.nameMax { name = o; Feel.refuse() } }
-                .frame(width: W - 64, height: 52)
-                .offset(x: sin(shake * .pi * 2) * 10)
+            // the name and the bio as the Profile has them: the name in the app's own type, the bio a reading line under
+            // it (Return in the name goes on to the bio; in the bio, Done)
+            VStack(spacing: 8) {
+                TextField("", text: $name, prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
+                    .font(Typeface.nature(34, relativeTo: .title))
+                    .multilineTextAlignment(.center)
+                    .textContentType(.name)
+                    .submitLabel(.next)
+                    .focused($typing)
+                    .onSubmit { typingBio = true }
+                    .onChange(of: name) { o, n in if n.count > ProfileStore.nameMax { name = o; Feel.refuse() } }
+                    .frame(width: W - 64, height: 52)
+                    .offset(x: sin(shake * .pi * 2) * 10)
+                TextField("", text: $bio, prompt: Text("Bio").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+                    .font(.body)
+                    .foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1 ... 3)
+                    .submitLabel(.done)
+                    .focused($typingBio)
+                    .onChange(of: bio) { o, n in
+                        // (one paragraph: Return is Done)
+                        if n.contains("\n") { bio = o; typingBio = false; return }
+                        if n.count > ProfileStore.bioMax { bio = o; Feel.refuse() }
+                    }
+                    .frame(maxWidth: 300)
+                    .frame(minHeight: 44)
+            }
         }
         .frame(width: W, height: H)
         .contentShape(Rectangle())
-        .onTapGesture { typing = false }
+        .onTapGesture { typing = false; typingBio = false }
     }
 
     // MARK: over the map: whose borders, which map, location
