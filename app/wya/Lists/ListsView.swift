@@ -106,6 +106,8 @@ struct ListsWater: View {
     @State private var removed: (list: String, item: ListItem, at: Int)?
     /// the list whose own sheet is up (name, cover, who can see it, archive, hide, delete)
     @State private var infoFor: String?
+    /// the archive sheet is up (archived and hidden lists)
+    @State private var archiveOpen = false
 
     var body: some View {
         let L = water.layout
@@ -147,6 +149,11 @@ struct ListsWater: View {
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        .sheet(isPresented: $archiveOpen) {
+            ListArchiveSheet(open: { id in archiveOpen = false; withAnimation(Motion.quick) { s.open = id } })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: Binding(get: { infoFor != nil }, set: { if !$0 { infoFor = nil } })) {
             if let id = infoFor {
                 ListInfoSheet(id: id) { infoFor = nil }
@@ -199,6 +206,9 @@ struct ListsWater: View {
                     guard s.kind <= 2 else { Feel.refuse(); return }
                     Feel.tap()
                     withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
+                    // A NEW LIST STARTS ON ITS OWN PAGE OF INFORMATION (you can always just continue): its sheet,
+                    // name first, over the empty list
+                    if s.kind == 0, let id = s.open { s.naming = false; infoFor = id }
                 }
                 .accessibilityLabel(open != nil ? "View on map" : ["New list", "New plan", "New tier list", "New book"][s.kind])
                 .transition(.blurReplace)
@@ -314,6 +324,18 @@ struct ListsWater: View {
                     ForEach(ordered) { l in (l.wish ? AnyView(wishTile(l)) : AnyView(listTile(l))).settlesIn() }
                 }
                 .padding(.top, 4)
+            }
+            // THE ARCHIVE (25 Nov): archived or hidden lists left the shelf and could never be seen again; one quiet line
+            // at the shelf's foot when there are any
+            let away = store.book.lists.filter { $0.arch || $0.hid }.count
+            if q.isEmpty, away > 0 {
+                Button { Feel.tap(); archiveOpen = true } label: {
+                    Text("Archived and hidden · \(away)").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 12)
             }
         // PLANS AND TIER LISTS AS TILES, the same shape as Lists': a plan's cover the map of where it goes, or its
         // days as a little calendar while it has no places; a tier list's its tiers in full colour
@@ -515,7 +537,8 @@ struct ListsWater: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
-                    if editable, s.naming || title.isEmpty {
+                    // (named in place only when asked; a new list is named in its own sheet, 25 Nov)
+                    if editable, s.naming {
                         TextField("", text: Binding(get: { store.book.lists.first { $0.id == s.open }?.name ?? "" }, set: { v in
                             let n = String(v.prefix(60))
                             ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == s.open }) { b.lists[i].name = n } }
@@ -527,7 +550,8 @@ struct ListsWater: View {
                         .onAppear { naming = true }
                         .onChange(of: naming) { _, f in if !f { s.naming = false } }
                     } else {
-                        Text(title).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
+                        Text(title.isEmpty ? "New list" : title).font(.largeTitle.weight(.bold))
+                            .foregroundStyle(Palette.ink.opacity(title.isEmpty ? 0.5 : 1))
                             .lineLimit(2)
                             // (its name tapped: the list's own sheet, everything that makes it yours, 25 Nov)
                             .onTapGesture { if let list { Feel.tap(); infoFor = list.id } }
@@ -682,7 +706,8 @@ struct ListsWater: View {
         guard !places.isEmpty else { Feel.refuse(); return }
         // (the caption's count: of the list's countries, the ones you have stamped)
         map.viewing = MapController.Viewing(name: l.name.isEmpty ? "New list" : l.name, places: places,
-                                            been: places.filter { map.stamped.contains($0) }.count)
+                                            been: places.filter { map.stamped.contains($0) }.count,
+                                            tint: ListColours.vector(l.mapc))
         // (on Countries: Pins and Places draw no countries' colours)
         if let h = AIContext.head, h.mode != .countries { h.mode = .countries }
         NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)

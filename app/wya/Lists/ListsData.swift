@@ -72,6 +72,8 @@ nonisolated struct MyList: Codable, Equatable, Sendable, Identifiable {
     var hid: Bool
     /// who can see it: "me", "friends" or "all"
     var vis: String = "me"
+    /// its colour on the map when seen there (one of ListColours' names)
+    var mapc: String = "lime"
 
     init(id: String = "l-" + UUID().uuidString, name: String, wish: Bool = false, cols: [String] = ["lime", "teal", "blue"],
                 cov: String = "cascade", pics: [String] = [], items: [ListItem] = [], what: String = "", when: String = "",
@@ -80,7 +82,7 @@ nonisolated struct MyList: Codable, Equatable, Sendable, Identifiable {
         self.what = what; self.when = when; self.note = note; self.arch = arch; self.hid = hid
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, wish, cols, cov, pics, items, what, when, whenFrom, whenTo, note, arch, hid, vis }
+    enum CodingKeys: String, CodingKey { case id, name, wish, cols, cov, pics, items, what, when, whenFrom, whenTo, note, arch, hid, vis, mapc }
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -98,6 +100,7 @@ nonisolated struct MyList: Codable, Equatable, Sendable, Identifiable {
         arch = try c.decodeIfPresent(Bool.self, forKey: .arch) ?? false
         hid = try c.decodeIfPresent(Bool.self, forKey: .hid) ?? false
         vis = try c.decodeIfPresent(String.self, forKey: .vis) ?? "me"
+        mapc = try c.decodeIfPresent(String.self, forKey: .mapc) ?? "lime"
     }
 
     var whenIsExact: Bool { whenFrom != nil || whenTo != nil }

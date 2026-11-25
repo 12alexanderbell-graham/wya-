@@ -912,7 +912,7 @@ final class MapRenderer: NSObject, MTKViewDelegate {
         // A LIST VIEWED ON THE MAP (MapController.viewing): only its places, lime; your stamps and wishes wait
         let viewing = controller.viewing
         if !drained, let v = viewing {
-            group(v.places.filter { $0 != pressed }.sorted(), kind: 2, tint: Palette.limeV, pattern: hatch)
+            group(v.places.filter { $0 != pressed }.sorted(), kind: 2, tint: v.tint ?? Palette.limeV, pattern: hatch)
         }
         // Stamped+ and Wishlist+ (1.14): each place by its passes (lime by visits, ink where you lived; blue by want)
         if drained || viewing != nil {

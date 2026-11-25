@@ -86,7 +86,11 @@ final class MapController {
     enum Look: Equatable { case plain, lime, blue }
     /// A LIST VIEWED ON THE MAP (Lists plan §4; P06:): its countries lime, everything else plain, until it is put
     /// away
-    struct Viewing: Equatable { let name: String; let places: Set<Int>; let been: Int }
+    struct Viewing: Equatable {
+        let name: String; let places: Set<Int>; let been: Int
+        /// the list's own map colour; nil: lime
+        var tint: SIMD4<Float>? = nil
+    }
     var viewing: Viewing? { didSet { if viewing != oldValue { needsFrame = true } } }
     func look(of i: Int, stamped s: Set<Int>, wished w: Set<Int>, filter f: Int) -> Look {
         if let v = viewing { return v.places.contains(i) ? .lime : .plain }

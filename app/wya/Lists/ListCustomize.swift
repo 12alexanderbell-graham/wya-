@@ -64,6 +64,12 @@ enum ListIcon: String, CaseIterable, Sendable {
 /// the colours a piece can take: the app's own eight
 enum ListColours {
     static let names = ["lime", "teal", "blue", "yellow", "red", "brown", "grey", "ink"]
+    /// the colour as the map's renderer takes it
+    static func vector(_ n: String) -> SIMD4<Float> {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(colour(n)).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return SIMD4(Float(r), Float(g), Float(b), 1)
+    }
     static func colour(_ n: String) -> Color {
         switch n {
         case "teal": Palette.teal
@@ -131,6 +137,15 @@ enum ListCoverPhotos {
     return nil
 }
 
+/// a list's cover for its little pictures (its sheet, the archive): its own, else its map, else plain glass while it
+/// has no places (a blank gap stood where its picture should be, 25 Nov)
+@MainActor func listCoverOrGlass(_ l: MyList) -> AnyView {
+    if let own = listOwnCover(l) { return own }
+    let ccs = Array(l.countries.prefix(4))
+    if ccs.isEmpty { return AnyView(Color.clear.glassEffect(PageGlass.on, in: .rect(cornerRadius: 12))) }
+    return AnyView(ListCover(ccs: ccs, world: AIContext.map?.world, spots: []))
+}
+
 /// A LIST'S OWN SHEET (tapping its name, or Edit in its hold menu): everything that makes it yours, with no title and
 /// nothing to save (every change is kept as it is made)
 struct ListInfoSheet: View {
@@ -142,6 +157,7 @@ struct ListInfoSheet: View {
     /// which of the icon's pieces is being coloured
     @State private var piece = 2
     @State private var confirmDelete = false
+    @FocusState private var naming: Bool
 
     private var l: MyList? { store.book.lists.first { $0.id == id } }
     private func change(_ f: (inout MyList) -> Void) {
@@ -158,17 +174,37 @@ struct ListInfoSheet: View {
                     // the cover as it will show, at the top (whatever you make looks as it will to others, 26 Sep)
                     HStack(alignment: .top, spacing: 16) {
                         Color.clear.frame(width: 96, height: 96)
-                            .overlay { listOwnCover(l) ?? AnyView(ListCover(ccs: Array(l.countries.prefix(4)), world: AIContext.map?.world, spots: [])) }
+                            .overlay { listOwnCover(l) ?? listCoverOrGlass(l) }
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                         VStack(alignment: .leading, spacing: 6) {
                             TextField("", text: text(\.name, limit: 60), prompt: Text("Name").foregroundStyle(Palette.ink.opacity(0.5)))
                                 .font(.title2.weight(.bold)).foregroundStyle(Palette.ink)
+                                .focused($naming)
+                                .submitLabel(.done)
+                                // (a new list: its name first, the keyboard up for it)
+                                .onAppear { if l.name.isEmpty { naming = true } }
                             TextField("", text: text(\.what, limit: 140), prompt: Text("What it's for").foregroundStyle(Palette.ink.opacity(0.5)),
                                       axis: .vertical)
                                 .font(.body).foregroundStyle(Palette.ink).lineLimit(1 ... 3)
                         }
                     }
                     section("Cover") { coverPicker(l) }
+                    // ITS COLOUR ON THE MAP: its countries in it
+                    // when you tap its cover to see it on the map
+                    section("On the map") {
+                        HStack(spacing: 8) {
+                            ForEach(ListColours.names.filter { $0 != "ink" && $0 != "grey" }, id: \.self) { n in
+                                Circle().fill(ListColours.colour(n))
+                                    .frame(width: 30, height: 30)
+                                    .overlay { if l.mapc == n { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 38, height: 38) } }
+                                    .frame(width: 40, height: 40)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { Feel.tap(); change { $0.mapc = n } }
+                                    .accessibilityLabel(n)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
                     section("When") {
                         TextField("", text: text(\.when, limit: 60), prompt: Text("Any time, summer, 25 Oct 2027").foregroundStyle(Palette.ink.opacity(0.5)))
                             .font(.body).foregroundStyle(Palette.ink)
@@ -179,8 +215,15 @@ struct ListInfoSheet: View {
                                 on: l.vis) { v in change { $0.vis = v } }
                     }
                     VStack(alignment: .leading, spacing: 0) {
-                        rowButton(l.arch ? "Take out of the archive" : "Archive") { change { $0.arch.toggle() }; if self.l?.arch == true { close() } }
-                        rowButton(l.hid ? "Show again" : "Hide") { change { $0.hid.toggle() }; if self.l?.hid == true { close() } }
+                        rowButton(l.arch ? "Take out of the archive" : "Archive") {
+                            change { $0.arch.toggle() }
+                            // (archived: back to the shelf, the list's page closed with the sheet)
+                            if self.l?.arch == true { ListsState.shared.open = nil; close() }
+                        }
+                        rowButton(l.hid ? "Show again" : "Hide") {
+                            change { $0.hid.toggle() }
+                            if self.l?.hid == true { ListsState.shared.open = nil; close() }
+                        }
                         if !l.wish {
                             rowButton("Delete list", red: true) { confirmDelete = true }
                         }
@@ -306,5 +349,50 @@ struct ListInfoSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// THE ARCHIVE (25 Nov): every archived or hidden list, its cover, its name and which it is; tapped, it opens; held,
+/// it comes back to the shelf
+struct ListArchiveSheet: View {
+    var open: (String) -> Void
+    @State private var store = ListsStore.shared
+    var body: some View {
+        let away = store.book.lists.filter { $0.arch || $0.hid }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if away.isEmpty {
+                    Text("Nothing archived or hidden").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                        .frame(maxWidth: .infinity, minHeight: 88)
+                }
+                ForEach(away) { l in
+                    HStack(spacing: 14) {
+                        Color.clear.frame(width: 56, height: 56)
+                            .overlay { listOwnCover(l) ?? listCoverOrGlass(l) }
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(l.name.isEmpty ? "New list" : l.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                            Text(l.hid && l.arch ? "Archived, hidden" : l.hid ? "Hidden" : "Archived")
+                                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                        }
+                        Spacer(minLength: 0)
+                        Button {
+                            Feel.tap()
+                            ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == l.id }) { b.lists[i].arch = false; b.lists[i].hid = false } }
+                        } label: {
+                            Text("Back on the shelf").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                                .padding(.horizontal, 12).frame(height: 34)
+                                .glassEffect(PageGlass.control.interactive(), in: .capsule)
+                        }
+                        .buttonStyle(.press)
+                    }
+                    .frame(minHeight: 64)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Feel.tap(); open(l.id) }
+                }
+            }
+            .padding(24)
+        }
+        .scrollIndicators(.hidden)
     }
 }
