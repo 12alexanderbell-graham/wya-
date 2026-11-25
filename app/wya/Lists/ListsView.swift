@@ -1794,8 +1794,29 @@ enum ListMapCovers {
         // (centred on its places, not on its countries' whole outlines: Apple's map goes only so far out, showing the
         // middle of what was asked, and Chile's outline down to Tierra del Fuego pulled that middle south of Portugal)
         let pts = mids.map { MKMapPoint($0) }
-        let cx = pts.isEmpty ? rect.midX : (pts.map(\.x).min()! + pts.map(\.x).max()!) / 2
-        let cy = pts.isEmpty ? rect.midY : (pts.map(\.y).min()! + pts.map(\.y).max()!) / 2
+        var cx = pts.isEmpty ? rect.midX : (pts.map(\.x).min()! + pts.map(\.x).max()!) / 2
+        var cy = pts.isEmpty ? rect.midY : (pts.map(\.y).min()! + pts.map(\.y).max()!) / 2
+        // A LIST ROUND THE WORLD: wider than Apple's map shows at a cover's size (about two fifths of the world), the
+        // cover is where most of its places are, not the middle of them all (a list from Peru to Japan to New Zealand
+        // was framed on the mid-Atlantic, nearly every dot off its edges, 25 Nov)
+        let reach = MKMapSize.world.width * 0.4
+        if pts.count > 2, pts.map(\.x).max()! - pts.map(\.x).min()! > reach {
+            var best = (n: 0, from: cx - reach / 2)
+            for p in pts {
+                let n = pts.filter { $0.x >= p.x && $0.x <= p.x + reach }.count
+                if n > best.n { best = (n, p.x) }
+            }
+            let inside = pts.filter { $0.x >= best.from && $0.x <= best.from + reach }
+            if !inside.isEmpty {
+                let x0 = inside.map(\.x).min()!, x1 = inside.map(\.x).max()!
+                let y0 = inside.map(\.y).min()!, y1 = inside.map(\.y).max()!
+                cx = (x0 + x1) / 2; cy = (y0 + y1) / 2
+                // (and only as wide as those places: a frame the world's width can only sit at the world's middle)
+                w = max(x1 - x0, MKMapSize.world.width / 60) * 1.4; h = max(y1 - y0, MKMapSize.world.height / 60) * 1.4
+                if w / h < aspect { w = h * aspect } else { h = w / aspect }
+                if h > MKMapSize.world.height { h = MKMapSize.world.height; w = h * aspect }
+            }
+        }
         let o = MKMapPoint(x: min(max(0, cx - w / 2), MKMapSize.world.width - w), y: max(0, cy - h / 2))
         let opt = MKMapSnapshotter.Options()
         opt.mapRect = MKMapRect(origin: o, size: MKMapSize(width: w, height: h))
