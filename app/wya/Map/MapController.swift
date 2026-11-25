@@ -329,7 +329,7 @@ final class MapController {
     /// never flat beside it
     @ObservationIgnored private(set) var inView: [Int] = []
     static let fineSlots = 12
-    private func mostInView(_ w: World) -> [Int] {
+    private func mostInView(_ w: World, c: SIMD2<Double>, k: Double) -> [Int] {
         let hw = Float(view.width / 2 / k), hh = Float(view.height / 2 / k)
         let v = SIMD4(Float(c.x) - hw, Float(c.y) - hh, Float(c.x) + hw, Float(c.y) + hh)
         let whole = (v.z - v.x) * (v.w - v.y)
@@ -348,7 +348,7 @@ final class MapController {
         // its finer relief is asked for at once; only the choice of map waits)
         if let w = world {
             let mid = k >= Self.fineFrom ? w.place(at: SIMD2(Float(c.x), Float(c.y))) : nil
-            inView = k >= Self.fineFrom ? mostInView(w) : []
+            inView = k >= Self.fineFrom ? mostInView(w, c: c, k: k) : []
             if mid != underCentre { underCentre = mid; finePending = true; needsFrame = true }
         }
         guard afterFlight == nil, !CardState.shared.shown, !finePending else { return }
@@ -1758,6 +1758,13 @@ final class MapController {
         // Reduce Motion: the same move, shorter (Part 19; never a fade or a cut)
         flight = (SIMD3(c.x, c.y, log(k)), SIMD3(p.x, p.y, log(nk)), 0, Motion.reduce ? dur * 0.6 : dur, glide)
         details?.prefetch(c: p, k: nk, view: view)
+        // (the land where it lands asked for its finer relief as it sets off, so the countries round a card's place are
+        // in relief when the camera gets there, not flat until a moment after)
+        if let w = world, nk >= Self.fineFrom {
+            let mid = w.place(at: SIMD2(Float(p.x), Float(p.y)))
+            inView = mostInView(w, c: p, k: nk)
+            if mid != underCentre { underCentre = mid; finePending = true }
+        }
         afterFlight = then
         needsFrame = true
     }
