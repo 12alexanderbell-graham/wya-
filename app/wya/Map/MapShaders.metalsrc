@@ -156,11 +156,11 @@ inline float valleyShade(texture2d<float> rel, sampler s, float2 uv, float h0, f
     return smoothstep(0.0, 0.12, sum / 8.0 - h0);
 }
 
-// THE FINER RELIEF'S SLOTS: up to twelve countries' own pictures at once (the open one, then the land filling
+// THE FINER RELIEF'S SLOTS: up to sixteen countries' own pictures at once (the open one, then the land filling
 // the screen), each with its box in the world picture and its texel; n how many are in
-#define DET_N 12
+#define DET_N 16
 struct Dets { float4 box[DET_N]; float4 texel[DET_N]; float4 n; };
-inline float2 detSample(int i, sampler s, float2 uv, texture2d<float> d0, texture2d<float> d1, texture2d<float> d2, texture2d<float> d3, texture2d<float> d4, texture2d<float> d5, texture2d<float> d6, texture2d<float> d7, texture2d<float> d8, texture2d<float> d9, texture2d<float> d10, texture2d<float> d11) {
+inline float2 detSample(int i, sampler s, float2 uv, texture2d<float> d0, texture2d<float> d1, texture2d<float> d2, texture2d<float> d3, texture2d<float> d4, texture2d<float> d5, texture2d<float> d6, texture2d<float> d7, texture2d<float> d8, texture2d<float> d9, texture2d<float> d10, texture2d<float> d11, texture2d<float> d12, texture2d<float> d13, texture2d<float> d14, texture2d<float> d15) {
     switch (i) {
         case 0: return d0.sample(s, uv).rg;
         case 1: return d1.sample(s, uv).rg;
@@ -173,7 +173,11 @@ inline float2 detSample(int i, sampler s, float2 uv, texture2d<float> d0, textur
         case 8: return d8.sample(s, uv).rg;
         case 9: return d9.sample(s, uv).rg;
         case 10: return d10.sample(s, uv).rg;
-        default: return d11.sample(s, uv).rg;
+        case 11: return d11.sample(s, uv).rg;
+        case 12: return d12.sample(s, uv).rg;
+        case 13: return d13.sample(s, uv).rg;
+        case 14: return d14.sample(s, uv).rg;
+        default: return d15.sample(s, uv).rg;
     }
 }
 
@@ -185,6 +189,8 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
                                texture2d<float> d6 [[texture(7)]], texture2d<float> d7 [[texture(8)]],
                                texture2d<float> d8 [[texture(9)]], texture2d<float> d9 [[texture(10)]],
                                texture2d<float> d10 [[texture(11)]], texture2d<float> d11 [[texture(12)]],
+                               texture2d<float> d12 [[texture(13)]], texture2d<float> d13 [[texture(14)]],
+                               texture2d<float> d14 [[texture(15)]], texture2d<float> d15 [[texture(16)]],
                                sampler s [[sampler(0)]],
                                constant Look& look [[buffer(0)]],
                                constant Cam& cam [[buffer(1)]],
@@ -221,11 +227,14 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
             // over)
             if (u.x < 0.0) { float x = (in.uv.x + 1.0 - bx.x) / span.x; if (x <= 1.0) u.x = x; }
             else if (u.x > 1.0) { float x = (in.uv.x - 1.0 - bx.x) / span.x; if (x >= 0.0) u.x = x; }
+            // (eased in over its box's outer edge: 4% of the box, and never under about 40 pixels on screen, so the edge of
+            // a small country's box over land with no picture of its own is a soft change, not a line)
             float2 e = min(u, 1.0 - u);
-            float w = smoothstep(0.0, 0.04, min(e.x, e.y));
+            float2 ePx = e * span / max(fw, float2(1e-9));
+            float w = min(smoothstep(0.0, 0.04, min(e.x, e.y)), smoothstep(0.0, 40.0, min(ePx.x, ePx.y)));
             if (w > wd + 0.001) { wd = w; du = u; di = i; }
         }
-        if (wd > 0.0) dh = mix(dh, detSample(di, s, du, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11), wd);
+        if (wd > 0.0) dh = mix(dh, detSample(di, s, du, d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15), wd);
     }
     // MAP SETTINGS' STYLE SIMPLE (Part 1.4): no relief; the sea blue 25% on cream, unmarked land cream, your colours
     // on white as on Detailed (so lime and blue read the same in both styles)
@@ -272,10 +281,10 @@ fragment float4 reliefFragment(GridV in [[stage_in]],
         // strength so the hills read alike in both
         float2 dtx = D.texel[di].xy;
         float2 dt = dtx / (D.box[di].zw - D.box[di].xy);
-        float2 g2 = float2(detSample(di, s, du - float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g
-                           - detSample(di, s, du + float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g,
-                           detSample(di, s, du - float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g
-                           - detSample(di, s, du + float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11).g);
+        float2 g2 = float2(detSample(di, s, du - float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15).g
+                           - detSample(di, s, du + float2(dt.x, 0), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15).g,
+                           detSample(di, s, du - float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15).g
+                           - detSample(di, s, du + float2(0, dt.y), d0, d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11, d12, d13, d14, d15).g);
         g2 *= pow(max(look.texelU / max(dtx.x, 1e-9), 1.0), 0.45);
         grad = mix(grad, g2, wd);
     }

@@ -328,20 +328,36 @@ final class MapController {
     /// first, at most `fineSlots`): the renderer lays in their finer relief too, so the land round the middle country is
     /// never flat beside it
     @ObservationIgnored private(set) var inView: [Int] = []
-    static let fineSlots = 12
+    static let fineSlots = 16
     private func mostInView(_ w: World, c: SIMD2<Double>, k: Double) -> [Int] {
         let hw = Float(view.width / 2 / k), hh = Float(view.height / 2 / k)
         let v = SIMD4(Float(c.x) - hw, Float(c.y) - hh, Float(c.x) + hw, Float(c.y) + hh)
         let whole = (v.z - v.x) * (v.w - v.y)
         var area: [Int: Float] = [:]
+        // (each country's pieces in view, boxed together: a far piece, France's Guiana, never makes its box the world)
+        var box: [Int: SIMD4<Float>] = [:]
         for r in w.rings where r.unit >= 0 {
             let o = w.unitOwner[r.unit]
             guard o >= 0 else { continue }
             let x = min(r.box.z, v.z) - max(r.box.x, v.x), y = min(r.box.w, v.w) - max(r.box.y, v.y)
-            if x > 0, y > 0 { area[o, default: 0] += x * y }
+            guard x > 0, y > 0 else { continue }
+            area[o, default: 0] += x * y
+            if let b = box[o] { box[o] = SIMD4(min(b.x, r.box.x), min(b.y, r.box.y), max(b.z, r.box.z), max(b.w, r.box.w)) }
+            else { box[o] = r.box }
         }
-        // (a sliver at the screen's edge isn't worth a picture: at least half a percent of the view)
-        return area.filter { $0.value > whole * 0.005 }.sorted { $0.value > $1.value }.prefix(Self.fineSlots).map(\.key)
+        // biggest first; one whose land sits inside a box already chosen is drawn by that box's picture (the pictures
+        // carry the heights of all the land in them), so its slot goes to the next (Andorra and Luxembourg inside
+        // France's left Libya flat beside Tunisia, 25 Nov). A sliver at the screen's edge isn't worth a picture: at
+        // least a third of a percent of the view
+        var out: [Int] = []
+        var chosen: [SIMD4<Float>] = []
+        for (o, a) in area.sorted(by: { $0.value > $1.value }) where a > whole * 0.003 {
+            guard let b = box[o] else { continue }
+            if chosen.contains(where: { $0.x <= b.x && $0.y <= b.y && $0.z >= b.z && $0.w >= b.w }) { continue }
+            out.append(o); chosen.append(b)
+            if out.count == Self.fineSlots { break }
+        }
+        return out
     }
     func checkCloseUp() {
         // (the land under the camera is worked out at every rest, a flight with a card to come and under a card too, so
