@@ -475,3 +475,54 @@ enum ShareSheet {
         #endif
     }
 }
+
+/// A TIER LIST SHARED AS A PICTURE: drawn as it looks on the phone, its name, then each tier its colour from edge to
+/// edge with its letter and its things (their flags where they have them), wya?! at the foot, on the cream ground
+struct TierShareCard: View {
+    let tiers: TierList
+    private func colour(_ n: String) -> Color {
+        let v = Palette.named[n] ?? SIMD3(0.5, 0.5, 0.5)
+        return Color(red: v.x, green: v.y, blue: v.z)
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(tiers.name.isEmpty ? "Tier list" : tiers.name)
+                .font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
+                .padding(.horizontal, 32).padding(.top, 32).padding(.bottom, 20)
+            VStack(spacing: 0) {
+                ForEach(Array(tiers.rows.enumerated()), id: \.offset) { i, r in
+                    HStack(alignment: .top, spacing: 0) {
+                        Text(r.t).font(.system(size: 28, weight: .semibold)).foregroundStyle(Palette.ink)
+                            .lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center)
+                            .frame(width: 72, height: 72)
+                        FlowLayout(spacing: 8) {
+                            ForEach(r.items, id: \.self) { n in
+                                HStack(spacing: 8) {
+                                    if let cc = tiers.cc[n], let f = Flags.row(cc.lowercased()) {
+                                        f.resizable().interpolation(.high).frame(width: 28, height: 21)
+                                    }
+                                    Text(n).font(.system(size: 22)).foregroundStyle(Palette.ink).lineLimit(1)
+                                }
+                                .padding(.horizontal, 14).frame(height: 48)
+                                .background(Palette.cream, in: .rect(cornerRadius: 8))
+                            }
+                        }
+                        .padding(.horizontal, 8).padding(.vertical, r.items.isEmpty ? 0 : 12)
+                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+                    }
+                    .padding(.leading, 16)
+                    .background(colour(tiers.colour(i)))
+                }
+            }
+            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5))
+                .padding(32)
+        }
+        .frame(width: 600, alignment: .leading)
+        .background(Palette.cream)
+    }
+    @MainActor static func image(_ t: TierList) -> UIImage? {
+        let r = ImageRenderer(content: TierShareCard(tiers: t))
+        r.scale = 3
+        return r.uiImage
+    }
+}

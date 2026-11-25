@@ -595,6 +595,13 @@ struct ListsWater: View {
                     ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].hid.toggle() } }
                 }
             }
+            // A TIER LIST'S: shared as a picture, drawn as it looks (TierShareCard)
+            if let t = store.book.tiers.first(where: { $0.id == id }) {
+                Button("Share as a picture") {
+                    Feel.tap()
+                    if let img = TierShareCard.image(t) { ShareSheet.present([img]) }
+                }
+            }
             // A BOOK'S: shared as a book, a PDF of its pages (BookPDF)
             if let b = store.book.books.first(where: { $0.id == id }), !b.pages.isEmpty {
                 Button("Share as a book") {
