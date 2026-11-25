@@ -104,6 +104,8 @@ struct ListsWater: View {
     /// a row being swiped out (its id, how far), and the last thing taken out, for Undo
     @State private var swiping: (id: String, x: CGFloat)?
     @State private var removed: (list: String, item: ListItem, at: Int)?
+    /// the list whose own sheet is up (name, cover, who can see it, archive, hide, delete)
+    @State private var infoFor: String?
 
     var body: some View {
         let L = water.layout
@@ -145,6 +147,13 @@ struct ListsWater: View {
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        .sheet(isPresented: Binding(get: { infoFor != nil }, set: { if !$0 { infoFor = nil } })) {
+            if let id = infoFor {
+                ListInfoSheet(id: id) { infoFor = nil }
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
     }
 
     // MARK: the top row
@@ -154,7 +163,9 @@ struct ListsWater: View {
         // middle shrinks away while a list is open and grows back
         let open = s.open
         let viewL = open.flatMap { viewable($0) }
-        let rightKey: String? = open == nil ? "plus" : viewL == nil ? nil : "tab-map"
+        // (a list open: nothing in the right corner, 25 Nov; it was View on map, the Map tab's circle in a glass circle;
+        // the list's own cover at its top is now what you tap to see it on the map)
+        let rightKey: String? = open == nil ? "plus" : nil
         return HStack(spacing: 0) {
             circle(open != nil ? "back" : "search") {
                 Feel.tap()
@@ -359,7 +370,7 @@ struct ListsWater: View {
         let land = spots.isEmpty && named == nil ? Self.namedCountry(l.name) : nil
         let ccs = named.map { [$0.file.lowercased()] } ?? land.map { [$0] } ?? Array(l.countries.prefix(4))
         return tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
-             ccs: ccs, ticks: ListTicks.count(l.items.filter { $0.k != .section }),
+             ccs: ccs, ticks: ListTicks.count(l.items.filter { $0.k != .section }), cover: listOwnCover(l),
              spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
              places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place })
     }
@@ -412,7 +423,7 @@ struct ListsWater: View {
     /// THE WISHLIST (LS01): a tile the shelf's full width, first, its cover made from the places you wished
     private func wishTile(_ l: MyList) -> some View {
         let ccs = Array(NSOrderedSet(array: wishThings.compactMap(\.cc)).array.compactMap { $0 as? String }.prefix(4))
-        return tile(l.id, name: l.name, dim: false, count: wishThings.count, ccs: ccs,
+        return tile(l.id, name: l.name, dim: false, count: wishThings.count, ccs: ccs, cover: listOwnCover(l),
                     spots: wishThings.compactMap { t in t.cc.map { t.name + "|" + $0 } })
     }
     /// A LIST'S TILE: its cover a square, Apple's own map of where its places are; a list with no places yet, plain
@@ -438,6 +449,18 @@ struct ListsWater: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { s.open = id } }
+        // A LIST'S HOLD MENU (25 Nov): its own sheet, and archive / hide straight from the shelf
+        .contextMenu {
+            if let l = store.book.lists.first(where: { $0.id == id }) {
+                Button("Edit") { infoFor = id }
+                Button(l.arch ? "Take out of the archive" : "Archive") {
+                    ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].arch.toggle() } }
+                }
+                Button(l.hid ? "Show again" : "Hide") {
+                    ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].hid.toggle() } }
+                }
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name + (n > 0 ? ", " + sub : ""))
         .accessibilityAddTraits(.isButton)
@@ -475,17 +498,20 @@ struct ListsWater: View {
         } else if let t = store.book.tiers.first(where: { $0.id == id }) {
             TierPage(t: t, w: w, naming: $naming)
         } else if id == "wish" {
-            page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w)
+            page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w,
+                 list: store.book.lists.first { $0.wish })
         } else if let l = store.book.lists.first(where: { $0.id == id }) {
-            page(title: l.name, editable: true, things: things(l), note: l.note, w: w)
+            page(title: l.name, editable: true, things: things(l), note: l.note, w: w, list: l)
         }
     }
 
     /// A LIST (LS03): its cover at the top, wide, square corners, the list's name large on it at the bottom left (a
     /// list of no countries yet: the name alone, no cover); then its things, each its square flag at 44, its name.
     /// A note shows when its row is tapped. Taking a thing out is in the row's hold menu, never a button on every row.
-    private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat) -> some View {
+    private func page(title: String, editable: Bool, things: [ListsThing], note: String, w: CGFloat, list: MyList? = nil) -> some View {
         let (ccs, spots) = Self.pageCover(title: title, things: things, naming: s.naming)
+        let own = list.flatMap { listOwnCover($0) }
+        let hasCover = own != nil || !ccs.isEmpty
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
@@ -503,16 +529,25 @@ struct ListsWater: View {
                     } else {
                         Text(title).font(.largeTitle.weight(.bold)).foregroundStyle(Palette.ink)
                             .lineLimit(2)
-                            .onTapGesture { if editable { Feel.tap(); s.naming = true } }
+                            // (its name tapped: the list's own sheet, everything that makes it yours, 25 Nov)
+                            .onTapGesture { if let list { Feel.tap(); infoFor = list.id } }
+                            .accessibilityHint(list == nil ? "" : "Name, cover, who can see it")
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .bottomLeading)
-                .padding(.top, ccs.isEmpty ? 0 : 192)
+                .padding(.top, hasCover ? 192 : 0)
                 .background(alignment: .top) {
-                    if !ccs.isEmpty {
-                        ListCover(ccs: ccs, world: map.world, spots: spots)
-                            .frame(height: 180)
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    if hasCover {
+                        Group {
+                            if let own { own } else { ListCover(ccs: ccs, world: map.world, spots: spots) }
+                        }
+                        .frame(height: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        // (its cover tapped: the list on the map, where the corner circle was, 25 Nov)
+                        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .onTapGesture { if let l = s.open.flatMap({ viewable($0) }) { viewOnMap(l) } else { Feel.refuse() } }
+                        .accessibilityLabel("See it on the map")
+                        .accessibilityAddTraits(.isButton)
                     }
                 }
                 .padding(.bottom, 8)
