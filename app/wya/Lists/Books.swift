@@ -825,6 +825,10 @@ struct PageCurl: UIViewControllerRepresentable {
         func pageViewController(_ pvc: UIPageViewController, viewControllerAfter vc: UIViewController) -> UIViewController? {
             index(of: vc).flatMap { page(at: $0 + 1) }
         }
+        // (a page turned with paper, as the passport's: the same found sound as it starts to move)
+        func pageViewController(_ pvc: UIPageViewController, willTransitionTo pending: [UIViewController]) {
+            Sound.play(.page, volume: 0.8)
+        }
         func pageViewController(_ pvc: UIPageViewController, didFinishAnimating finished: Bool,
                                 previousViewControllers: [UIViewController], transitionCompleted done: Bool) {
             guard done, let v = pvc.viewControllers?.first, let i = index(of: v) else { return }
