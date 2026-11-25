@@ -1111,11 +1111,32 @@ struct ListsWater: View {
                         }
                         .accessibilityHint(hourly ? "Shows the day as a list" : "Shows the day hour by hour")
                     if hourly {
-                        // (the things with no time stay above the hours, as a list)
+                        // THE THINGS WITH NO TIME, above the hours, each a whole-day box in the hours' own form (17 Sep spec;
+                        // it was bare words over the hours, 25 Nov): "All day" in the hours' column, the box in its colour
+                        // where the timed boxes stand
                         ForEach(d.items.filter { $0.at == nil }) { it in
-                            Text(it.what).font(.body).foregroundStyle(Palette.ink).frame(minHeight: 44, alignment: .leading)
-                                .contentShape(Rectangle())
-                                .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } }
+                            HStack(alignment: .center, spacing: 0) {
+                                Text("All day").font(.footnote).foregroundStyle(Palette.ink.opacity(0.5))
+                                    .lineLimit(1).fixedSize()
+                                    .frame(width: 52, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(it.what).font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
+                                    if !it.place.isEmpty, it.place.lowercased() != it.what.lowercased() {
+                                        Text(it.place).font(.footnote).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                                    }
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .background(p.ai ? Color.clear : (it.c.isEmpty ? Palette.white.opacity(0.7) : PlanItemSheet.colour(it.c).opacity(0.85)),
+                                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .glassEffect(p.ai ? .clear.tint(Palette.lime.opacity(0.55)) : .identity,
+                                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            }
+                            .padding(.bottom, 6)
+                            .contentShape(Rectangle())
+                            .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(.isButton)
                         }
                         PlanDayHours(items: d.items, ai: p.ai,
                                      open: { it in withAnimation(Motion.quick) { editingItem = PlanItemRef(plan: p.id, day: i, item: it.id) } },

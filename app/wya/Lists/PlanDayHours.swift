@@ -18,7 +18,7 @@ struct PlanDayHours: View {
         let first = min(6, timed.compactMap { $0.span?.0 }.min().map { $0 / 60 } ?? 6)
         let hours = Array(first ..< 24)
         ZStack(alignment: .topLeading) {
-            // the hours: a hairline each, the hour's words at 50%; an empty hour tapped makes a thing there
+            // the hours: the hour's words at 50%, nothing drawn across; an empty hour tapped makes a thing there
             VStack(spacing: 0) {
                 ForEach(hours, id: \.self) { h in
                     HStack(alignment: .top, spacing: 0) {
@@ -26,7 +26,8 @@ struct PlanDayHours: View {
                             .foregroundStyle(Palette.ink.opacity(0.5))
                             .frame(width: labelW, alignment: .leading)
                             .offset(y: -8)
-                        Rectangle().fill(Palette.ink.opacity(0.12)).frame(height: 0.5)
+                        // (no line across the hour, 25 Nov: the hour is its number alone)
+                        Color.clear.frame(height: 0.5)
                     }
                     .frame(height: Self.hour, alignment: .top)
                     .contentShape(Rectangle())
