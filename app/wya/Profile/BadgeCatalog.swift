@@ -359,12 +359,12 @@ nonisolated extension Badges {
         add("made-with-the-ai", "Made with the AI", [1, 5, 15, 40, 100], "Lists and tier lists the AI made with you.", family: "ai")
         add("ai-maps", "AI maps", [1, 5, 15, 40, 100], "Maps the AI drew for you.", family: "ai")
 
-        add("challenge", "Challenge", [1, 10, 25, 50, 100], "Verified stamps in the season.", family: "challenge", counted: false, from: "passport")
+        // (no seasons: a challenge has no season and no target, the first one to it, 22 Oct; 25 Nov the "Seasons" badge
+        // and the season in Challenge's line taken out)
+        add("challenge", "Challenge", [1, 10, 25, 50, 100], "Verified stamps in challenges.", family: "challenge", counted: false, from: "passport")
         add("best-place", "Ranked", [1, 2, 3, 4, 5], "Your best place: top 1,000, 100, 10, the podium, first.", family: "challenge", counted: false, from: "server")
-        add("seasons", "Seasons", [1, 2, 5, 10, 20], "Seasons you took part in.", family: "challenge", counted: false, from: "server")
 
-        add("votes", "Votes", [1, 3, 10, 25, 50], "Coming soon features you voted for.", family: "helping")
-        add("wished-for", "Wished for", [1, 3, 10, 25, 50], "Features you voted for that came out.", family: "helping", counted: false, from: "server")
+        // (no votes on coming features: the Coming soon page is blank, 25 Nov "Votes" and "Wished for" taken out)
         add("spotted", "Spotted", [1, 3, 10, 25, 50], "Mistakes you reported.", family: "helping")
 
         for id in ["borders", "distance", "nights", "weekends", "trains", "nighttrains", "metros"] { keep(id, family: "around") }
