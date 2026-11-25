@@ -129,7 +129,17 @@ struct ListsWater: View {
                 // A LIST OPENS AS A PAGE PUSHED IN: the list comes in from the right while the shelf goes out to the
                 // left, and back the other way
                 ZStack(alignment: .top) {
-                    if let id = s.open {
+                    // A LIST'S OWN PAGE AND THE ARCHIVE PUSHED IN THE SAME WAY (25 Nov: never Apple's pop-up sheet with
+                    // its grabber line): over the list or the shelf, from the right, the back circle taking it away
+                    if let id = infoFor {
+                        ListInfoSheet(id: id) { withAnimation(Motion.quick) { infoFor = nil } }
+                            .frame(width: w)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
+                    } else if archiveOpen {
+                        ListArchiveSheet(open: { id in withAnimation(Motion.quick) { archiveOpen = false; s.open = id } })
+                            .frame(width: w)
+                            .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
+                    } else if let id = s.open {
                         listPage(id, w: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
                     } else {
@@ -149,18 +159,6 @@ struct ListsWater: View {
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
-        .sheet(isPresented: $archiveOpen) {
-            ListArchiveSheet(open: { id in archiveOpen = false; withAnimation(Motion.quick) { s.open = id } })
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: Binding(get: { infoFor != nil }, set: { if !$0 { infoFor = nil } })) {
-            if let id = infoFor {
-                ListInfoSheet(id: id) { infoFor = nil }
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-        }
     }
 
     // MARK: the top row
@@ -172,16 +170,20 @@ struct ListsWater: View {
         let viewL = open.flatMap { viewable($0) }
         // (a list open: nothing in the right corner, 25 Nov; it was View on map, the Map tab's circle in a glass circle;
         // the list's own cover at its top is now what you tap to see it on the map)
-        let rightKey: String? = open == nil ? "plus" : nil
+        // (a list's own page or the archive pushed in: back, as for a list)
+        let inner = infoFor != nil || archiveOpen
+        let rightKey: String? = open == nil && !inner ? "plus" : nil
         return HStack(spacing: 0) {
-            circle(open != nil ? "back" : "search") {
+            circle(open != nil || inner ? "back" : "search") {
                 Feel.tap()
-                if open != nil { withAnimation(Motion.quick) { s.close() } }
+                if infoFor != nil { withAnimation(Motion.quick) { infoFor = nil } }
+                else if archiveOpen { withAnimation(Motion.quick) { archiveOpen = false } }
+                else if open != nil { withAnimation(Motion.quick) { s.close() } }
                 else { s.searching.toggle(); if !s.searching { s.query = "" } }
             }
-            .accessibilityLabel(open != nil ? "Back" : s.searching ? "Close search" : "Search")
+            .accessibilityLabel(open != nil || inner ? "Back" : s.searching ? "Close search" : "Search")
             Spacer(minLength: 8)
-            if open == nil {
+            if open == nil && !inner {
                 if s.searching {
                     TextField("", text: $s.query, prompt: Text("Search").foregroundStyle(Palette.ink.opacity(0.5)))
                         .font(.body).foregroundStyle(Palette.ink)
@@ -208,7 +210,7 @@ struct ListsWater: View {
                     withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
                     // A NEW LIST STARTS ON ITS OWN PAGE OF INFORMATION (you can always just continue): its sheet,
                     // name first, over the empty list
-                    if s.kind == 0, let id = s.open { s.naming = false; infoFor = id }
+                    if s.kind == 0, let id = s.open { s.naming = false; withAnimation(Motion.quick) { infoFor = id } }
                 }
                 .accessibilityLabel(open != nil ? "View on map" : ["New list", "New plan", "New tier list", "New book"][s.kind])
                 .transition(.blurReplace)
@@ -329,7 +331,7 @@ struct ListsWater: View {
             // at the shelf's foot when there are any
             let away = store.book.lists.filter { $0.arch || $0.hid }.count
             if q.isEmpty, away > 0 {
-                Button { Feel.tap(); archiveOpen = true } label: {
+                Button { Feel.tap(); withAnimation(Motion.quick) { archiveOpen = true } } label: {
                     Text("Archived and hidden · \(away)").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .contentShape(Rectangle())
@@ -474,7 +476,7 @@ struct ListsWater: View {
         // A LIST'S HOLD MENU (25 Nov): its own sheet, and archive / hide straight from the shelf
         .contextMenu {
             if let l = store.book.lists.first(where: { $0.id == id }) {
-                Button("Edit") { infoFor = id }
+                Button("Edit") { withAnimation(Motion.quick) { infoFor = id } }
                 Button(l.arch ? "Take out of the archive" : "Archive") {
                     ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].arch.toggle() } }
                 }
@@ -554,7 +556,7 @@ struct ListsWater: View {
                             .foregroundStyle(Palette.ink.opacity(title.isEmpty ? 0.5 : 1))
                             .lineLimit(2)
                             // (its name tapped: the list's own sheet, everything that makes it yours, 25 Nov)
-                            .onTapGesture { if let list { Feel.tap(); infoFor = list.id } }
+                            .onTapGesture { if let list { Feel.tap(); withAnimation(Motion.quick) { infoFor = list.id } } }
                             .accessibilityHint(list == nil ? "" : "Name, cover, who can see it")
                     }
                 }
@@ -575,6 +577,17 @@ struct ListsWater: View {
                     }
                 }
                 .padding(.bottom, 8)
+                // WHAT IT'S FOR AND ITS NOTE, under its name, when it has them (both set in its page, 25 Nov)
+                if let list, !list.what.isEmpty || !list.note.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if !list.what.isEmpty { Text(list.what).font(.body).foregroundStyle(Palette.ink.opacity(0.5)) }
+                        if !list.note.isEmpty { Text(list.note).font(.body).foregroundStyle(Palette.ink) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 16)
+                    .contentShape(Rectangle())
+                    .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { infoFor = list.id } }
+                }
                 ForEach(things) { t in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {

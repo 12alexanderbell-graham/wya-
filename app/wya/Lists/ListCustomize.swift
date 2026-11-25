@@ -188,6 +188,12 @@ struct ListInfoSheet: View {
                                 .font(.body).foregroundStyle(Palette.ink).lineLimit(1 ... 3)
                         }
                     }
+                    section("Note") {
+                        TextField("", text: text(\.note, limit: 1000), prompt: Text("Anything about this list").foregroundStyle(Palette.ink.opacity(0.5)),
+                                  axis: .vertical)
+                            .font(.body).foregroundStyle(Palette.ink).lineLimit(1 ... 6)
+                            .frame(minHeight: 44)
+                    }
                     section("Cover") { coverPicker(l) }
                     // ITS COLOUR ON THE MAP: its countries in it
                     // when you tap its cover to see it on the map
@@ -215,6 +221,12 @@ struct ListInfoSheet: View {
                                 on: l.vis) { v in change { $0.vis = v } }
                     }
                     VStack(alignment: .leading, spacing: 0) {
+                        // SHARE IT AS A PICTURE: its cover, name,
+                        // what it's for and everything in it, drawn as one card for Apple's share sheet
+                        // (drawn only when asked: drawing it on every change of the sheet was a picture a keystroke)
+                        rowButton("Share as a picture") {
+                            Task { if let img = await ListShareCard.image(l) { ShareSheet.present([img]) } else { Feel.refuse() } }
+                        }
                         rowButton(l.arch ? "Take out of the archive" : "Archive") {
                             change { $0.arch.toggle() }
                             // (archived: back to the shelf, the list's page closed with the sheet)
@@ -229,7 +241,8 @@ struct ListInfoSheet: View {
                         }
                     }
                 }
-                .padding(24)
+                .padding(.top, 8)
+                .padding(.bottom, 140)
             }
         }
         .scrollIndicators(.hidden)
@@ -391,8 +404,71 @@ struct ListArchiveSheet: View {
                     .onTapGesture { Feel.tap(); open(l.id) }
                 }
             }
-            .padding(24)
+            .padding(.top, 8)
         }
         .scrollIndicators(.hidden)
+    }
+}
+
+/// A LIST AS ONE PICTURE (25 Nov): its cover (its own, else its map as last drawn), its name, what it's for, and its
+/// things each with its flag, on the app's cream, for sending anywhere
+struct ListShareCard: View {
+    let list: MyList
+    let cover: UIImage?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Group {
+                if let own = listOwnCover(list) { own }
+                else if let cover { Image(uiImage: cover).resizable().scaledToFill() }
+            }
+            .frame(width: 600 - 64, height: 300)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            Text(list.name.isEmpty ? "New list" : list.name).font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
+            if !list.what.isEmpty { Text(list.what).font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(list.items.filter { $0.k != .section }.prefix(14)) { it in
+                    HStack(spacing: 14) {
+                        Group {
+                            if let cc = it.cc, let f = Flags.row(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
+                        }
+                        .frame(width: 40, height: 30)
+                        Text(it.n).font(.system(size: 24)).foregroundStyle(Palette.ink).lineLimit(1)
+                    }
+                }
+                let more = list.items.filter { $0.k != .section }.count - 14
+                if more > 0 { Text("and \(more) more").font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
+            }
+            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 8)
+        }
+        .padding(32)
+        .frame(width: 600, alignment: .leading)
+        .background(Palette.cream)
+    }
+    @MainActor static func image(_ l: MyList) async -> UIImage? {
+        let ccs = Array(l.countries.prefix(4))
+        // (its map drawn at the card's own size: a tile's small picture blown up was pixelated, its dots huge, 25 Nov)
+        let spots = l.items.compactMap { i in i.cc.map { i.n + "|" + $0.lowercased() } }
+        let map = ccs.isEmpty || listOwnCover(l) != nil ? nil
+            : await ListMapCovers.image(ccs, spots: spots, world: AIContext.map?.world, size: CGSize(width: 536, height: 300), scale: 3)
+        let r = ImageRenderer(content: ListShareCard(list: l, cover: map))
+        r.scale = 3
+        return r.uiImage
+    }
+}
+
+/// APPLE'S SHARE SHEET as iOS itself brings it up, from the screen (wrapped in a SwiftUI sheet it stood at full height
+/// with a blank preview, 25 Nov)
+enum ShareSheet {
+    @MainActor static func present(_ items: [Any]) {
+        guard let root = UIApplication.shared.connectedScenes.compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first?.rootViewController else { return }
+        var top = root
+        while let p = top.presentedViewController { top = p }
+        let vc = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        vc.popoverPresentationController?.sourceView = top.view
+        top.present(vc, animated: true)
+        #if DEBUG
+        // (the test driver's eye: the picture as sent, kept where the snaps go)
+        if let img = items.first as? UIImage, let png = img.pngData() { try? png.write(to: URL(fileURLWithPath: Snap.dir + "/share-card.png")) }
+        #endif
     }
 }
