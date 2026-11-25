@@ -1215,6 +1215,29 @@ final class MapController {
         needsFrame = true
     }
     /// zoomed by the fingers about a point on the screen (the point under them stays under them)
+    /// THE WORLD LEANS IN (the map's camera moves with what rises over it, rather than sitting still under a panel):
+    /// as a card rises, the map comes a little closer about the place you touched,
+    /// the place staying where it is; as it goes, the map eases back, unless a finger moved it meanwhile
+    @ObservationIgnored private var leanFrom: (c: SIMD2<Double>, k: Double, to: SIMD2<Double>, tk: Double)?
+    func lean(toward s: CGPoint) {
+        guard !onApple, flight == nil, leanFrom == nil else { return }
+        let nk = min(kMax, k * 1.06)
+        guard nk > k else { return }
+        let p = mapPoint(s)
+        let sp = SIMD2(Double(s.x), Double(s.y)) - SIMD2(Double(view.width), Double(view.height)) / 2
+        let to = clamped(p - sp / nk, nk)
+        leanFrom = (c, k, to, nk)
+        fly(to: to, k: nk, dur: 0.6)
+    }
+    func unlean() {
+        guard let l = leanFrom else { return }
+        leanFrom = nil
+        // (back only from where it leaned to, or on its way there: a map moved by a finger stays where it was put)
+        let still = flight != nil || (simd_distance(c, l.to) * k < 1 && abs(log(k / l.tk)) < 0.001)
+        guard still else { return }
+        fly(to: l.c, k: l.k, dur: 0.45)
+    }
+
     func zoom(by f: Double, about s: CGPoint) {
         let anchor = mapPoint(s)
         let nk = min(kMax, max(kMin, k * f))

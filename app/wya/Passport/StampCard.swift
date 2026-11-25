@@ -113,6 +113,7 @@ final class CardState {
         stampedHere = false
         landing = false
         map.kept = i
+        map.lean(toward: point)
         p = 0
         Task {
             order = await MarkStore.shared.passportOrder()
@@ -147,6 +148,7 @@ final class CardState {
     /// `instant`: gone in this frame, no fold
     func close(map: MapController, instant: Bool = false) {
         guard place != nil else { return }
+        map.unlean()
         // (closed once by you: its hint has nothing to show)
         if !instant { Hints.shared.usedCardClose() }
         if instant {
