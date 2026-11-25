@@ -43,5 +43,12 @@ struct wyaApp: App {
                     if p == .active { Task { await PlanLive.refresh() } }
                 }
         }
+        // (the plan on the lock screen counted again after midnight, the app closed: PlanLive)
+        .backgroundTask(.appRefresh(PlanLive.task)) {
+            #if DEBUG
+            NSLog("wya planlive: woken in the background")
+            #endif
+            await PlanLive.refresh()
+        }
     }
 }

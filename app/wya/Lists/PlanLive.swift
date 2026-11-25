@@ -1,4 +1,5 @@
 import ActivityKit
+import BackgroundTasks
 import UIKit
 
 /// A PLAN ON THE LOCK SCREEN: from seven days before a dated plan starts to its last day, one Live Activity for it, the
@@ -83,16 +84,24 @@ enum PlanLive {
         let running = Activity<PlanLiveAttributes>.activities
         guard let (p, toStart) = pick(ListsStore.shared.book.plans, today: PlanDates.key(local: Date())) else {
             for a in running { await a.end(nil, dismissalPolicy: .immediate) }
+            // (a plan further off: woken each midnight until it comes within the days before it)
+            let today = PlanDates.key(local: Date())
+            if ListsStore.shared.book.plans.contains(where: { !$0.arch && !$0.hid && !$0.ai && !$0.start.isEmpty && $0.start > today }) {
+                scheduleNext()
+            }
             return
         }
         for a in running where a.attributes.plan != p.id { await a.end(nil, dismissalPolicy: .immediate) }
         await writeMap(p)
-        let content = ActivityContent(state: state(p, toStart: toStart), staleDate: nil)
+        // (stale at the next midnight: a day the app was not opened, the lock screen knows its count is old)
+        let content = ActivityContent(state: state(p, toStart: toStart), staleDate: nextMidnight())
         if let a = running.first(where: { $0.attributes.plan == p.id }) {
             await a.update(content)
         } else {
             _ = try? Activity.request(attributes: PlanLiveAttributes(plan: p.id, name: p.name), content: content)
         }
+        // (counted again just after midnight, the app not opened: "3 days to Bangkok" becomes 2 by itself)
+        scheduleNext()
         // (the towns or sights still being read after the wait: the map square drawn again once they are, its places
         // where they are, not all at the country's middle, 25 Nov; a few times at most)
         if !(TownIndex.shared.ready && ThingIndex.shared.ready), tries < 6 {
@@ -102,6 +111,24 @@ enum PlanLive {
         } else { tries = 0 }
     }
     private static var tries = 0
+
+    /// THE DAY'S NEW COUNT IN THE BACKGROUND: the app asks iOS to wake it a minute after midnight (wyaApp's
+    /// .backgroundTask runs refresh), so a plan on the lock screen counts its days down with the app closed; iOS picks
+    /// the moment, so the activity is also marked stale at midnight
+    static let task = "com.alexanderbell.wya.planlive"
+    static func nextMidnight() -> Date {
+        let cal = Calendar.current
+        return cal.nextDate(after: Date(), matching: DateComponents(hour: 0, minute: 1), matchingPolicy: .nextTime) ?? Date().addingTimeInterval(86_400)
+    }
+    static func scheduleNext() {
+        let r = BGAppRefreshTaskRequest(identifier: task)
+        r.earliestBeginDate = nextMidnight()
+        do { try BGTaskScheduler.shared.submit(r) } catch {
+            #if DEBUG
+            NSLog("wya planlive: the midnight wake-up not booked: %@", String(describing: error))
+            #endif
+        }
+    }
     /// after a change to your plans: once, a moment later (typing a plan's name changes it at every letter)
     private static var soon: Task<Void, Never>?
     static func changed() {
