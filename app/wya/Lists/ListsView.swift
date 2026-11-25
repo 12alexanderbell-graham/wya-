@@ -806,7 +806,7 @@ struct ListsWater: View {
                             if let cc = t.cc, !cc.isEmpty {
                                 Button { PlanPlaces.open(t.name, cc: cc) } label: {
                                     Text("Open").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
-                                        .padding(.horizontal, 16).frame(height: 36)
+                                        .padding(.horizontal, 16).frame(height: 44)
                                         .glassEffect(PageGlass.control.interactive(), in: .capsule)
                                 }
                                 .buttonStyle(.plain)

@@ -248,7 +248,7 @@ struct UploadCalendar: View {
                 .foregroundStyle(Palette.ink.opacity(n == 0 ? 0.5 : 1))
                 .contentTransition(.numericText(value: Double(n)))
                 .padding(.horizontal, 28)
-                .frame(height: 50)
+                .frame(height: 44)
                 .glassEffect((n > 0 ? Glass.clear.tint(Palette.lime) : .clear).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)

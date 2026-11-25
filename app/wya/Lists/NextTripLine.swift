@@ -15,9 +15,8 @@ struct NextTripLine: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 18)
-                .frame(height: 40)
+                .padding(.horizontal, 16)
+                .frame(height: 44)
                 .glassEffect(PageGlass.head.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)

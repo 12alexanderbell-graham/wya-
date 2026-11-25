@@ -346,7 +346,7 @@ struct ListInfoSheet: View {
     private func pill(_ t: String, on: Bool, _ act: @escaping () -> Void) -> some View {
         Button { Feel.tap(); act() } label: {
             Text(t).font(.body.weight(.semibold)).foregroundStyle(on ? Palette.white : Palette.ink)
-                .padding(.horizontal, 16).frame(height: 36)
+                .padding(.horizontal, 16).frame(height: 44)
                 .background { if on { Capsule().fill(Palette.ink) } }
                 .glassEffect(on ? .clear : PageGlass.control.interactive(), in: .capsule)
         }
@@ -397,7 +397,7 @@ struct ListArchiveSheet: View {
                             ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == l.id }) { b.lists[i].arch = false; b.lists[i].hid = false } }
                         } label: {
                             Text("Back on the shelf").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
-                                .padding(.horizontal, 12).frame(height: 34)
+                                .padding(.horizontal, 16).frame(height: 44)
                                 .glassEffect(PageGlass.control.interactive(), in: .capsule)
                         }
                         .buttonStyle(.press)
