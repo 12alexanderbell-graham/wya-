@@ -526,3 +526,67 @@ struct TierShareCard: View {
         return r.uiImage
     }
 }
+
+/// A PLAN SHARED AS A PICTURE: its map (the places it goes to, as its cover), its name, its dates in numbers, then each
+/// day with its things in their order by time (their times as the plan has them), on the cream ground, wya?! at the foot
+struct PlanShareCard: View {
+    let plan: Plan
+    let cover: UIImage?
+    private func dayName(_ i: Int) -> String {
+        guard !plan.start.isEmpty, let d = PlanDates.date(PlanDates.key(plan.start, i)) else { return "Day \(i + 1)" }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "EEE d MMM"
+        return f.string(from: d)
+    }
+    private func line(_ it: PlanItem) -> String {
+        // (the thing, and where it is when that is not its own name: "Grand Palace · Bangkok")
+        let place = it.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        let words = place.isEmpty || place == it.what ? it.what : (it.what.isEmpty ? place : it.what + " · " + place)
+        guard let m = PlanItem.minutes(it.at) else { return words }
+        return "\(m / 60):" + String(format: "%02d", m % 60) + "  " + words
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let cover {
+                Image(uiImage: cover).resizable().scaledToFill()
+                    .frame(width: 600 - 64, height: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            }
+            Text(plan.name.isEmpty ? "Plan" : plan.name).font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
+            if !plan.start.isEmpty {
+                Text(PlanLive.dates(plan)).font(.system(size: 22, weight: .semibold).monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
+            }
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(Array(plan.days.enumerated()).prefix(10), id: \.offset) { i, day in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(dayName(i)).font(.system(size: 24, weight: .semibold)).foregroundStyle(Palette.ink)
+                        let items = day.items.enumerated().sorted { a, b in
+                            switch (PlanItem.minutes(a.element.at), PlanItem.minutes(b.element.at)) {
+                            case let (x?, y?): return x != y ? x < y : a.offset < b.offset
+                            case (.some, .none): return true
+                            case (.none, .some): return false
+                            default: return a.offset < b.offset
+                            }
+                        }.map(\.element)
+                        ForEach(items.prefix(8)) { it in
+                            Text(line(it)).font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.75)).lineLimit(1)
+                        }
+                        if items.count > 8 { Text("and \(items.count - 8) more").font(.system(size: 20)).foregroundStyle(Palette.ink.opacity(0.5)) }
+                    }
+                }
+                if plan.days.count > 10 { Text("and \(plan.days.count - 10) more days").font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
+            }
+            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 8)
+        }
+        .padding(32)
+        .frame(width: 600, alignment: .leading)
+        .background(Palette.cream)
+    }
+    @MainActor static func image(_ p: Plan) async -> UIImage? {
+        let c = ListsWater.planCover(p)
+        let map = c.ccs.isEmpty ? nil
+            : await ListMapCovers.image(c.ccs, spots: c.spots, world: AIContext.map?.world, size: CGSize(width: 536, height: 300), scale: 3)
+        let r = ImageRenderer(content: PlanShareCard(plan: p, cover: map))
+        r.scale = 3
+        return r.uiImage
+    }
+}
