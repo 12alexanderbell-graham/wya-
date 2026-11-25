@@ -53,6 +53,8 @@ struct BookPhoto: View {
 /// (a blank page is white)
 struct BookPageView: View {
     let page: BookPage
+    /// the words left off (while they are being moved, drawn by the mover)
+    var noWords = false
     var body: some View {
         GeometryReader { g in
             let p = page.photos, gap: CGFloat = 3
@@ -83,7 +85,12 @@ struct BookPageView: View {
                     Image(uiImage: dr.image(from: CGRect(origin: .zero, size: g.size), scale: UIScreen.main.scale))
                         .resizable().frame(width: g.size.width, height: g.size.height)
                 }
-                if let t = page.text, !t.isEmpty {
+                // WORDS PUT WHERE YOU WANT THEM: at their place on
+                // the page, a soft shadow under white words on a photo
+                if !noWords, let t = page.text, !t.isEmpty, let at = page.words {
+                    BookWordsBox(text: t, onPhoto: !p.isEmpty, width: g.size.width * 0.8)
+                        .position(x: at.tx * g.size.width, y: at.ty * g.size.height)
+                } else if !noWords, let t = page.text, !t.isEmpty {
                     Text(t)
                         .font(p.isEmpty ? .title2.weight(.semibold) : .body.weight(.semibold))
                         .foregroundStyle(p.isEmpty ? Palette.ink : Palette.white)
@@ -126,6 +133,11 @@ struct BookOpenView: View {
     @State private var overview = false
     /// the page being drawn on (its id): the page becomes Apple's canvas with Apple's tools
     @State private var sketching: String?
+    /// the page whose words are being moved (its id), and where the finger has them now (0...1 of the page)
+    @State private var placing: String?
+    @State private var placeAt: CGPoint?
+    /// where the words were when the finger took them (they move by how far the finger goes, not jump under it)
+    @State private var placeFrom: CGPoint?
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
     /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
@@ -156,6 +168,43 @@ struct BookOpenView: View {
                     if b.pages.isEmpty {
                         // (no pages yet: the first is made from photos, one or many, or words)
                         addPage
+                    } else if let mid = placing, let pg = b.pages.first(where: { $0.id == mid }) {
+                        // THE WORDS MOVED: the page alone (no turning under the finger), its words dragged where you
+                        // want them; Done keeps the place
+                        // (they start where the page has them: the middle of a words page, the foot of a photo, no jump)
+                        let start = pg.words.map { CGPoint(x: $0.tx, y: $0.ty) }
+                            ?? CGPoint(x: 0.5, y: pg.photos.isEmpty ? 0.5 : 0.9)
+                        let now = placeAt ?? start
+                        ZStack {
+                            BookPageView(page: pg, noWords: true)
+                            GeometryReader { g in
+                                BookWordsBox(text: pg.text ?? "", onPhoto: !pg.photos.isEmpty, width: g.size.width * 0.8)
+                                    .position(x: now.x * g.size.width, y: now.y * g.size.height)
+                                    .gesture(DragGesture(minimumDistance: 0)
+                                        .onChanged { v in
+                                            let from = placeFrom ?? now
+                                            if placeFrom == nil { placeFrom = now }
+                                            placeAt = CGPoint(x: min(0.95, max(0.05, from.x + v.translation.width / g.size.width)),
+                                                              y: min(0.95, max(0.05, from.y + v.translation.height / g.size.height)))
+                                        }
+                                        .onEnded { _ in placeFrom = nil })
+                            }
+                        }
+                        .frame(width: w, height: pageH)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        HStack {
+                            pill("Done") {
+                                let p = placeAt ?? start
+                                change { bk in if let i = bk.pages.firstIndex(where: { $0.id == mid }) {
+                                    bk.pages[i].words = BookWords(text: "", tx: p.x, ty: p.y) } }
+                                withAnimation(Motion.quick) { placing = nil; placeAt = nil; placeFrom = nil }
+                            }
+                            Text("Drag the words where you want them")
+                                .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                                .padding(.leading, 8)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: 52)
                     } else if let sid = sketching, let pg = b.pages.first(where: { $0.id == sid }) {
                         // A SKETCH: Apple's canvas over the page, Apple's tool picker (any colour, the rubber, thickness)
                         // under it; Done keeps it
@@ -221,6 +270,9 @@ struct BookOpenView: View {
                                                 }
                                                 // (any page drawn on, a photo's too)
                                                 Button("Draw on it") { withAnimation(Motion.quick) { sketching = pid } }
+                                                if !(pg.text ?? "").isEmpty {
+                                                    Button("Move the words") { withAnimation(Motion.quick) { placing = pid } }
+                                                }
                                                 Button("Take out page", role: .destructive) {
                                                     Feel.lift()
                                                     let n = book?.pages.count ?? 1
@@ -443,5 +495,24 @@ struct PassportCover: View {
             }
         }
         .task { order = await MarkStore.shared.passportOrder() }
+    }
+}
+
+/// a page's words as a little box: black on a white page, white on a photo with a soft shadow under them
+struct BookWordsBox: View {
+    let text: String
+    let onPhoto: Bool
+    /// how wide a line may run (most of the page, so a line does not break anew when the words are taken to move)
+    var width: CGFloat = 280
+    var body: some View {
+        Text(text)
+            // (as big as the page's own words: title2 on a words page, a step smaller over a photo)
+            .font(onPhoto ? .title3.weight(.semibold) : .title2.weight(.semibold))
+            .foregroundStyle(onPhoto ? Palette.white : Palette.ink)
+            .multilineTextAlignment(.center)
+            .shadow(color: .black.opacity(onPhoto ? 0.45 : 0), radius: 6, y: 1)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: width)
     }
 }
