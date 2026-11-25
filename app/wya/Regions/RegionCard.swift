@@ -126,7 +126,10 @@ struct RegionCard: View {
                 VStack(spacing: 2) {
                     Text(card.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(2)
                     if !card.parents.isEmpty {
-                        Text(card.parents).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
+                        // (over Apple's map the 50% ink solid, not see-through: its street names showed through the
+                        // letters, "STREATHAM" inside Big Ben's line, 25 Nov; the same grey to the eye)
+                        Text(card.parents).font(.subheadline)
+                            .foregroundStyle(map.onApple ? Color(white: 0.5) : Palette.ink.opacity(0.5)).lineLimit(2)
                     }
                 }
                 .mapHalo(map.onApple)
