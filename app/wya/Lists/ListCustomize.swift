@@ -222,12 +222,7 @@ struct ListInfoSheet: View {
                                 on: l.vis) { v in change { $0.vis = v } }
                     }
                     VStack(alignment: .leading, spacing: 0) {
-                        // SHARE IT AS A PICTURE: its cover, name,
-                        // what it's for and everything in it, drawn as one card for Apple's share sheet
-                        // (drawn only when asked: drawing it on every change of the sheet was a picture a keystroke)
-                        rowButton("Share as a picture") {
-                            Task { if let img = await ListShareCard.image(l) { ShareSheet.present([img]) } else { Feel.refuse() } }
-                        }
+                        // (no share picture: share cards are not to be built, 15 Nov)
                         rowButton(l.arch ? "Take out of the archive" : "Archive") {
                             change { $0.arch.toggle() }
                             // (archived: back to the shelf, the list's page closed with the sheet)
@@ -413,52 +408,6 @@ struct ListArchiveSheet: View {
     }
 }
 
-/// A LIST AS ONE PICTURE (25 Nov): its cover (its own, else its map as last drawn), its name, what it's for, and its
-/// things each with its flag, on the app's cream, for sending anywhere
-struct ListShareCard: View {
-    let list: MyList
-    let cover: UIImage?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Group {
-                if let own = listOwnCover(list) { own }
-                else if let cover { Image(uiImage: cover).resizable().scaledToFill() }
-            }
-            .frame(width: 600 - 64, height: 300)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            Text(list.name.isEmpty ? "New list" : list.name).font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
-            if !list.what.isEmpty { Text(list.what).font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(list.items.filter { $0.k != .section }.prefix(14)) { it in
-                    HStack(spacing: 14) {
-                        Group {
-                            if let cc = it.cc, let f = Flags.row(cc.lowercased()) { f.resizable().interpolation(.high) } else { Color.clear }
-                        }
-                        .frame(width: 40, height: 30)
-                        Text(it.n).font(.system(size: 24)).foregroundStyle(Palette.ink).lineLimit(1)
-                    }
-                }
-                let more = list.items.filter { $0.k != .section }.count - 14
-                if more > 0 { Text("and \(more) more").font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
-            }
-            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 8)
-        }
-        .padding(32)
-        .frame(width: 600, alignment: .leading)
-        .background(Palette.cream)
-    }
-    @MainActor static func image(_ l: MyList) async -> UIImage? {
-        let ccs = Array(l.countries.prefix(4))
-        // (its map drawn at the card's own size: a tile's small picture blown up was pixelated, its dots huge, 25 Nov)
-        let spots = l.items.compactMap { i in i.cc.map { i.n + "|" + $0.lowercased() } }
-        let map = ccs.isEmpty || listOwnCover(l) != nil ? nil
-            : await ListMapCovers.image(ccs, spots: spots, world: AIContext.map?.world, size: CGSize(width: 536, height: 300), scale: 3)
-        let r = ImageRenderer(content: ListShareCard(list: l, cover: map))
-        r.scale = 3
-        return r.uiImage
-    }
-}
-
 /// APPLE'S SHARE SHEET as iOS itself brings it up, from the screen (wrapped in a SwiftUI sheet it stood at full height
 /// with a blank preview, 25 Nov)
 enum ShareSheet {
@@ -476,117 +425,3 @@ enum ShareSheet {
     }
 }
 
-/// A TIER LIST SHARED AS A PICTURE: drawn as it looks on the phone, its name, then each tier its colour from edge to
-/// edge with its letter and its things (their flags where they have them), wya?! at the foot, on the cream ground
-struct TierShareCard: View {
-    let tiers: TierList
-    private func colour(_ n: String) -> Color {
-        let v = Palette.named[n] ?? SIMD3(0.5, 0.5, 0.5)
-        return Color(red: v.x, green: v.y, blue: v.z)
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(tiers.name.isEmpty ? "Tier list" : tiers.name)
-                .font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
-                .padding(.horizontal, 32).padding(.top, 32).padding(.bottom, 20)
-            VStack(spacing: 0) {
-                ForEach(Array(tiers.rows.enumerated()), id: \.offset) { i, r in
-                    HStack(alignment: .top, spacing: 0) {
-                        Text(r.t).font(.system(size: 28, weight: .semibold)).foregroundStyle(Palette.ink)
-                            .lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center)
-                            .frame(width: 72, height: 72)
-                        FlowLayout(spacing: 8) {
-                            ForEach(r.items, id: \.self) { n in
-                                HStack(spacing: 8) {
-                                    if let cc = tiers.cc[n], let f = Flags.row(cc.lowercased()) {
-                                        f.resizable().interpolation(.high).frame(width: 28, height: 21)
-                                    }
-                                    Text(n).font(.system(size: 22)).foregroundStyle(Palette.ink).lineLimit(1)
-                                }
-                                .padding(.horizontal, 14).frame(height: 48)
-                                .background(Palette.cream, in: .rect(cornerRadius: 8))
-                            }
-                        }
-                        .padding(.horizontal, 8).padding(.vertical, r.items.isEmpty ? 0 : 12)
-                        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-                    }
-                    .padding(.leading, 16)
-                    .background(colour(tiers.colour(i)))
-                }
-            }
-            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5))
-                .padding(32)
-        }
-        .frame(width: 600, alignment: .leading)
-        .background(Palette.cream)
-    }
-    @MainActor static func image(_ t: TierList) -> UIImage? {
-        let r = ImageRenderer(content: TierShareCard(tiers: t))
-        r.scale = 3
-        return r.uiImage
-    }
-}
-
-/// A PLAN SHARED AS A PICTURE: its map (the places it goes to, as its cover), its name, its dates in numbers, then each
-/// day with its things in their order by time (their times as the plan has them), on the cream ground, wya?! at the foot
-struct PlanShareCard: View {
-    let plan: Plan
-    let cover: UIImage?
-    private func dayName(_ i: Int) -> String {
-        guard !plan.start.isEmpty, let d = PlanDates.date(PlanDates.key(plan.start, i)) else { return "Day \(i + 1)" }
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_GB"); f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "EEE d MMM"
-        return f.string(from: d)
-    }
-    private func line(_ it: PlanItem) -> String {
-        // (the thing, and where it is when that is not its own name: "Grand Palace · Bangkok")
-        let place = it.place.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-        let words = place.isEmpty || place == it.what ? it.what : (it.what.isEmpty ? place : it.what + " · " + place)
-        guard let m = PlanItem.minutes(it.at) else { return words }
-        return "\(m / 60):" + String(format: "%02d", m % 60) + "  " + words
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let cover {
-                Image(uiImage: cover).resizable().scaledToFill()
-                    .frame(width: 600 - 64, height: 300)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            }
-            Text(plan.name.isEmpty ? "Plan" : plan.name).font(.system(size: 40, weight: .bold)).foregroundStyle(Palette.ink)
-            if !plan.start.isEmpty {
-                Text(PlanLive.dates(plan)).font(.system(size: 22, weight: .semibold).monospacedDigit()).foregroundStyle(Palette.ink.opacity(0.5))
-            }
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(Array(plan.days.enumerated()).prefix(10), id: \.offset) { i, day in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(dayName(i)).font(.system(size: 24, weight: .semibold)).foregroundStyle(Palette.ink)
-                        let items = day.items.enumerated().sorted { a, b in
-                            switch (PlanItem.minutes(a.element.at), PlanItem.minutes(b.element.at)) {
-                            case let (x?, y?): return x != y ? x < y : a.offset < b.offset
-                            case (.some, .none): return true
-                            case (.none, .some): return false
-                            default: return a.offset < b.offset
-                            }
-                        }.map(\.element)
-                        ForEach(items.prefix(8)) { it in
-                            Text(line(it)).font(.system(size: 22)).foregroundStyle(Palette.ink).lineLimit(1)
-                        }
-                        if items.count > 8 { Text("and \(items.count - 8) more").font(.system(size: 20)).foregroundStyle(Palette.ink.opacity(0.5)) }
-                    }
-                }
-                if plan.days.count > 10 { Text("and \(plan.days.count - 10) more days").font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.5)) }
-            }
-            Text("wya?!").font(.system(size: 20, weight: .semibold)).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 8)
-        }
-        .padding(32)
-        .frame(width: 600, alignment: .leading)
-        .background(Palette.cream)
-    }
-    @MainActor static func image(_ p: Plan) async -> UIImage? {
-        let c = ListsWater.planCover(p)
-        let map = c.ccs.isEmpty ? nil
-            : await ListMapCovers.image(c.ccs, spots: c.spots, world: AIContext.map?.world, size: CGSize(width: 536, height: 300), scale: 3)
-        let r = ImageRenderer(content: PlanShareCard(plan: p, cover: map))
-        r.scale = 3
-        return r.uiImage
-    }
-}
