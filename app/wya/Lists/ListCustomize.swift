@@ -568,7 +568,7 @@ struct PlanShareCard: View {
                             }
                         }.map(\.element)
                         ForEach(items.prefix(8)) { it in
-                            Text(line(it)).font(.system(size: 22)).foregroundStyle(Palette.ink.opacity(0.75)).lineLimit(1)
+                            Text(line(it)).font(.system(size: 22)).foregroundStyle(Palette.ink).lineLimit(1)
                         }
                         if items.count > 8 { Text("and \(items.count - 8) more").font(.system(size: 20)).foregroundStyle(Palette.ink.opacity(0.5)) }
                     }
