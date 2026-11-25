@@ -501,10 +501,13 @@ struct ListsWater: View {
     }
     /// what a list holds, in words: its first two and how many more ("Ramen, Seoul and 2 more"), as Pins' maps say
     /// their countries
-    static func whatsIn(_ names: [String]) -> String {
+    static func whatsIn(_ names: [String], show: Int = 2) -> String {
         let n = names.filter { !$0.isEmpty }
         guard !n.isEmpty else { return "" }
-        return n.prefix(2).joined(separator: ", ") + (n.count > 2 ? " and \(n.count - 2) more" : "")
+        let k = max(1, min(show, n.count))
+        let first = n.prefix(k)
+        if n.count > k { return first.joined(separator: ", ") + " and \(n.count - k) more" }
+        return first.count == 2 ? first.joined(separator: " and ") : first.joined(separator: ", ")
     }
     /// a town of 100,000 people or more that a plan's name says, one word or two (: Lisbon), or nil A LIST PAGE'S
     /// COVER'S PLACES: its first four countries and its things where they are; with no places yet, the town or
@@ -579,8 +582,14 @@ struct ListsWater: View {
                 .padding(.bottom, 6)
             Text(name).font(.body.weight(.semibold))
                 .foregroundStyle(Palette.ink.opacity(dim ? 0.5 : 1)).lineLimit(1)
-            Text(sub).font(.subheadline)
-                .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+            // (what is in it says as much as fits: two names and how many more, else one, so the count is never cut off
+            // at a big type size, "Ramen, Seoul and..." at XXXL, 25 Nov)
+            ViewThatFits(in: .horizontal) {
+                Text(sub)
+                if !places, !names.isEmpty, words == nil, names.count > 1 { Text(Self.whatsIn(names, show: 1)) }
+                Text(sub).lineLimit(1)
+            }
+            .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
         }
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); if let tap { tap(); return }; s.parents = []; withAnimation(Motion.quick) { s.open = id } }
