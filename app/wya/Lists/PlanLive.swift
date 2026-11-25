@@ -93,7 +93,15 @@ enum PlanLive {
         } else {
             _ = try? Activity.request(attributes: PlanLiveAttributes(plan: p.id, name: p.name), content: content)
         }
+        // (the towns or sights still being read after the wait: the map square drawn again once they are, its places
+        // where they are, not all at the country's middle, 25 Nov; a few times at most)
+        if !(TownIndex.shared.ready && ThingIndex.shared.ready), tries < 6 {
+            tries += 1
+            soon?.cancel()
+            soon = Task { try? await Task.sleep(for: .seconds(10)); if !Task.isCancelled { await refresh() } }
+        } else { tries = 0 }
     }
+    private static var tries = 0
     /// after a change to your plans: once, a moment later (typing a plan's name changes it at every letter)
     private static var soon: Task<Void, Never>?
     static func changed() {
