@@ -620,7 +620,7 @@ struct ListsWater: View {
         } else if let t = store.book.tiers.first(where: { $0.id == id }) {
             TierPage(t: t, w: w, naming: $naming)
         } else if store.book.books.contains(where: { $0.id == id }) {
-            BookOpenView(id: id, w: w, naming: $naming)
+            BookOpenView(id: id, w: w, naming: $naming, water: water)
         } else if id == "wish" {
             page(title: "Wishlist", editable: false, things: wishThings, note: "", w: w,
                  list: store.book.lists.first { $0.wish })

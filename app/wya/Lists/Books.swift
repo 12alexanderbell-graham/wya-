@@ -260,6 +260,9 @@ struct BookOpenView: View {
     let id: String
     let w: CGFloat
     var naming: FocusState<Bool>.Binding
+    /// the water, its tabs drawn in to their middle while a page is drawn on (Apple's pen sits where the capsule's left
+    /// end was: the two lay over each other, 25 Nov)
+    let water: Water
     @State private var store = ListsStore.shared
     @State private var s = ListsState.shared
     @State private var at = 0
@@ -380,7 +383,18 @@ struct BookOpenView: View {
                         }
                         .transaction { $0.animation = nil }
                         HStack {
-                            pill("Done") { withAnimation(Motion.quick) { sketching = nil; sketchInk = nil } }
+                            pill("Done") {
+                                // (a page made for a sketch and left blank is not kept)
+                                let blank = pg.photos.isEmpty && pg.video == nil && (pg.text ?? "").isEmpty
+                                    && (pg.drawing.flatMap { BookPhotos.drawing($0) }.map { $0.strokes.isEmpty } ?? true)
+                                withAnimation(Motion.quick) {
+                                    if blank {
+                                        change { $0.pages.removeAll { $0.id == sid } }
+                                        at = max(0, min(at, (book?.pages.count ?? 1) - 1))
+                                    }
+                                    sketching = nil; sketchInk = nil
+                                }
+                            }
                             Spacer(minLength: 8)
                             // (Clear: the drawing taken off this page)
                             lineButton("Clear") { sketchClears += 1 }
@@ -495,6 +509,11 @@ struct BookOpenView: View {
                 .padding(.bottom, 140)
             }
             .scrollIndicators(.hidden)
+            .onChange(of: sketching) { _, v in
+                let want: CGFloat = v == nil ? 0 : 1
+                if water.mini != want { withAnimation(Motion.chrome) { water.mini = want } }
+            }
+            .onDisappear { if water.mini != 0 { withAnimation(Motion.chrome) { water.mini = 0 } } }
             .fullScreenCover(isPresented: $reading) {
                 BookFullView(id: id, at: $at) { reading = false }
                     .navigationTransition(.zoom(sourceID: id, in: zoom))
