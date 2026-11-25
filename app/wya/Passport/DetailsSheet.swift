@@ -691,7 +691,8 @@ struct DetailsSheet: View {
 
     /// REGIONS YOU WENT TO (the web's): the country's first level of regions as choices, one tap stamping or
     /// unstamping it as the Regions map does (its parents too), so the chips and the map always agree
-    struct RegionChoice: Sendable { let id: String; let name: String; let parent: String? }
+    struct RegionChoice: Sendable {
+ let id: String; let name: String; let parent: String? }
     @State private var regionUnits: [RegionChoice] = []
     /// the test driver's: a row brought to the top
     @State private var scrollAsk: String?
@@ -770,7 +771,8 @@ struct DetailsSheet: View {
                             Button("Remove", role: .destructive) { removePhoto(ph.file) }
                         }
                         .accessibilityLabel("Photo \(i + 1)")
-                        .transition(.scale(scale: 0, anchor: .leading))
+                        // (a photo added comes in from 93%, never from a point, 25 Nov)
+                        .transition(detailsPhotoIn)
                 }
             }
             .padding(.vertical, 4)
@@ -1451,3 +1453,6 @@ struct DrawerSlide: ViewModifier {
     var y: CGFloat
     func body(content: Content) -> some View { content.offset(y: y) }
 }
+
+/// a photo added in Details comes in from 93% at its left, blurred in, never from a point (25 Nov)
+@MainActor let detailsPhotoIn: AnyTransition = AnyTransition.scale(scale: 0.93, anchor: .leading).combined(with: AnyTransition(.blurReplace))

@@ -331,7 +331,7 @@ struct StampCard: View {
                 .foregroundStyle(Palette.ink)
                 .contentTransition(.identity)
                 .frame(width: w, height: 44)
-                .glassEffect(s.stamped ? PageGlass.surface.tint(Palette.lime) : PageGlass.surface, in: .capsule)
+                .glassEffect((s.stamped ? PageGlass.surface.tint(Palette.lime) : PageGlass.surface).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
         #if DEBUG
@@ -393,7 +393,7 @@ struct StampCard: View {
                 .lineLimit(1)
                 .foregroundStyle(s.wished ? Color.white : blocked ? Palette.ink.opacity(0.5) : Palette.ink)
                 .frame(width: w, height: 44)
-                .glassEffect(s.wished ? PageGlass.surface.tint(Palette.blue) : PageGlass.surface, in: .capsule)
+                .glassEffect((s.wished ? PageGlass.surface.tint(Palette.blue) : PageGlass.surface).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -408,7 +408,7 @@ struct StampCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(PageGlass.surface, in: .capsule)
+                .glassEffect(PageGlass.surface.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -428,7 +428,7 @@ struct StampCard: View {
                 .animation(Motion.quick, value: words)
                 .animation(Motion.quick, value: proofWord)
                 .frame(width: w, height: 44)
-                .glassEffect(PageGlass.surface, in: .capsule)
+                .glassEffect(PageGlass.surface.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
         .task(id: "\(key)-\(marks.changes)-\(s.stamped)") {
@@ -452,7 +452,7 @@ struct StampCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(PageGlass.surface, in: .capsule)
+                .glassEffect(PageGlass.surface.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }

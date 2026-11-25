@@ -46,8 +46,12 @@ struct PlacesSheet: View {
                 ScrollView(.vertical) {
                   VStack(spacing: 8) {
                     if !rows.isEmpty {
-                    let w = L.W - 2 * L.sheetInset - 24
-                    setGrid(rows, columns: rows.contains { Self.wide($0.title, small: picked, part: w / 2) } ? 1 : 2, width: w, small: picked)
+                    // (25 Nov alignment pass: three, six or nine of them go three a line, each word over a tab's icon,
+                    // when every one fits a tab's part: World Heritage's Cultural, Natural stood over Mixed alone)
+                    let tab = (L.capsule.width - 8) / 3
+                    let three = rows.count % 3 == 0 && !rows.contains { Self.wide($0.title, small: picked, part: tab) }
+                    let w = three ? 3 * tab : L.W - 2 * L.sheetInset - 24
+                    setGrid(rows, columns: three ? 3 : rows.contains { Self.wide($0.title, small: picked, part: w / 2) } ? 1 : 2, width: w, small: picked)
                     .padding(.vertical, 4)
                     .edgeRow()
                     }
@@ -64,12 +68,15 @@ struct PlacesSheet: View {
                                 HStack(spacing: 12) {
                                     SetPlaceThumb(own: it.photo, thing: it.id, cc: it.cc)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(it.short).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
+                                        // (a row's name semibold over its grey second line, as Regions' countries and Pins' maps, 25 Nov)
+                                        Text(it.short).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                                         let land = Self.country(it, map: map)
                                         if !land.isEmpty { Text(land).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1) }
                                     }
                                 }
-                                .padding(.horizontal, 24)
+                                // (16 pt inside the water, as Pins' maps, Map settings and Regions: the photos stood
+                                // 8 pt further in than every other sheet's rows, 25 Nov)
+                                .padding(.horizontal, 16)
                                 .frame(maxWidth: .infinity, minHeight: Self.rowH, alignment: .leading)
                                 .contentShape(Rectangle())
                             }
@@ -169,10 +176,13 @@ struct PlacesSheet: View {
                                 .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 12).frame(height: 34)
                                 .background { if r.on { Capsule().fill(Palette.ink) } }
+                                // (the chosen one just appears, as Pins' chips since 21 Nov: under the sheet's animation
+                                // the black chip faded in over five frames, "Natural" unreadable grey on grey, 25 Nov)
+                                .transaction { $0.animation = nil }
                                 .frame(width: width / CGFloat(columns), height: 44)
                                 .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.press)
                         .accessibilityLabel(r.count.isEmpty ? r.title : r.title + ", " + r.count)
                         .accessibilityAddTraits(r.on ? [.isButton, .isSelected] : .isButton)
                     }
@@ -291,7 +301,7 @@ struct PlacesRows: View {
                     Icon5(key: "forward", ink: ink.opacity(0.5), size: 15)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: PlacesSheet.rowH)
             .background { Rectangle().fill(r.on ? Palette.ink : .clear) }
             .contentShape(Rectangle())

@@ -171,7 +171,9 @@ struct ListsWater: View {
                         .frame(height: 44)
                 } else {
                     ListsWheel(s: s)
-                        .transition(.scale(scale: 0.01))
+                        // (never from a point: it shrank to 1% and grew back from it; now Apple's blur
+                        // replace, from 93%, as Pins' choices come and go, 25 Nov)
+                        .transition(.blurReplace)
                 }
             }
             Spacer(minLength: 8)
@@ -185,7 +187,7 @@ struct ListsWater: View {
                     withAnimation(Motion.quick) { [s.newList, s.newPlan, s.newTier][s.kind]() }
                 }
                 .accessibilityLabel(open != nil ? "View on map" : ["New list", "New plan", "New tier list", "New book"][s.kind])
-                .transition(.scale(scale: 0.01))
+                .transition(.blurReplace)
             }
         }
         .frame(width: w, height: 44)

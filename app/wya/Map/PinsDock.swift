@@ -102,7 +102,8 @@ struct PinsDock: View {
     #endif
     var body: some View {
         let L = water.layout
-        let w = L.W - 2 * L.sheetInset - 16
+        // (the rows' own inset: the outer chips' edges on the maps' pictures' edge, 16 pt inside the water, 25 Nov)
+        let w = L.W - 2 * (L.sheetInset + 16)
         // THE TOOLS: the five tools as words, the one out a black chip with white words (as every chosen thing in the
         // app); under it, that tool's choices shown as what they make (a line's weight, a dashed line, the colour, a
         // line or an area), words only where a word is the thing (Straight, Drive, Walk; Import, Export). Drawing or
@@ -384,7 +385,7 @@ struct SheetWord: View {
 }
 
 
-/// A ROW OF CHIPS (Pins' tools and their choices): each in its own equal part of the row; the one chosen a black chip
+/// A ROW OF CHIPS (Pins' tools and their choices): the tools spread with even gaps from end to end of the row; the one chosen a black chip
 /// with its content white, the rest plain ink on the glass; one that can't be used yet at 30%
 struct ChipRow: View {
     struct Item {
@@ -415,7 +416,10 @@ struct ChipRow: View {
     }
 
     private func chips(spread: Bool) -> some View {
-        HStack(spacing: columns || !spread ? 20 : 0) {
+        // (spread: EvenRow, the gaps between the chips all one size and the outer chips on the row's ends; an HStack
+        // of infinite frames gave the longest word the most room, so the gaps ran 44, 36, 32, 33 pt, 25 Nov)
+        let row = spread && !columns ? AnyLayout(EvenRow()) : AnyLayout(HStackLayout(spacing: 20))
+        return row {
             ForEach(Array(items.enumerated()), id: \.offset) { k, it in
                 Button {
                     if it.dim { Feel.refuse(); return }
@@ -438,14 +442,37 @@ struct ChipRow: View {
                         .frame(height: 44)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: !columns && spread ? .infinity : nil)
+                .buttonStyle(.press)
                 // (a chip that is its word is read by its word: an empty label left VoiceOver saying only)
                 .accessibilityLabelIfGiven(it.label)
                 .accessibilityAddTraits(it.on ? [.isButton, .isSelected] : .isButton)
             }
         }
         .fixedSize(horizontal: !spread, vertical: false)
+    }
+}
+
+/// A ROW WITH EVEN GAPS: each child at its own width, the first at the row's start, the last at its end, the gaps
+/// between them equal. Asked for its own width it says what it needs (the children and 8 pt between each), so a
+/// ViewThatFits around it gives up on it when the words are too long for the sheet
+struct EvenRow: SwiftUI.Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let total: CGFloat = sizes.reduce(0) { $0 + $1.width }
+        let need = total + 8 * CGFloat(max(0, sizes.count - 1))
+        let h: CGFloat = sizes.map { $0.height }.max() ?? 0
+        guard let w = proposal.width, w.isFinite else { return CGSize(width: need, height: h) }
+        return CGSize(width: max(w, need), height: proposal.height ?? h)
+    }
+    func placeSubviews(in b: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let total: CGFloat = sizes.reduce(0) { $0 + $1.width }
+        let gap: CGFloat = subviews.count > 1 ? (b.width - total) / CGFloat(subviews.count - 1) : 0
+        var x: CGFloat = subviews.count > 1 ? b.minX : b.midX - (sizes.first?.width ?? 0) / 2
+        for (v, s) in zip(subviews, sizes) {
+            v.place(at: CGPoint(x: x, y: b.midY), anchor: .leading, proposal: ProposedViewSize(s))
+            x += s.width + gap
+        }
     }
 }
 

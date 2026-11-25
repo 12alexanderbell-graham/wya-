@@ -158,7 +158,7 @@ struct RegionCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(.clear, in: .capsule)
+                .glassEffect(.clear.interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -208,7 +208,7 @@ struct RegionCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(s.stamped ? .clear.tint(Palette.lime) : .clear, in: .capsule)
+                .glassEffect((s.stamped ? Glass.clear.tint(Palette.lime) : .clear).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }
@@ -237,7 +237,7 @@ struct RegionCard: View {
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: words)
                 .frame(width: w, height: 44)
-                .glassEffect(s.wished ? .clear.tint(Palette.blue) : .clear, in: .capsule)
+                .glassEffect((s.wished ? Glass.clear.tint(Palette.blue) : .clear).interactive(), in: .capsule)
         }
         .buttonStyle(.plain)
     }

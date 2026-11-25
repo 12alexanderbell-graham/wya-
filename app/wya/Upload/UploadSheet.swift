@@ -1350,14 +1350,17 @@ struct UploadSheet: View {
 
     var body: some View {
         let L = water.layout
-        let w = (L.W - 2 * L.sheetInset - 2 * 16 - 12) / 2
+        // THE PAIR ON THE TABS' COLUMNS (25 Nov alignment pass): Photos over the first tab, Location over the third,
+        // each as wide as the gap between them leaves (12 pt apart); they sat on the halves of the water, 12 pt off
+        let tabStep = (L.capsule.width - 8) / 3
+        let w = 2 * tabStep - 12
         // (never above the head's foot, as the finding's row: at full the choices stood under the status bar)
         let top = max(form.top + 20, L.headBottom + 12)
         ZStack(alignment: .topLeading) {
             if u.phase == .choosing {
                 ForEach(0 ..< 2, id: \.self) { side in
                     choice(side, width: w)
-                        .position(x: L.sheetInset + 16 + w / 2 + CGFloat(side) * (w + 12), y: top + 48)
+                        .position(x: L.W / 2 + CGFloat(side * 2 - 1) * tabStep, y: top + 48)
                 }
             } else {
                 finding(L)

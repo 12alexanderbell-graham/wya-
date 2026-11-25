@@ -47,3 +47,17 @@ enum Motion {
         set { UserDefaults.standard.set(newValue, forKey: "waterPhysics") }
     }
 }
+
+/// THE PRESS (25 Nov, Emil Kowalski's motion numbers): a word chip pressed goes to 97% in 0.15 s and
+/// comes back on the quick curve when the finger lifts, so a tap is felt before anything happens. Glass buttons take
+/// Apple's own press instead (`.interactive()` glass); rows don't shrink.
+struct PressButton: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !Motion.reduce ? 0.97 : 1)
+            .animation(configuration.isPressed ? .smooth(duration: 0.15) : Motion.quick, value: configuration.isPressed)
+    }
+}
+extension ButtonStyle where Self == PressButton {
+    static var press: PressButton { PressButton() }
+}
