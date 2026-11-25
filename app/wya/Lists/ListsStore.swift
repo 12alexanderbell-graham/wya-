@@ -23,7 +23,10 @@ final class ListsStore {
         var b = book
         f(&b)
         guard b != book else { return }
+        // (a plan changed: the lock screen's plan worked out again, PlanLive)
+        let plansChanged = b.plans != book.plans
         book = b
+        if plansChanged { PlanLive.changed() }
         guard let u = Self.url else { return }
         try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(b) { try? d.write(to: u, options: .atomic) }

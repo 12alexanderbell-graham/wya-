@@ -37,7 +37,11 @@ struct wyaApp: App {
                 // system's accents in black, never the system blue
                 .tint(Palette.ink)
                 // the app put away: a review or round up is kept on disk (iOS may end the app before it is back)
-                .onChange(of: phase) { _, p in if p == .background { UploadState.shared.backgrounded() } }
+                .onChange(of: phase) { _, p in
+                    if p == .background { UploadState.shared.backgrounded() }
+                    // (the app up: the plan near now on the lock screen, its days counted again)
+                    if p == .active { Task { await PlanLive.refresh() } }
+                }
         }
     }
 }
