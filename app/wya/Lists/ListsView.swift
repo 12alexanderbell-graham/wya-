@@ -1465,7 +1465,8 @@ enum ListMapCovers {
         conf.showsTraffic = false
         opt.preferredConfiguration = conf
         guard let snap = try? await MKMapSnapshotter(options: opt).start() else { return nil }
-        // A DOT ON EACH OF ITS PLACES (black, a pale halo, as the journey's stops): what makes one list's map its own
+        // A DOT ON EACH OF ITS PLACES: what makes one list's map its own. Small and plain black, no halo (25 Nov: they
+        // were 8 pt on a 12 pt white ring, too big and loud)
         let out = UIGraphicsImageRenderer(size: snap.image.size, format: {
             let f = UIGraphicsImageRendererFormat(); f.scale = snap.image.scale; return f
         }()).image { ctx in
@@ -1473,10 +1474,8 @@ enum ListMapCovers {
             let c = ctx.cgContext
             for m in mids {
                 let p = snap.point(for: m)
-                c.setFillColor(UIColor.white.withAlphaComponent(0.85).cgColor)
-                c.fillEllipse(in: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12))
                 c.setFillColor(UIColor(Palette.ink).cgColor)
-                c.fillEllipse(in: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+                c.fillEllipse(in: CGRect(x: p.x - 2.5, y: p.y - 2.5, width: 5, height: 5))
             }
         }
         cache[k] = out
