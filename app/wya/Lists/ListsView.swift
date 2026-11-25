@@ -19,6 +19,13 @@ final class ListsState {
     var testDial: CGFloat?
     /// the list open, by id ("wish" is the map's wishlist)
     var open: String?
+    /// the lists this one was opened from, inside one another (a list inside a list goes back to the list it is in)
+    var parents: [String] = []
+    /// open a list that sits inside the open one: back returns to this one
+    func openInner(_ id: String) {
+        if let o = open { parents.append(o) }
+        open = id; noted = nil
+    }
     /// the open list's name being typed
     var naming = false
     var searching = false
@@ -69,7 +76,8 @@ final class ListsState {
            l.name.trimmingCharacters(in: .whitespaces).isEmpty, l.items.isEmpty {
             ListsStore.shared.change { $0.lists.removeAll { $0.id == id } }
         }
-        open = nil
+        // (back from a list opened inside another: to that one, not the shelf)
+        open = parents.popLast()
         naming = false
         noted = nil
     }
@@ -81,6 +89,8 @@ struct ListsThing: Identifiable {
     let name: String
     let cc: String?
     let note: String
+    /// a list inside this list: the inner list's id (it sits like a country and opens as a list, any depth)
+    var ref: String? = nil
 }
 
 struct ListsWater: View {
@@ -141,7 +151,7 @@ struct ListsWater: View {
                             .frame(width: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
                     } else if archiveOpen {
-                        ListArchiveSheet(open: { id in withAnimation(Motion.quick) { archiveOpen = false; s.open = id } })
+                        ListArchiveSheet(open: { id in s.parents = []; withAnimation(Motion.quick) { archiveOpen = false; s.open = id } })
                             .frame(width: w)
                             .transition(.asymmetric(insertion: .move(edge: .trailing), removal: .move(edge: .trailing)))
                     } else if let id = s.open {
@@ -166,6 +176,21 @@ struct ListsWater: View {
         .frame(width: L.W, height: L.H, alignment: .topLeading)
     }
 
+    /// A LIST INSIDE A LIST: its own cover, small, rounded as its tile
+    private func innerThumb(_ r: String) -> some View {
+        let inner = store.book.lists.first { $0.id == r }
+        return Color.clear.frame(width: 44, height: 44)
+            .overlay { if let inner { listCoverOrGlass(inner) } }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+    /// its name, and "List" with how many things are in it
+    private func innerLabel(_ r: String, name: String) -> some View {
+        let n = store.book.lists.first { $0.id == r }.map { things($0).count } ?? 0
+        return VStack(alignment: .leading, spacing: 1) {
+            Text(name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+            Text("List · \(n) " + (n == 1 ? "thing" : "things")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+        }
+    }
     /// a plan's thing put away: back to the plan, and a thing left with no words taken out
     private func closeItem() {
         guard let r = editingItem else { return }
@@ -272,7 +297,14 @@ struct ListsWater: View {
         .sorted { $0.name < $1.name }
     }
     private func things(_ l: MyList) -> [ListsThing] {
-        l.items.filter { $0.k != .section }.map { ListsThing(id: $0.id, name: $0.n, cc: $0.cc, note: $0.note) }
+        l.items.filter { $0.k != .section }.compactMap { it in
+            if it.k == .mine, it.t == .list, let r = it.ref {
+                // (a list inside: its own name, as it is now; gone if that list was deleted)
+                guard let inner = store.book.lists.first(where: { $0.id == r }) else { return nil }
+                return ListsThing(id: it.id, name: inner.name.isEmpty ? "New list" : inner.name, cc: nil, note: it.note, ref: r)
+            }
+            return ListsThing(id: it.id, name: it.n, cc: it.cc, note: it.note)
+        }
     }
 
     @ViewBuilder private func rows(_ w: CGFloat) -> some View {
@@ -485,7 +517,7 @@ struct ListsWater: View {
                 .foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
         }
         .contentShape(Rectangle())
-        .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { s.open = id } }
+        .onTapGesture { Feel.tap(); s.parents = []; withAnimation(Motion.quick) { s.open = id } }
         // A LIST'S HOLD MENU (25 Nov): its own sheet, and archive / hide straight from the shelf
         .contextMenu {
             if let l = store.book.lists.first(where: { $0.id == id }) {
@@ -609,7 +641,9 @@ struct ListsWater: View {
                             let own = key.flatMap { CollectionStore.shared.item($0)?.photo } ?? set?.item.photo ?? ""
                             let wd = key.map { $0.id.hasPrefix("wd:") ? String($0.id.dropFirst(3)) : $0.id }
                                 ?? t.cc.flatMap { ListSuggestions.sight(t.name, $0) } ?? set?.item.id
-                            if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
+                            if let r = t.ref {
+                                innerThumb(r)
+                            } else if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
                                 SetPlaceThumb(own: own, thing: wd ?? "", cc: cc)
                             } else {
                                 Group {
@@ -619,7 +653,11 @@ struct ListsWater: View {
                                 .frame(width: 44, height: 44)
                                 .onAppear { if let cc = t.cc, !cc.isEmpty { ThingStore.shared.load(cc.lowercased()); ThingIndex.shared.load() } }
                             }
-                            Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                            if let r = t.ref {
+                                innerLabel(r, name: t.name)
+                            } else {
+                                Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                            }
                             Spacer(minLength: 0)
                         }
                         // OPENED: its note, and for a place, Open, which takes it to the map (morning Q12)
@@ -643,6 +681,8 @@ struct ListsWater: View {
                     .frame(minHeight: 56, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture {
+                        // (a list inside opens, pushed in as any list)
+                        if let r = t.ref { Feel.tap(); withAnimation(Motion.quick) { s.openInner(r) }; return }
                         guard !t.note.isEmpty || !(t.cc ?? "").isEmpty else { return }
                         Feel.tap()
                         withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id }

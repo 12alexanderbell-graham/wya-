@@ -9,7 +9,7 @@ struct ListAddRow: View {
     @State private var text = ""
     @FocusState private var typing: Bool
 
-    struct Found: Hashable { let name: String; let cc: String; let line: String }
+    struct Found: Hashable { let name: String; let cc: String; let line: String; var ref: String? = nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,10 +23,16 @@ struct ListAddRow: View {
                 .padding(.leading, 56)
             ForEach(found, id: \.self) { f in
                 HStack(spacing: 12) {
-                    Group {
-                        if let fl = Flags.row(f.cc) { fl.resizable().interpolation(.high) } else { Color.clear }
+                    if let r = f.ref, let l = ListsStore.shared.book.lists.first(where: { $0.id == r }) {
+                        Color.clear.frame(width: 44, height: 44)
+                            .overlay { listCoverOrGlass(l) }
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    } else {
+                        Group {
+                            if let fl = Flags.row(f.cc) { fl.resizable().interpolation(.high) } else { Color.clear }
+                        }
+                        .frame(width: 44, height: 33).frame(width: 44, height: 44)
                     }
-                    .frame(width: 44, height: 33).frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(f.name).font(.body).foregroundStyle(Palette.ink).lineLimit(1)
                         Text(f.line).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
@@ -49,6 +55,16 @@ struct ListAddRow: View {
         let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
         let fq = fold(q)
         var out: [Found] = []
+        // YOUR OTHER LISTS of that name first (a list inside a list), never one that would hold this one
+        let book = ListsStore.shared.book
+        if let me = book.lists.first(where: { $0.id == listID }) {
+            for l in book.lists where !l.wish && l.id != listID && fold(l.name).contains(fq) {
+                let item = ListItem.mine(.list, l.id)
+                guard !book.wouldLoop(me, item), !me.items.contains(where: { $0.ref == l.id }) else { continue }
+                out.append(Found(name: l.name, cc: "", line: "List", ref: l.id))
+                if out.count >= 2 { break }
+            }
+        }
         let starts = CountryEntity.all.filter { fold($0.name).hasPrefix(fq) }
         let inside = CountryEntity.all.filter { !fold($0.name).hasPrefix(fq) && fold($0.name).contains(fq) }
         for c in (starts + inside).prefix(2) { out.append(Found(name: c.name, cc: c.id, line: "Country")) }
@@ -84,6 +100,7 @@ struct ListAddRow: View {
 
     private func add(_ f: Found) {
         Feel.tap()
+        if let r = f.ref { put(ListItem.mine(.list, r)); return }
         put(ListItem(n: f.name, cc: f.cc))
     }
 
