@@ -384,7 +384,8 @@ struct StampedList: View {
             // the words by the text roll (never scaled, never faded): a blank of the same length until they come
             let w = wordsOut.contains(r.id)
             VStack(alignment: .leading, spacing: 1) {
-                Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body).foregroundStyle(Palette.ink)
+                // (the name semibold over its grey line, the one rule for such rows across the app, 25 Nov)
+                Text(w ? r.name : Caption.blank(r.name, "\u{2002}")).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1)
                     .contentTransition(.identity)
                 Text(w ? r.line : Caption.blank(r.line, "\u{2002}")).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
