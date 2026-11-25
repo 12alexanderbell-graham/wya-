@@ -63,7 +63,9 @@ enum StampArt {
     /// AS A RUBBER STAMP LEAVES IT: the ink never lies perfectly even; it is a little lighter where the pad pressed
     /// less, in broad soft patches, and the paper's grain leaves small gaps. Each stamp's pattern comes from its own
     /// id, so it is the same every time it is shown
-    static var inked = true
+    /// off (25 Nov): the stamps as clean vector lines, the Japan one's way, with no grain or patchy ink (the rule of
+    /// 3 Oct); the inked look stays in code for a test
+    static var inked = false
     private static let ci = CIContext()
     private static func inked(_ img: UIImage, seed: String) -> UIImage {
         guard let cg = img.cgImage else { return img }
