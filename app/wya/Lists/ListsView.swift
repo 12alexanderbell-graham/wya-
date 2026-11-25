@@ -989,22 +989,22 @@ struct ListsWater: View {
         return f.string(from: d)
     }
 
-    @ViewBuilder private func datePills(_ p: Plan) -> some View {
-        dateBox(p.start, label: "First day") { v in var e = false; changePlan(p.id) { $0.pickFirst(v, endFirst: &e) } }
-        dateBox(p.end, label: "Last day") { v in var e = false; changePlan(p.id) { _ = $0.pickLast(v, endFirst: &e, force: true) } }
+    @ViewBuilder private func datePills(_ p: Plan, half: CGFloat) -> some View {
+        dateBox(p.start, label: "First day", width: half) { v in var e = false; changePlan(p.id) { $0.pickFirst(v, endFirst: &e) } }
+        dateBox(p.end, label: "Last day", width: half) { v in var e = false; changePlan(p.id) { _ = $0.pickLast(v, endFirst: &e, force: true) } }
     }
-    @ViewBuilder private func calendarPills(_ p: Plan) -> some View {
+    @ViewBuilder private func calendarPills(_ p: Plan, half: CGFloat) -> some View {
         if !p.start.isEmpty, p.count > 0, let url = Self.icsFile(p) {
             ShareLink(item: url) {
                 Text("Add to Calendar").font(.body).foregroundStyle(Palette.ink)
-                    .padding(.horizontal, 16).frame(height: 44)
+                    .frame(width: half, height: 44)
                     .glassEffect(PageGlass.control, in: .capsule)
             }
             .buttonStyle(.plain)
         }
         Button { Feel.tap(); importingICS = true } label: {
             Text("Import").font(.body).foregroundStyle(Palette.ink)
-                .padding(.horizontal, 16).frame(height: 44)
+                .frame(width: half, height: 44)
                 .glassEffect(PageGlass.control, in: .capsule)
         }
         .buttonStyle(.plain)
@@ -1055,13 +1055,12 @@ struct ListsWater: View {
                 // file (Apple's Calendar and Google Calendar both take it); a calendar file comes in as things on the
                 // plan's days (an undated plan takes the file's days). One line when they all fit, else the calendar on
                 // a second line (25 Nov: an undated plan had Import alone under First day and Last day)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) { datePills(p); calendarPills(p); Spacer(minLength: 0) }
-                        .frame(minHeight: 52)
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 12) { datePills(p); Spacer(minLength: 0) }.frame(minHeight: 52)
-                        HStack(spacing: 12) { calendarPills(p); Spacer(minLength: 0) }.frame(minHeight: 52)
-                    }
+                // (set widths, half the row each, 25 Nov: buttons are never sized by their words; the four were each as
+                // wide as their words)
+                let half = (w - 12) / 2
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 12) { datePills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
+                    HStack(spacing: 12) { calendarPills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
                 }
                 if let w = icsWords {
                     Text(w).font(.body).foregroundStyle(Palette.ink.opacity(0.5)).frame(minHeight: 28)
@@ -1248,11 +1247,11 @@ struct ListsWater: View {
     }
 
     /// a day picked on Apple's own calendar, its words the day, or the label at 50% when not set
-    private func dateBox(_ v: String, label: String, set: @escaping (String) -> Void) -> some View {
+    private func dateBox(_ v: String, label: String, width: CGFloat? = nil, set: @escaping (String) -> Void) -> some View {
         let shown = v.isEmpty ? Date() : PlanDates.date(v) ?? Date()
         return Text(v.isEmpty ? label : WhenWords.day(v)).font(.body)
             .foregroundStyle(v.isEmpty ? Palette.ink.opacity(0.5) : Palette.ink)
-            .padding(.horizontal, 16).frame(height: 44)
+            .padding(.horizontal, width == nil ? 16 : 0).frame(width: width, height: 44)
             .glassEffect(PageGlass.control, in: .capsule)
             .overlay {
                 DatePicker("", selection: Binding(get: { shown }, set: { d in Feel.tap(); set(PlanDates.key(local: d)) }), displayedComponents: .date)
