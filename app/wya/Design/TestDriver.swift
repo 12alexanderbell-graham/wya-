@@ -305,6 +305,32 @@ final class TestDriver {
                 // lists open <id>|new|close|kind <n>|name <words>|drop: the Lists tab's state, as its taps set it
                 // (drop: the open list taken away, test residue)
                 // bookplace <lat> <lon>: the name a book page gets for a photo taken there (written to bookplace.txt)
+                // plancover <id>: a plan's cover places and the cover drawn from them (plancover.txt, plancover.png)
+                case "plancover":
+                    if p.count > 1, let pl = ListsStore.shared.book.plans.first(where: { $0.id == p[1] }) {
+                        let (ccs, spots) = ListsWater.planCover(pl)
+                        try? "ccs=\(ccs) spots=\(spots)".write(toFile: Snap.dir + "/plancover.txt", atomically: true, encoding: .utf8)
+                        Task { @MainActor in
+                            if let img = await ListMapCovers.image(ccs, spots: spots, world: map?.world,
+                                                                   size: CGSize(width: 170, height: 170), scale: 2) {
+                                try? img.pngData()?.write(to: URL(fileURLWithPath: Snap.dir + "/plancover.png"))
+                            }
+                        }
+                    }
+                // spot <name> <cc>: where a list's place is put on its cover, and the towns' and sights' readiness (spot.txt)
+                case "spot":
+                    if p.count > 2 {
+                        let c = ListMapCovers.spot(p[1], p[2])
+                        let t = TownIndex.shared.named(p[1], in: p[2])
+                        let line = "spot=\(c.map { "\($0.latitude),\($0.longitude)" } ?? "nil") town=\(t.map { "\($0.name) \($0.file) \($0.people)" } ?? "nil") towns=\(TownIndex.shared.ready) sights=\(ThingIndex.shared.ready)"
+                        try? line.write(toFile: Snap.dir + "/spot.txt", atomically: true, encoding: .utf8)
+                        Task { @MainActor in
+                            if let img = await ListMapCovers.image([p[2]], spots: [p[1] + "|" + p[2]], world: map?.world,
+                                                                   size: CGSize(width: 170, height: 170), scale: 2) {
+                                try? img.pngData()?.write(to: URL(fileURLWithPath: Snap.dir + "/spot.png"))
+                            }
+                        }
+                    }
                 case "bookplace":
                     if p.count > 2, let la = Double(p[1]), let lo = Double(p[2]) {
                         Task { @MainActor in
