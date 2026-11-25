@@ -120,6 +120,8 @@ struct BookPageView: View {
     /// the page you are on: a video plays (elsewhere its first frame stands still), with its sound if asked
     var live = false
     var sound = false
+    /// room kept under words at the foot (full screen: above the home bar)
+    var foot: CGFloat = 0
     var body: some View {
         GeometryReader { g in
             let p = page.photos, gap: CGFloat = 3
@@ -170,6 +172,7 @@ struct BookPageView: View {
                         .foregroundStyle(!pictured ? Palette.ink : Palette.white)
                         .multilineTextAlignment(!pictured ? .center : .leading)
                         .padding(16)
+                        .padding(.bottom, pictured ? foot : 0)
                         .frame(maxWidth: .infinity, maxHeight: !pictured ? .infinity : nil,
                                alignment: !pictured ? .center : .leading)
                         // (white words on a photo read by a soft dark foot, as Photos' memories do)
@@ -217,6 +220,9 @@ struct BookOpenView: View {
     /// the sketch's ink, from our colours (nil: whatever Apple's tool picker has), and a count bumped to clear it
     @State private var sketchInk: String?
     @State private var sketchClears = 0
+    /// the book read full screen, grown out of its page (Apple's zoom, as a photo opens in Photos)
+    @State private var reading = false
+    @Namespace private var zoom
 
     private var book: PhotoBook? { store.book.books.first { $0.id == id } }
     /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
@@ -392,13 +398,19 @@ struct BookOpenView: View {
                         }
                         .frame(width: w, height: pageH)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .matchedTransitionSource(id: id, in: zoom) { $0.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
                         // where you are, in words (no dots), and All pages at its right (four pills in a row wrapped
-                        // "All pages" onto two lines, 25 Nov)
-                        HStack {
+                        // "All pages" onto two lines, 25 Nov); FULL SCREEN beside it
+                        HStack(spacing: 20) {
                             Text("Page \(min(at, b.pages.count - 1) + 1) of \(b.pages.count)")
                                 .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                                 .contentTransition(.numericText(value: Double(at)))
-                            Spacer(minLength: 8)
+                            Spacer(minLength: 0)
+                            Button { Feel.tap(); reading = true } label: {
+                                Text("Full screen").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                                    .frame(minHeight: 44).contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             if b.pages.count > 1 { lineButton("All pages") { overview = true } }
                         }
                         // THE WORDS ON THIS PAGE, typed here
@@ -418,6 +430,10 @@ struct BookOpenView: View {
                 .padding(.bottom, 140)
             }
             .scrollIndicators(.hidden)
+            .fullScreenCover(isPresented: $reading) {
+                BookFullView(id: id, at: $at) { reading = false }
+                    .navigationTransition(.zoom(sourceID: id, in: zoom))
+            }
             // (videos too, as Apple's Photos keeps them with the photos)
             .photosPicker(isPresented: $picking, selection: $picked, maxSelectionCount: 6,
                           matching: .any(of: [.images, .videos]), photoLibrary: .shared())
@@ -498,6 +514,43 @@ struct BookOpenView: View {
                 .glassEffect(PageGlass.control.interactive(), in: .capsule)
         }
         .buttonStyle(.press)
+    }
+}
+
+/// A BOOK READ FULL SCREEN: its pages to the screen's edges, turned as before (a video plays on the page you are on);
+/// back in the app's glass circle where the Lists' back always is, or a swipe down, and it shrinks into its page again
+struct BookFullView: View {
+    let id: String
+    @Binding var at: Int
+    let close: () -> Void
+    @State private var store = ListsStore.shared
+    var body: some View {
+        let pages = store.book.books.first { $0.id == id }?.pages ?? []
+        ZStack(alignment: .topLeading) {
+            Palette.white.ignoresSafeArea()
+            if !pages.isEmpty {
+                PageCurl(pages: pages.map(\.id), at: $at) { pid in
+                    AnyView(
+                        Group {
+                            if let pg = store.book.books.first(where: { $0.id == id })?.pages.first(where: { $0.id == pid }) {
+                                BookPageView(page: pg, live: pages.indices.contains(at) && pages[at].id == pid, foot: 28)
+                            }
+                        }
+                        .ignoresSafeArea()
+                    )
+                }
+                .ignoresSafeArea()
+            }
+            Button { Feel.tap(); close() } label: {
+                Icon5(key: "back", ink: Palette.ink, size: 22)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(PageGlass.head.interactive(), in: .circle)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 24)
+            .accessibilityLabel("Back")
+        }
+        .statusBarHidden()
     }
 }
 
