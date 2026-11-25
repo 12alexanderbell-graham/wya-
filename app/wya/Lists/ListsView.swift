@@ -896,15 +896,19 @@ struct ListsWater: View {
     }
     /// the list's countries coloured on the Map tab, under them (P06 §3)
     private func viewOnMap(_ l: MyList) {
+        let ccs = l.items.filter { $0.k == .place }.compactMap { $0.cc }
+        viewOnMap(name: l.name.isEmpty ? "New list" : l.name, ccs: ccs, tint: l.mapc)
+    }
+    /// countries coloured on the Map tab under a name (a list's or a plan's)
+    private func viewOnMap(name: String, ccs: [String], tint: String) {
         guard let w = map.world else { return }
         Feel.tap()
-        let ccs = Set(l.items.filter { $0.k == .place }.compactMap { $0.cc?.lowercased() }.filter { !$0.isEmpty })
-        let places = Set(ccs.compactMap { w.placeIndex[$0] })
+        let places = Set(ccs.map { $0.lowercased() }.filter { !$0.isEmpty }.compactMap { w.placeIndex[$0] })
         guard !places.isEmpty else { Feel.refuse(); return }
-        // (the caption's count: of the list's countries, the ones you have stamped)
-        map.viewing = MapController.Viewing(name: l.name.isEmpty ? "New list" : l.name, places: places,
+        // (the caption's count: of its countries, the ones you have stamped)
+        map.viewing = MapController.Viewing(name: name, places: places,
                                             been: places.filter { map.stamped.contains($0) }.count,
-                                            tint: ListColours.vector(l.mapc))
+                                            tint: ListColours.vector(tint))
         // (on Countries: Pins and Places draw no countries' colours)
         if let h = AIContext.head, h.mode != .countries { h.mode = .countries }
         NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: 0)
@@ -1010,6 +1014,12 @@ struct ListsWater: View {
                         .scaleEffect((180 + shownPull) / 180, anchor: .bottom)
                         .frame(height: 180 + shownPull, alignment: .bottom)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        // (its cover tapped: THE WHOLE TRIP ON THE MAP, its countries coloured as a list's are, 25 Nov;
+                        // a plan's places opened one at a time before)
+                        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .onTapGesture { viewOnMap(name: p.name.isEmpty ? "Plan" : p.name, ccs: cover.ccs, tint: "lime") }
+                        .accessibilityLabel("See it on the map")
+                        .accessibilityAddTraits(.isButton)
                         .padding(.top, -shownPull)
                         .padding(.bottom, 12)
                 }
