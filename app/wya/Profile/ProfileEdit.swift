@@ -150,9 +150,10 @@ struct ProfileGroundSheet: View {
                         store.set { $0.ground = g }
                         at = g.count - 1
                     } label: {
+                        // (a glass circle, never an empty outlined one, 12 Nov)
                         Icon5(key: "plus", ink: Palette.ink, size: 20)
                             .frame(width: 44, height: 44)
-                            .overlay(Circle().inset(by: -0.25).stroke(Palette.ink.opacity(0.15), lineWidth: 0.5))
+                            .glassEffect(.clear.interactive(), in: .circle)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Add a colour")
