@@ -91,7 +91,9 @@ nonisolated enum BadgeFlat {
             if case .pole = plan.plane {
                 path.addEllipse(in: frame)
             } else if plan.tile {
-                let r = min(frame.width, frame.height) * 0.22
+                // (a sea's window has the app's capsule ends, 25 Nov: a hard rounded rectangle, the Mediterranean,
+                // stood among the circles and the land's own shapes as the one box on the page)
+                let r = min(frame.width, frame.height) / 2
                 path.addRoundedRect(in: frame, cornerWidth: r, cornerHeight: r)
             } else {
                 for r in plan.rings where r.count > 2 {
