@@ -715,6 +715,27 @@ struct ListsWater: View {
         return f.string(from: d)
     }
 
+    @ViewBuilder private func datePills(_ p: Plan) -> some View {
+        dateBox(p.start, label: "First day") { v in var e = false; changePlan(p.id) { $0.pickFirst(v, endFirst: &e) } }
+        dateBox(p.end, label: "Last day") { v in var e = false; changePlan(p.id) { _ = $0.pickLast(v, endFirst: &e, force: true) } }
+    }
+    @ViewBuilder private func calendarPills(_ p: Plan) -> some View {
+        if !p.start.isEmpty, p.count > 0, let url = Self.icsFile(p) {
+            ShareLink(item: url) {
+                Text("Add to Calendar").font(.body).foregroundStyle(Palette.ink)
+                    .padding(.horizontal, 16).frame(height: 44)
+                    .glassEffect(PageGlass.control, in: .capsule)
+            }
+            .buttonStyle(.plain)
+        }
+        Button { Feel.tap(); importingICS = true } label: {
+            Text("Import").font(.body).foregroundStyle(Palette.ink)
+                .padding(.horizontal, 16).frame(height: 44)
+                .glassEffect(PageGlass.control, in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Adds a calendar file's events to this plan")
+    }
     private func planPage(_ p: Plan, w: CGFloat) -> some View {
         ScrollViewReader { reader in
         ScrollView {
@@ -743,35 +764,18 @@ struct ListsWater: View {
                         .frame(minHeight: 44)
                         .onTapGesture { Feel.tap(); s.naming = true }
                 }
-                // its first and last day (none yet: someday)
-                HStack(spacing: 12) {
-                    dateBox(p.start, label: "First day") { v in var e = false; changePlan(p.id) { $0.pickFirst(v, endFirst: &e) } }
-                    dateBox(p.end, label: "Last day") { v in var e = false; changePlan(p.id) { _ = $0.pickLast(v, endFirst: &e, force: true) } }
-                    Spacer(minLength: 0)
-                }
-                .frame(minHeight: 52)
-                // ITS CALENDAR: a dated plan goes out as a calendar file (Apple's Calendar and Google Calendar both
-                // take it); a calendar file comes in as things on the plan's days (an undated plan takes the file's
-                // days)
-                HStack(spacing: 12) {
-                    if !p.start.isEmpty, p.count > 0, let url = Self.icsFile(p) {
-                        ShareLink(item: url) {
-                            Text("Add to Calendar").font(.body).foregroundStyle(Palette.ink)
-                                .padding(.horizontal, 16).frame(height: 44)
-                                .glassEffect(PageGlass.control, in: .capsule)
-                        }
-                        .buttonStyle(.plain)
+                // its first and last day (none yet: someday), then ITS CALENDAR: a dated plan goes out as a calendar
+                // file (Apple's Calendar and Google Calendar both take it); a calendar file comes in as things on the
+                // plan's days (an undated plan takes the file's days). One line when they all fit, else the calendar on
+                // a second line (25 Nov: an undated plan had Import alone under First day and Last day)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) { datePills(p); calendarPills(p); Spacer(minLength: 0) }
+                        .frame(minHeight: 52)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 12) { datePills(p); Spacer(minLength: 0) }.frame(minHeight: 52)
+                        HStack(spacing: 12) { calendarPills(p); Spacer(minLength: 0) }.frame(minHeight: 52)
                     }
-                    Button { Feel.tap(); importingICS = true } label: {
-                        Text("Import").font(.body).foregroundStyle(Palette.ink)
-                            .padding(.horizontal, 16).frame(height: 44)
-                            .glassEffect(PageGlass.control, in: .capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Adds a calendar file's events to this plan")
-                    Spacer(minLength: 0)
                 }
-                .frame(minHeight: 52)
                 if let w = icsWords {
                     Text(w).font(.body).foregroundStyle(Palette.ink.opacity(0.5)).frame(minHeight: 28)
                 }
