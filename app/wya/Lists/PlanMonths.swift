@@ -78,11 +78,20 @@ struct PlanMonths: View {
                 // form for the whole trip, not a capsule a week
                 .background(alignment: .topLeading) {
                     GeometryReader { g in
-                        let cw = g.size.width / 7
+                        let cw = g.size.width / 7, gx = g.frame(in: .global).minX
                         let rects: [CGRect] = weeks.indices.compactMap { w in
-                            let inPlan = weeks[w].map { i in i.map { PlanDates.key(first, $0) }.map { $0 >= plan.start && $0 <= plan.end } ?? false }
-                            guard let lo = inPlan.firstIndex(of: true), let hi = inPlan.lastIndex(of: true) else { return nil }
-                            return CGRect(x: CGFloat(lo) * cw + 2, y: CGFloat(w) * 46, width: CGFloat(hi - lo + 1) * cw - 4, height: 40)
+                            let keys = weeks[w].map { i in i.map { PlanDates.key(first, $0) } }
+                            let inPlan = keys.map { k in k.map { $0 >= plan.start && $0 <= plan.end } ?? false }
+                            guard let lo = inPlan.firstIndex(of: true), let hi = inPlan.lastIndex(of: true),
+                                  let kLo = keys[lo], let kHi = keys[hi] else { return nil }
+                            // A TRIP RUNNING ON PAST THE WEEK'S OR THE MONTH'S EDGE runs off the screen's edge and comes back
+                            // in on the next row, never a capsule stopping short (26 Nov;
+                            // as the visit calendar's)
+                            let openL = keys[..<lo].allSatisfy { $0 == nil } && kLo > plan.start
+                            let openR = keys[(hi + 1)...].allSatisfy { $0 == nil } && kHi < plan.end
+                            let x0 = openL ? -gx - 40 : CGFloat(lo) * cw + 2
+                            let x1 = openR ? Screen.width - gx + 40 : CGFloat(hi + 1) * cw - 2
+                            return CGRect(x: x0, y: CGFloat(w) * 46, width: x1 - x0, height: 40)
                         }
                         DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.ink)
                     }
