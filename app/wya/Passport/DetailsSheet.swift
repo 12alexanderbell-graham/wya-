@@ -764,6 +764,8 @@ struct DetailsSheet: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add photos")
+                // (over the photos, which slide out from under it)
+                .zIndex(1)
                 ForEach(Array((s.d.photos ?? []).enumerated()), id: \.element.file) { i, ph in
                     PhotoStampTile(file: ph.file)
                         .opacity(out ? 0 : 1)
@@ -771,10 +773,11 @@ struct DetailsSheet: View {
                             Button("Remove", role: .destructive) { removePhoto(ph.file) }
                         }
                         .accessibilityLabel("Photo \(i + 1)")
-                        // (a photo added comes in from 93%, never from a point, 25 Nov)
+                        // (a photo added slides out from under the plus, never from a point, never faded, 26 Nov)
                         .transition(detailsPhotoIn)
                 }
             }
+            .coordinateSpace(.named("detailsPhotos"))
             .padding(.vertical, 4)
             .edgeRow()
         }
@@ -1463,5 +1466,19 @@ struct DrawerSlide: ViewModifier {
     func body(content: Content) -> some View { content.offset(y: y) }
 }
 
-/// a photo added in Details comes in from 93% at its left, blurred in, never from a point (25 Nov)
-@MainActor let detailsPhotoIn: AnyTransition = AnyTransition.scale(scale: 0.93, anchor: .leading).combined(with: AnyTransition(.blurReplace))
+/// a photo added in Details slides out from under the plus to its place, whole (never from a point, never blurred in,
+/// 26 Nov); taken out, it slides back under the plus
+@MainActor let detailsPhotoIn: AnyTransition = .modifier(active: FromUnderPlus(t: 1), identity: FromUnderPlus(t: 0))
+
+/// how far a photo tile is still from its place, as a part of the way from the plus's left edge (its row's start)
+struct FromUnderPlus: ViewModifier, Animatable {
+    var t: CGFloat
+    var animatableData: CGFloat {
+        get { t }
+        set { t = newValue }
+    }
+    func body(content: Content) -> some View {
+        let k = t
+        content.visualEffect { c, g in c.offset(x: -k * max(0, g.frame(in: .named("detailsPhotos")).minX)) }
+    }
+}

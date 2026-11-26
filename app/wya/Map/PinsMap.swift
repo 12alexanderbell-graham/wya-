@@ -1820,7 +1820,8 @@ struct PinsWater: View {
                     Caption(name: " ", count: 0, tail: " ", night: false).hidden()
                     VStack(spacing: 4) {
                         // while the phone names a new pin, the nearest town we know at once (never an empty line,
-                        // 19:18), the real name blurring in over it when it comes
+                        // 19:18), the real name rolling in over it when it comes, letter by letter as every caption's name (never
+                        // blurred in, 26 Nov)
                         let name = p.shownTitle
                         ZStack {
                             if editable {
@@ -1833,7 +1834,7 @@ struct PinsWater: View {
                                 .focused($naming).submitLabel(.done)
                             } else {
                                 Text(name).font(.title2.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                                    .id(name).transition(.blurReplace)
+                                    .contentTransition(.numericText())
                             }
                         }
                         .animation(Motion.quick, value: name)

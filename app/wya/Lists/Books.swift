@@ -319,6 +319,10 @@ struct BookOpenView: View {
     /// a page's height: 3 to 4 of its width, but never more than about half the screen, so what is under it (its words,
     /// Photos, Words, Sketch) is above the tabs at rest (they sat half under the capsule, 25 Nov)
     private var pageH: CGFloat { min(w * 4 / 3, UIScreen.main.bounds.height * 0.5) }
+    private var pageRoll: AnyTransition {
+        let d = pageH + 220
+        return .asymmetric(insertion: .offset(y: d), removal: .offset(y: -d))
+    }
     private func change(_ f: (inout PhotoBook) -> Void) {
         ListsStore.shared.change { b in if let i = b.books.firstIndex(where: { $0.id == id }) { f(&b.books[i]) } }
     }
@@ -341,7 +345,13 @@ struct BookOpenView: View {
                             .frame(minHeight: 44)
                             .onTapGesture { Feel.tap(); s.naming = true }
                     }
+                    // THE BOOK'S PAGE GIVES WAY TO ANOTHER (all pages, the words moved, a sketch, the place): the one leaving
+                    // rolls up out of the top under the name, the one coming up from below, cut top and bottom; never faded
+                    // (26 Nov: all pages blurred in over a page that faded out); both go the same way, further than the
+                    // tallest of them, so they travel as one strip and never slide over each other
+                    ZStack(alignment: .topLeading) {
                     if b.pages.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
                         // A NEW BOOK: ITS NAME, ITS COVER, THEN ITS PAGES: the cover's place as big as a page, tapped for a
                         // photo; under it the first page's kinds
                         Button { Feel.tap(); coverPicking = true } label: {
@@ -371,11 +381,15 @@ struct BookOpenView: View {
                             }
                         }
                         addPage
+                        }.transition(pageRoll)
                     } else if let wid = whereFor {
+                        VStack(alignment: .leading, spacing: 12) {
                         // WHERE IT WAS, BY HAND: for a page of words or a sketch, or a photo
                         // with none of its own; the app's own towns, as Places' search finds them, offline
                         whereSetter(wid)
+                        }.transition(pageRoll)
                     } else if let mid = placing, let pg = b.pages.first(where: { $0.id == mid }) {
+                        VStack(alignment: .leading, spacing: 12) {
                         // THE WORDS MOVED: the page alone (no turning under the finger), its words dragged where you
                         // want them; Done keeps the place
                         // (they start where the page has them: the middle of a words page, the foot of a photo, no jump)
@@ -412,7 +426,9 @@ struct BookOpenView: View {
                             Spacer(minLength: 0)
                         }
                         .frame(minHeight: 52)
+                        }.transition(pageRoll)
                     } else if let sid = sketching, let pg = b.pages.first(where: { $0.id == sid }) {
+                        VStack(alignment: .leading, spacing: 12) {
                         // A SKETCH: Apple's canvas over the page, Apple's tool picker (any colour, the rubber, thickness)
                         // under it; Done keeps it
                         ZStack {
@@ -460,11 +476,17 @@ struct BookOpenView: View {
                             lineButton("Clear") { sketchClears += 1 }
                         }
                         .frame(minHeight: 52)
+                        }.transition(pageRoll)
                     } else if overview {
+                        VStack(alignment: .leading, spacing: 12) {
                         // ALL PAGES, to go to one or put them in order: small, three
                         // across, in order; tapped, that page; held, earlier, later, out
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                            ForEach(Array(b.pages.enumerated()), id: \.element.id) { i, pg in
+                        // (rows drawn whole, not a lazy grid: a lazy grid stopped drawing its tiles the moment it began
+                        // to roll away, so they vanished in one frame and its buttons slid over them, 26 Nov)
+                        Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
+                          ForEach(Array(stride(from: 0, to: b.pages.count, by: 3)), id: \.self) { row in
+                           GridRow {
+                            ForEach(Array(b.pages.enumerated()).filter { $0.offset / 3 == row / 3 }, id: \.element.id) { i, pg in
                                 VStack(spacing: 4) {
                                     BookPageView(page: pg)
                                         .aspectRatio(3 / 4, contentMode: .fit)
@@ -475,6 +497,7 @@ struct BookOpenView: View {
                                         }
                                     Text("\(i + 1)").font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                                 }
+                                .frame(width: (w - 20) / 3)
                                 .contentShape(Rectangle())
                                 .onTapGesture { Feel.tap(); at = i; withAnimation(Motion.quick) { overview = false } }
                                 .contextMenu {
@@ -487,14 +510,17 @@ struct BookOpenView: View {
                                     }
                                 }
                             }
+                           }
+                          }
                         }
-                        .transition(.blurReplace)
                         HStack {
                             Spacer(minLength: 0)
                             lineButton("Back to the page") { overview = false }
                         }
                         addPage
+                        }.transition(pageRoll)
                     } else {
+                        VStack(alignment: .leading, spacing: 12) {
                         // THE PAGES, TURNED AS APPLE BOOKS TURNS THEM: the page curls over under the finger; a page
                         // held: make it the cover, take it out
                         PageCurl(pages: b.pages.map(\.id), at: $at) { pid in
@@ -579,7 +605,10 @@ struct BookOpenView: View {
                                 .submitLabel(.done)
                         }
                         addPage
+                        }.transition(pageRoll)
                     }
+                    }
+                    .mask { Rectangle().padding(.horizontal, -400) }
                 }
                 .frame(width: w, alignment: .leading)
                 .padding(.bottom, 140)

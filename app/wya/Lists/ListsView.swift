@@ -383,7 +383,9 @@ struct ListsWater: View {
                     if s.kind == 0, let id = s.open { s.naming = false; withAnimation(Motion.quick) { infoFor = id } }
                 }
                 .accessibilityLabel(open != nil ? "View on map" : ["New list", "New plan", "New tier list", "New book"][s.kind])
-                .transition(.blurReplace)
+                // (a list opened: the plus goes off its own side of the screen whole, glass and all, and comes back in
+                // from there; never blurred away in place, 26 Nov)
+                .transition(.offset(x: 16 + 44 + 40))
             }
         }
         .frame(width: w, height: 44)
