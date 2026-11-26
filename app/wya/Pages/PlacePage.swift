@@ -602,9 +602,17 @@ extension PlacePageState.OnePage {
             let known = (CollectionStore.shared.collection(CollectionStore.famousCities)?.items ?? [])
                 .filter { $0.cc.lowercased() == cc.lowercased() }.map { fk($0.name) }
             if !known.isEmpty {
-                let rank = { (c: PlacePageState.Inside) in known.firstIndex(of: fk(c.name)) ?? Int.max }
+                // (a known name leads once, for its biggest town, the list being by people: every Washington took
+                // Washington's place, so the US listed New York, then Washington in DC, Utah, Illinois and Pennsylvania,
+                // 26 Nov)
+                var taken = Set<String>()
+                let ranks = out.cities.map { c -> Int in
+                    let n = fk(c.name)
+                    guard let r = known.firstIndex(of: n), taken.insert(n).inserted else { return Int.max }
+                    return r
+                }
                 out.cities = out.cities.enumerated().sorted { a, b in
-                    let x = rank(a.element), y = rank(b.element)
+                    let x = ranks[a.offset], y = ranks[b.offset]
                     return x != y ? x < y : a.offset < b.offset
                 }.map(\.element)
             }

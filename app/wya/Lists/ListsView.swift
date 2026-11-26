@@ -293,16 +293,20 @@ struct ListsWater: View {
         let corner: CGFloat = Self.picStyle == 2 ? 0 : 10
         let (own, wd0) = Self.rowPhoto(t)
         let cc = (t.cc ?? "").lowercased()
-        // (a thing known only by its country, Ramen in Japan, Pasta in Italy, takes that country's best known sight as a
-        // country does: their flags beside the photos looked cheap, 26 Nov; the flag is left only where no photo is)
-        let wd = wd0 ?? (cc.isEmpty ? nil : Self.countrySight(cc))
+        // (a country takes its best known sight, its flag only where none has a photo; a thing that only has a country,
+        // Ramen in Japan, Pasta in Italy, is no sight and no flag: it showed Mount Fuji and the Colosseum, 26 Nov, and
+        // flags before that; its letter, in the same rounded square)
+        let isCountry = !cc.isEmpty && (map.world.flatMap { w in
+            (w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()]).map { w.places[$0].n.townFolded == t.name.townFolded }
+        } ?? false)
+        let wd = wd0 ?? (isCountry ? Self.countrySight(cc) : nil)
         if let r = t.ref {
             innerThumb(r, side: side, corner: corner)
         } else if !cc.isEmpty, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
             SetPlaceThumb(own: own, thing: wd ?? "", cc: cc, side: side, corner: corner)
         } else {
             Group {
-                if !cc.isEmpty, let f = Flags.square(cc) {
+                if isCountry, let f = Flags.square(cc) {
                     f.resizable().interpolation(.high).scaledToFill()
                 } else {
                     // (a link: its site's first letter, never the "h" of https)
