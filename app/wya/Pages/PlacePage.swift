@@ -796,6 +796,13 @@ extension PlacePageState.OnePage {
                                                        others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
+        // (no guide's article: Wikipedia's opening of the town of its name, its article standing within 150 km, as a
+        // sight's page has it)
+        if out.prose.isEmpty, let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2,
+           let w = await PlacePageState.wikipediaIntro(wd: nil, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue,
+                                                       within: [t["r"] as? String ?? "", PlacePageState.countryName(cc)]) {
+            out.prose = PlacePageState.cut(w, 620); out.proseWikipedia = true
+        }
         // ITS HIGHLIGHTS: the best known sights with a photo near it, 12 km round a city of a million, 5 km round a
         // smaller one, as a region's page has them
         // (15 km round a city of a million, 26 Nov: Dubai's point lies 13 km from the Burj Khalifa, and its highlights
@@ -891,6 +898,10 @@ extension PlacePageState.OnePage {
         }
         if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon, others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: t.name), 620); out.proseWikivoyage = true
+        }
+        if out.prose.isEmpty, let w = await PlacePageState.wikipediaIntro(wd: nil, name: t.name, lat: t.lat, lon: t.lon,
+                                                                           within: [t.region, PlacePageState.countryName(cc)]) {
+            out.prose = PlacePageState.cut(w, 620); out.proseWikipedia = true
         }
         // (its highlights, 5 km round it as a smaller city's, and its photo the first of them's: Hallstatt, Positano and Zermatt opened bare)
         out.highlights = await nearHighlights(cc, lat: t.lat, lon: t.lon, reach: 5)
@@ -1572,8 +1583,8 @@ extension PlacePageState {
     /// Angkor's and the Great Wall's are the place's), without the bracket of other names and sounds after its name;
     /// kept for the app's run, a miss as ""
     static var wikipedia: [String: String] = [:]
-    static func wikipediaIntro(wd: String?, name: String, lat: Double, lon: Double) async -> String? {
-        let key = (wd ?? "") + "|" + name
+    static func wikipediaIntro(wd: String?, name: String, lat: Double, lon: Double, within: [String] = []) async -> String? {
+        let key = (wd ?? "") + "|" + name + "|" + within.joined(separator: "|")
         if let had = wikipedia[key] { return had.isEmpty ? nil : had }
         var titles: [(String, Bool)] = []
         if let wd, wd.hasPrefix("Q") {
@@ -1588,6 +1599,9 @@ extension PlacePageState {
         if titles.isEmpty {
             titles.append((name, true))
             if name.hasPrefix("The ") { titles.append((String(name.dropFirst(4)), true)) }
+            // (a town's article by its name and its region or country, as Wikipedia titles one of many of that name,
+            // 26 Nov: "Barcelona, Venezuela", "Chekhov, Moscow Oblast")
+            for w in within where !w.isEmpty { titles.append((name + ", " + w, true)) }
         }
         for (title, check) in titles {
             guard let path = title.replacingOccurrences(of: " ", with: "_").addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)?
