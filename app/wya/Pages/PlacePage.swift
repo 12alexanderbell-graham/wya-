@@ -342,7 +342,7 @@ extension PlacePageState.OnePage {
             // away by train", from Irkutsk's guide; an airport's "About five minutes away by car")
             // (and a price list, Wikipedia's opening before it where there is one)
             if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) || PlacePageState.leadsAsTip(x)
-                || PlacePageState.isPriceList(x) {
+                || PlacePageState.isPriceList(x) || PlacePageState.leadsWithCost(x) {
                 if let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
                 else if PlacePageState.leadsWithNotice(x) { d = PlacePageState.noticeLast(x, name: name) }
             }
@@ -391,6 +391,10 @@ extension PlacePageState.OnePage {
                 d = await PlacePageState.guideIntro(cc, name: art, lat: ll.lat, lon: ll.lon, within: 30)
             }
             if d == nil, let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
+            // (a line too short to say what it is, Wikipedia's opening where that says more: Niagara Falls' page read
+            // only that its town is in the Niagara Frontier region, from the town's guide, 26 Nov walk)
+            if let x = d, x.count < 100, !fromWikipedia,
+               let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon), w.count > x.count { d = w; fromWikipedia = true }
             if let d, self.key.id == id, self.facts?.prose.isEmpty == true {
                 self.facts?.prose = PlacePageState.whole(PlacePageState.cut(PlacePageState.plain(d, name: name), 620))
                 self.facts?.proseWikivoyage = !fromWikipedia
@@ -1893,7 +1897,16 @@ extension PlacePageState {
         + "take (the|a|bus)\\b|get there\\b)", options: [.caseInsensitive])
     /// A PRICE LIST, not words about the place (a refuge's page read "Serves French fries (€5), ice cream (€5), dinner
     /// (€20)..."): three prices or more
-    private static let price = try! NSRegularExpression(pattern: #"([€$£¥₹]\s?\d)|(\d\s?(€|EUR|USD|GBP|CHF|eur|euros?|dollars?)\b)|\b(EUR|USD|GBP|CHF)\s?\d"#)
+    private static let price = try! NSRegularExpression(pattern: #"([€$£¥₹]\s?\d)|(\bS/\.?\s?\d)|(\d\s?(€|EUR|USD|GBP|CHF|eur|euros?|dollars?)\b)|\b(EUR|USD|GBP|CHF)\s?\d"#)
+    /// ABOUT THE COST OR THE WAY: a listing whose first two sentences are what it costs or how to get there (26 Nov walk:
+    /// Machu Picchu's page began with the bus fare from Aguas Calientes)
+    // (a fare's own words only: a price alone or "cost" caught "low-cost airline", "said to have cost a boatload of
+    // silver" and "this $49-million dam"; measured over the 3,715 best-known sights' listings, 6 caught)
+    private static let cost = try! NSRegularExpression(pattern: #"(?<!low[- ])\bcosts\b|\b(per person|return trip|one[- ]way|entrance fee|admission fee|round[- ]trip)\b"#, options: [.caseInsensitive])
+    static func leadsWithCost(_ t: String) -> Bool {
+        let head = t.components(separatedBy: ". ").prefix(2).joined(separator: ". ")
+        return cost.firstMatch(in: head, range: NSRange(head.startIndex..., in: head)) != nil
+    }
     static func isPriceList(_ t: String) -> Bool {
         price.numberOfMatches(in: t, range: NSRange(t.startIndex..., in: t)) >= 3
     }

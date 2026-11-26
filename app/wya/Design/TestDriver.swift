@@ -998,6 +998,13 @@ final class TestDriver {
                     ThingIndex.shared.load()
                     for _ in 0 ..< 150 where !ThingIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
                     if let t = ThingIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first { map?.showThing(file: t.file, id: t.id) }
+                // thingwhere alps: the first thing found, the country its stamp goes under (its file's, or the one it is in)
+                case "thingwhere":
+                    ThingIndex.shared.load(); TownIndex.shared.load()
+                    for _ in 0 ..< 150 where !ThingIndex.shared.ready || !TownIndex.shared.ready { try? await Task.sleep(for: .milliseconds(100)) }
+                    if let h = ThingIndex.shared.hits(p.dropFirst().joined(separator: " "), open: nil).first {
+                        NSLog("wya thingwhere %@ file %@ in %@", h.name, h.file, TownIndex.shared.country(of: h.id, lat: h.lat, lon: h.lon, file: h.file))
+                    }
                 // thingpage louvre museum: the first thing found, its country's things read, its page opened (Part 16)
                 case "thingpage":
                     ThingIndex.shared.load()

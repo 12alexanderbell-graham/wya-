@@ -258,6 +258,23 @@ final class TownIndex {
         return n
     }
 
+    /// THE COUNTRY A POINT FILED UNDER `file` IS IN: the file's, unless none of that country's towns is within 60 km of
+    /// it and another's is (26 Nov: the Alps' record is filed under Hungary, its point in Switzerland); kept per key
+    @ObservationIgnored private var countryKept: [String: String] = [:]
+    func country(of key: String, lat: Double, lon: Double, file: String) -> String {
+        guard ready else { return file }
+        if let had = countryKept[key] { return had }
+        let k = cos(lat * .pi / 180)
+        let within = nearest(lat: lat, lon: lon, count: 12).filter { t in
+            let dy = (t.lat - lat) * 111.2, dx = (t.lon - lon) * 111.2 * k
+            return dx * dx + dy * dy <= 3600
+        }
+        var out = file
+        if let other = within.first, !within.contains(where: { $0.file.lowercased() == file.lowercased() }) { out = other.file.lowercased() }
+        countryKept[key] = out
+        return out
+    }
+
     /// the `count` towns nearest a point, nearest first (What's here?, A11.4), however far
     func nearest(lat: Double, lon: Double, count: Int) -> [Hit] {
         guard ready, count > 0 else { return [] }

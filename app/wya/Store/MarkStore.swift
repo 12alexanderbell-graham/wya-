@@ -111,6 +111,11 @@ final class MarkStore {
         var cc = cc
         if key.kind == .country, cc.isEmpty, MapSettingsStore.shared.value.territories != "separate",
            let s = Territories.sovereign[key.id.lowercased()] { cc = s }
+        // (a thing under the country it is in, not the one its record is filed under: the Alps counted for Hungary)
+        if key.kind == .thing, !cc.isEmpty, let t = ThingStore.shared.thing(key.id)?.thing {
+            let p = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+            cc = TownIndex.shared.country(of: t.id, lat: p.lat, lon: p.lon, file: cc)
+        }
         guard let r = try? await store.stamp(key, account: acc, source: source, name: name, cc: cc, level: level, day: day) else { refused(); return }
         apply(r, words: "\(both(r, key, name)) stamped", origin: origin, who: who)
     }

@@ -2047,24 +2047,9 @@ struct SearchResults: View {
     }
     /// the countries a set's place lies in, by its Wikidata id (made once the sets have come)
     private static var setCountries: [String: [String]]?
-    /// the country a thing is in: its file's, unless none of that country's towns is within 60 km and another's is
-    private static var whereKept: [String: String] = [:]
+    /// the country a thing is in (TownIndex.country(of:)): its file's unless it lies in another
     static func whereThing(_ h: ThingIndex.Hit) -> String {
-        guard TownIndex.shared.ready else { return h.file }
-        if let had = whereKept[h.id] { return had }
-        let found = whereFound(h)
-        whereKept[h.id] = found
-        return found
-    }
-    private static func whereFound(_ h: ThingIndex.Hit) -> String {
-        let near = TownIndex.shared.nearest(lat: h.lat, lon: h.lon, count: 12)
-        let k = cos(h.lat * .pi / 180)
-        let within = near.filter { t in
-            let dy = (t.lat - h.lat) * 111.2, dx = (t.lon - h.lon) * 111.2 * k
-            return dx * dx + dy * dy <= 3600
-        }
-        guard let other = within.first, !within.contains(where: { $0.file.lowercased() == h.file.lowercased() }) else { return h.file }
-        return other.file.lowercased()
+        TownIndex.shared.country(of: h.id, lat: h.lat, lon: h.lon, file: h.file)
     }
     private static func sharedBy(_ q: String) -> [String] {
         if setCountries == nil, CollectionStore.shared.ready {
