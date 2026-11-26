@@ -655,6 +655,40 @@ extension PlacePageState.OnePage {
                                  photo: PlacePageState.photo(h["img"]) ?? (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
+        // THE COUNTRY'S TWO BEST KNOWN SIGHTS LEAD (26 Nov: Brazil's cards had no Christ the Redeemer, Thailand's opened on
+        // Ban Chiang and Australia's on Heard Island): the sights file's famous-first order, as the page's top photo takes
+        // its first; never a school, a ground, a station, an airport or a memorial; its World Heritage sites after them
+        do {
+            ThingStore.shared.load(cc)
+            for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let skip = "border|between|universit|college|school|stadium|arena|airport|station|territory|concentration|camp\\b|memorial|genocide|cemetery|prison"
+            let lead = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
+                // (never a river or a lake: the Mississippi led the USA's, the Nile Egypt's)
+                o.fame >= 3 && (2...6).contains(o.kind) && o.kind != 4 && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
+                    && !PlacePageState.isStudy(o.name) && !PlacePageState.isVenue(o.name, o.line)
+                    && (o.name + " " + o.line).range(of: skip, options: [.regularExpression, .caseInsensitive]) == nil
+            }.sorted { a, b in a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset }
+            .map(\.element).prefix(2)
+            let firsts = lead.map { o in
+                let l = PlacePageState.brief(o.line, 60)
+                return PlacePageState.Highlight(id: o.id, name: o.name.prefix(1).uppercased() + o.name.dropFirst(), line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
+            }
+            let leadNames = firsts.map { $0.name.townFolded }
+            // (and not the same place again by its World Heritage name, within 5 km of a lead: Mount Fuji and "Fujisan",
+            // Fernando de Noronha and the Brazilian Atlantic Islands)
+            let leadAt = lead.map { EqualEarth.unproject(SIMD2(Double($0.at.x), Double($0.at.y))) }
+            let rest = out.highlights.filter { h in
+                let n = h.name.townFolded
+                if leadNames.contains(where: { $0 == n || $0.contains(n) || n.contains($0) }) { return false }
+                guard let ll = PlacePageState.heritage?[h.id]?["ll"] as? [NSNumber], ll.count == 2 else { return true }
+                let lat = ll[0].doubleValue, lon = ll[1].doubleValue
+                return !leadAt.contains { p in
+                    let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
+                    return dx * dx + dy * dy < 25
+                }
+            }
+            out.highlights = Array((firsts + rest).prefix(8))
+        }
         if out.highlights.count < 8 {
             ThingStore.shared.load(cc)
             for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }

@@ -36,7 +36,11 @@ final class CollectionStore {
             guard name.count > 30 else { return name }
             let cut = name.firstIndex { ",:(–".contains($0) } ?? name.endIndex
             let head = name[..<cut].trimmingCharacters(in: .whitespaces)
-            return head.count >= 5 ? head : name
+            // (never a first part that names no place: Patmos's "The Historic Centre (Chora) with the Monastery ..." is
+            // not "The Historic Centre")
+            let bare = head.lowercased().replacingOccurrences(of: "the ", with: "")
+            let generic = ["historic centre", "historic center", "old town", "historic town", "old city", "historic city"].contains(bare)
+            return head.count >= 5 && !generic ? head : name
         }
         var key: PlaceKey { own.flatMap { PlaceKey($0) } ?? PlaceKey(.thing, "wd:" + id) }
     }
