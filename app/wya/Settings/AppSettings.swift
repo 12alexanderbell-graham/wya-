@@ -50,6 +50,9 @@ struct AppSettingsList: View {
         }
         .frame(height: room, alignment: .top)
         .clipped()
+        // (every line up to the size Map settings' rows hold, as those rows are: the type's line and Sources' rows grew
+        // past them at the largest text)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
     private var list: some View {
