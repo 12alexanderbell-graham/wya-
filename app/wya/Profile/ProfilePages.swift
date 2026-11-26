@@ -34,8 +34,9 @@ struct ProfilePushedPage: View {
                 // of badges over the capsule, as Lists was this morning)
                 let foot = L.H - (L.capsule.minY - 8)
                 // (the page's name is the list's own top bar, in the middle of the head's row)
-                let name = kind == .stats ? "Stats" : "Badges"
-                if kind == .stats { ProfileStatsList(width: w, room: L.H, top: listTop, foot: foot, side: L.side, title: name, titleY: L.headY) }
+                let name = kind == .stats ? "Stats" : kind == .settings ? "Settings" : "Badges"
+                if kind == .settings { AppSettingsList(room: L.H, top: listTop, foot: foot, title: name, titleY: L.headY) }
+                else if kind == .stats { ProfileStatsList(width: w, room: L.H, top: listTop, foot: foot, side: L.side, title: name, titleY: L.headY) }
                 else { ProfileBadgesList(width: w, room: L.H, top: listTop, foot: foot, side: L.side, title: name, titleY: L.headY) }
             }
             GlassCircle(icon: "back", label: "Back") { back() }

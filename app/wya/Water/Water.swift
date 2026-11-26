@@ -489,7 +489,7 @@ final class Water {
     var halfAllowed: Bool {
         // (on the Profile: only for its picture's and nationalities' sheets)
         // (not under Stats or Badges: their own pages, the water closed under them)
-        if profile { let s = ProfileEdit.shared.sheet; return s != nil && s != .stats && s != .badges }
+        if profile { let s = ProfileEdit.shared.sheet; return s != nil && s?.page != true }
         // (Upload's two choices are all there is while you choose: the water stays at 25%, never an empty 50% or full)
         if upload, UploadState.shared.phase == .choosing { return false }
         return !(regionMapUp() && head?.mode == .regions && !stampedList && !settings && !details && !upload && !pageSheet

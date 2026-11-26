@@ -67,7 +67,7 @@ extension EnvironmentValues {
 /// a line's placeholder for the text roll (en spaces), as the caption does it
 private func blank(_ s: String) -> String { String(repeating: "\u{2002}", count: max(1, s.count)) }
 
-private struct RowWords: View {
+struct RowWords: View {
     let name: String
     let value: String
     var chevron = false
@@ -308,7 +308,7 @@ private struct SettingsList: View {
 
 /// ONE CHOICE under its row (A5.4): 44 pt; its words roll in in their own place once the rows below have moved out of
 /// the way (top first), so nothing passes over anything; the picked one is the black band
-private struct ChoiceRow: View {
+struct ChoiceRow: View {
     let name: String
     let picked: Bool
     let delay: Double

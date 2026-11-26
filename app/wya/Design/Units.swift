@@ -6,8 +6,17 @@ import Foundation
 nonisolated enum Units {
     /// the phone reads distances in miles
     static var miles: Bool {
-        let m = Locale.current.measurementSystem
+        let m = system
         return m == .us || m == .uk
+    }
+
+    /// the phone's own measures, unless Settings' Units picked Metric or Imperial (the US measures)
+    static var system: Locale.MeasurementSystem {
+        switch AppSettings.units {
+        case "metric": .metric
+        case "imperial": .us
+        default: Locale.current.measurementSystem
+        }
     }
 
     /// "850 m", "2.4 km", "12 km"; "900 ft", "1.5 mi", "8 mi"
@@ -27,7 +36,7 @@ nonisolated enum Units {
 
     /// an area: "0.3 ha", "12 km²"; "75 acres", "4.6 sq mi" (only the US reads areas in square miles)
     static func area(km2 a: Double) -> String {
-        if Locale.current.measurementSystem == .us {
+        if system == .us {
             let sq = a * 0.386102
             return sq < 1 ? "\(Int((a * 247.105).rounded()).formatted()) acres" : sq < 10 ? String(format: "%.1f sq mi", sq) : "\(Int(sq.rounded()).formatted()) sq mi"
         }
@@ -35,7 +44,7 @@ nonisolated enum Units {
     }
 
     /// the phone reads heights in feet, areas in square miles and temperatures in Fahrenheit (the US)
-    static var us: Bool { Locale.current.measurementSystem == .us }
+    static var us: Bool { system == .us }
 
     /// a height: "1,085 m" or "3,560 ft"
     static func height(m: Double) -> String {

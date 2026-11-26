@@ -42,6 +42,8 @@ enum Sound {
     private final class Made: @unchecked Sendable { var all: [Name: AVAudioPlayer] = [:] }
 
     static func play(_ n: Name, volume: Float = 1) {
+        // (Settings' Sounds off: none)
+        guard AppSettings.sounds else { return }
         prepareNow()
         guard let p = players[n] else { return }
         p.volume = volume

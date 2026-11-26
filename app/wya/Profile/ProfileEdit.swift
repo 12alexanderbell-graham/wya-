@@ -11,7 +11,11 @@ import CoreLocation
 final class ProfileEdit {
     static let shared = ProfileEdit()
     enum Field: Hashable { case name, handle, bio }
-    enum Sheet { case picture, nationalities, home, ground, stats, badges }
+    enum Sheet {
+        case picture, nationalities, home, ground, stats, badges, settings
+        /// its own page pushed over the Profile (the water closed under it), not a sheet in the water
+        var page: Bool { self == .stats || self == .badges || self == .settings }
+    }
     /// the line being typed in
     var field: Field? {
         didSet {
@@ -37,7 +41,7 @@ final class ProfileEdit {
     func open(_ s: Sheet, water: Water) {
         field = nil
         searching = false
-        if s == .stats || s == .badges {
+        if s.page {
             withAnimation(Motion.chrome) { sheet = s }
             water.go(.closed)
             return

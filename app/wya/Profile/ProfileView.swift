@@ -94,11 +94,19 @@ struct ProfileView: View {
             .offset(y: top)
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        // SETTINGS: a glass circle at the top right, where the Lists tab has its plus; its page pushed in as Stats' is
+        .overlay(alignment: .topLeading) {
+            GlassCircle(icon: "settings", label: "Settings") {
+                if edit.field != nil { edit.field = nil }
+                edit.open(.settings, water: water)
+            }
+            .position(x: L.W - L.side - 22, y: L.headY)
+        }
         // (under a page, the Profile is not read by VoiceOver)
-        .accessibilityHidden(edit.sheet == .stats || edit.sheet == .badges)
+        .accessibilityHidden(edit.sheet?.page == true)
         // YOUR STATS, YOUR BADGES: their own pages, slid in from the right over all of it
         .overlay(alignment: .topLeading) {
-            if let s = edit.sheet, s == .stats || s == .badges {
+            if let s = edit.sheet, s.page {
                 ProfilePushedPage(kind: s, water: water)
                     .transition(.move(edge: .trailing))
             }
@@ -457,23 +465,23 @@ struct ProfileWater: View {
                     case .picture: ProfilePictureSheet(water: water, width: w)
                     case .ground: ProfileGroundSheet(width: w)
                     // (stats and badges are their own pages, ProfilePushedPage)
-                    case .stats, .badges: EmptyView()
+                    case .stats, .badges, .settings: EmptyView()
                     case .nationalities:
                         NationalitiesSheet(water: water, map: map, width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop + 8)))
                     case .home:
                         HomeSheet(water: water, width: w, room: max(56, L.capsule.minY - 8 - max(form.top + 16, L.safeTop + 8)))
                     }
                 }
-                .offset(x: L.sheetInset + 16, y: s == .stats || s == .badges ? max(form.top + 16, L.safeTop)
+                .offset(x: L.sheetInset + 16, y: s.page ? max(form.top + 16, L.safeTop)
                         : max(form.top + (s == .nationalities || s == .home ? 16 : 24), L.safeTop + 8))
             }
         }
         // (the water pulled down from 50%: the sheet is put away with it)
         .onChange(of: water.stop) { _, st in
             // (stats and badges close the water under their pages: their back circle closes them)
-            if let s = edit.sheet, s != .stats, s != .badges, st == .quarter || st == .closed { edit.close(water: water, move: false) }
+            if let s = edit.sheet, !s.page, st == .quarter || st == .closed { edit.close(water: water, move: false) }
             // (Stats or Badges up and the water pulled up from closed: the page goes, the water where it was pulled)
-            if let s = edit.sheet, s == .stats || s == .badges, st != .closed { withAnimation(Motion.chrome) { edit.close(water: water, move: false) } }
+            if let s = edit.sheet, s.page, st != .closed { withAnimation(Motion.chrome) { edit.close(water: water, move: false) } }
         }
         .onChange(of: fits, initial: true) { was, f in
             guard shown != f else { return }

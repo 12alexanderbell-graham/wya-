@@ -433,6 +433,7 @@ final class TestDriver {
                         else if p.count > 2, p[2] == "ground" { edit.open(.ground, water: w) }
                         else if p.count > 2, p[2] == "stats" { edit.open(.stats, water: w) }
                         else if p.count > 2, p[2] == "badges" { edit.open(.badges, water: w) }
+                        else if p.count > 2, p[2] == "settings" { edit.open(.settings, water: w) }
                         else { edit.end(water: w) }
                     }
                     if a == "colour", p.count > 4 {
