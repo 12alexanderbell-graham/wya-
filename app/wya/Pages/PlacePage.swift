@@ -1276,9 +1276,16 @@ extension PlacePageState {
         guard top.count > 1 else { return acts }
         let town = { (a: Activity) in a.line.components(separatedBy: " \u{00B7} ").first ?? a.line }
         var n: [String: Int] = [:], lead: [Activity] = [], later: [Activity] = []
+        // (one tower or skyscraper among them, the rest later: Japan's first three were Tokyo Skytree, Tokyo Tower and
+        // the Abeno Harukas, 26 Nov walk)
+        var towers = 0
         for t in top {
             let c = town(t.a)
-            if n[c, default: 0] < 2 { lead.append(t.a); n[c, default: 0] += 1 } else { later.append(t.a) }
+            let tower = (t.a.name + " " + (t.a.wd.flatMap { what[$0] } ?? ""))
+                .range(of: #"\b(tower|skyscraper|skytree)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+            if n[c, default: 0] < 2, !(tower && towers >= 1) {
+                lead.append(t.a); n[c, default: 0] += 1; if tower { towers += 1 }
+            } else { later.append(t.a) }
         }
         let used = Set(top.map(\.i))
         return lead + later + acts.enumerated().filter { !used.contains($0.offset) }.map(\.element)
@@ -2191,7 +2198,12 @@ private struct PageLayer: View {
                 marking(key)
                 if let f = page.facts, !f.prose.isEmpty { PageOpening(text: f.prose).id(f.prose) }
                 if let f = page.facts, !f.rows.isEmpty { factsGrid(f.rows) }
-                if let f = page.facts, !f.highlights.isEmpty { highlights(f.highlights, title: f.highlightsTitle, L: L).id("highlights") }
+                // (a card with the page's own top photo goes to the row's end, so the row opens on something new: Japan's
+                // first card was the same Mount Fuji photo as right above it, 26 Nov walk)
+                if let f = page.facts, !f.highlights.isEmpty {
+                    let again = { (h: PlacePageState.Highlight) in f.photo != nil && PlacePageState.photo(h.photo) == f.photo }
+                    highlights(f.highlights.filter { !again($0) } + f.highlights.filter(again), title: f.highlightsTitle, L: L).id("highlights")
+                }
                 // ("lists": where the head's search takes the page, the first of its long lists) (where the first
                 // long list starts: the head's search brings its title under the field)
                 if let f = page.facts, case let shown = Set(f.highlights.map(\.id)),
