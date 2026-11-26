@@ -10,6 +10,10 @@ enum HangWatch {
     nonisolated(unsafe) private static var main: pthread_t?
     nonisolated(unsafe) private static var beat = CFAbsoluteTimeGetCurrent()
     nonisolated(unsafe) private static var told = false
+    /// the stack's room, made once here: the signal's handler may allocate nothing (26 Nov 03:03 the app was paused from
+    /// outside and resumed; the handler's own array asked the runtime for its type while the main thread held the
+    /// runtime's lock, and the app aborted on a recursive lock)
+    nonisolated(unsafe) private static let frames = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: 80)
     #endif
 
     @MainActor static func start() {
@@ -20,20 +24,26 @@ enum HangWatch {
                        (UIApplication.didBecomeActiveNotification, "active")] {
             NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { _ in NSLog("wya app %@", w) }
         }
+        _ = frames
         signal(SIGUSR2) { _ in
-            var frames = [UnsafeMutableRawPointer?](repeating: nil, count: 80)
-            let n = backtrace(&frames, 80)
-            let head = "wya HANG main thread stack:\n"
-            _ = head.withCString { write(2, $0, strlen($0)) }
-            backtrace_symbols_fd(&frames, n, 2)
+            let n = backtrace(HangWatch.frames, 80)
+            let head: StaticString = "wya HANG main thread stack:\n"
+            _ = write(2, head.utf8Start, head.utf8CodeUnitCount)
+            backtrace_symbols_fd(HangWatch.frames, n, 2)
         }
         Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in beat = CFAbsoluteTimeGetCurrent() }
         let t = Thread {
             NSLog("wya hangwatch on")
             var k = 0
+            var woke = CFAbsoluteTimeGetCurrent()
             while true {
                 Thread.sleep(forTimeInterval: 0.5)
                 k += 1
+                // (a half-second sleep that took far longer: the whole app was paused from outside, this thread too,
+                // and the main thread is not late, only the clock moved; start counting again)
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - woke > 2 { beat = now; told = false; NSLog("wya hangwatch: the app was paused %.1f s", now - woke) }
+                woke = now
                 // every 5 s: still here (no file read here: a read that hangs would stop this too)
                 if k % 10 == 0 { NSLog("wya alive, main %.1f s ago", CFAbsoluteTimeGetCurrent() - beat) }
                 let late = CFAbsoluteTimeGetCurrent() - beat
