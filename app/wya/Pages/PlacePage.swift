@@ -818,7 +818,9 @@ extension PlacePageState.OnePage {
             return PlacePageState.Highlight(id: o.id, name: o.name.prefix(1).uppercased() + o.name.dropFirst(), line: l.prefix(1).uppercased() + l.dropFirst(), photo: PlacePageState.photo(o.photo))
         }
         all.insert(contentsOf: extra, at: min(1, all.count))
-        return Array(all.prefix(8))
+        // (never the place itself: Prague's first highlight was Prague, 26 Nov)
+        let own = name.townFolded
+        return Array(all.filter { $0.name.townFolded != own }.prefix(8))
     }
     fileprivate func loadSmallTown(_ cc: String, id: String, near all: [[String: Any]]) async {
         guard let t = TownIndex.shared.hit(id), key.id == id else { return }
