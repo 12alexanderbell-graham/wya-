@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 import CoreLocation
 
 /// WHICH STAMP'S VERIFY IS OPEN in the water (Part 4.5), and where it stands
@@ -48,8 +49,9 @@ final class VerifyState {
 /// VERIFY IN THE WATER (Part 4.5): the ways to prove a stamp, chosen by you, rows of 52 pt with no title (the card's
 /// name is above). Laid out as Details and Map settings are: black and white, words on the water. As built: there is
 /// no server yet, so nothing can be checked by a person or by the server. works on the phone (asked at this press
-/// only; the inside test on the stamp's real place) and a proof is kept as (the card reads); the other five ways are
-/// in the look and refuse. Remove the stamp works. Not here yet: the logo sphere while it waits (a plain for now),
+/// only; the inside test on the stamp's real place) and a proof is kept as (the card reads); Photo and History work the same
+/// way from a photo's own place and from your location history file; the other three ways are in the look and
+/// refuse. Remove the stamp works. Not here yet: the logo sphere while it waits (a plain for now),
 /// icons.
 struct VerifySheet: View {
     let water: Water
@@ -62,6 +64,9 @@ struct VerifySheet: View {
     @State private var photoPicking = false
     @State private var photoItem: PhotosPickerItem?
     @State private var photoWord: String?
+    /// HISTORY (26 Nov): your location history file, read as Upload reads it, with a point inside the stamp's place
+    @State private var historyPicking = false
+    @State private var historyWord: String?
 
     static let ways: [(id: String, name: String)] = [
         ("here", "Location"), ("history", "History"), ("library", "Photo"),
@@ -108,6 +113,9 @@ struct VerifySheet: View {
         .position(x: L.W / 2, y: top + h / 2)
         .photosPicker(isPresented: $photoPicking, selection: $photoItem, matching: .images, photoLibrary: .shared())
         .onChange(of: photoItem) { _, it in if let it { photo(it) } }
+        .fileImporter(isPresented: $historyPicking, allowedContentTypes: [.json], allowsMultipleSelection: true) { r in
+            if case .success(let urls) = r { history(urls) }
+        }
     }
 
     static func wayName(_ id: String) -> String { ways.first { $0.id == id }?.name ?? "Another way" }
@@ -130,18 +138,20 @@ struct VerifySheet: View {
             }
             .frame(minHeight: 52)
         } else {
-            let live = id == "here" || id == "library"
-            Text(id == "here" ? (s.hereWord ?? name) : id == "library" ? (photoWord ?? name) : name)
+            let live = id == "here" || id == "library" || id == "history"
+            Text(id == "here" ? (s.hereWord ?? name) : id == "library" ? (photoWord ?? name) : id == "history" ? (historyWord ?? name) : name)
                 .font(.body)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: s.hereWord)
                 .animation(Motion.quick, value: photoWord)
+                .animation(Motion.quick, value: historyWord)
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     s.consent = nil
-                    if id == "here" { here() } else if id == "library" { Feel.tap(); photoItem = nil; photoPicking = true } else { Feel.refuse() }
+                    if id == "here" { here() } else if id == "library" { Feel.tap(); photoItem = nil; photoPicking = true }
+                    else if id == "history" { Feel.tap(); historyPicking = true } else { Feel.refuse() }
                 }
                 .accessibilityAddTraits(.isButton)
         }
@@ -251,6 +261,44 @@ struct VerifySheet: View {
                 photoWord = nil
             }
         }
+    }
+    /// YOUR HISTORY: the files read off the main thread (the four shapes Upload reads); their points, a tenth of a
+    /// degree apart at most, tested inside the stamp's place; one inside is enough for the consent line
+    private func history(_ urls: [URL]) {
+        historyWord = "Reading your history"
+        Task {
+            let points: [(Double, Double)]? = await Task.detached(priority: .userInitiated) {
+                var any = false
+                var seen = Set<Int64>(), out: [(Double, Double)] = []
+                for u in urls {
+                    let ok = u.startAccessingSecurityScopedResource()
+                    defer { if ok { u.stopAccessingSecurityScopedResource() } }
+                    guard let d = try? Data(contentsOf: u, options: .alwaysMapped), let r = HistoryReader.read(d) else { continue }
+                    any = true
+                    for p in r.samples where out.count < 20_000 {
+                        let c = Int64((p.lat * 10).rounded()) * 10_000 + Int64((p.lon * 10).rounded())
+                        if seen.insert(c).inserted { out.append((p.lat, p.lon)) }
+                    }
+                }
+                return any ? out : nil
+            }.value
+            guard let points else { await sayHistory("That file is not a location history"); return }
+            for (la, lo) in points {
+                if case .yes = inside(EqualEarth.project(lon: lo, lat: la)) {
+                    historyWord = nil
+                    s.consent = "history"
+                    Feel.land(speed: 0)
+                    return
+                }
+            }
+            Feel.refuse()
+            await sayHistory("Not in your history")
+        }
+    }
+    private func sayHistory(_ w: String) async {
+        historyWord = w
+        try? await Task.sleep(for: .seconds(2.5))
+        if historyWord == w { historyWord = nil }
     }
     private func say(_ w: String) async {
         photoWord = w
