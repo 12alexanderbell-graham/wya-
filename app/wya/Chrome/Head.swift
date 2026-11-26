@@ -1168,14 +1168,27 @@ struct SearchResults: View {
         let sameAsRegion = { (t: TownIndex.Hit) in anyRegionHits.contains { $0.place.lowercased() == t.file.lowercased() && $0.name.townFolded == t.name.townFolded } }
         let fullFold = Self.spelledOut(head.query).townFolded
         let sightNames = Set(thingSights.map { $0.name.townFolded + "|" + $0.file.lowercased() })
+        // (the best known sights' own quarter too, up to 200,000 people and within 15 km of the sight: "sagrada" listed
+        // the Sagrada Família and again, last, Barcelona's district of that name; a town of the name elsewhere stays)
+        let bestSights = thingSights.filter { $0.fame >= 3 }
+        let shadowed = { (t: TownIndex.Hit) -> Bool in
+            let n = t.name.townFolded, f = t.file.lowercased()
+            if t.people < 50_000 && sightNames.contains(n + "|" + f) { return true }
+            guard t.people < 200_000 else { return false }
+            return bestSights.contains { s in
+                guard s.name.townFolded == n, s.file.lowercased() == f else { return false }
+                let dy = (s.lat - t.lat) * 111, dx = (s.lon - t.lon) * 111 * cos(t.lat * .pi / 180)
+                return dx * dx + dy * dy < 15 * 15
+            }
+        }
         // (one of a name in one division: had two rows)
         var townSeen = Set<String>()
-        let exactTowns = Array(rankedTowns.filter { !($0.people < 50_000 && sightNames.contains($0.name.townFolded + "|" + $0.file.lowercased())) }
+        let exactTowns = Array(rankedTowns.filter { !shadowed($0) }
             .filter { townSeen.insert($0.name.townFolded + "|" + $0.file.lowercased() + "|" + $0.region.townFolded).inserted }
             .filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
             || ($0.people >= 200_000 && ($0.name.townFolded.hasPrefix(typedFold) || $0.name.townFolded.hasPrefix(fullFold)))) }.prefix(2))
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.allSatisfy({ $0.people < 50_000 })
-            ? Array(bigTowns.filter { t in !sameAsRegion(t) && !exactTowns.contains { $0.id == t.id } && !(t.people < 50_000 && sightNames.contains(t.name.townFolded + "|" + t.file.lowercased())) }.prefix(1)) : []
+            ? Array(bigTowns.filter { t in !sameAsRegion(t) && !exactTowns.contains { $0.id == t.id } && !shadowed(t) }.prefix(1)) : []
         let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
         let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits0.contains { begins($0.name) } || !setSights.isEmpty
             || townHits.contains { begins($0.name) }

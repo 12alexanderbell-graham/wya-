@@ -924,7 +924,10 @@ final class TestDriver {
                     case "cancel": UploadState.shared.cancel()
                     case "go": UploadState.shared.go()
                     // upload calendar on|off: the review's calendar
-                    case "calendar": if p.count > 2, p[2] == "off" { UploadState.shared.calendarOpen = false } else { UploadState.shared.openCalendar() }
+                    case "calendar":
+                        if p.count > 2, p[2] == "off" { UploadState.shared.calendarOpen = false }
+                        else if UploadState.shared.phase != .review { NSLog("wya upload calendar: no review open (the calendar is the review's)") }
+                        else { UploadState.shared.openCalendar() }
                     case "drop": if let m = map, let w = m.world, let i = w.places.firstIndex(where: { $0.id == (p.count > 2 ? p[2] : "") }) { _ = UploadState.shared.tap(i) }
                     // upload dates <id> | trip <id> <k> | show <id>: the review row's hold menu and a trip's ×
                     case "dates": if p.count > 2 { UploadState.shared.toggleDates(p[2]) }
@@ -1160,7 +1163,9 @@ final class TestDriver {
                         m.showSetPlace(f.list, id: f.item.id)
                     }
                 case "regiondirect":
-                    if let h = head, let i = map?.world?.placeIndex[a] { ContentView.openRegionMap(i, head: h) }
+                    // (either case: "FR" found nothing, the map's ids being "fr")
+                    if let h = head, let w = map?.world, let i = w.placeIndex[a] ?? w.placeIndex[a.lowercased()] ?? w.placeIndex[a.uppercased()] { ContentView.openRegionMap(i, head: h) }
+                    else { NSLog("wya regiondirect %@: no such place", a) }
                 // regionslow 8: the region borders' change at 1/8 speed (frame checks)
                 case "regionslow": RegionLines.slow = Double(a) ?? 1
                 // regionlevel 2: the open country's level from that row of its table (the level line's pick)

@@ -76,18 +76,28 @@ enum Snap {
     /// stepped through as it really ran (each grab costs time, so the frames come as fast as the simulator allows)
     @MainActor static func burst(ms: Int) {
         #if targetEnvironment(simulator) && DEBUG
+        // (26 Nov: two critic runs lost every frame: each grab was queued as a full-size picture with no limit, the
+        // pictures piled up in memory and the app stopped answering. Now at most two are waiting to be written, a
+        // frame that comes while two wait is skipped and noted, and burst.txt is written as the frames come, so a run
+        // cut short still says what it got)
         let t0 = CACurrentMediaTime()
         let queue = DispatchQueue(label: "burst", qos: .userInitiated)
-        var n = 0
+        var n = 0, skipped = 0, waiting = 0
         var times: [String] = []
+        let url = URL(fileURLWithPath: dir)
+        let writeTimes = { (lines: [String]) in
+            let log = lines.joined(separator: "\n")
+            queue.async { try? log.write(to: url.appendingPathComponent("burst.txt"), atomically: true, encoding: .utf8) }
+        }
         let link = BurstLink { link in
             let t = CACurrentMediaTime() - t0
             if t * 1000 > Double(ms) || n >= 240 {
                 link.stop()
-                let log = times.joined(separator: "\n")
-                queue.async { try? log.write(toFile: dir + "/burst.txt", atomically: true, encoding: .utf8) }
+                times.append("done: \(n) frames, \(skipped) skipped while writing")
+                writeTimes(times)
                 return
             }
+            guard waiting < 2 else { skipped += 1; return }
             let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
                 .flatMap(\.windows).filter { !$0.isHidden && $0.alpha > 0 }
                 .sorted { $0.windowLevel.rawValue < $1.windowLevel.rawValue }
@@ -100,10 +110,13 @@ enum Snap {
             let i = n
             n += 1
             times.append(String(format: "b%03d %.0f ms", i, t * 1000))
+            if i % 10 == 0 { writeTimes(times) }
+            waiting += 1
             queue.async {
                 if let data = img.jpegData(compressionQuality: 0.8) {
-                    try? data.write(to: URL(fileURLWithPath: dir).appendingPathComponent(String(format: "b%03d.jpg", i)))
+                    try? data.write(to: url.appendingPathComponent(String(format: "b%03d.jpg", i)))
                 }
+                DispatchQueue.main.async { waiting -= 1 }
             }
         }
         link.start()
