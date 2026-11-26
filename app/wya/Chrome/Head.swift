@@ -1689,6 +1689,19 @@ struct SearchResults: View {
     }
     /// the towns for what was typed, as typed and with its short words in full, the group with the bigger town first
     static func townsFor(_ q: String, open: String?, limit: Int = 6) -> [TownIndex.Hit] {
+        // (the last answers kept: the results drew several times for each letter typed, and each time looked through
+        // every town again, 26 Nov; kept only once the index has come, and a few at a time)
+        let k = "\(q)|\(open ?? "")|\(limit)"
+        if TownIndex.shared.ready, let known = townsKept[k] { return known }
+        let found = townsLookUp(q, open: open, limit: limit)
+        if TownIndex.shared.ready {
+            if townsKept.count > 40 { townsKept = [:] }
+            townsKept[k] = found
+        }
+        return found
+    }
+    private static var townsKept: [String: [TownIndex.Hit]] = [:]
+    private static func townsLookUp(_ q: String, open: String?, limit: Int) -> [TownIndex.Hit] {
         let a = TownIndex.shared.hits(q, open: open, limit: limit)
         let full = spelledOut(q)
         guard full != q else { return a }
