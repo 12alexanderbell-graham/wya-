@@ -302,14 +302,18 @@ struct SheetContent: View {
             // (and only where every map's caption fits: never inside the closed capsule over the tabs)
             if map.pinsMode, waterFits, !water.pageSheet {
                 let cy = max(L.headBottom + 12 + 52, form.top + 72)
-                // (the water's three contents, the tools, a pin, a colour, give way to each other blurred and faded, Apple's
-                // blur replace; at once, a pin chosen swapped the tools for its name in one frame, 17:46)
+                // (the water's three contents, the tools, a pin, a colour, give way to each other by rolling through the
+                // water: the one leaving up out of its top edge, the one coming up from below, cut by the water's own
+                // shape, as the first open's card words do; never faded, 26 Nov; at once, a pin chosen swapped the tools
+                // for its name in one frame, 17:46)
                 let kind = PinRoutes.shared.colouring != nil || PinDrawings.shared.colouring != nil ? 0
                     : PinStore.shared.selected == nil || PinRoutes.shared.open || DrawTool.shared.on ? 1 : 2
+                // (how far each moves: the water's open part, its top edge to the capsule's top)
+                let slot = max(60, L.capsule.minY - 2 - max(form.top, L.headBottom + 8))
                 ZStack {
                 // a route's colour being picked takes the water (its name where the pins' caption sits)
                 if kind == 0 {
-                    RouteColourSheet(water: water, captionY: cy).transition(.blurReplace)
+                    RouteColourSheet(water: water, captionY: cy).transition(.rollThrough(slot: slot, cutY: L.capsule.minY - 2))
                 } else if kind == 1 {
                     Group {
                     // THE DOCK (8.5): the tools in glass circles at the water's top, what you have under them (a route
@@ -327,7 +331,7 @@ struct SheetContent: View {
                             .opacity(min(1, max(0, Double(up) * 3)))
                     }
                     }
-                    .transition(.blurReplace)
+                    .transition(.rollThrough(slot: slot, cutY: L.capsule.minY - 2))
                 } else {
                     Group {
                     PinsWater(water: water, form: form, captionY: cy)
@@ -338,9 +342,10 @@ struct SheetContent: View {
                         PinSheet(water: water, top: cy + 6)
                     }
                     }
-                    .transition(.blurReplace)
+                    .transition(.rollThrough(slot: slot, cutY: L.capsule.minY - 2))
                 }
                 }
+                .clipShape(WaterShape(form: form))
                 .animation(Motion.quick, value: kind)
             }
             if !Perf.shared.off.contains("caption"), map.regionScene == nil || (water.historyUp && map.historyInfo != nil), !water.pageSheet, !map.pinsMode, !water.menuShown {

@@ -150,3 +150,42 @@ struct WaterTools: View {
         if key == "pin" { PinShape().fill(ink).frame(width: 16, height: 20) } else { Icon5(key: key, ink: ink, size: 20) }
     }
 }
+
+/// ONE OF THE WATER'S CONTENTS GIVING WAY TO ANOTHER: the leaving one rolls up through the water's open part and out of
+/// its top edge, the coming one up into it from the capsule's top line, both moving the open part's height (never the
+/// whole screen's, which took the old one away in one frame), and cut at the capsule's top while they move so no word
+/// crosses the tabs; the cut opens back to the screen's foot only in the roll's last quarter, as the contents settle
+extension AnyTransition {
+    static func rollThrough(slot: CGFloat, cutY: CGFloat) -> AnyTransition {
+        .asymmetric(insertion: .modifier(active: RollThrough(phase: 1, slot: slot, cutY: cutY),
+                                         identity: RollThrough(phase: 0, slot: slot, cutY: cutY)),
+                    removal: .modifier(active: RollThrough(phase: -1, slot: slot, cutY: cutY),
+                                       identity: RollThrough(phase: 0, slot: slot, cutY: cutY)))
+    }
+}
+
+struct RollThrough: ViewModifier, Animatable {
+    var phase: CGFloat
+    let slot: CGFloat
+    let cutY: CGFloat
+    var animatableData: CGFloat {
+        get { phase }
+        set { phase = newValue }
+    }
+    func body(content: Content) -> some View {
+        let open = max(0, 1 - abs(phase) * 4)
+        content
+            .offset(y: phase * slot)
+            .mask(alignment: .top) {
+                GeometryReader { g in
+                    let top = g.frame(in: .global).minY
+                    let cut = cutY + 2000 * open
+                    // (from far above the view, for the leaving one's way out, down to the cut, in the view's own space)
+                    let bottom = cut - top
+                    Rectangle()
+                        .frame(width: g.size.width + 800, height: max(0, bottom + 400))
+                        .position(x: g.size.width / 2, y: (bottom - 400) / 2)
+                }
+            }
+    }
+}

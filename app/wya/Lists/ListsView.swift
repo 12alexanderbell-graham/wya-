@@ -1603,7 +1603,13 @@ struct TierPage: View {
                             withAnimation(Motion.quick) { change { _ = $0.move(n, to: .row(i)) } }
                             return true
                         }
-                        if tierOpen == i { tierStrip(i, r) }
+                        // A TIER'S OWN STRIP OPENS AS A DRAWER under its band (26 Nov: nothing fades): it slides down out
+                        // from under the band, cut at the band's foot (only top and bottom, so the bands still reach the
+                        // screen's sides), and back up under it
+                        VStack(spacing: 0) {
+                            if tierOpen == i { tierStrip(i, r).transition(.move(edge: .top)) }
+                        }
+                        .mask { Rectangle().padding(.horizontal, -400) }
                     }
                 }
                 // ADD A TIER (two at least, as many as wanted)
@@ -1743,7 +1749,6 @@ struct TierPage: View {
             }
         }
         .padding(.top, 8)
-        .transition(.blurReplace)
     }
 
     private func chip(_ n: String) -> some View {
