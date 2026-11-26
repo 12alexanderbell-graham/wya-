@@ -753,7 +753,10 @@ extension PlacePageState.OnePage {
         // (15 km round a city of a million, 26 Nov: Dubai's point lies 13 km from the Burj Khalifa, and its highlights
         // were a mall, a garden and a theme park)
         if let ll = t["ll"] as? [NSNumber], ll.count == 2 {
-            let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 15.0 : 5.0
+            // (8 km round a city of a quarter of a million, 26 Nov: Lisbon's had neither the Belem Tower nor the
+            // Jeronimos Monastery, 7.4 km from its point)
+            let people = (t["p"] as? NSNumber)?.doubleValue ?? 0
+            let reach = people >= 1_000_000 ? 15.0 : people >= 250_000 ? 8.0 : 5.0
             out.highlights = await nearHighlights(cc, lat: ll[0].doubleValue, lon: ll[1].doubleValue, reach: reach)
         }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
@@ -779,7 +782,10 @@ extension PlacePageState.OnePage {
         for _ in 0 ..< 100 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
         let picks = (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
             guard !o.photo.isEmpty, PlacePageState.photo(o.photo) != nil,
-                  !["station", "stay", "route", "event", "city", "area"].contains(o.kindName) else { return false }
+                  !["station", "stay", "route", "event", "city", "area"].contains(o.kindName),
+                  // (never an airport, filed as a spot: Lisbon's third highlight was its airport, 26 Nov)
+                  !["airport", "aeroporto", "aeropuerto", "aéroport", "flughafen", "aeroport"].contains(where: { o.name.lowercased().contains($0) })
+            else { return false }
             let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
             let dy = (p.lat - lat) * 111.2, dx = (p.lon - lon) * 111.2 * cos(lat * .pi / 180)
             return dx * dx + dy * dy <= reach * reach
