@@ -750,8 +750,10 @@ extension PlacePageState.OnePage {
         }
         // ITS HIGHLIGHTS: the best known sights with a photo near it, 12 km round a city of a million, 5 km round a
         // smaller one, as a region's page has them
+        // (15 km round a city of a million, 26 Nov: Dubai's point lies 13 km from the Burj Khalifa, and its highlights
+        // were a mall, a garden and a theme park)
         if let ll = t["ll"] as? [NSNumber], ll.count == 2 {
-            let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
+            let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 15.0 : 5.0
             out.highlights = await nearHighlights(cc, lat: ll[0].doubleValue, lon: ll[1].doubleValue, reach: reach)
         }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }

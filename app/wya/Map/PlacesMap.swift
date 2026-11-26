@@ -85,10 +85,25 @@ extension MapController {
             }
             // a newer pick wins; a town that can't be shown says so
             guard me == ShowJob.n else { return }
-            guard let self, self.placeOpen == i, let sc = self.townScenes[cc], let t = sc.index[id] else { Feel.refuse(); return }
+            // (a town the search knows by its name only, New York City and London having no GeoNames id there, is the
+            // map's town of that name, else its nearest big town: the pick was refused and the map stayed where it
+            // was, 26 Nov)
+            guard let self, self.placeOpen == i, let sc = self.townScenes[cc],
+                  let t = sc.index[id] ?? Self.townByName(sc, hit: TownIndex.shared.hit(id)) else { Feel.refuse(); return }
             self.townPressed = (cc, t)
             self.showBox(sc.box(t), place: i)
         }
+    }
+
+    /// a search's town in the map's towns when the ids differ: the biggest of its name, else the nearest of the
+    /// first thousand (the biggest)
+    nonisolated static func townByName(_ sc: TownScene, hit h: TownIndex.Hit?) -> Int? {
+        guard let h else { return nil }
+        let n = h.name.townFolded
+        if let i = sc.towns.firstIndex(where: { $0.name.townFolded == n }) { return i }
+        let p = EqualEarth.project(lon: h.lon, lat: h.lat)
+        let near = sc.at.prefix(1000).enumerated().min { simd_distance($0.element, p) < simd_distance($1.element, p) }
+        return near.flatMap { simd_distance($0.element, p) < 0.5 ? $0.offset : nil }
     }
 
     /// YOUR OWN PLACE from the Stamped list: its country opened (if it isn't), the camera close to it, its mark pressed

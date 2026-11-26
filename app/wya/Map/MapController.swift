@@ -1037,7 +1037,10 @@ final class MapController {
         let mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
         let centre = mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk)
         pressed = place
-        fly(to: clamped(centre, nk), k: nk, dur: 0.8)
+        // (Apple's map up, close in on Places: it is moved, and ours follows it, as show(place:) does; our camera flown
+        // under it was taken straight back, so a town or sight picked while close up left the map where it was, 26 Nov)
+        if onApple { PinsMapState.shared.fly(centre: clamped(centre, nk), k: nk, size: view) }
+        else { fly(to: clamped(centre, nk), k: nk, dur: 0.8) }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(800 + 1200))
             guard let self, self.pressed == place, !self.touching else { return }
@@ -1057,7 +1060,9 @@ final class MapController {
         let fw = max(0.02, Double(b.z - b.x)), fh = max(0.02, Double(b.w - b.y))
         let nk = min(kMax, max(worldKMin, min((W - 128) / fw, max(80, bottom - top) / fh)))
         let mid = SIMD2(Double(b.x + b.z) / 2, Double(b.y + b.w) / 2)
-        fly(to: clamped(mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk), nk), k: nk, dur: Self.flight)
+        let to = clamped(mid + SIMD2(0, (H / 2 - (top + bottom) / 2) / nk), nk)
+        if onApple { PinsMapState.shared.fly(centre: to, k: nk, size: view); return }
+        fly(to: to, k: nk, dur: Self.flight)
     }
 
     /// the region under a screen point, if the region map is up: the region whose shape holds the point; a region
