@@ -585,7 +585,8 @@ extension PlacePageState.OnePage {
             for r in rows { for n in namesOf[r.code ?? r.key.id] ?? [] where regionShown[n] == nil { regionShown[n] = r.name } }
         }
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
-           let all = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+           let all0 = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+            let all = PlacePageState.withoutDistricts(all0)
             out.cities = all.compactMap { t in
                 guard let n = t["n"] as? String, !PlacePageState.notACity(t) else { return nil }
                 // (its region, unless that is its own name again:, on Japan's page)
@@ -974,7 +975,8 @@ extension PlacePageState.OnePage {
         var names = Set([me] + ((r["u"] as? [String]) ?? []).map(fold))
         if let n = r["n"] as? String { names.insert(fold(n)) }
         if case .ok(let cd) = await Servers.data.file("cities/\(cc).json"),
-           let cities = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+           let cities0 = try? JSONSerialization.jsonObject(with: cd) as? [[String: Any]] {
+            let cities = PlacePageState.withoutDistricts(cities0)
             out.cities = cities.compactMap { t in
                 guard let n = t["n"] as? String, let rr = t["r"] as? String, names.contains(fold(rr)), !PlacePageState.notACity(t) else { return nil }
                 let ll = t["ll"] as? [NSNumber]
@@ -1503,6 +1505,36 @@ extension PlacePageState {
     nonisolated static func cityKey(_ cc: String, _ t: [String: Any], name: String) -> PlaceKey {
         if let gid = (t["gid"] as? NSNumber)?.intValue { return PlaceKey(.town, "\(cc)/\(gid)") }
         return PlaceKey(.town, "\(cc)/\(name)")
+    }
+    /// A BIG CITY'S OWN DISTRICTS OUT (26 Nov walk: Île-de-France's cities were Paris, then "Paris 15 Vaugirard" and
+    /// "Paris 20 Ménilmontant", and further down quarters called "Gare" and "Salpêtrière"): a name that is a big city's
+    /// and a number ("Marseille 08"), or a plain place a fifth of a big city's size or less within 3.5 km of its middle
+    nonisolated static func withoutDistricts(_ all: [[String: Any]]) -> [[String: Any]] {
+        let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+        let big: [(n: String, p: Double, lat: Double, lon: Double)] = all.compactMap { t in
+            guard let n = t["n"] as? String, let p = (t["p"] as? NSNumber)?.doubleValue, p >= 300_000,
+                  let ll = t["ll"] as? [NSNumber], ll.count == 2 else { return nil }
+            return (fold(n), p, ll[0].doubleValue, ll[1].doubleValue)
+        }
+        guard !big.isEmpty else { return all }
+        return all.filter { t in
+            guard let n = t["n"] as? String else { return true }
+            let f = fold(n)
+            if big.contains(where: { b in
+                f != b.n && f.hasPrefix(b.n + " ") && f.dropFirst(b.n.count + 1).first?.isNumber == true
+            }) { return false }
+            if (t["fc"] as? String) == "PPL", let p = (t["p"] as? NSNumber)?.doubleValue,
+               let ll = t["ll"] as? [NSNumber], ll.count == 2 {
+                let lat = ll[0].doubleValue, lon = ll[1].doubleValue
+                let inside = big.contains { b in
+                    guard b.n != f, b.p >= p * 5 else { return false }
+                    let dy = (lat - b.lat) * 111.2, dx = (lon - b.lon) * 111.2 * cos(b.lat * .pi / 180)
+                    return dx * dx + dy * dy < 3.5 * 3.5
+                }
+                if inside { return false }
+            }
+            return true
+        }
     }
     /// a part of a city, or a place that was (GeoNames' PPLX, PPLH, PPLQ, PPLW), not a city of its own: Quarto
     /// Oggiaro, a district of Milan, stood third among Lombardy's cities
