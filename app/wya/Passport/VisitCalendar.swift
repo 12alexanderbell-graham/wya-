@@ -3,7 +3,7 @@ import SwiftUI
 /// A VISIT'S DAYS ON OUR OWN CALENDAR (Part 4.4.3, the dates that waited for it; never Apple's date picker). One
 /// month at a time under the visit's When row: the month's name between back and forward circles, the weekdays, the
 /// days. The first tap is the day you arrived, the second the day you left (picked earlier, the two swap); the days
-/// between are a lime band, the two ends black circles. A third tap starts again from that day; the same day twice is
+/// between are one black band, its two ends its round ends. A third tap starts again from that day; the same day twice is
 /// a one-day visit. Today and later are the look and can't be picked (a stamp is somewhere you have been).
 struct VisitCalendar: View {
     @Binding var from: String?
@@ -49,7 +49,7 @@ struct VisitCalendar: View {
                 }
             }
             // THE VISIT'S DAYS ARE ONE SHAPE (as the plan's and the upload's calendars since 25 Nov): its weeks melt
-            // into each other where they meet, one lime form for the whole stay, not a band a week
+            // into each other where they meet, one black form for the whole stay, not a band a week
             .background(alignment: .topLeading) { band(cells) }
         }
         .gesture(DragGesture(minimumDistance: 24).onEnded { g in
@@ -69,8 +69,9 @@ struct VisitCalendar: View {
             ZStack {
                 if end { Circle().fill(Palette.ink).frame(width: 40, height: 40) }
                 Text("\(d.d)").font(.body.weight(end ? .semibold : .regular))
-                    // (a day still to come at the one grey, 50%, as everything that can't act yet)
-                    .foregroundStyle(end ? Palette.white : Palette.ink.opacity(later ? 0.5 : 1))
+                    // (a day still to come at the one grey, 50%, as everything that can't act yet; a day of the stay
+                    // white on its black)
+                    .foregroundStyle(end || inside ? Palette.white : Palette.ink.opacity(later ? 0.5 : 1))
                     .monospacedDigit()
             }
             .frame(maxWidth: .infinity).frame(height: 44)
@@ -86,7 +87,7 @@ struct VisitCalendar: View {
         }
     }
 
-    /// the lime of the visit's days: in each week, one rounded piece from the first such day's middle to the last's
+    /// the black of the visit's days: in each week, one rounded piece from the first such day's middle to the last's
     /// (the ends' circles sit on its round ends); a week the visit runs on past (or came in from) at a month's edge
     /// runs off the screen's edge; the weeks joined where they share columns (DayGoo)
     @ViewBuilder private func band(_ cells: [LocalDay?]) -> some View {
@@ -104,7 +105,8 @@ struct VisitCalendar: View {
                     let x1 = openR ? Screen.width + 40 : gx + w * (CGFloat(l) + 0.5) + 20
                     return CGRect(x: x0, y: CGFloat(r) * 46 + 2, width: x1 - x0, height: 40)
                 }
-                DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.lime)
+                // (black, as the plan's calendar and every filled thing, never lime)
+                DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.ink)
                     .frame(width: Screen.width, height: g.size.height)
                     .offset(x: -gx)
             }
