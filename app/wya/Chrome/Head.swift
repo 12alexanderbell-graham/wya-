@@ -2273,6 +2273,20 @@ struct SearchResults: View {
     static func words(_ s: String) -> [Substring] { s.split { !$0.isLetter && !$0.isNumber } }
     static func matches(map: MapController, query: String) -> [Int] {
         guard let w = map.world else { return [] }
+        // (the last answers kept, by the world they were found in and whether its other languages had come: the results
+        // drew several times for each letter, each time going through every country's names word by word, 26 Nov)
+        // (a new world, other borders: its places are other rows, so what was kept goes)
+        if matchesWorld !== w { matchesKept = [:]; matchesWorld = w }
+        let k = "\(w.otherLanguageNamesIfReady != nil)|\(query)"
+        if let known = matchesKept[k] { return known }
+        let found = matchesLookUp(w, query: query)
+        if matchesKept.count > 40 { matchesKept = [:] }
+        matchesKept[k] = found
+        return found
+    }
+    private static var matchesKept: [String: [Int]] = [:]
+    private static weak var matchesWorld: World?
+    private static func matchesLookUp(_ w: World, query: String) -> [Int] {
         let typedLower = query.lowercased().trimmingCharacters(in: .whitespaces)
         let q = fold(query.trimmingCharacters(in: .whitespaces))
         guard !q.isEmpty else { return [] }
