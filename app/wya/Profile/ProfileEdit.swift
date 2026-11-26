@@ -201,6 +201,16 @@ struct ProfileGroundSheet: View {
 struct ProfileStatsList: View {
     let width: CGFloat
     let room: CGFloat
+    /// a pushed page's list running the screen's whole height: the room over where it starts (it scrolls on up under
+    /// the head to the screen's top), under where it ends (on under the tab capsule to the screen's foot, the last row
+    /// still coming up above the capsule) and at its sides (Apple's soft edge then runs side to side); 0: inside its room
+    var top: CGFloat = 0
+    var foot: CGFloat = 0
+    var side: CGFloat = 0
+    /// the page's name in the top row, its middle this far down: the list's own top bar, so Apple's soft edge runs
+    /// under the whole row as the list goes up under it (nil: no bar)
+    var title: String? = nil
+    var titleY: CGFloat = 0
     @State private var numbers = ProfileNumbers.shared
     /// the gaps between the rows (EdgeRows): the list's visible height ends in one, whole rows only
     @State private var cuts: [CGFloat] = []
@@ -209,7 +219,8 @@ struct ProfileStatsList: View {
 
     var body: some View {
         let all = numbers.groups.map { ($0.title, $0.rows) } + numbers.sections.map { ($0.name, $0.rows) }
-        let h = EdgeRows.fit(room, cuts: cuts)
+        // (running on under the capsule the list ends at the screen's foot, so it needs no whole-row end of its own)
+        let h = foot > 0 ? room : EdgeRows.fit(room, cuts: cuts)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(all.enumerated()), id: \.offset) { i, g in
@@ -240,20 +251,25 @@ struct ProfileStatsList: View {
             .coordinateSpace(name: EdgeRows.space)
             .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
         }
-        .scrollTargetBehavior(GapSnap(cuts: cuts))
+        .scrollTargetBehavior(GapSnap(cuts: cuts, off: foot > 0))
         .scrollBlur()
         .scrollIndicators(.hidden)
         .onScrollGeometryChange(for: Bool.self, of: { $0.contentOffset.y > 1 }) { _, v in scrolled = v }
+        // (the whole screen's height: its own room as the scroll's insets, and the page's own edge, not this mask)
+        .modifier(TopBar(title: title, titleY: titleY, top: top))
+        .safeAreaPadding(.bottom, foot).safeAreaPadding(.horizontal, side)
         .mask(alignment: .top) {
+            if top > 0 { Color.black } else {
             VStack(spacing: 0) {
                 LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                     .frame(height: scrolled ? 20 : 0)
                 Color.black
                 LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
             }
+            }
         }
-        .frame(width: width, height: h, alignment: .top)
-        .frame(width: width, height: room, alignment: .top)
+        .frame(width: width + 2 * side, height: h, alignment: .top)
+        .frame(width: width + 2 * side, height: room, alignment: .top)
     }
     /// : the count in black, "of 58" at 50%; anything else as it is; never bold (the stat's name is)
     private func value(_ v: String) -> Text {
@@ -288,6 +304,14 @@ struct ProfileBadgesList: View {
     @ScaledMetric(relativeTo: .title2) private var nextBig: CGFloat = 22
     let width: CGFloat
     let room: CGFloat
+    /// the room over, under and beside the grid when it runs the screen's whole height (as the Stats list's)
+    var top: CGFloat = 0
+    var foot: CGFloat = 0
+    var side: CGFloat = 0
+    /// the page's name in the top row, its middle this far down: the list's own top bar, so Apple's soft edge runs
+    /// under the whole row as the list goes up under it (nil: no bar)
+    var title: String? = nil
+    var titleY: CGFloat = 0
     @State private var numbers = ProfileNumbers.shared
     @State private var edit = ProfileEdit.shared
     @State private var pos = ScrollPosition(edge: .top)
@@ -366,7 +390,9 @@ struct ProfileBadgesList: View {
         .onChange(of: ScrollTest.shared.y) { _, y in pos.scrollTo(y: y) }
         #endif
         .scrollIndicators(.hidden)
-        .frame(width: width, height: room)
+        .modifier(TopBar(title: title, titleY: titleY, top: top))
+        .safeAreaPadding(.bottom, foot).safeAreaPadding(.horizontal, side)
+        .frame(width: width + 2 * side, height: room)
     }
 
     /// A BADGE'S OWN PAGE: the badge as wide as the page lets it be, its name and level, what you have against the
@@ -431,7 +457,9 @@ struct ProfileBadgesList: View {
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
-        .frame(width: width, height: room, alignment: .top)
+        .modifier(TopBar(title: title, titleY: titleY, top: top))
+        .safeAreaPadding(.bottom, foot).safeAreaPadding(.horizontal, side)
+        .frame(width: width + 2 * side, height: room, alignment: .top)
     }
 }
 
@@ -792,5 +820,34 @@ struct HomeSheet: View {
         withAnimation(Motion.quick) { store.set { $0.home = .init(id: t.id, name: t.name, cc: cc, lat: t.lat, lon: t.lon) } }
         // (one home: picked, the sheet goes and the line under your passports says it)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { edit.close(water: water) }
+    }
+}
+
+
+/// A PUSHED PAGE'S TOP ROW AS ITS LIST'S OWN BAR: the page's name in the middle of the head's row, the room down to where
+/// the list starts; the list rests under it and goes up under it with Apple's soft edge over the whole row (it reached
+/// only the status bar from a plain inset, and the badges' names went sharp across the title, 26 Nov)
+struct TopBar: ViewModifier {
+    let title: String?
+    let titleY: CGFloat
+    let top: CGFloat
+    func body(content: Content) -> some View {
+        if let title {
+            content.safeAreaBar(edge: .top, spacing: 0) {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: max(0, titleY - 22))
+                    Text(title)
+                        .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                        .frame(height: 44)
+                        .accessibilityAddTraits(.isHeader)
+                    Color.clear.frame(height: max(0, top - titleY - 22))
+                }
+                .frame(maxWidth: .infinity)
+            }
+        } else {
+            content.safeAreaPadding(.top, top)
+        }
     }
 }

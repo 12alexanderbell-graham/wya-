@@ -26,19 +26,18 @@ struct ProfilePushedPage: View {
             LivingField(custom: me.ground.map { g in (0 ..< 4).map { g[$0 % max(1, g.count)].srgb } },
                         saturation: ProfileView.look.x * (0.7 + 0.6 * s), power: ProfileView.look.y * (0.62 + 0.76 * s))
                 .frame(width: L.W, height: L.H)
-            Text(kind == .stats ? "Stats" : "Badges")
-                .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
-                .lineLimit(1)
-                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-                .frame(width: w - 2 * 52, height: 44)
-                .position(x: L.W / 2, y: L.headY)
-                .frame(width: L.W, height: L.H, alignment: .topLeading)
-                .accessibilityAddTraits(.isHeader)
+            // (the list under the title and the back circle, which float over it)
             Group {
-                if kind == .stats { ProfileStatsList(width: w, room: max(56, L.capsule.minY - 8 - listTop)) }
-                else { ProfileBadgesList(width: w, room: max(56, L.capsule.minY - 8 - listTop)) }
+                // THE WHOLE SCREEN'S HEIGHT (26 Nov): resting where it did, it scrolls up under the title and the back
+                // circle to the screen's top with Apple's soft edge, and down under the tab capsule's glass to the
+                // screen's foot, its end kept clear of the capsule (it was cut hard under the title row and through a row
+                // of badges over the capsule, as Lists was this morning)
+                let foot = L.H - (L.capsule.minY - 8)
+                // (the page's name is the list's own top bar, in the middle of the head's row)
+                let name = kind == .stats ? "Stats" : "Badges"
+                if kind == .stats { ProfileStatsList(width: w, room: L.H, top: listTop, foot: foot, side: L.side, title: name, titleY: L.headY) }
+                else { ProfileBadgesList(width: w, room: L.H, top: listTop, foot: foot, side: L.side, title: name, titleY: L.headY) }
             }
-            .offset(x: L.side, y: listTop)
             GlassCircle(icon: "back", label: "Back") { back() }
                 .position(x: L.side + 22, y: L.headY)
         }

@@ -1423,7 +1423,11 @@ extension View {
 /// a scroll stops where the visible height's end lands in a gap between rows
 struct GapSnap: ScrollTargetBehavior {
     var cuts: [CGFloat]
+    /// a list that runs on under the tab capsule to the screen's foot has no end of its own to land in a gap (and its
+    /// resting place is above zero, under its top bar: snapped to zero it rested 13 pt too high, 26 Nov)
+    var off = false
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        if off { return }
         let H = context.containerSize.height
         let top = max(0, context.contentSize.height - H)
         let want = target.rect.minY + H - 8
