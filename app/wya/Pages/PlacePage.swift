@@ -599,10 +599,13 @@ extension PlacePageState.OnePage {
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
             // THE CITIES PEOPLE KNOW FIRST (26 Nov: Japan's five above Show more were Tokyo, Yokohama, Osaka, Nagoya and
-            // Sapporo, never Kyoto): in the famous cities set's own order, as search lists a country's; the rest by people
+            // Sapporo, never Kyoto): the famous cities set's first, the best known first; the rest by people
             let fk = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
-            let known = (CollectionStore.shared.collection(CollectionStore.famousCities)?.items ?? [])
-                .filter { $0.cc.lowercased() == cc.lowercased() }.map { fk($0.name) }
+            // (by the set's fame, then by people within it, not the set's own order: France's fifth was Roubaix, ahead
+            // of Toulouse, Bordeaux and Nice, Spain's Melilla and Ceuta ahead of Valencia, 26 Nov walk)
+            let knownItems = (CollectionStore.shared.collection(CollectionStore.famousCities)?.items ?? [])
+                .filter { $0.cc.lowercased() == cc.lowercased() }
+            let known = knownItems.map { fk($0.name) }
             if !known.isEmpty {
                 // (a known name leads once, for its biggest town, the list being by people: every Washington took
                 // Washington's place, so the US listed New York, then Washington in DC, Utah, Illinois and Pennsylvania,
@@ -611,7 +614,7 @@ extension PlacePageState.OnePage {
                 let ranks = out.cities.map { c -> Int in
                     let n = fk(c.name)
                     guard let r = known.firstIndex(of: n), taken.insert(n).inserted else { return Int.max }
-                    return r
+                    return -knownItems[r].fame
                 }
                 out.cities = out.cities.enumerated().sorted { a, b in
                     let x = ranks[a.offset], y = ranks[b.offset]
@@ -2893,7 +2896,9 @@ private struct ActivitiesList: View {
             // (the photos' column only where one of the rows shown has a photo)
             let pictured = rows.prefix(limit).contains { $0.wd.map { SetPlaceThumb.file(own: "", thing: $0) != nil } ?? false }
             ForEach(rows.prefix(limit), id: \.self) { a in
-                HStack(alignment: .top, spacing: 12) {
+                // (beside photos the words centred on the photo, every row the photo's height: Paris's one-line rows had
+                // their names at the photo's top and an empty band under them, 26 Nov walk; no photos, from the top)
+                HStack(alignment: pictured ? .center : .top, spacing: 12) {
                     if pictured { SetPlaceThumb(own: "", thing: a.wd ?? "", cc: country, flag: false) }
                     VStack(alignment: .leading, spacing: 2) {
                         // (a row's name semibold over its grey line, as Highlights, Regions, Pins and Places, 25 Nov)
