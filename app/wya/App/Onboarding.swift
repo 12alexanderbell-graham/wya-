@@ -112,6 +112,9 @@ struct OnboardingView: View {
             }
         }
         .ignoresSafeArea()
+        // (its words up to the size its 44 pt buttons still hold on one line, as the country card's; at AX5 the
+        // pills' words ran out of them and the card)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .photosPicker(isPresented: $choosingPhoto, selection: $photo, matching: .images, photoLibrary: .shared())
         .onChange(of: photo) { _, it in
             guard let it else { return }
@@ -340,6 +343,8 @@ struct OnboardingView: View {
         Button(action: act) {
             Text(t).font(.body.weight(.semibold)).foregroundStyle(on ? Palette.white : Palette.ink)
                 .lineLimit(1)
+                // (at the largest sizes a long one shrinks a little rather than cut: "Detail..." at AX5)
+                .minimumScaleFactor(0.75)
                 .frame(width: width, height: 44)
                 .background { if on { Capsule().fill(Palette.ink) } }
                 .glassEffect(on ? .clear : Glass.clear.interactive(), in: .capsule)
