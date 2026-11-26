@@ -284,8 +284,9 @@ struct ListsWater: View {
         let corner: CGFloat = Self.picStyle == 2 ? 0 : 10
         let (own, wd0) = Self.rowPhoto(t)
         let cc = (t.cc ?? "").lowercased()
-        let isCountry = !cc.isEmpty && CountryEntity(id: cc).name.townFolded == t.name.townFolded
-        let wd = wd0 ?? (isCountry ? Self.countrySight(cc) : nil)
+        // (a thing known only by its country, Ramen in Japan, Pasta in Italy, takes that country's best known sight as a
+        // country does: their flags beside the photos looked cheap, 26 Nov; the flag is left only where no photo is)
+        let wd = wd0 ?? (cc.isEmpty ? nil : Self.countrySight(cc))
         if let r = t.ref {
             innerThumb(r, side: side, corner: corner)
         } else if !cc.isEmpty, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
@@ -2086,14 +2087,24 @@ enum ListMapCovers {
         // A LIST ROUND THE WORLD: wider than Apple's map shows at a cover's size (about two fifths of the world), the
         // cover is where most of its places are, not the middle of them all (a list from Peru to Japan to New Zealand
         // was framed on the mid-Atlantic, nearly every dot off its edges, 25 Nov)
-        let reach = MKMapSize.world.width * 0.4
-        if pts.count > 2, pts.map(\.x).max()! - pts.map(\.x).min()! > reach {
-            var best = (n: 0, from: cx - reach / 2)
+        // (and the same up and down: a list from Iceland and Finland to Namibia and Madagascar was taller than Apple's
+        // map shows at the cover's shape, so it showed the middle and only two of six dots, 26 Nov; the window is the
+        // one holding most of its places, across and up and down at once)
+        // (measured on a cover: Apple's map showed about half the world across and, at the cover's shape, a quarter of
+        // it up and down)
+        let reach = MKMapSize.world.width * 0.4, reachY = MKMapSize.world.width * 0.5 / aspect
+        let spanX = pts.isEmpty ? 0 : pts.map(\.x).max()! - pts.map(\.x).min()!
+        let spanY = pts.isEmpty ? 0 : pts.map(\.y).max()! - pts.map(\.y).min()!
+        if pts.count > 2, spanX > reach || spanY * 1.15 > reachY {
+            let winX = reach, winY = reachY / 1.15
+            var best = (n: 0, x: cx - winX / 2, y: cy - winY / 2)
             for p in pts {
-                let n = pts.filter { $0.x >= p.x && $0.x <= p.x + reach }.count
-                if n > best.n { best = (n, p.x) }
+                for q in pts {
+                    let n = pts.filter { $0.x >= p.x && $0.x <= p.x + winX && $0.y >= q.y && $0.y <= q.y + winY }.count
+                    if n > best.n { best = (n, p.x, q.y) }
+                }
             }
-            let inside = pts.filter { $0.x >= best.from && $0.x <= best.from + reach }
+            let inside = pts.filter { $0.x >= best.x && $0.x <= best.x + winX && $0.y >= best.y && $0.y <= best.y + winY }
             if !inside.isEmpty {
                 let x0 = inside.map(\.x).min()!, x1 = inside.map(\.x).max()!
                 let y0 = inside.map(\.y).min()!, y1 = inside.map(\.y).max()!
