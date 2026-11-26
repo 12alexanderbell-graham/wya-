@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var pageStack = PlacePageState.shared
     @State private var uploadState = UploadState.shared
     @State private var onboarding = Onboarding.shared
+    /// when the first open ended (the zoom column slides in from the right edge over the next 0.38 s, by the clock)
+    @State private var columnSince: Date?
     /// THE SESSION (19.2), for when the system ends the app in the background (Apple's scene storage: discarded when
     /// the person quits the app, so a cold launch opens fresh): the tab, the mode, the continent, the camera, the sheet
     /// stop, the lock
@@ -74,8 +76,15 @@ struct ContentView: View {
                 // sideways (1.11) the head goes up past the top edge, the column off the right edge, the water down past
                 // the bottom edge
                 if !Perf.shared.off.contains("zoom") {
+                    // THE FIRST OPEN OVER: the column comes in from the right edge as the head comes down, moved by the
+                    // clock frame by frame (an animated offset never showed: it simply appeared, a jump, seen in a screen
+                    // recording at 30 fps while the head slid); at rest the clock is stopped
+                    TimelineView(.animation(paused: columnSince.map { Date().timeIntervalSince($0) > 0.5 } ?? true)) { tl in
+                    let p = columnSince.map { min(1, max(0, tl.date.timeIntervalSince($0) / 0.38)) } ?? (onboarding.done ? 1 : 0)
+                    let ease = p * p * (3 - 2 * p)
                     ZoomColumn(map: map, water: water, head: head, sideways: { enterSideways() })
-                        .offset(x: side.chromeOut || !onboarding.done ? 90 : 0)
+                        .offset(x: side.chromeOut ? 90 : 0)
+                        .offset(x: 90 * (1 - ease))
                         // no zoom column under Regions' menu (6.3): off the right edge while the menu is up (no slide on a
                         // mode change; with the water's own move otherwise)
                         .offset(x: water.regions ? 90 : 0)
@@ -85,6 +94,7 @@ struct ContentView: View {
                         .opacity(columnOff ? 0 : 1)
                         .allowsHitTesting(!columnOff)
                         .transaction { $0.animation = nil }
+                    }
                 }
 
                 // under the water: the space's shaders set up once, unseen (Prewarm.swift)
@@ -572,6 +582,12 @@ struct ContentView: View {
         // the Stamped list rising (its caption tapped): the passport book goes back into its tool, never left open
         // squeezed to nothing under the list
         .onChange(of: water.stampedList) { _, v in if v { BookState.shared.close() } }
+        .onChange(of: onboarding.done) { _, d in
+            guard d else { return }
+            columnSince = Date()
+            // (the slide over: the clock stopped, the column at rest where it always is)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { columnSince = nil }
+        }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
             if head.settingsOpen, s == .quarter || s == .closed { head.closeSettings() }
