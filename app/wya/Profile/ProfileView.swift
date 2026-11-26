@@ -15,6 +15,11 @@ struct ProfileView: View {
     /// WHAT IS BEING TYPED, past the limit too: the saved name or bio is what fits, the typed words stay on screen
     /// until the line is left
     @State private var draft: String?
+    /// THE PHOTO BEING MOVED OR ZOOMED: its frame under the fingers (kept when they lift), and the one they began on
+    @State private var live: [Double]?
+    @State private var began: [Double]?
+    /// the photo was moved by this touch: its lift is not a tap (which would open the photos)
+    @State private var moved = false
 
     static let picture: CGFloat = 132
     static let gap: CGFloat = 16
@@ -53,10 +58,13 @@ struct ProfileView: View {
                 .accessibilityAction { edit.open(.ground, water: water) }
             VStack(spacing: 0) {
                 Button {
+                    if moved { return }
                     Feel.tap()
                     if edit.sheet == .picture { edit.choosingPhoto = true } else { edit.open(.picture, water: water) }
                 } label: { picture(me) }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(moving, isEnabled: me.picture == "photo" && edit.sheet == .picture)
+                    .simultaneousGesture(zooming, isEnabled: me.picture == "photo" && edit.sheet == .picture)
                     .accessibilityLabel("Picture")
                     .accessibilityHint(edit.sheet == .picture ? "Chooses a photo" : "Changes your picture")
                 nameLine(me)
@@ -261,11 +269,65 @@ struct ProfileView: View {
             .accessibilityAddTraits(.isButton)
     }
 
+    /// the whole photo in the circle, its frame's middle at the circle's middle and its short side the circle's
+    /// width at zoom 1
+    private func framed(_ w: UIImage, _ frame: [Double]) -> some View {
+        let f = ProfileStore.clamped(frame, size: w.size)
+        let k = Self.picture * f[2] / min(w.size.width, w.size.height)
+        return Image(uiImage: w).resizable().interpolation(.high)
+            .frame(width: w.size.width * k, height: w.size.height * k)
+            .offset(x: Self.picture / 2 - f[0] * w.size.width * k, y: Self.picture / 2 - f[1] * w.size.height * k)
+            .frame(width: Self.picture, height: Self.picture, alignment: .topLeading)
+    }
+
+    /// a finger on the photo moves it under the circle, as far as its edges
+    private var moving: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { v in
+                guard let w = store.photoWhole else { return }
+                let b = began ?? live ?? store.me.photoFrame ?? [0.5, 0.5, 1]
+                if began == nil { began = b }
+                moved = true
+                // (with two fingers zooming as well, at the zoom they have reached)
+                let z = live?[2] ?? b[2]
+                let k = Self.picture * z / min(w.size.width, w.size.height)
+                live = ProfileStore.clamped([b[0] - v.translation.width / (w.size.width * k),
+                                             b[1] - v.translation.height / (w.size.height * k), z], size: w.size)
+            }
+            .onEnded { _ in keepFrame() }
+    }
+
+    /// two fingers zoom it, from once to four times
+    private var zooming: some Gesture {
+        MagnifyGesture()
+            .onChanged { v in
+                guard let w = store.photoWhole else { return }
+                let b = began ?? live ?? store.me.photoFrame ?? [0.5, 0.5, 1]
+                if began == nil { began = b }
+                moved = true
+                let z = min(4, max(1, b[2] * v.magnification))
+                if (z == 1 || z == 4), z != live?[2] { Feel.refuse() }
+                live = ProfileStore.clamped([live?[0] ?? b[0], live?[1] ?? b[1], z], size: w.size)
+            }
+            .onEnded { _ in keepFrame() }
+    }
+
+    /// the fingers lifted: the frame kept and the circle's square cut again
+    private func keepFrame() {
+        began = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { moved = false }
+        guard let f = live else { return }
+        Task { await store.framePhoto(f); live = nil }
+    }
+
     /// the picture: a full circle with no outline. Your photo, or a flag of yours, or your initial on the colour you
     /// picked (on black when none is); the initial is white on a deep colour and black on a pale one
     private func picture(_ me: ProfileStore.Me) -> some View {
         ZStack {
-            if me.picture == "photo", let p = store.photo {
+            if me.picture == "photo", let w = store.photoWhole, edit.sheet == .picture {
+                // (its sheet up: the whole photo, moved with a finger and zoomed with two, the circle cutting it)
+                framed(w, live ?? me.photoFrame ?? [0.5, 0.5, 1])
+            } else if me.picture == "photo", let p = store.photo {
                 Image(uiImage: p).resizable().interpolation(.high).scaledToFill()
             } else if let f = me.picture, f.hasPrefix("flag:") {
                 FlagCircle(cc: String(f.dropFirst(5)), size: Self.picture)

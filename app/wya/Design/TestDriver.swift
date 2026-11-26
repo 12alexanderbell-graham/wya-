@@ -441,6 +441,9 @@ final class TestDriver {
                         ProfileStore.shared.set { $0.picture = p.count > 3 && p[2] == "flag" ? "flag:" + p[3] : p.count > 2 && p[2] == "photo" ? "photo" : nil }
                         if p.count > 2, p[2] == "none" { ProfileStore.shared.set { $0.colour = nil } }
                     }
+                    // profile photofile <path on the Mac> (a real photo through the upload); profile frame <x> <y> <zoom>
+                    if a == "photofile", p.count > 2, let d = FileManager.default.contents(atPath: p[2]) { await ProfileStore.shared.setPhoto(d) }
+                    if a == "frame", p.count > 4 { await ProfileStore.shared.framePhoto([Double(p[2]) ?? 0.5, Double(p[3]) ?? 0.5, Double(p[4]) ?? 1]) }
                     if a == "phototest" {
                         let img = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600)).image { c in
                             UIColor.systemTeal.setFill(); c.fill(CGRect(x: 0, y: 0, width: 900, height: 600))
