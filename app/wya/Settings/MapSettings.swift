@@ -95,6 +95,8 @@ final class MapSettingsStore {
         if let u = Self.url, let d = try? Data(contentsOf: u), let s = try? JSONDecoder().decode(MapSettings.self, from: d) {
             value = s
         } else {
+            // (one there that can't be read is moved beside itself, never written over)
+            if let u = Self.url, FileManager.default.fileExists(atPath: u.path) { PinRoutes.putAside(u) }
             value = MapSettings()
         }
         savedAI = value.ai

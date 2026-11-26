@@ -49,7 +49,9 @@ final class PinDrawings {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("pin-drawings.json")
     }
     private init() {
-        if let u = url, let d = try? Data(contentsOf: u), let a = try? JSONDecoder().decode([PinDrawing].self, from: d) { all = a }
+        if let u = url, let d = try? Data(contentsOf: u) {
+            if let a = try? JSONDecoder().decode([PinDrawing].self, from: d) { all = a } else { PinRoutes.putAside(u) }
+        }
     }
     private func save() {
         guard let u = url else { return }

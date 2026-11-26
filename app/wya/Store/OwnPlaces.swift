@@ -28,7 +28,10 @@ final class OwnPlaces {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("own-places.json")
     }
     private init() {
-        if let u = Self.url, let d = try? Data(contentsOf: u), let p = try? JSONDecoder().decode([Place].self, from: d) { all = p }
+        // (one that can't be read is moved beside itself, never written over)
+        if let u = Self.url, let d = try? Data(contentsOf: u) {
+            if let p = try? JSONDecoder().decode([Place].self, from: d) { all = p } else { PinRoutes.putAside(u) }
+        }
     }
     private func save() {
         guard let u = Self.url else { return }

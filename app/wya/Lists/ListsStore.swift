@@ -12,7 +12,11 @@ final class ListsStore {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("lists.json")
     }
     private init() {
-        if let u = Self.url, let d = try? Data(contentsOf: u), let b = try? JSONDecoder().decode(ListsBook.self, from: d) { book = b }
+        // (a file there that can't be read is moved beside itself, never written over by the next change: every list,
+        // plan and book would have gone with one bad read, 26 Nov)
+        if let u = Self.url, let d = try? Data(contentsOf: u) {
+            if let b = try? JSONDecoder().decode(ListsBook.self, from: d) { book = b } else { PinRoutes.putAside(u) }
+        }
         if !book.lists.contains(where: \.wish) {
             book.lists.insert(MyList(id: "wish", name: "Wishlist", wish: true), at: 0)
         }

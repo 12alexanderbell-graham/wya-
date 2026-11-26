@@ -64,7 +64,10 @@ final class ProfileStore {
     private static var photoURL: URL? { url?.deletingLastPathComponent().appendingPathComponent("profile-photo.jpg") }
     private static var wholeURL: URL? { url?.deletingLastPathComponent().appendingPathComponent("profile-photo-whole.jpg") }
     private init() {
-        if let u = Self.url, let d = try? Data(contentsOf: u), let m = try? JSONDecoder().decode(Me.self, from: d) { me = m }
+        // (one that can't be read is moved beside itself, never written over)
+        if let u = Self.url, let d = try? Data(contentsOf: u) {
+            if let m = try? JSONDecoder().decode(Me.self, from: d) { me = m } else { PinRoutes.putAside(u) }
+        }
         if me.picture == "photo", let p = Self.photoURL { photo = UIImage(contentsOfFile: p.path) }
         if me.picture == "photo", let p = Self.wholeURL { photoWhole = UIImage(contentsOfFile: p.path) }
     }
