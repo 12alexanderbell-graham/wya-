@@ -796,8 +796,9 @@ extension PlacePageState.OnePage {
         var zone = (t["tz"] as? String).flatMap(TimeZone.init(identifier:))
         if zone == nil, let ll = t["ll"] as? [NSNumber], ll.count == 2 { zone = await Self.zone(lat: ll[0].doubleValue, lon: ll[1].doubleValue) }
         if let tz = zone {
-            let f = DateFormatter(); f.timeZone = tz; f.locale = .current; f.setLocalizedDateFormatFromTemplate("jmm")  // (the phone's own clock, 12 or 24 hours)
-            out.rows.append(("Local time", f.string(from: Date())))
+            // (its zone, not a time: the page shows it as a clock that keeps going, 26 Nov walk: Paris read 15:23 at 15:24,
+            // and a page kept from before showed the hour it was first opened)
+            out.rows.append(("Local time", PlacePageState.zoneMark + tz.identifier))
         }
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
             let h = hi.map(\.doubleValue), l = lo.map(\.doubleValue)
@@ -923,8 +924,9 @@ extension PlacePageState.OnePage {
         var zone = (near?["tz"] as? String).flatMap(TimeZone.init(identifier:))
         if zone == nil { zone = await Self.zone(lat: t.lat, lon: t.lon) }
         if let tz = zone {
-            let f = DateFormatter(); f.timeZone = tz; f.locale = .current; f.setLocalizedDateFormatFromTemplate("jmm")  // (the phone's own clock, 12 or 24 hours)
-            out.rows.append(("Local time", f.string(from: Date())))
+            // (its zone, not a time: the page shows it as a clock that keeps going, 26 Nov walk: Paris read 15:23 at 15:24,
+            // and a page kept from before showed the hour it was first opened)
+            out.rows.append(("Local time", PlacePageState.zoneMark + tz.identifier))
         }
         if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon, others: TownIndex.shared.otherNames(id)) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: t.name), 620); out.proseWikivoyage = true
@@ -1505,6 +1507,13 @@ extension PlacePageState {
     nonisolated static func cityKey(_ cc: String, _ t: [String: Any], name: String) -> PlaceKey {
         if let gid = (t["gid"] as? NSNumber)?.intValue { return PlaceKey(.town, "\(cc)/\(gid)") }
         return PlaceKey(.town, "\(cc)/\(name)")
+    }
+    /// a fact that is a local time is kept as this and its zone's name
+    nonisolated static let zoneMark = "\u{1}tz:"
+    /// the time in that zone, the phone's own way (12 or 24 hours)
+    nonisolated static func clock(_ tz: TimeZone, at d: Date) -> String {
+        let f = DateFormatter(); f.timeZone = tz; f.locale = .current; f.setLocalizedDateFormatFromTemplate("jmm")
+        return f.string(from: d)
     }
     /// A BIG CITY'S OWN DISTRICTS OUT (26 Nov walk: Île-de-France's cities were Paris, then "Paris 15 Vaugirard" and
     /// "Paris 20 Ménilmontant", and further down quarters called "Gare" and "Salpêtrière"): a name that is a big city's
@@ -2589,9 +2598,18 @@ private struct PageLayer: View {
             }
         }
     }
-    private func fact(_ f: (String, String)) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(f.1).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+    private func fact(_ f0: (String, String)) -> some View {
+        // (a local time is kept as its zone and drawn as a clock, to the minute)
+        let zone = f0.1.hasPrefix(PlacePageState.zoneMark) ? TimeZone(identifier: String(f0.1.dropFirst(PlacePageState.zoneMark.count))) : nil
+        let f = (f0.0, zone.map { PlacePageState.clock($0, at: Date()) } ?? f0.1)
+        return VStack(alignment: .leading, spacing: 2) {
+            if let zone {
+                TimelineView(.everyMinute) { c in
+                    Text(PlacePageState.clock(zone, at: c.date)).font(.body.weight(.semibold)).foregroundStyle(Palette.ink)
+                }
+            } else {
+                Text(f.1).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).fixedSize(horizontal: false, vertical: true)
+            }
             Text(f.0).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
