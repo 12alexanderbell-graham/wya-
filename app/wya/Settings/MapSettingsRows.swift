@@ -93,8 +93,8 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),
     ]
 
-    /// ROWS THE APP DOES NOT FOLLOW YET: in their look, refusing a tap, as All settings (A.1.5: never a control that
-    /// silently does nothing). A row leaves this list when its part is built.
+    /// ROWS THE APP DOES NOT FOLLOW YET: not shown (a greyed row that refuses a tap is a dead control). A row leaves
+    /// this list when its part is built.
     static let notYet: Set<String> = ["projection"]
 
     /// Style's choices follow the Map row (Apple's looks only once the Map row is followed)

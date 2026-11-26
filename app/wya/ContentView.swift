@@ -550,6 +550,13 @@ struct ContentView: View {
         .onChange(of: head.mode) { _, _ in saveSession(after: 0) }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("wyaTestTab"))) { n in if let t = n.object as? Int { tab = t } }
+        // Map settings' All settings: the map's settings put away, the Profile's tab, its Settings page pushed once the
+        // tab has changed (the water settles at the Profile's 25% first, as the Profile's settings circle finds it)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("wyaAppSettings"))) { _ in
+            head.closeSettings()
+            tab = 2
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { ProfileEdit.shared.open(.settings, water: water) }
+        }
         #endif
         // THE MODES (6.1): Regions always restarts at its selection menu, the camera flying to the world home under
         // it; leaving it, the water goes to 25%

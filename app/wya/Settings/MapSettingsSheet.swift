@@ -214,10 +214,15 @@ private struct SettingsList: View {
         VStack(spacing: 0) {
             if let page = row.page {
                 if page == "all" {
-                    // the app's Settings comes with its own book: until then the row keeps its place in its look and
-                    // refuses (A.1.5: never a pressable-looking control that silently does nothing)
-                    RowWords(name: row.name, value: "", dim: true)
-                        .onTapGesture { Feel.refuse() }
+                    // THE APP'S SETTINGS live in the Profile (Settings/AppSettings.swift): the row takes you there, Map
+                    // settings put away, the Profile's tab with its Settings page pushed
+                    Button {
+                        Feel.tap()
+                        NotificationCenter.default.post(name: Notification.Name("wyaAppSettings"), object: nil)
+                    } label: {
+                        RowWords(name: row.name, value: "", chevron: true)
+                    }
+                    .buttonStyle(.plain)
                 } else {
                     Button {
                         Feel.tap()
