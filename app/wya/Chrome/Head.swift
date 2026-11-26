@@ -1573,6 +1573,12 @@ struct SearchResults: View {
         let region = { (r: RegionIndex.Hit) -> ResultKey in ResultKey.anyRegion(r.key) }
         var out: [ResultKey] = starts.prefix(3).map { (i: Int) -> ResultKey in ResultKey.place(i) }
         out += cities.map(town)
+        // (a big town found by its other name, when every town named as typed is small, goes first; only one whose
+        // other name is exactly what was typed, so a town found loosely never leads)
+        let fullTyped = spelledOut(typed).townFolded
+        out += otherTowns.filter { t in
+            t.people >= 50_000 && TownIndex.shared.otherNames(t.id).contains { $0 == typed || $0 == fullTyped }
+        }.map(town)
         let full = spelledOut(typed).townFolded
         let known = famousCityNames()
         let isKnown = { (t: TownIndex.Hit) in known.contains(t.name.townFolded + "|" + t.file.lowercased()) }
