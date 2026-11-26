@@ -17,6 +17,8 @@ struct PageSheet: View {
     @State private var note = ""
     @State private var sent = false
     @FocusState private var noteFocused: Bool
+    /// the gaps between the list's rows: its visible height ends in one (whole rows only, as every list's)
+    @State private var cuts: [CGFloat] = []
 
     static let reasons = ["Wrong number", "Wrong place", "Wrong photo", "Bad text", "Missing", "Something else"]
 
@@ -27,23 +29,38 @@ struct PageSheet: View {
         let bottom = L.capsule.minY - 16
         let w = L.W - 2 * L.sheetInset
         if let page = stack.top {
+            let room = max(0, bottom - top)
+            // WHOLE ROWS ONLY (as Stats and Details): the visible height ends in a gap between rows, under the 16 pt soft
+            // foot, and a scroll stops on one (the sources ran on to the capsule's edge with a credit cut through its
+            // middle, 26 Nov); the report's form keeps the whole room
+            let h = reporting ? room : EdgeRows.fit(room, cuts: cuts)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if reporting { report(page, width: w - 32) } else { list(page) }
                 }
+                .coordinateSpace(name: EdgeRows.space)
+                .onPreferenceChange(EdgeRows.self) { cuts = EdgeRows.cuts($0) }
                 // (a pull down from the list's top at full brings the water down, Water/WaterHandoff)
                 .background(WaterHandoff())
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
                 .frame(width: w, alignment: .leading)
             }
+            .scrollTargetBehavior(GapSnap(cuts: cuts, off: reporting || water.stop != .full))
             .scrollBlur()
             .scrollIndicators(.hidden)
             // below full a drag on the rows is the water's (it rises to full, or comes down), as in Apple's sheets
             // and the Places shelf; at full they scroll
             .scrollDisabled(water.stop != .full)
-            .frame(width: w, height: max(0, bottom - top))
-            .position(x: L.W / 2, y: top + max(0, bottom - top) / 2)
+            .mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.black
+                    if !reporting { LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16) }
+                }
+            }
+            .frame(width: w, height: h, alignment: .top)
+            .frame(width: w, height: room, alignment: .top)
+            .position(x: L.W / 2, y: top + room / 2)
             .onChange(of: stack.reportTest) { _, r in reporting = true; reason = Self.reasons.contains(r) ? r : nil }
             .onChange(of: stack.sendTest) { _, _ in send(page) }
             // a report asked while the sheet is already up (a fact held, 11.5)
@@ -68,6 +85,7 @@ struct PageSheet: View {
         if let u = URL(string: "wya://page/\(key.description)") {
             ShareLink(item: u, subject: Text(page.name), message: Text(page.name)) { actionWords("Share") }
                 .buttonStyle(.plain)
+                .edgeRow()
         }
         // Show in passport (a stamped country): the page closes and the passport opens on its stamp (the book is under
         // the page in the screen's layers, so it can't open over it)
@@ -79,10 +97,12 @@ struct PageSheet: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { BookState.shared.open(showing: key.id) }
             } label: { actionWords("Show in passport") }
             .buttonStyle(.plain)
+            .edgeRow()
         }
         // SOURCES, 24 pt below under its name
         Text("Sources").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
             .padding(.top, 24).padding(.bottom, 4)
+            .edgeRow()
         if let f = page.facts {
             ForEach(Array(SourcesRow.lines(f, kind: key.kind, credits: credits, id: key.id).enumerated()), id: \.offset) { _, l in
                 VStack(alignment: .leading, spacing: 1) {
@@ -90,6 +110,7 @@ struct PageSheet: View {
                     Text(l.1).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .edgeRow()
             }
         }
         // REPORT A MISTAKE, last
@@ -99,6 +120,7 @@ struct PageSheet: View {
         } label: { actionWords("Report a mistake") }
         .buttonStyle(.plain)
         .padding(.top, 12)
+        .edgeRow()
     }
 
     private func actionWords(_ s: String) -> some View {
