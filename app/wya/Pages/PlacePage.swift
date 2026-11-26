@@ -929,6 +929,13 @@ extension PlacePageState.OnePage {
            let intro = await PlacePageState.guideIntro(cc, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: 150) {
             out.prose = PlacePageState.cut(PlacePageState.plain(intro, name: n), 620); out.proseWikivoyage = true
         }
+        // (no guide's article, only the one line of what it is: Wikipedia's opening, its article standing within 150 km,
+        // 26 Nov: Andalusia had only its one line)
+        if !out.proseWikivoyage, let ll = r["ll"] as? [NSNumber], ll.count == 2,
+           let w = await PlacePageState.wikipediaIntro(wd: r["wd"] as? String, name: (r["n"] as? String) ?? name,
+                                                       lat: ll[0].doubleValue, lon: ll[1].doubleValue, within: [PlacePageState.countryName(cc)]) {
+            out.prose = PlacePageState.cut(w, 620); out.proseWikipedia = true
+        }
         if let p = r["pop"] as? NSNumber { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
         if let a = r["area"] as? NSNumber { out.rows.append(("Area", PlacePageState.big(a.doubleValue) + " km²")) }
         if let c = r["cap"] as? String { out.rows.append(("Capital", c)) }
