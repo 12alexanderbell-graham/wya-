@@ -583,6 +583,14 @@ struct ContentView: View {
         }
         // another tab leaves the review, the finds waiting (9.5; the tab changes at once, so A9.13 ends unseen)
         .onChange(of: tab) { _, t in if t != 0, water.upload { UploadState.shared.leaveReview() } }
+        // (the map rests while Lists or the Profile covers it, once the tab has changed; back on the Map at once)
+        .onChange(of: tab) { _, t in
+            if t == 0 { MapLayer.rest(false); return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                if tab != 0 { MapLayer.rest(true) }
+            }
+        }
         // (a list viewed on the map is put away when you leave the Map tab)
         .onChange(of: tab) { _, t in if t != 0, map.viewing != nil { map.viewing = nil } }
         // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)

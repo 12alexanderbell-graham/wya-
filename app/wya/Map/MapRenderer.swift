@@ -2113,6 +2113,7 @@ struct MapLayer: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MapMTKView {
         let v = MapMTKView(frame: .zero, device: nil)
+        Self.view = v
         v.controller = controller
         if let r = MapRenderer(controller: controller) {
             r.configure(v)
@@ -2126,6 +2127,17 @@ struct MapLayer: UIViewRepresentable {
         return v
     }
     func updateUIView(_ uiView: MapMTKView, context: Context) {}
+
+    /// the map's view, to rest it while another tab covers it
+    @MainActor static weak var view: MapMTKView?
+    /// THE MAP RESTS UNDER LISTS AND THE PROFILE (26 Nov): their own ground covers the whole screen, and the map went on
+    /// drawing under it, 30 times a second, for nothing; it stops once the other tab is up and starts again as the Map
+    /// tab comes back (its last picture is there until the next is drawn)
+    @MainActor static func rest(_ on: Bool) {
+        guard let v = view, v.isPaused != on else { return }
+        v.isPaused = on
+        if !on { v.controller?.needsFrame = true }
+    }
 }
 
 
