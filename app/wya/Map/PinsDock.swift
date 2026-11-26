@@ -137,10 +137,15 @@ struct PinsDock: View {
             ]
         VStack(spacing: 0) {
             ChipRow(width: w, items: tools)
-            if let c = dock.chosen, c != 0 {
-                ChipRow(width: w, items: options(c), columns: true)
-                    .transition(.blurReplace)
+            // A TOOL'S CHOICES OPEN AS A DRAWER under the tools (26 Nov: nothing fades): they slide down out from under the
+            // row, cut at its foot, and back up under it
+            VStack(spacing: 0) {
+                if let c = dock.chosen, c != 0 {
+                    ChipRow(width: w, items: options(c), columns: true)
+                        .transition(.move(edge: .top))
+                }
             }
+            .clipped()
         }
         #if DEBUG
         // (the test driver presses a tool or one of its choices by number: `action pins.tool<n>`, `action pins.opt<n>`)
@@ -188,7 +193,8 @@ struct PinsDock: View {
                         GlassCircle(icon: "undo", label: "Undo", dim: t.marks.isEmpty) { t.undo() }
                         GlassCircle(icon: "done", label: "Done", dim: !t.canFinish, filled: t.canFinish) { t.done() }
                     }
-                    .transition(.blurReplace)
+                    // (they roll up into the title line from below it and back down, never fading)
+                    .transition(.move(edge: .bottom))
                 } else if maps.inside, water.stop != .quarter {
                     HStack {
                         Button { Feel.tap(); maps.inside = false } label: {
@@ -202,6 +208,8 @@ struct PinsDock: View {
             }
             .animation(Motion.quick, value: t.on)
             .frame(width: L.W - 2 * L.sheetInset - 24, height: 44)
+            // (the title line cuts what rolls into it; a little room above and below for the circles' glass edge)
+            .clipShape(Rectangle().inset(by: -4))
             .position(x: L.W / 2, y: Self.titleY(top))
             .frame(width: L.W, height: L.H)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)

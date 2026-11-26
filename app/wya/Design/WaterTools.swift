@@ -31,7 +31,8 @@ struct WaterTools: View {
         VStack(alignment: align, spacing: 8) {
             if capsule, let w = width {
                 HStack(spacing: 0) {
-                    ForEach(Array(tools.enumerated()), id: \.offset) { _, t in segment(t, w / CGFloat(max(1, tools.count))) }
+                    // (each part cuts its own word as it rolls: a word never runs into its neighbour)
+                    ForEach(Array(tools.enumerated()), id: \.offset) { _, t in segment(t, w / CGFloat(max(1, tools.count))).clipShape(Capsule()) }
                 }
                 .padding(3)
                 .frame(width: w, height: 44)
@@ -59,12 +60,18 @@ struct WaterTools: View {
                     .lineLimit(1)
                     .contentTransition(.numericText())
                     .id(words.filter { !$0.isNumber })
-                    .transition(.blurReplace)
+                    .transition(Self.roll)
             }
+            // (the line rolls whole, up through its own height, cut at its edges: never letter by letter, never faded)
+            .clipped()
             .animation(Motion.quick, value: words)
         }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
+
+    /// A WORD OR AN ICON GIVING WAY TO ANOTHER IN ITS PLACE (26 Nov: nothing fades one thing into another): the old one
+    /// rolls up out of its slot, the new one up into it from below, the slot cutting both
+    static let roll: AnyTransition = .asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top))
 
     /// one tool in the capsule: its word, centred in its part; a menu tool opens Apple's menu
     @ViewBuilder private func segment(_ t: Tool, _ w: CGFloat) -> some View {
@@ -76,7 +83,7 @@ struct WaterTools: View {
             .background { if t.on { Capsule().fill(Palette.ink) } }
             .contentShape(Capsule())
             .id(t.label)
-            .transition(.blurReplace)
+            .transition(Self.roll)
         if let m = t.menu {
             Menu {
                 ForEach(Array(m.enumerated()), id: \.offset) { _, e in Button(e.0) { e.1() } }
@@ -123,10 +130,12 @@ struct WaterTools: View {
                     icon(t.icon, Palette.white).opacity(t.on ? 1 : 0)
                 }
                 .id(t.icon)
-                .transition(.blurReplace)
+                .transition(Self.roll)
             }
             .animation(Motion.quick, value: t.icon)
             .frame(width: 44, height: 44)
+            // (a new icon rolls up into its circle, the old one out of its top, cut by the circle)
+            .clipShape(Circle())
             .background { if t.on { Circle().fill(Palette.ink) } }
             .contentShape(Circle())
         }

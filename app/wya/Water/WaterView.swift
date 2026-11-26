@@ -316,7 +316,9 @@ struct SheetContent: View {
                     // being made: what it wants next); your saved pins, routes and drawings under it from 50%
                     let dockTop = max(form.top, L.headBottom + 8)
                     PinsDock(water: water, top: dockTop)
-                    if !PinRoutes.shared.open, !DrawTool.shared.on,
+                    // (a route or a drawing begun: the list stays and sinks with the water to 25%, going as the water
+                    // reaches it, as when the water is pulled down; it was taken away in one frame, leaving bare water)
+                    if (!PinRoutes.shared.open && !DrawTool.shared.on) || form.top < L.top(.quarter) - 1,
                        !PinStore.shared.pins.isEmpty || !PinRoutes.shared.routes.isEmpty || !PinDrawings.shared.all.isEmpty {
                         // (how far the water is from 25% towards 50%: at 25% no row shows at all, 17:52; by a third
                         // of the way they are whole)
