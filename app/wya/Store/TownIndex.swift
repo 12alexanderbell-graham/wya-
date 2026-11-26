@@ -235,7 +235,8 @@ final class TownIndex {
             let h = r.hit
             guard h.people >= 300_000 else { break }
             guard h.people >= n.people * 5, h.file == n.file else { continue }
-            let reach = (2 + Double(h.people).squareRoot() / 200) / 111.2
+            // (a little wider, 26 Nov: the Golden Gate Bridge, 7.2 km from San Francisco, had gone to Sausalito)
+            let reach = (2 + Double(h.people).squareRoot() / 150) / 111.2
             let dy = h.lat - lat, dx = (h.lon - lon) * k
             if dx * dx + dy * dy <= reach * reach { return Self.asCity(h) }
         }
