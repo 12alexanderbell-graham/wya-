@@ -51,6 +51,9 @@ struct WaterView: View {
                     tab = 0
                     Feel.tap()
                 })
+                    // (up to the size the map's caption stops at: at the accessibility sizes its numbers ran to dots
+                    // and their words under the tabs)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     .frame(width: L.W, height: L.H, alignment: .topLeading)
                     .mask(shape)
             } else if water.lists {
@@ -340,6 +343,9 @@ struct SheetContent: View {
                             // (Places: the name keeps clear of the back arrow on its line)
                             maxNameWidth: water.layout.W - 2 * (water.layout.sheetInset + (map.placesMode ? 60 : 24)),
                             compact: hc != nil)
+                // (capped here, outside it, so its own scaled number is capped too: inside, the cap reached the words but
+                // not the 64 pt number, which at the accessibility sizes grew and pushed the name and its second line off)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .transaction(value: map.placesPicked) { $0.animation = nil; $0.disablesAnimations = true }
                 // always 72 pt under the top edge; its words are there only when the whole caption fits in the water
                 // above the capsule, and roll in and out by the text roll as the edge crosses that line (A2.5), so
