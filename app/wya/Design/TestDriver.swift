@@ -160,7 +160,15 @@ final class TestDriver {
                         NSLog("wya neighbours %@: %@", a, w.neighbours[i].map { w.places[$0].id }.sorted().joined(separator: " "))
                     }
                 case "search":
-                    if a == "off" { head?.searching = false }
+                    // (on the Lists tab, Lists' own search, as its search circle: the map's search there found nothing,
+                    // 26 Nov critic)
+                    if water?.lists == true {
+                        let ls = ListsState.shared
+                        if a == "off" { ls.searching = false; ls.query = "" }
+                        else { ls.searching = true; ls.query = p.dropFirst().joined(separator: " ") }
+                        NSLog("wya t lists search %@", ls.query)
+                    }
+                    else if a == "off" { head?.searching = false }
                     // search suggest [new]: the empty field's suggestions, logged by id (new: as with no searches yet)
                     else if a == "suggest", let m = map, let w = m.world {
                         let s = SearchResults.suggestions(map: m, recentToo: p.count < 3)
