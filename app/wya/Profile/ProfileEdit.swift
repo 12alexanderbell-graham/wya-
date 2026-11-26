@@ -37,6 +37,8 @@ final class ProfileEdit {
     var query = ""
     /// the badge shown alone in your badges (nil: all of them)
     var badge: String?
+    /// a page pushed inside Settings ("sources"), nil for Settings' own list
+    var settingsPage: String?
 
     func open(_ s: Sheet, water: Water) {
         field = nil
@@ -58,6 +60,7 @@ final class ProfileEdit {
         searching = false
         query = ""
         badge = nil
+        settingsPage = nil
         if move { water.go(.quarter) }
     }
     /// a tap off whatever is being edited: typing ends (kept), a sheet goes

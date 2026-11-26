@@ -66,6 +66,13 @@ struct ProfilePushedPage: View {
 
     private func back() {
         // (one badge open: back to all of them first)
+        // (Sources open inside Settings: back to Settings first)
+        if kind == .settings, edit.settingsPage != nil {
+            Feel.tap()
+            withAnimation(Motion.chrome) { edit.settingsPage = nil }
+            withAnimation(Motion.settle) { pull = 0 }
+            return
+        }
         if kind == .badges, edit.badge != nil {
             Feel.tap()
             edit.badge = nil

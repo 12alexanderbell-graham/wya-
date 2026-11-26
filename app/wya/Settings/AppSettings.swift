@@ -4,7 +4,10 @@ import SwiftUI
 /// (settings open as a whole page, not a sheet; they live in the Profile; Map settings stay on the map's dot). Only rows
 /// that do something, no empty boxes: Units (the phone's own by default, changed here), Sounds, and the version. Rows
 /// as Map settings' rows: the name, the value at 50%, a tap; a row of three opens its choices under it with the black
-/// band on the one in use. Kept in the app's defaults the moment it changes.
+/// band on the one in use. Kept in the app's defaults the moment it changes. ABOUT, last: the app's own type in one
+/// line (what its letters are, no paragraph; a letter viewer comes later), Sources (pushed inside the page as
+/// Map settings pushes it: everything the app's maps, words, pictures, sounds and type come from, each with its
+/// licence), and the version.
 nonisolated enum AppSettings {
     static let unitsKey = "wya.units"
     static let soundsKey = "wya.sounds"
@@ -25,10 +28,31 @@ struct AppSettingsList: View {
     @AppStorage(AppSettings.soundsKey) private var sounds = true
     /// Units' choices are open under it
     @State private var open = false
+    @State private var edit = ProfileEdit.shared
 
     private static let unitChoices: [(String, String)] = [("phone", "Phone"), ("metric", "Metric"), ("imperial", "Imperial")]
 
     var body: some View {
+        let sources = edit.settingsPage == "sources"
+        // (a push of its own, as Map settings': the list out to the left as Sources comes in from the right; back the
+        // other way, by the page's back circle)
+        ZStack(alignment: .top) {
+            if sources {
+                ScrollView { SourcesPage().padding(.top, 8) }
+                    .scrollBlur()
+                    .scrollIndicators(.hidden)
+                    .modifier(TopBar(title: "Sources", titleY: titleY, top: top))
+                    .safeAreaPadding(.bottom, foot)
+                    .transition(.move(edge: .trailing))
+            } else {
+                list.transition(.move(edge: .leading))
+            }
+        }
+        .frame(height: room, alignment: .top)
+        .clipped()
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(spacing: 0) {
                 Button {
@@ -54,6 +78,23 @@ struct AppSettingsList: View {
                 }
                 .buttonStyle(.plain)
                 Color.clear.frame(height: 24)
+                // ABOUT: the type in one line, Sources, the version
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Tellus").font(Typeface.nature(22, relativeTo: .body)).foregroundStyle(Palette.ink)
+                    Text("Its letters are rivers and lakes seen from above.").font(.subheadline)
+                        .foregroundStyle(Palette.ink.opacity(0.5))
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                Button {
+                    Feel.tap()
+                    withAnimation(Motion.chrome) { edit.settingsPage = "sources" }
+                } label: {
+                    RowWords(name: "Sources", value: "", chevron: true)
+                }
+                .buttonStyle(.plain)
                 RowWords(name: "Version", value: Self.version)
                     .accessibilityElement(children: .combine)
             }

@@ -521,6 +521,11 @@ struct SourcesPage: View {
               url: "https://www.solarsystemscope.com/textures/"),
         .init(name: "Squiresy92, on Wikimedia Commons", what: "Norfolk Island's arms, on its stamp", licence: "CC BY-SA 4.0",
               url: "https://commons.wikimedia.org/wiki/File:Coat_of_arms_of_Norfolk_Island.svg"),
+        // the app's own type and the stamps' type (their licences ship beside them in Resources/Fonts)
+        .init(name: "Tellus, wya's own type", what: "Its letters traced from rivers and lakes on NASA/USGS Landsat, Esri World Imagery (Esri, Maxar, Earthstar Geographics) and OpenStreetMap",
+              licence: "Public domain, Esri's terms, ODbL", url: "https://science.nasa.gov/specials/your-name-in-landsat/"),
+        .init(name: "Barlow Condensed, Noto Serif, Noto Sans Arabic, Caveat", what: "The stamps' letters",
+              licence: "SIL Open Font License 1.1", url: "https://openfontlicense.org"),
         .init(name: "I.fekry, on Freesound", what: "The stamp's sound", licence: "CC0", url: "https://freesound.org/s/470710/"),
         .init(name: "SpaceJoe, on Freesound", what: "The page's sound", licence: "CC0", url: "https://freesound.org/s/484968/"),
         .init(name: "qubodup, on Freesound", what: "The passport closing", licence: "CC0", url: "https://freesound.org/s/862315/"),
