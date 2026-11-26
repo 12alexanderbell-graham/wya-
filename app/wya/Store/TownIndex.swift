@@ -26,6 +26,10 @@ final class TownIndex {
     @ObservationIgnored private var rows: [(folded: String, hit: Hit)] = []
     /// each row's other names folded, ("" for none), read after the index
     @ObservationIgnored private var alt: [String] = []
+    /// each country's towns as their rows, in the index's order (made with it, off the main thread): a town found by its
+    /// name and country looks through its own country's rows, not all 228,000 (Lists asked it for every thing in every
+    /// list as their tiles drew, and Big Ben's page opened slowly behind it, 26 Nov)
+    @ObservationIgnored private var byCC: [String: [Int]] = [:]
     @ObservationIgnored private var last: (q: String, open: String?, hits: [Hit])?
     /// THE NAMES AS BYTES, for the search's pass over every town (a pass over the names as strings held the screen a
     /// quarter of a second a letter): each row's folded name, and its other names as, one after another, with where
@@ -104,12 +108,15 @@ final class TownIndex {
                     if let a = all[String(g)] { alt[i] = "|" + a.townFolded }
                 }
             }
+            var cc: [String: [Int]] = [:]
+            for (i, r) in out.enumerated() { cc[r.1.file.lowercased(), default: []].append(i) }
             let own = Self.pack(out.map(\.0))
             let others = Self.pack(alt.map { $0.isEmpty ? "" : $0 + "|" })
             await MainActor.run {
                 let me = TownIndex.shared
                 me.rows = out
                 me.alt = alt
+                me.byCC = cc
                 (me.ownBytes, me.ownStart) = own
                 (me.altBytes, me.altStart) = others
                 me.loading = false
@@ -153,13 +160,21 @@ final class TownIndex {
     func named(_ name: String, in cc: String) -> Hit? {
         let q = name.trimmingCharacters(in: .whitespaces).townFolded
         guard ready, !q.isEmpty else { return nil }
-        let c = cc.lowercased()
-        if let r = rows.first(where: { $0.folded == q && $0.hit.file.lowercased() == c }) { return r.hit }
+        // (each answer kept: Lists asks again for every thing in a list each time its tile draws)
+        let k = cc.lowercased() + "|" + q
+        if let known = namedKept[k] { return known }
+        let found = lookUp(q, cc.lowercased())
+        namedKept[k] = .some(found)
+        return found
+    }
+    @ObservationIgnored private var namedKept: [String: Hit?] = [:]
+    private func lookUp(_ q: String, _ c: String) -> Hit? {
+        guard let mine = byCC[c] else { return nil }
+        for i in mine where rows[i].folded == q { return rows[i].hit }
         guard alt.count == rows.count else { return nil }
-        let bar = "|" + q + "|"
-        for (i, a) in alt.enumerated() where !a.isEmpty && rows[i].hit.file.lowercased() == c && (a + "|").contains(bar) {
-            return rows[i].hit
-        }
+        // (its other names, each between bars: the last one has no bar after it)
+        let bar = "|" + q + "|", last = "|" + q
+        for i in mine where !alt[i].isEmpty && (alt[i].hasSuffix(last) || alt[i].contains(bar)) { return rows[i].hit }
         return nil
     }
     /// each town's row by its id, made once at the first look-up (the Stamped list asks for many)

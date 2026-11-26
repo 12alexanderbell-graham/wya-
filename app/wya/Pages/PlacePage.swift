@@ -297,13 +297,15 @@ extension PlacePageState.OnePage {
         var ownPhotos = Set<String>()
         if let a = PlacePageState.photo(t.photo) { ownPhotos.insert(a) }
         if let b = out.photo { ownPhotos.insert(b) }
+        // (the distance first and the photo's check only for what is near: every sight in the country went through the
+        // photo's check, thousands for Britain, and Big Ben's page held the screen still as it opened, 26 Nov)
         let near = lands.flatMap { ThingStore.shared.things($0) ?? [] }.compactMap { o -> (ThingStore.Thing, Double)? in
-            guard o.id != t.id, !o.photo.isEmpty, let ph = PlacePageState.photo(o.photo), !ownPhotos.contains(ph),
-                  !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
+            guard o.id != t.id, !o.photo.isEmpty, !["station", "stay", "route", "event"].contains(o.kindName) else { return nil }
             let p = EqualEarth.unproject(SIMD2(Double(o.at.x), Double(o.at.y)))
             let dy = (p.lat - mine.x) * 111.2, dx = (p.lon - mine.y) * 111.2 * cos(mine.x * .pi / 180)
             let km = (dx * dx + dy * dy).squareRoot()
-            return km <= reach ? (o, km) : nil
+            guard km <= reach, let ph = PlacePageState.photo(o.photo), !ownPhotos.contains(ph) else { return nil }
+            return (o, km)
         }
         // (as well known, a sports ground after the sights, then the nearest, as the other cards)
         .sorted { a, b in
@@ -1239,20 +1241,26 @@ extension PlacePageState {
         return isVenue(a.name, a.line) ? 6 : 0
     }
     /// a place of study or a visitors' office: not what a traveller comes for
-    nonisolated static func isStudy(_ name: String) -> Bool {
-        name.range(of: #"\b(university|universit[äéàa]\w*|universidad|universidade|college|school|academy|institute of technology|campus|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
-                   options: [.regularExpression, .caseInsensitive]) != nil
+    nonisolated static func isStudy(_ name: String) -> Bool { matches(studyRx, name) }
+    // (each pattern made once: given as a string to range(of:), it was made again on every call, and the Nearby
+    // sort's comparisons asked hundreds of times as a page opened, 26 Nov)
+    nonisolated private static let studyRx = try! NSRegularExpression(pattern: #"\b(university|universit[äéàa]\w*|universidad|universidade|college|school|academy|institute of technology|campus|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#, options: [.caseInsensitive])
+    nonisolated private static let oldArenaRx = try! NSRegularExpression(pattern: #"amphithea|roman|ancient|antique|historic"#, options: [.caseInsensitive])
+    nonisolated private static let venueRx = try! NSRegularExpression(pattern: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark|football club|soccer club|football ground|f\.?c\.?|villa park|anfield|old trafford)\b"#, options: [.caseInsensitive])
+    nonisolated private static let ticketRx = try! NSRegularExpression(pattern: #"(\bpass|\bpasses|citypass|city ?card|\bcard)$"#, options: [.caseInsensitive])
+    nonisolated private static func matches(_ rx: NSRegularExpression, _ s: String) -> Bool {
+        rx.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
     }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
-        if (name + " " + line).range(of: #"amphithea|roman|ancient|antique|historic"#, options: [.regularExpression, .caseInsensitive]) != nil { return false }
+        let both = name + " " + line
+        if matches(oldArenaRx, both) { return false }
         // (and a club or its ground by name)
-        return (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark|football club|soccer club|football ground|f\.?c\.?|villa park|anfield|old trafford)\b"#,
-                                  options: [.regularExpression, .caseInsensitive]) != nil
+        return matches(venueRx, both)
     }
     /// a pass or a city card (,,): a ticket, not a thing to see or do
     nonisolated static func isTicket(_ name: String) -> Bool {
         // (and, one word)
-        name.range(of: #"(\bpass|\bpasses|citypass|city ?card|\bcard)$"#, options: [.regularExpression, .caseInsensitive]) != nil
+        matches(ticketRx, name)
     }
 
     /// the activities' rows (name as the source writes it, cleaned; its Wikidata id; its line), in their order
@@ -1718,6 +1726,11 @@ extension PlacePageState {
     }
 
     static func listingText(_ cc: String, wd: String?, name: String) async -> String? {
+        // (read and searched off the main thread: a country's whole listings file, Britain's for Big Ben, parsed and
+        // walked on it held the page still as it opened, 26 Nov)
+        await Task.detached(priority: .userInitiated) { await Self.listingWork(cc, wd: wd, name: name) }.value
+    }
+    nonisolated private static func listingWork(_ cc: String, wd: String?, name: String) async -> String? {
         guard case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
               let all = try? JSONSerialization.jsonObject(with: d) as? [String: [[String: Any]]] else { return nil }
         var byID: [String] = [], byName: [String] = []
@@ -1820,11 +1833,14 @@ extension PlacePageState {
     static func photo(_ any: Any?) -> String? {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
-            !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|satview|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b|(real|true)[ -]colou?r",
-                    options: [.regularExpression, .caseInsensitive]) == nil
+            !n.lowercased().hasSuffix(".svg") && notAPhoto.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)) == nil
         }
     }
+    /// (made once: the pattern was built again for every name tried, many times a page, and opening Big Ben's page held
+    /// the screen still for 1.4 s, 26 Nov)
+    nonisolated(unsafe) private static let notAPhoto = try! NSRegularExpression(
+        pattern: "satellite|satview|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b|(real|true)[ -]colou?r",
+        options: [.caseInsensitive])
 
     /// where a text starts with its own name and then says what it is (,,) in its first 220 characters, any case and
     /// accents; nil when it never does

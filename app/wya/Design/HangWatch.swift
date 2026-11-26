@@ -31,7 +31,9 @@ enum HangWatch {
             _ = write(2, head.utf8Start, head.utf8CodeUnitCount)
             backtrace_symbols_fd(HangWatch.frames, n, 2)
         }
-        Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in beat = CFAbsoluteTimeGetCurrent() }
+        // (in every run loop mode: in the default one alone it stopped while a finger scrolled, and each scroll read as
+        // the main thread a second late, 26 Nov)
+        RunLoop.main.add(Timer(timeInterval: 0.25, repeats: true) { _ in beat = CFAbsoluteTimeGetCurrent() }, forMode: .common)
         let t = Thread {
             NSLog("wya hangwatch on")
             var k = 0

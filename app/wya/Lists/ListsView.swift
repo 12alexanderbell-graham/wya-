@@ -269,6 +269,15 @@ struct ListsWater: View {
     /// A COUNTRY'S PICTURE IN A LIST: its best known sight's photo (France the Eiffel Tower, Japan Mount Fuji), as the
     /// country's page opens on it; its flag only where it has none
     static func countrySight(_ cc: String) -> String? {
+        // (kept once found: every row of a country asked again, each time the list drew, through all its sights)
+        if let known = sightKept[cc] { return known }
+        guard ThingStore.shared.things(cc) != nil else { return nil }
+        let found = findSight(cc)
+        sightKept[cc] = .some(found)
+        return found
+    }
+    @MainActor private static var sightKept: [String: String?] = [:]
+    private static func findSight(_ cc: String) -> String? {
         let skip = "border|between|universit|college|school|stadium|arena|airport|station|territory|concentration|camp\\b|memorial|genocide|cemetery|prison"
         return (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
             o.fame >= 3 && (2...6).contains(o.kind) && o.kind != 4 && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
