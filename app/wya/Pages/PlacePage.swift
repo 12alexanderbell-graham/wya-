@@ -813,7 +813,14 @@ extension PlacePageState.OnePage {
             let ll = t["ll"] as? [NSNumber]
             let reach = ((t["p"] as? NSNumber)?.doubleValue ?? 0) >= 1_000_000 ? 12.0 : 5.0
             let near = ll.flatMap { $0.count == 2 ? (lat: $0[0].doubleValue, lon: $0[1].doubleValue, km: reach) : nil }
-            out.activities = await PlacePageState.activities(cc, town: n, near: near)
+            // (the best known first, as a country's page has them: Paris's five were in its guide's own order, Basilique
+            // de Saint-Denis, La Bastille, Cimetière du Père Lachaise, the Élysée, the Opéra, 26 Nov walk; all its rows are
+            // the one town, so no two-a-town limit)
+            ThingStore.shared.load(cc)
+            for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            let things = ThingStore.shared.things(cc) ?? []
+            out.activities = PlacePageState.oneEach(PlacePageState.knownFirst(await PlacePageState.activities(cc, town: n, near: near),
+                                                                              things: things, perTown: .max), things: things)
         }
         // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
         // article's), as a country's page has them
@@ -1263,7 +1270,7 @@ extension PlacePageState {
     }
     /// a country's best known sights first, in the order they are known: the rows of the best known sights (fame 3)
     /// by their place in the things file, no more than two from one town before every other town's; the rest as they were
-    static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing]) -> [Activity] {
+    static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing], perTown: Int = 2) -> [Activity] {
         var at: [String: Int] = [:], what: [String: String] = [:]
         for (i, t) in things.enumerated() where t.fame >= 3 && at[t.id] == nil { at[t.id] = i; what[t.id] = t.line }
         // (never a place of study, a ground or a border marker lifted to the top for being well known, 26 Nov:
@@ -1273,7 +1280,9 @@ extension PlacePageState {
             // (by what the sight is too: Borussia Dortmund and Schalke 04 are "German football club")
             guard let wd = e.element.wd, let a = at[wd], push(e.element) == 0, !isVenue(e.element.name, what[wd] ?? ""),
                   (what[wd] ?? "").range(of: #"\b(football club|sports club|association football|university|basketball|hockey team|film festival)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
-                  e.element.name.range(of: #"\b(triple point|tripoint|border|boundary)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+                  e.element.name.range(of: #"\b(triple point|tripoint|border|boundary)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
+                  // (never a place that is gone: Paris's page led with La Bastille, a fortress torn down in 1789, 26 Nov walk)
+                  (what[wd] ?? "").range(of: #"\b(former|demolished|destroyed|defunct)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
             else { return nil }
             return (e.offset, a, e.element)
         }.sorted { $0.at != $1.at ? $0.at < $1.at : $0.i < $1.i }
@@ -1287,7 +1296,7 @@ extension PlacePageState {
             let c = town(t.a)
             let tower = (t.a.name + " " + (t.a.wd.flatMap { what[$0] } ?? ""))
                 .range(of: #"\b(tower|skyscraper|skytree)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
-            if n[c, default: 0] < 2, !(tower && towers >= 1) {
+            if n[c, default: 0] < perTown, !(tower && towers >= 1) {
                 lead.append(t.a); n[c, default: 0] += 1; if tower { towers += 1 }
             } else { later.append(t.a) }
         }
