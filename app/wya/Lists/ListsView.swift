@@ -565,7 +565,7 @@ struct ListsWater: View {
                     ForEach(tiers) { t in
                         tile(t.id, name: t.name.isEmpty ? "New tier list" : t.name, dim: t.name.isEmpty, count: t.count, ccs: [],
                              cover: AnyView(TierBandsCover(tiers: t)),
-                             words: t.count == 0 ? "Nothing ranked yet" : "\(t.count) ranked")
+                             words: t.count == 0 ? "" : "\(t.count) ranked")
                             .settlesIn()
                     }
                 }
@@ -596,7 +596,8 @@ struct ListsWater: View {
                     ForEach(books) { b in
                         tile(b.id, name: b.name.isEmpty ? "New book" : b.name, dim: b.name.isEmpty, count: b.pages.count, ccs: [],
                              cover: AnyView(BookCover(book: b)),
-                             words: b.pages.isEmpty ? "No pages yet" : "\(b.pages.count) " + (b.pages.count == 1 ? "page" : "pages"))
+                             // (empty, nothing under its name, as an empty list's tile, 26 Sep)
+                             words: b.pages.isEmpty ? "" : "\(b.pages.count) " + (b.pages.count == 1 ? "page" : "pages"))
                             .settlesIn()
                     }
                 }
