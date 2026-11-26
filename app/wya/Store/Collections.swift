@@ -254,9 +254,19 @@ final class CollectionStore {
                                           types: c["types"] as? [[String]] ?? [], tag: id + "||"))
                 }
             }
+            // (each set's folded names for search, made here off the main thread: made on the first letter of the first
+            // search, they held it 65 to 89 ms, 26 Nov)
+            var folded: [String: (bytes: [UInt8], start: [Int])] = [:]
+            for c in out {
+                var bytes: [UInt8] = [], start: [Int] = [0]
+                for it in c.items { bytes.append(contentsOf: it.name.townFolded.utf8); start.append(bytes.count) }
+                folded[c.tag] = (bytes, start)
+            }
+            let made = folded
             await MainActor.run {
                 let me = CollectionStore.shared
                 me.all = out
+                for (k, v) in made where me.foldedBytes[k] == nil { me.foldedBytes[k] = v }
                 me.loading = false
                 me.ready = true
             }
