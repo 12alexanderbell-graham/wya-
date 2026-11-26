@@ -1559,13 +1559,21 @@ struct TierPage: View {
                 // EDGE TO EDGE, FULL COLOUR: each tier's whole row is its colour, from one side of the screen to the
                 // other; its letter in line with the title
                 let m = max(0, (UIScreen.main.bounds.width - w) / 2)
+                // (the letters' column, one width for every tier: 52, or as wide as the longest word of a longer name
+                // needs at the smaller size, up to 112, so no word is ever broken or shrunk)
+                let labelW = Self.tierLabelWidth(t.rows.map(\.t))
                 // (bands flush: 2 pt gaps showed the gradient through as muddy lines between them)
                 VStack(spacing: 0) {
                     ForEach(Array(t.rows.enumerated()), id: \.offset) { i, r in
                         HStack(alignment: .top, spacing: 0) {
-                            Text(r.t).font(.title3.weight(.semibold)).foregroundStyle(Palette.ink)
-                                .lineLimit(2).minimumScaleFactor(0.6).multilineTextAlignment(.center)
-                                .frame(width: 52, height: 52)
+                            // (never shrunk: a letter or two at its size, a longer name at the app's one
+                            // smaller size, on up to three lines, the band growing with it)
+                            Text(r.t).font(r.t.count <= 2 ? .title3.weight(.semibold) : .subheadline.weight(.semibold))
+                                .foregroundStyle(Palette.ink)
+                                .lineLimit(3).multilineTextAlignment(labelW > 52 ? .leading : .center)
+                                // (a wider column: every name starts on the title's line, the letters too)
+                                .frame(width: labelW, alignment: labelW > 52 ? .leading : .center)
+                                .frame(minHeight: 52)
                                 .contentShape(Rectangle())
                                 // (its letter tapped: its own strip opens under it)
                                 .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { tierOpen = tierOpen == i ? nil : i } }
@@ -1647,6 +1655,14 @@ struct TierPage: View {
         .scrollClipDisabled()
     }
 
+    /// the tiers' name column: 52 for letters; for a longer name, its longest word at the smaller size and its margins
+    static func tierLabelWidth(_ names: [String]) -> CGFloat {
+        let base = UIFont.preferredFont(forTextStyle: .subheadline)
+        let f = UIFont.systemFont(ofSize: base.pointSize, weight: .semibold)
+        let widest = names.filter { $0.count > 2 }.flatMap { $0.split(separator: " ") }
+            .map { ($0 as NSString).size(withAttributes: [.font: f]).width }.max() ?? 0
+        return min(112, max(52, (widest + 12).rounded(.up)))
+    }
     /// its ranked things that are countries, with their tier's colour: a thing's own country where it has one, else a
     /// country of exactly its name
     private func mapPlaces() -> [Int: SIMD4<Float>] {
