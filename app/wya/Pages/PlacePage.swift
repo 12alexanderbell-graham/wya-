@@ -820,7 +820,7 @@ extension PlacePageState.OnePage {
             for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
             let things = ThingStore.shared.things(cc) ?? []
             out.activities = PlacePageState.oneEach(PlacePageState.knownFirst(await PlacePageState.activities(cc, town: n, near: near),
-                                                                              things: things, perTown: .max), things: things)
+                                                                              things: things, perTown: .max, near: near), things: things)
         }
         // its photo (Wikidata's image of the place with this GeoNames id) and its opening words (its Wikivoyage
         // article's), as a country's page has them
@@ -1270,7 +1270,8 @@ extension PlacePageState {
     }
     /// a country's best known sights first, in the order they are known: the rows of the best known sights (fame 3)
     /// by their place in the things file, no more than two from one town before every other town's; the rest as they were
-    static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing], perTown: Int = 2) -> [Activity] {
+    static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing], perTown: Int = 2,
+                           near: (lat: Double, lon: Double, km: Double)? = nil) -> [Activity] {
         var at: [String: Int] = [:], what: [String: String] = [:]
         for (i, t) in things.enumerated() where t.fame >= 3 && at[t.id] == nil { at[t.id] = i; what[t.id] = t.line }
         // (never a place of study, a ground or a border marker lifted to the top for being well known, 26 Nov:
@@ -1282,7 +1283,13 @@ extension PlacePageState {
                   (what[wd] ?? "").range(of: #"\b(football club|sports club|association football|university|basketball|hockey team|film festival)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
                   e.element.name.range(of: #"\b(triple point|tripoint|border|boundary)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
                   // (never a place that is gone: Paris's page led with La Bastille, a fortress torn down in 1789, 26 Nov walk)
-                  (what[wd] ?? "").range(of: #"\b(former|demolished|destroyed|defunct)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+                  (what[wd] ?? "").range(of: #"\b(former|demolished|destroyed|defunct)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
+                  // (a town's page lifts only what is in the town: London's led with Windsor Castle, 35 km out, 26 Nov walk)
+                  near.map({ n in
+                      let p = EqualEarth.unproject(SIMD2(Double(things[a].at.x), Double(things[a].at.y)))
+                      let dy = (p.lat - n.lat) * 111.2, dx = (p.lon - n.lon) * 111.2 * cos(n.lat * .pi / 180)
+                      return dx * dx + dy * dy <= n.km * n.km
+                  }) ?? true
             else { return nil }
             return (e.offset, a, e.element)
         }.sorted { $0.at != $1.at ? $0.at < $1.at : $0.i < $1.i }
@@ -1462,6 +1469,11 @@ extension PlacePageState {
     /// says something (,; 372 of 33,356 listings)
     static func activity(_ name: String, line: String, wd: String?) -> Activity {
         var t = corrected(name, wd: wd), l = line
+        // (two names run together by a slash, the first is the place: "Windsor Castle/Queen Mary's Dollhouses", 26 Nov
+        // walk; never a slash between figures, "24/7")
+        if let sl = t.range(of: "/"), sl.lowerBound > t.startIndex, sl.upperBound < t.endIndex,
+           !t[t.index(before: sl.lowerBound)].isNumber, !t[sl.upperBound].isNumber,
+           case let head = t[..<sl.lowerBound].trimmingCharacters(in: .whitespaces), head.count >= 6 { t = head }
         if t.hasSuffix(")"), let open = t.range(of: " (", options: .backwards), open.lowerBound > t.startIndex {
             var aside = String(t[t.index(open.lowerBound, offsetBy: 2)..<t.index(before: t.endIndex)]).trimmingCharacters(in: .whitespaces)
             t = String(t[..<open.lowerBound]).trimmingCharacters(in: .whitespaces)
