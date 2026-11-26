@@ -399,7 +399,7 @@ extension PlacePageState.OnePage {
             }
             // ITS OWN FACTS (26 Nov walk: the Eiffel Tower's page had no facts at all, a country's and a town's have a
             // grid): Wikidata's height, year built, architect and visitors a year, the ones it has, none it already shows
-            if self.key.id == id, let more = await PlacePageState.wikidataFacts(wd, landmark: t.kindName == "landmark"), self.key.id == id {
+            if self.key.id == id, let more = await PlacePageState.wikidataFacts(wd, landmark: !["nature", "water", "mountain", "area"].contains(t.kindName)), self.key.id == id {
                 let have = Set((self.facts?.rows ?? []).map(\.0))
                 self.facts?.rows += more.filter { !have.contains($0.0) }
             }
@@ -1740,7 +1740,7 @@ extension PlacePageState {
     /// A SIGHT'S FACTS FROM WIKIDATA: its height (P2048, in metres or feet), the year it was built (P571), its
     /// architect (P84) and visitors a year (P1174), as rows; kept for the app's run; nil when there is nothing
     static var wikidataKept: [String: [(String, String)]] = [:]
-    static func wikidataFacts(_ wd: String, landmark: Bool) async -> [(String, String)]? {
+    static func wikidataFacts(_ wd: String, landmark built: Bool) async -> [(String, String)]? {
         guard wd.hasPrefix("Q") else { return nil }
         if let had = wikidataKept[wd] { return had.isEmpty ? nil : had }
         func get(_ q: [URLQueryItem]) async -> [String: Any]? {
@@ -1768,7 +1768,8 @@ extension PlacePageState {
         if let t = value("P571") as? [String: Any], let time = t["time"] as? String {
             let bc = time.hasPrefix("-")
             let year = time.dropFirst().prefix { $0 != "-" }.drop { $0 == "0" }
-            if !year.isEmpty { out.append((landmark ? "Built" : "Established", bc ? "\(year) BC" : String(year))) }
+            // (a year under a thousand says it is one: the Colosseum's read "82", 26 Nov walk)
+            if !year.isEmpty { out.append((built ? "Built" : "Established", bc ? "\(year) BC" : year.count < 4 ? "AD \(year)" : String(year))) }
         }
         if let v = value("P1174") as? [String: Any], let a = v["amount"] as? String, let n = Double(a.replacingOccurrences(of: "+", with: "")), n >= 1000 {
             out.append(("Visitors a year", PlacePageState.big(n)))
