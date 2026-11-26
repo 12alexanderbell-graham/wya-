@@ -384,6 +384,12 @@ extension PlacePageState.OnePage {
                 self.facts?.proseWikivoyage = !fromWikipedia
                 self.facts?.proseWikipedia = fromWikipedia
             }
+            // (no photo of its own fit to show: its Wikipedia article's, 26 Nov: Socotra's only picture was a view from
+            // space, so its page had none)
+            if self.key.id == id, self.facts?.photo == nil,
+               let ph = await PlacePageState.wikipediaPhoto(wd: wd, name: name, lat: ll.lat, lon: ll.lon), self.key.id == id {
+                self.facts?.photo = ph
+            }
             // (its town still to come: the page waits for that answer too)
             if TownIndex.shared.ready { self.settled = true }
         }
@@ -1730,6 +1736,12 @@ extension PlacePageState {
         for (it, verb) in [("It is ", "is "), ("It's ", "is "), ("It was ", "was ")] where best.hasPrefix(it) {
             best = name + " " + verb + best.dropFirst(it.count)
         }
+        // (a listing that goes on from its name, as Corfu's did: its name and "is" before it,
+        // 26 Nov: Corfu's page began in the middle of a sentence; any other small first letter made capital)
+        if let c = best.first, c.isLowercase {
+            if best.range(of: #"^(the|a|an|one of) "#, options: .regularExpression) != nil { best = name + " is " + best }
+            else { best = c.uppercased() + best.dropFirst() }
+        }
         return best
     }
 
@@ -1808,7 +1820,7 @@ extension PlacePageState {
         let all = (any as? [String]) ?? (any as? String).map { [$0] } ?? []
         return all.first { n in
             !n.lowercased().hasSuffix(".svg") &&
-            n.range(of: "satellite|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b|(real|true)[ -]colou?r",
+            n.range(of: "satellite|satview|\\bnasa\\b|\\besa[0-9]*\\b|cloud-free|copernicus|envisat|eumetsat|\\bterra\\b|landsat|\\bmodis\\b|sentinel-?[0-9]|blue marble|from space|\\biss[0-9]*\\b|\\borbit|relief|topograph|\\bsrtm\\b|locator|location map|\\bmap\\b|\\bkarte\\b|\\bcarte\\b|\\bharta\\b|\\bmapa\\b|\\bkaart\\b|montage|collage|\\bflag\\b|dannebrog|coat of arms|\\bemblem\\b|quarantine|cuarentena|covid|\\.png$|\\d+\\.\\d+\\s?[NSEW]\\b|\\b[ns][0-9]+[ew][0-9]+\\b|\\.a[0-9]{7}\\.|\\bwms\\b|labell?ed|\\beo\\b|[0-9]utc\\b|[0-9]px-(250|500)m\\b|(real|true)[ -]colou?r",
                     options: [.regularExpression, .caseInsensitive]) == nil
         }
     }
