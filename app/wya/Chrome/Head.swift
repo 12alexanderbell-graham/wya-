@@ -2047,6 +2047,25 @@ struct SearchResults: View {
     }
     /// the countries a set's place lies in, by its Wikidata id (made once the sets have come)
     private static var setCountries: [String: [String]]?
+    /// the country a thing is in: its file's, unless none of that country's towns is within 60 km and another's is
+    private static var whereKept: [String: String] = [:]
+    static func whereThing(_ h: ThingIndex.Hit) -> String {
+        guard TownIndex.shared.ready else { return h.file }
+        if let had = whereKept[h.id] { return had }
+        let found = whereFound(h)
+        whereKept[h.id] = found
+        return found
+    }
+    private static func whereFound(_ h: ThingIndex.Hit) -> String {
+        let near = TownIndex.shared.nearest(lat: h.lat, lon: h.lon, count: 12)
+        let k = cos(h.lat * .pi / 180)
+        let within = near.filter { t in
+            let dy = (t.lat - h.lat) * 111.2, dx = (t.lon - h.lon) * 111.2 * k
+            return dx * dx + dy * dy <= 3600
+        }
+        guard let other = within.first, !within.contains(where: { $0.file.lowercased() == h.file.lowercased() }) else { return h.file }
+        return other.file.lowercased()
+    }
     private static func sharedBy(_ q: String) -> [String] {
         if setCountries == nil, CollectionStore.shared.ready {
             var d: [String: [String]] = [:]
@@ -2081,7 +2100,10 @@ struct SearchResults: View {
         let many = (h.map { Self.sharedBy($0.id) } ?? []).compactMap { cc in Self.shortCountry[cc.lowercased()] ?? named(cc) }.sorted()
         let manyWords = many.count >= 4 ? many.prefix(2).joined(separator: ", ") + " and \(many.count - 2) more" : many.joined(separator: ", ")
         // (and a shorter form where the whole does not fit beside a long name:)
-        var country: [String] = many.count >= 2 ? [manyWords, many[0] + " and \(many.count - 1) more"] : countryNotes(h?.file)
+        // (a thing filed under a country it is not in says where it is: the Alps, filed under Hungary, read "Alps,
+        // Hungary" with its flag, 26 Nov walk; only when none of its file's towns is within 60 km of it)
+        let file = h.map { Self.whereThing($0) }
+        var country: [String] = many.count >= 2 ? [manyWords, many[0] + " and \(many.count - 1) more"] : countryNotes(file)
         if many.count < 2, twin, let h, h.file != map.placeOpenID, let town = Self.townOf(h) {
             // (the town and its region; the flag says the country)
             country = [town] + [String(town.split(separator: ",").first ?? "")]
@@ -2090,8 +2112,8 @@ struct SearchResults: View {
             HStack(spacing: 12) {
                 // its country's flag in the flag's place: every row's name starts on one line (a town under a country
                 // started 34 pt further left)
-                rowFlag(many.count >= 2 ? nil : h?.file)
-                ResultWords(name: h?.name ?? "", notes: many.count < 2 && h?.file == map.placeOpenID ? [] : country)
+                rowFlag(many.count >= 2 ? nil : file)
+                ResultWords(name: h?.name ?? "", notes: many.count < 2 && file == map.placeOpenID ? [] : country)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
