@@ -2323,7 +2323,9 @@ private struct PageLayer: View {
                 if n > 0 { Rectangle().fill(Palette.ink.opacity(0.5)).frame(height: 0.5) }
                 HStack(alignment: .top, spacing: 16) {
                     fact(pair.0)
-                    if let b = pair.1 { fact(b) } else { Color.clear.frame(maxWidth: .infinity) }
+                    // (an odd last fact keeps its column, so the grid stays two columns; a page with one fact alone
+                    // has no columns to keep, and its half width broke "London, United Kingdom" over two lines)
+                    if let b = pair.1 { fact(b) } else if rows.count > 1 { Color.clear.frame(maxWidth: .infinity) }
                 }
                 .padding(.vertical, 12)
             }
