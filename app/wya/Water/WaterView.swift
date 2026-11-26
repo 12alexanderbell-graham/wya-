@@ -163,7 +163,7 @@ struct WaterView: View {
                         // closes (search, the tools, settings)
                         Self.mapAgain(water: water, map: map)
                     }
-                    if i != tab { water.onTabChange?() }
+                    if i != tab { water.arriveFresh = AppSettings.tabsReset; water.onTabChange?() }
                     tab = i
                     Feel.tap()
                 } label: {

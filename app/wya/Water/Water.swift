@@ -100,6 +100,10 @@ final class Water {
     var lists = false
     /// when the tab last changed: what a tab swaps in and out of the water is simply there (no roll)
     @ObservationIgnored var tabSwitchedAt: CFTimeInterval = 0
+    /// THE TAB BUTTON TAPPED with Settings' Tabs on Start over (a tab you come back to resets by default, or
+    /// keeps its place if you choose): the tab arrives fresh. Only a tap of the button: a page or list sent to the map
+    /// from another tab keeps what it set up
+    @ObservationIgnored var arriveFresh = false
     var tabSwitching: Bool { CACurrentMediaTime() - tabSwitchedAt < 0.4 }
     /// when the map's mode last changed: what the change swaps in and out of the water goes with no movement
     @ObservationIgnored var modeSwitchedAt: CFTimeInterval = 0

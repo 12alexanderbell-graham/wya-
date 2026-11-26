@@ -503,8 +503,12 @@ final class TestDriver {
                 case "maptab": if let w = water, let m = map { WaterView.mapAgain(water: w, map: m) }
                 // tabgo 0|1|2: that tab, as its button does when it is another tab (the tab change's own hook first)
                 case "tabgo":
+                    // (as its button: with Tabs on Start over the tab arrives fresh)
+                    water?.arriveFresh = AppSettings.tabsReset
                     water?.onTabChange?()
                     NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: Int(a) ?? 0)
+                // tabs reset|keep: Settings' Tabs row
+                case "tabs": UserDefaults.standard.set(a == "keep" ? "keep" : "reset", forKey: AppSettings.tabsKey)
                 // tutorial on|next|off: the tutorial from its first line, the next line, put away
                 case "tutorial": if a == "on" { Tutorial.shared.replay() } else if a == "next" { Tutorial.shared.next() } else { Tutorial.shared.stop() }
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0

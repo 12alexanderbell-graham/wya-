@@ -576,6 +576,19 @@ struct ContentView: View {
         // on the Map the water is where the map left it
         .onChange(of: tab, initial: true) { was, t in
             water.tabSwitchedAt = CACurrentMediaTime()
+            // (a tab button tapped with Tabs on Start over: the tab as it is when the app opens; a cut, nothing flies)
+            let fresh = water.arriveFresh && was != t
+            water.arriveFresh = false
+            if fresh, t == 0 {
+                water.onMapAgain?()
+                if head.mode == .pins { map.appleHome() } else { map.goHome(animated: false) }
+                mapStop = .quarter
+            }
+            if fresh, t == 1 {
+                ListsState.shared.searching = false
+                ListsState.shared.query = ""
+                ListsState.shared.close()
+            }
             // (the map's own stop kept when the Map tab is left, given back when it comes again)
             if was == 0, t != 0 { mapStop = water.stop }
             if t == 2 {
@@ -588,7 +601,8 @@ struct ContentView: View {
             } else if water.profile || water.lists {
                 water.profile = false
                 water.lists = false
-                ListsState.shared.close()
+                // (Tabs on Keep place: the open list is there when you come back)
+                if AppSettings.tabsReset { ListsState.shared.close() }
                 water.jump(mapStop == .full ? .quarter : mapStop)
             }
         }

@@ -2,7 +2,7 @@ import SwiftUI
 
 /// THE APP'S OWN SETTINGS (Part 6): their own page, pushed from the Profile's settings circle as Stats and Badges are
 /// (settings open as a whole page, not a sheet; they live in the Profile; Map settings stay on the map's dot). Only rows
-/// that do something, no empty boxes: Units (the phone's own by default, changed here), Sounds, and the version. Rows
+/// that do something, no empty boxes: Units (the phone's own by default, changed here), Sounds, Tabs (start over or keep your place), and the version. Rows
 /// as Map settings' rows: the name, the value at 50%, a tap; a row of three opens its choices under it with the black
 /// band on the one in use. Kept in the app's defaults the moment it changes. ABOUT, last: the app's own type in one
 /// line (what its letters are, no paragraph; a letter viewer comes later), Sources (pushed inside the page as
@@ -11,10 +11,13 @@ import SwiftUI
 nonisolated enum AppSettings {
     static let unitsKey = "wya.units"
     static let soundsKey = "wya.sounds"
+    static let tabsKey = "wya.tabs"
     /// "phone" (the phone's region decides), "metric" or "imperial"
     static var units: String { UserDefaults.standard.string(forKey: unitsKey) ?? "phone" }
     /// the app's sounds (a stamp's thud and the few others): on unless turned off here
     static var sounds: Bool { UserDefaults.standard.object(forKey: soundsKey) as? Bool ?? true }
+    /// a tab you come back to starts over (the default) or keeps your place ("keep")
+    static var tabsReset: Bool { (UserDefaults.standard.string(forKey: tabsKey) ?? "reset") == "reset" }
 }
 
 /// THE SETTINGS PAGE'S LIST: the whole screen's height as the Stats page's list, its name in the top row
@@ -26,6 +29,7 @@ struct AppSettingsList: View {
     let titleY: CGFloat
     @AppStorage(AppSettings.unitsKey) private var units = "phone"
     @AppStorage(AppSettings.soundsKey) private var sounds = true
+    @AppStorage(AppSettings.tabsKey) private var tabs = "reset"
     /// Units' choices are open under it
     @State private var open = false
     @State private var edit = ProfileEdit.shared
@@ -78,6 +82,14 @@ struct AppSettingsList: View {
                     sounds.toggle()
                 } label: {
                     RowWords(name: "Sounds", value: sounds ? "On" : "Off")
+                }
+                .buttonStyle(.plain)
+                // a tab you come back to: as when the app opens, or where you left it (start over by default)
+                Button {
+                    Feel.notch()
+                    tabs = tabs == "reset" ? "keep" : "reset"
+                } label: {
+                    RowWords(name: "Tabs", value: tabs == "reset" ? "Start over" : "Keep place")
                 }
                 .buttonStyle(.plain)
                 Color.clear.frame(height: 24)
