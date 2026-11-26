@@ -1087,15 +1087,15 @@ struct SearchResults: View {
         let itemHits = itemTyped.isEmpty && (spotSearch || sightSearch) && typed && spelled != head.query
             ? CollectionStore.shared.find(spelled, first: map.placesCollection) : itemTyped
         // (a near spelling only with nothing else found: found Vinson Massif, then Tinson Pen Aerodrome)
-        let thingHits = Self.timed("things") { (spotSearch || sightSearch) && typed
+        let thingHits0 = Self.timed("things") { (spotSearch || sightSearch) && typed
             ? Self.thingHits(head.query, spelled: spelled, open: map.placeOpenID, near: itemHits.isEmpty) : [] }
         let typedFolded = head.query.trimmingCharacters(in: .whitespaces).townFolded
-        let thingsNearOnly = !thingHits.isEmpty && !thingHits.contains { $0.name.townFolded.contains(typedFolded) }
+        let thingsNearOnly = !thingHits0.isEmpty && !thingHits0.contains { $0.name.townFolded.contains(typedFolded) }
         let townGuess0 = (spotSearch || onCountries) && typed && townHits.isEmpty && hits.isEmpty && itemHits.isEmpty && guess == nil
-            && (thingHits.isEmpty || thingsNearOnly) ? TownIndex.shared.guess(head.query) : nil
+            && (thingHits0.isEmpty || thingsNearOnly) ? TownIndex.shared.guess(head.query) : nil
         // (only as near as the sights found or nearer: "eifel" is the Eiffel Tower, one slip, not Kiel, two)
         let townGuess = townGuess0.flatMap { g in
-            thingHits.isEmpty || ThingIndex.nearness(head.query, g.name) <= ThingIndex.nearness(head.query, thingHits[0].name) ? g : nil
+            thingHits0.isEmpty || ThingIndex.nearness(head.query, g.name) <= ThingIndex.nearness(head.query, thingHits0[0].name) ? g : nil
         }
         // COUNTRIES (1.10, D12): the countries found, then regions everywhere (the first two levels), up to eight rows
         let countriesSearch = !placesSearch && map.regionScene == nil && !head.settingsOpen && !head.filtersMenu
@@ -1107,7 +1107,7 @@ struct SearchResults: View {
         // landmarks, mountains, water, nature, spots, never a station, an airport or a hotel; a region named as typed
         // before them, "paris" the city first, the rest after)
         let whole0 = head.query.trimmingCharacters(in: .whitespaces).townFolded
-        let thingSights = sightSearch ? thingHits.filter { ($0.fame >= 3 || $0.fame >= 2 && $0.name.townFolded == whole0) && (1...6).contains($0.kind) }.prefix(2) : []
+        let thingSights = sightSearch ? thingHits0.filter { ($0.fame >= 3 || $0.fame >= 2 && $0.name.townFolded == whole0) && (1...6).contains($0.kind) }.prefix(2) : []
         let sightIDs = Set(thingSights.map(\.id)), fold0 = head.query.trimmingCharacters(in: .whitespaces).townFolded
         let setSights = sightSearch ? itemHits.filter { f in
             let n = f.item.name.townFolded
@@ -1177,10 +1177,10 @@ struct SearchResults: View {
         let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.allSatisfy({ $0.people < 50_000 })
             ? Array(bigTowns.filter { t in !sameAsRegion(t) && !exactTowns.contains { $0.id == t.id } && !(t.people < 50_000 && sightNames.contains(t.name.townFolded + "|" + t.file.lowercased())) }.prefix(1)) : []
         let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
-        let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits.contains { begins($0.name) } || !setSights.isEmpty
+        let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits0.contains { begins($0.name) } || !setSights.isEmpty
             || townHits.contains { begins($0.name) }
         let guessLead: [ResultKey] = hits.isEmpty && !anyBegins ? guess.map { [ResultKey.place($0)] } ?? [] : []
-        let mapKeys: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && thingNamed.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
+        let mapKeys0: [ResultKey] = anyRegionHits.isEmpty && sights.isEmpty && thingNamed.isEmpty && bigTowns.isEmpty && countryCities.isEmpty ? baseKeys
             : !guessLead.isEmpty ? Array((guessLead + Self.countryKeys(typed: typedFold, starts: countryStarts, cities: countryCities, towns: exactTowns, exact: exactRegions,
                                named: namedRest, sights: sights, otherTowns: otherTowns,
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
@@ -1191,6 +1191,32 @@ struct SearchResults: View {
                                others: Array(countryOthers.prefix(max(1, 8 - anyRegionHits.count - sights.count - bigTowns.count))),
                                small: smallRest, rest: otherRegions, named0: setNamed.map { ResultKey.item($0.key) } + thingNamed.map { ResultKey.thing($0.key) }, low: lowSights,
                                cityNamed: cityNamed)
+        // A CITY PEOPLE KNOW, TYPED WHOLE AND LEADING: its two best known sights straight under it, as Apple's Maps
+        // lists them (26 Nov: "paris" gave Paris, Notre-Dame and Disneyland, then Parisi in Brazil and a parish in
+        // Dominica, and never the Eiffel Tower or the Louvre, whose names don't hold the word)
+        let leadCity: TownIndex.Hit? = countriesSearch && typed ? townHits.first { t in
+            let n = t.name.townFolded
+            return (n == typedFold || n == townFold0) && knownCities.contains(n + "|" + t.file.lowercased())
+        } : nil
+        let cityLeads: Bool = {
+            guard let c = leadCity, let k = mapKeys0.first else { return false }
+            switch k {
+            case .town(let r): return r == c.key
+            case .anyRegion(let r): return anyRegionHits.contains { $0.key == r && $0.place.lowercased() == c.file.lowercased() && $0.name.townFolded == c.name.townFolded }
+            default: return false
+            }
+        }()
+        let shownThings = Set(mapKeys0.compactMap { k -> String? in if case .thing(let r) = k { return r } else { return nil } })
+        let shownNames = Set(thingHits0.filter { shownThings.contains($0.key) }.map { $0.name.townFolded })
+            .union(itemHits.map { $0.item.name.townFolded })
+        let citySights: [ThingIndex.Hit] = cityLeads ? leadCity.map { c in
+            Array(ThingIndex.shared.best(lat: c.lat, lon: c.lon).filter { h in
+                !shownThings.contains(h.key) && !shownNames.contains(h.name.townFolded) && h.name.townFolded != c.name.townFolded
+            }.prefix(2))
+        } ?? [] : []
+        let thingHits = thingHits0 + citySights.filter { h in !thingHits0.contains { $0.key == h.key } }
+        let mapKeys: [ResultKey] = citySights.isEmpty ? mapKeys0
+            : Array(([mapKeys0[0]] + citySights.map { ResultKey.thing($0.key) } + mapKeys0.dropFirst()).prefix(8))
         let _ = Self.logKeys(mapKeys, townHits)
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
