@@ -497,6 +497,8 @@ final class TestDriver {
                 case "tabgo":
                     water?.onTabChange?()
                     NotificationCenter.default.post(name: Notification.Name("wyaTestTab"), object: Int(a) ?? 0)
+                // tutorial on|next|off: the tutorial from its first line, the next line, put away
+                case "tutorial": if a == "on" { Tutorial.shared.replay() } else if a == "next" { Tutorial.shared.next() } else { Tutorial.shared.stop() }
                 case "streak": map?.streakHeld = true; map?.streakWeeks = Int(a) ?? 0
                 case "sunpick": map?.sunPicked = a == "on"
                 case "settings": if a == "on" { head?.openSettings() } else { head?.closeSettings() }

@@ -22,8 +22,13 @@ final class Hints {
     /// the gestures, as you do them yourself
     func usedWater() { used(.water) }
     func usedPull() { used(.pull); shortPulls = [] }
-    func usedHold() { used(.hold) }
-    func usedTurn() { used(.turn) }
+    func usedHold() { used(.hold); Tutorial.shared.did(.hold) }
+    func usedTurn() { used(.turn); Tutorial.shared.did(.turn) }
+    /// THE TUTORIAL'S LINE for turning or holding the dot: that gesture's hint plays under its words (whether or not it
+    /// has played before)
+    func show(turn: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [self] in play(only: [turn ? .turn : .hold]) }
+    }
     func usedMoon() { used(.moon) }
     /// the card closed by a tap outside it: you know it
     func usedCardClose() { used(.card) }
@@ -68,7 +73,8 @@ final class Hints {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [self] in
             guard Date().timeIntervalSince(lastTouch) >= 1.19 else { return }
             // (the water's part is gone: the water never moves by itself any more, and it played a lone haptic)
-            play(only: [.hold, .turn].filter(due))
+            // (while the tutorial is on, its own lines bring these hints, each with its words)
+            if Tutorial.shared.step == nil { play(only: [.hold, .turn].filter(due)) }
         }
     }
 

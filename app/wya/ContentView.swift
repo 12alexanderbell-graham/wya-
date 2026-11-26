@@ -103,6 +103,10 @@ struct ContentView: View {
 
                 // What's here? (A11.4): over the map, under the cards, the water and the head
                 WhatsHereView(layout: water.layout)
+                // the tutorial's box (Part 5): under the head, once, after the first open
+                TutorialBox(layout: water.layout,
+                            on: tab == 0 && onboarding.done && !head.searching && !head.settingsOpen && water.stop != .full
+                                && !pageStack.isOpen && !water.upload)
                 // the stamping card: over the map, under the sheet's glass and the head (Part 4.2)
                 StampCard(map: map, water: water)
                     // (its words up to the size its 44 pt buttons still hold on one line)
@@ -600,6 +604,8 @@ struct ContentView: View {
         }
         // (a list viewed on the map is put away when you leave the Map tab)
         .onChange(of: tab) { _, t in if t != 0, map.viewing != nil { map.viewing = nil } }
+        // (the tutorial's last line, the other two tabs: going to one is having got it)
+        .onChange(of: tab) { _, t in if t != 0 { Tutorial.shared.did(.tabs) } }
         // (Pins: the tools close an open tool first, 8.5: the Route row goes, its route kept)
         // A PAGE OPENING (from a hold menu, the passport, a name on the map, the journey): it takes the screen, so the
         // tools (and quick stamping and history with them), settings and What's here? go first, as for a card
@@ -614,6 +620,8 @@ struct ContentView: View {
             columnSince = Date()
             // (the slide over: the clock stopped, the column at rest where it always is)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { columnSince = nil }
+            // the tutorial's first line once the map has settled
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { Tutorial.shared.begin() }
         }
         .onChange(of: head.toolsOpen) { _, v in if v { closeCard(); WhatsHere.shared.close(); PinRoutes.shared.close() } else { BookState.shared.close() } }
         .onChange(of: water.stop) { _, s in
