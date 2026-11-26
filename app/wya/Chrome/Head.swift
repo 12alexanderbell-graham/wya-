@@ -1133,7 +1133,15 @@ struct SearchResults: View {
         let lowSights = Set(thingSights.filter { $0.fame < 3 }.map { ResultKey.thing($0.key) } + setSights.filter { $0.item.fame < 3 }.map { ResultKey.item($0.key) })
         let typedFold = head.query.townFolded
         let namedRegions = anyRegionHits.filter { $0.name.townFolded.hasPrefix(typedFold) }
-        let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) }
+        // (a region named "Canton of <it>", "County of <it>" and the like is named as typed, 26 Nov: "lucerne" listed the
+        // Canton of Lucerne last, after two villages in America: its names are Luzern and Canton of Lucerne)
+        let ofTyped = anyRegionHits.filter { r in
+            let n = r.name.townFolded
+            guard let of = n.range(of: " of "), n[of.upperBound...] == typedFold else { return false }
+            return ["canton", "county", "province", "state", "region", "department", "district", "governorate",
+                    "prefecture", "municipality", "parish", "oblast", "voivodeship"].contains(String(n[..<of.lowerBound]))
+        }
+        let otherRegions = anyRegionHits.filter { !$0.name.townFolded.hasPrefix(typedFold) && !ofTyped.contains($0) }
         // (: a traveller types a city: big towns, 50,000 people and more, found by their own or other names ( is
         // Luzern), two at most; and a name typed whole leads: "bali" is Bali before Belize, a country that only looks
         // like it)
@@ -1160,7 +1168,8 @@ struct SearchResults: View {
         let countryOthers = hits.filter { !countryStarts.contains($0) }
         let wholeCountry = countryStarts.first { i in w0.map { $0.places[i].n.townFolded == typedFold || $0.aliases[typedFold] == $0.places[i].id } ?? false }
         let countryCities = Self.timed("cities") { countriesSearch && typed ? wholeCountry.flatMap { i in w0.map { Self.citiesOf($0.places[i].id) } } ?? [] : [] }
-        let exactRegions = namedRegions.filter { $0.name.townFolded == typedFold }
+        let exactNamed = namedRegions.filter { $0.name.townFolded == typedFold }
+        let exactRegions = exactNamed + ofTyped
         // (a small region that only starts with it comes after a country found by a near spelling: "rome" listed
         // Romelândia and Romeas Haek before Romania)
         let small = countryOthers.isEmpty || !TownIndex.shared.ready ? Set<RegionIndex.Hit>()
@@ -1194,7 +1203,8 @@ struct SearchResults: View {
             .filter { townSeen.insert($0.name.townFolded + "|" + $0.file.lowercased() + "|" + $0.region.townFolded).inserted }
             .filter { !sameAsRegion($0) && ($0.name.townFolded == typedFold || $0.name.townFolded == fullFold
             || ($0.people >= 200_000 && ($0.name.townFolded.hasPrefix(typedFold) || $0.name.townFolded.hasPrefix(fullFold)))) }.prefix(2))
-        let otherTowns = exactRegions.isEmpty && countryStarts.isEmpty && exactTowns.allSatisfy({ $0.people < 50_000 })
+        // (a "Canton of <it>" does not hold back a big town known by the name: Luzern for "lucerne")
+        let otherTowns = exactNamed.isEmpty && countryStarts.isEmpty && exactTowns.allSatisfy({ $0.people < 50_000 })
             ? Array(bigTowns.filter { t in !sameAsRegion(t) && !exactTowns.contains { $0.id == t.id } && !shadowed(t) }.prefix(1)) : []
         let begins = { (s: String) -> Bool in let f = s.townFolded; return f.hasPrefix(typedFold) || f.contains(" " + typedFold) }
         let anyBegins = anyRegionHits.contains { begins($0.name) } || thingHits0.contains { begins($0.name) } || !setSights.isEmpty
