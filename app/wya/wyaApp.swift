@@ -4,6 +4,8 @@ import CoreText
 @main
 struct wyaApp: App {
     init() {
+        // (before anything reads the map settings: whether this phone has run the app before, for the first open)
+        Onboarding.noteEarlierRuns()
         // Tellus, the display font (fonts/Tellus in the repo), registered from the bundle
         for name in ["Tellus-Regular", "Tellus-Light", "Tellus-Medium"] {
             if let url = Bundle.main.url(forResource: name, withExtension: "otf") {

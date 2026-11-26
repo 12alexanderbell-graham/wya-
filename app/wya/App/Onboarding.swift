@@ -9,7 +9,7 @@ import PhotosUI
 /// the map itself (the loading screen lifts unseen behind "who are you"), on glass where the map's sheet rests: whose
 /// borders (the map redrawn as each is picked), which map (Map and Style, as Map settings has them), and location
 /// (Apple's own prompt). Then the sheet is there in the card's place and the head and the column come in: the map.
-/// Once, ever: an account that already has a name or a handle has had it.
+/// Once, ever: an account that already has a name or a handle, or a phone the app has run on before, has had it.
 @MainActor @Observable
 final class Onboarding {
     static let shared = Onboarding()
@@ -22,9 +22,21 @@ final class Onboarding {
     /// past the first page for good: the loading screen (that page's ground) has lifted, so there is no way back to it
     private(set) var pastHello = false
 
+    /// THE APP HAS RUN HERE BEFORE: the map settings write their count into the app's defaults every launch, and have
+    /// since long before the first open existed, so finding it before they load this time means an earlier version
+    /// ran on this phone. Someone updating, with stamps but never a name typed, goes straight to their map.
+    private static var ranBefore = false
+    /// (an app that has shown its first open and was left before the end shows it again: only runs from before the
+    /// first open existed count)
+    private static let shownKey = "wya.onboardShown"
+    static func noteEarlierRuns() {
+        let d = UserDefaults.standard
+        ranBefore = d.object(forKey: "mapCount") != nil && !d.bool(forKey: shownKey)
+    }
+
     init() {
         let me = ProfileStore.shared.me
-        var d = UserDefaults.standard.bool(forKey: Self.key) || !me.name.isEmpty || !me.handle.isEmpty
+        var d = UserDefaults.standard.bool(forKey: Self.key) || !me.name.isEmpty || !me.handle.isEmpty || Self.ranBefore
         #if DEBUG
         // (a test's first open: -wyaOnboard shows it whatever the account has)
         let args = ProcessInfo.processInfo.arguments
@@ -36,6 +48,7 @@ final class Onboarding {
         }
         #endif
         done = d
+        if !d { UserDefaults.standard.set(true, forKey: Self.shownKey) }
     }
 
     /// over: the card gives way to the map's own sheet in its place, and the head and the column come in from their
