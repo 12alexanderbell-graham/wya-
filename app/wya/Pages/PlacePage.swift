@@ -262,6 +262,7 @@ extension PlacePageState.OnePage {
             let lands: String = land.isEmpty ? names.joined(separator: ", ") : land
             if !lands.isEmpty { out.rows.append(("Where", lands)) }
         }
+        if setArea() >= 20_000, own.count < 2 { out.rows.removeAll { $0.0 == "Where" } }
         // (no Where that the line under its name says whole: over)
         out.rows.removeAll { r in
             r.0 == "Where" && r.1.split(separator: ",").allSatisfy { what.localizedCaseInsensitiveContains($0.trimmingCharacters(in: .whitespaces)) }
