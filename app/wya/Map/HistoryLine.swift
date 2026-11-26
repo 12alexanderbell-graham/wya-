@@ -773,8 +773,6 @@ struct HistoryInfo: Equatable {
     /// the caption's three lines (13.4):, 14,
     var caption: (name: String, count: Int, tail: String) {
         let a = text(lo), b = text(hi)
-        let nf = NumberFormatter(); nf.numberStyle = .decimal; nf.locale = Locale(identifier: "en_GB")
-        let km = nf.string(from: NSNumber(value: km)) ?? "\(km)"
-        return (a == b ? a : "\(a) – \(b)", count, (count == 1 ? "place" : "places") + (count > 1 ? ", \(km) km" : ""))
+        return (a == b ? a : "\(a) – \(b)", count, (count == 1 ? "place" : "places") + (count > 1 ? ", " + Units.distance(wholeKm: km) : ""))
     }
 }

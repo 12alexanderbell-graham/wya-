@@ -97,7 +97,8 @@ final class ProfileNumbers {
             y.markIds = Set(thingRows.map { String($0.key.dropFirst(2)) })
             // YOUR HOME: the town you picked as home; else the passport you show (your first nationality's middle),
             // for Neighbours and Farthest from home
-            if let h = ProfileStore.shared.me.home {
+            // (a home typed in your own words that the map could not place has no point: the passport's middle then)
+            if let h = ProfileStore.shared.me.home, !(h.id.hasPrefix("typed:") && h.lat == 0 && h.lon == 0) {
                 y.home = .init(cc: h.cc, lat: h.lat, lon: h.lon)
             } else if let n = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).first?.lowercased(),
                let p = book.world.places[n], p.c.count == 2 {

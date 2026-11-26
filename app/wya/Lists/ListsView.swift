@@ -1748,6 +1748,10 @@ struct TierPage: View {
         }
             .padding(.horizontal, 10).frame(height: 36)
             .background(Palette.cream, in: .rect(cornerRadius: 6))
+            // A PLACE TAPPED OPENS IT (26 Sep), as a list's rows do; held, it is dragged
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            .onTapGesture { if let cc = t.cc[n] { Feel.tap(); PlanPlaces.open(n, cc: cc) } }
             .draggable(n)
             .contextMenu {
                 Button("Take out", role: .destructive) { Feel.lift(); withAnimation(Motion.quick) { change { _ = $0.move(n, to: nil) } } }

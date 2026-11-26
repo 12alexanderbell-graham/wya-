@@ -314,7 +314,8 @@ extension PlacePageState.OnePage {
         .prefix(6)
         if !near.isEmpty {
             out.highlights = near.map { o, km in
-                let d = km < 1 ? "\(Int((km * 1000 / 50).rounded()) * 50) m away" : km < 10 ? String(format: "%.1f km away", km) : "\(Int(km.rounded())) km away"
+                // (in the phone's own units, Units)
+                let d = Units.distance(km: km) + " away"
                 return PlacePageState.Highlight(id: o.id, name: o.name, line: d, photo: PlacePageState.photo(o.photo))
             }
             out.highlightsTitle = "Nearby"
@@ -441,8 +442,9 @@ extension PlacePageState.OnePage {
         let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
         var rows: [(String, String)] = []
         // (not what the line under its name says already: over)
-        if height > 0, let n = f.string(from: height as NSNumber), !what.contains(n) { rows.append(("Height", "\(n) m")) }
-        if area > 0, let n = f.string(from: area as NSNumber), !what.contains(n) { rows.append(("Area", "\(n) km²")) }
+        // (in the phone's own units, Units)
+        if height > 0, let n = f.string(from: height as NSNumber), !what.contains(n) { rows.append(("Height", Units.height(m: Double(height)))) }
+        if area > 0, let n = f.string(from: area as NSNumber), !what.contains(n) { rows.append(("Area", Units.area(wholeKm2: Double(area)))) }
         return rows
     }
     private func seedOnly() {
@@ -773,14 +775,11 @@ extension PlacePageState.OnePage {
         if CollectionStore.shared.collection(CollectionStore.capitals)?.items.contains(where: { $0.key == key }) == true,
            case let land = PlacePageState.countryName(cc), !land.isEmpty, land != name { out.rows.append(("Capital of", land)) }
         if let p = t["p"] as? NSNumber, p.intValue > 0 { out.rows.append(("People", PlacePageState.big(p.doubleValue))) }
-        if let e = t["ele"] as? NSNumber {
-            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_GB")
-            out.rows.append(("Height", "\(f.string(from: e) ?? "\(e.intValue)") m"))
-        }
+        if let e = t["ele"] as? NSNumber { out.rows.append(("Height", Units.height(m: e.doubleValue))) }
         var zone = (t["tz"] as? String).flatMap(TimeZone.init(identifier:))
         if zone == nil, let ll = t["ll"] as? [NSNumber], ll.count == 2 { zone = await Self.zone(lat: ll[0].doubleValue, lon: ll[1].doubleValue) }
         if let tz = zone {
-            let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
+            let f = DateFormatter(); f.timeZone = tz; f.locale = .current; f.setLocalizedDateFormatFromTemplate("jmm")  // (the phone's own clock, 12 or 24 hours)
             out.rows.append(("Local time", f.string(from: Date())))
         }
         if let c = t["climate"] as? [String: Any], let hi = c["hi"] as? [NSNumber], let lo = c["lo"] as? [NSNumber], hi.count == 12, lo.count == 12 {
@@ -789,7 +788,7 @@ extension PlacePageState.OnePage {
             let mf = DateFormatter(); mf.locale = Locale(identifier: "en_GB")
             let mon = mf.shortMonthSymbols ?? []
             if mon.count == 12 {
-                out.rows.append(("Climate", "\(Int(h[hm].rounded()))° \(mon[hm]) · \(Int(l[lm].rounded()))° \(mon[lm])"))
+                out.rows.append(("Climate", "\(Units.degrees(c: h[hm]))° \(mon[hm]) · \(Units.degrees(c: l[lm]))° \(mon[lm])"))
             }
         }
         if let n = t["n"] as? String {
@@ -907,7 +906,7 @@ extension PlacePageState.OnePage {
         var zone = (near?["tz"] as? String).flatMap(TimeZone.init(identifier:))
         if zone == nil { zone = await Self.zone(lat: t.lat, lon: t.lon) }
         if let tz = zone {
-            let f = DateFormatter(); f.timeZone = tz; f.dateFormat = "HH:mm"
+            let f = DateFormatter(); f.timeZone = tz; f.locale = .current; f.setLocalizedDateFormatFromTemplate("jmm")  // (the phone's own clock, 12 or 24 hours)
             out.rows.append(("Local time", f.string(from: Date())))
         }
         if let intro = await PlacePageState.guideIntro(cc, name: t.name, lat: t.lat, lon: t.lon, others: TownIndex.shared.otherNames(id)) {

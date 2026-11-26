@@ -163,11 +163,9 @@ final class DrawTool {
     }
 
     /// the words for a measure ("850 m",,,)
-    static func words(km d: Double) -> String {
-        d < 1 ? "\(Int((d * 1000 / 10).rounded()) * 10) m" : d < 10 ? String(format: "%.1f km", d) : "\(Int(d.rounded()).formatted()) km"
-    }
+    static func words(km d: Double) -> String { Units.distance(km: d) }
     static func words(km2 a: Double) -> String {
-        a < 1 ? String(format: "%.1f ha", a * 100) : a < 10 ? String(format: "%.1f km²", a) : "\(Int(a.rounded()).formatted()) km²"
+        Units.area(km2: a)
     }
 
     /// Douglas-Peucker: the points of a stroke the line needs, at `tol` points

@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import CoreLocation
 
 /// EDITING YOUR PROFILE ON THE PROFILE ITSELF: no Edit button and no other screen. A tap on your name, handle or bio
 /// makes that line its own text box where it stands (the keyboard's Done, or a tap anywhere else, keeps it); a tap on
@@ -715,7 +716,12 @@ struct HomeSheet: View {
                     .autocorrectionDisabled()
                     .focused($typing)
                     .submitLabel(.done)
-                    .onSubmit { if let f = found.first { pick(f) } }
+                    // (Done keeps the town of exactly that name, else the words as typed)
+                    .onSubmit {
+                        let q = edit.query.trimmingCharacters(in: .whitespaces)
+                        if let f = found.first(where: { $0.name.caseInsensitiveCompare(q) == .orderedSame }) ?? (q.isEmpty ? found.first : nil) { pick(f) }
+                        else if !q.isEmpty { keepTyped(q) }
+                    }
                     .frame(minHeight: NationalitiesSheet.rowH)
                 ForEach(found, id: \.id) { t in
                     let cc = String(t.id.prefix { $0 != "/" }).lowercased()
@@ -735,6 +741,16 @@ struct HomeSheet: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(.isButton)
                 }
+                // WHAT YOU TYPED, AS IT IS (16 Sep, 16 Oct): a place not in the towns is kept in your words
+                let q = edit.query.trimmingCharacters(in: .whitespaces)
+                if !q.isEmpty, !found.contains(where: { $0.name.caseInsensitiveCompare(q) == .orderedSame }) {
+                    Text(q).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: NationalitiesSheet.rowH, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { keepTyped(q) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Keeps it as you typed it")
+                }
             }
             .scrollTargetLayout()
             .frame(width: width)
@@ -749,6 +765,23 @@ struct HomeSheet: View {
             edit.searching = t
             water.go(t ? .full : .half)
         }
+    }
+
+    /// a home in your own words: Apple's map finds where it is if it can (for Neighbours and Farthest from home);
+    /// if not, it is kept by name and the badges measure from the passport you show
+    private func keepTyped(_ q: String) {
+        Feel.tap()
+        edit.query = ""
+        typing = false
+        let cc = Self.likelyCountry ?? ""
+        withAnimation(Motion.quick) { store.set { $0.home = .init(id: "typed:" + q, name: q, cc: cc, lat: 0, lon: 0) } }
+        Task {
+            if let p = try? await CLGeocoder().geocodeAddressString(q).first, let l = p.location {
+                store.set { $0.home = .init(id: "typed:" + q, name: q, cc: (p.isoCountryCode ?? cc).lowercased(),
+                                            lat: l.coordinate.latitude, lon: l.coordinate.longitude) }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { edit.close(water: water) }
     }
 
     private func pick(_ t: TownIndex.Hit) {

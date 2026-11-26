@@ -120,7 +120,7 @@ struct PageSheet: View {
                 }
             }
         }
-        TextField("", text: $note, prompt: Text("Explain the issue").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
+        TextField("", text: $note, prompt: Text("Note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
             .font(.body)
             .lineLimit(1 ... 4)
             .focused($noteFocused)
@@ -139,11 +139,13 @@ struct PageSheet: View {
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
                 .contentTransition(.identity)
-                .frame(maxWidth: .infinity, minHeight: 44)
+                // (half the row, a chip's width, at the right: never a wide bar across the bottom, 16 Oct)
+                .frame(width: chipW, height: 44)
                 // (not ready yet: 50%, as every control that cannot be used)
                 .background(Capsule().fill(Palette.ink.opacity(reason == nil ? 0.5 : 1)))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.top, 16)
     }
 
