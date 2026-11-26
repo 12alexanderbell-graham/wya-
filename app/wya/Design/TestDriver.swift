@@ -144,6 +144,10 @@ final class TestDriver {
                 // (a key like r:fr/FR-ARA for a region)
                 case "visit": if p.count > 2 { await MarkStore.shared.stamp(a.contains(":") ? (PlaceKey(a) ?? .country(a)) : .country(a), day: p[2]) }
                 case "quick": head?.quickStamp = a == "on"
+                // onboard <page> | done: the first open turned to a page (as a swipe would, nothing saved) or finished
+                case "onboard":
+                    if a == "done" { Onboarding.shared.finish() }
+                    else if let n = Int(a) { withAnimation(Motion.chrome) { Onboarding.shared.page = max(0, min(Onboarding.pages - 1, n)) } }
                 case "dial": head?.testDial = a == "off" ? nil : CGFloat(Double(a) ?? 0)
                 case "mode": head?.mode = HeadState.Mode(rawValue: Int(a) ?? 0) ?? .countries
                 // zoomhold 1|-1|0: + or − held (as the zoom column's hold), or let go; logs the limits

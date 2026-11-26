@@ -1847,7 +1847,7 @@ enum ListMapCovers {
     static func image(_ ccs: [String], spots: [String] = [], world: World?, size: CGSize, scale: CGFloat) async -> UIImage? {
         let k = key(ccs, spots, size)
         if let c = cache[k] { return c }
-        guard let world, !ccs.isEmpty, size.width > 4, size.height > 4 else { return nil }
+        guard let world, size.width > 4, size.height > 4 else { return nil }
         // the countries' frames, as Apple's map points (the frames are in our own map's units: Equal Earth)
         var rect = MKMapRect.null
         var mids: [CLLocationCoordinate2D] = []
@@ -1871,6 +1871,13 @@ enum ListMapCovers {
             }
             frames[cc.lowercased()] = r
             rect = rect.union(r)
+        }
+        // A LIST WITH NOTHING IN IT YET (a new account's Wishlist, a list just made): the whole world where people are,
+        // no dots, so its tile is a map like every other list's and not an empty pane of glass that reads as broken
+        if all.isEmpty, spots.isEmpty {
+            let a = MKMapPoint(CLLocationCoordinate2D(latitude: 78, longitude: -180))
+            let b = MKMapPoint(CLLocationCoordinate2D(latitude: -60, longitude: 180))
+            rect = MKMapRect(x: 0, y: a.y, width: MKMapSize.world.width, height: b.y - a.y)
         }
         guard !rect.isNull else { return nil }
         // (each place at its own town or sight where found; a country of none of them keeps its middle)
@@ -1934,6 +1941,9 @@ enum ListMapCovers {
         conf.pointOfInterestFilter = .excludingAll
         conf.showsTraffic = false
         opt.preferredConfiguration = conf
+        // (the whole world: Apple's standard map draws the equator and both tropics as dashed lines across it, which it
+        // cannot leave out; its satellite picture has none)
+        if all.isEmpty, spots.isEmpty { opt.preferredConfiguration = MKImageryMapConfiguration(elevationStyle: .flat) }
         guard let snap = try? await MKMapSnapshotter(options: opt).start() else { return nil }
         // A DOT ON EACH OF ITS PLACES: what makes one list's map its own. Small and plain black, no halo (25 Nov: they
         // were 8 pt on a 12 pt white ring, too big and loud)

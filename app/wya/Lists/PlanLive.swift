@@ -92,7 +92,8 @@ enum PlanLive {
         // (the world too: its outlines frame the countries)
         for _ in 0 ..< 60 where AIContext.map?.world == nil { try? await Task.sleep(for: .milliseconds(100)) }
         let c = ListsWater.planCover(p)
-        guard let img = await ListMapCovers.image(c.ccs, spots: c.spots, world: AIContext.map?.world,
+        // (a plan with no places has no map: the cover maker's whole-world picture is for lists)
+        guard !c.ccs.isEmpty, let img = await ListMapCovers.image(c.ccs, spots: c.spots, world: AIContext.map?.world,
                                                   size: CGSize(width: 64, height: 64), scale: 2),
               let png = img.pngData() else { return }
         try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)

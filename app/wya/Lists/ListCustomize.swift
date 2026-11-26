@@ -137,12 +137,12 @@ enum ListCoverPhotos {
     return nil
 }
 
-/// a list's cover for its little pictures (its sheet, the archive): its own, else its map, else plain glass while it
-/// has no places (a blank gap stood where its picture should be, 25 Nov)
+/// a list's cover for its little pictures (its sheet, the archive): its own, else its map (the whole world while it
+/// has no places; a blank gap stood where its picture should be, 25 Nov)
 @MainActor func listCoverOrGlass(_ l: MyList) -> AnyView {
     if let own = listOwnCover(l) { return own }
     let ccs = Array(l.countries.prefix(4))
-    if ccs.isEmpty { return AnyView(Color.clear.glassEffect(.clear, in: .rect(cornerRadius: 12))) }
+    // (no places yet: the whole world, as its tile on the shelf)
     return AnyView(ListCover(ccs: ccs, world: AIContext.map?.world, spots: []))
 }
 

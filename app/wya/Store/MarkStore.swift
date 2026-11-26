@@ -386,6 +386,8 @@ final class MarkStore {
     static let demoWished = ["na", "is", "ir", "et", "mg", "fi"]
     private func seedDemoIfEmpty() async {
         guard let store, let all = try? await store.all(account: account), all.isEmpty else { return }
+        // (-wyaEmpty: a test of what a new account sees, so nothing is planted)
+        if ProcessInfo.processInfo.arguments.contains("-wyaEmpty") { return }
         let now = Date()
         for (i, id) in Self.demoStamped.enumerated() {
             let at = now.addingTimeInterval(-Double(i % 3) * 7 * 86_400)
