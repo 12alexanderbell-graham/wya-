@@ -2,10 +2,10 @@ import UIKit
 import SwiftUI
 import simd
 
-// HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web and no dots.
-// Your stops in date order, each leg straight (the same two places again bow a little, one side then the other), 2.5
-// pt all along in screen points, black at the start to our blue at the end, no edge. A small glass capsule names the
-// start and the end, beside the line, never on it.
+// HISTORY LINES (Part 13): one journey you can read from where it started to where it ended, never a web. Your stops
+// in date order, each a dot, each leg straight (the same two places again bow a little, one side then the other), 2.5
+// pt all along in screen points, plain ink, no edge. No name tags on the line's ends; a leg tapped names its two ends
+// in a small glass capsule beside it, never on it, and a leg over the date line names its far end at the map's edge.
 
 /// THE JOURNEY: the stops of one mode in range, and the legs between them in map units (worked out once per range)
 struct HistoryTrack {
