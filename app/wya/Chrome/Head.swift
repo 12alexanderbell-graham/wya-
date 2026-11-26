@@ -1380,7 +1380,7 @@ struct SearchResults: View {
                         ForEach(Array(shown.enumerated()), id: \.element) { n, k in
                             Group {
                                 switch k {
-                                case .place(let i): row(i, note: i == guess ? "Did you mean?" : nil)
+                                case .place(let i): row(i, note: i == guess ? "Did you mean?" : typed ? nil : Self.why(map: map, i))
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
@@ -2245,6 +2245,20 @@ struct SearchResults: View {
         r.insert(id, at: 0)
         MapSettingsStore.shared.change { $0.recent = Array(r.prefix(12)) }
         UserDefaults.standard.removeObject(forKey: recentKey)
+    }
+    /// WHY A SUGGESTION IS THERE, in its grey words (26 Nov critic: five countries on the empty field and nothing said
+    /// they were your wishes): searched before, on your wishlist, or next to your country
+    static func why(map: MapController, _ i: Int) -> String? {
+        guard let w = map.world, i < w.places.count else { return nil }
+        if recent.contains(where: { w.placeIndex[$0] == i }) { return "Recent" }
+        if map.wished.contains(i) { return "Wishlist" }
+        let phone = Locale.current.region.flatMap { w.placeIndex[$0.identifier.lowercased()] }
+        let nats = (UserDefaults.standard.stringArray(forKey: MapController.nationalitiesKey) ?? []).compactMap { w.placeIndex[$0] }
+        let homes = nats.isEmpty ? (phone.map { [$0] } ?? []) : nats
+        let nb = w.neighboursIfReady ?? []
+        if let h = homes.first(where: { $0 < nb.count && nb[$0].contains(i) }) { return "Next to " + w.places[h].n }
+        if let h = homes.first { return "Near " + w.places[h].n }
+        return nil
     }
     static func suggestions(map: MapController, recentToo: Bool = true) -> [Int] {
         guard let w = map.world else { return [] }
