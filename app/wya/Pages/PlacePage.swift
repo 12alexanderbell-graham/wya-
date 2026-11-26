@@ -2003,6 +2003,8 @@ struct PlacePageView: View {
 
 /// ONE PAGE of the stack, grown from its origin
 private struct PageLayer: View {
+    /// "Your record"'s numbers: big, and growing with the phone's text size as a large title does
+    @ScaledMetric(relativeTo: .largeTitle) private var recordBig: CGFloat = 64
     let map: MapController
     let water: Water
     let page: PlacePageState.OnePage
@@ -2427,7 +2429,7 @@ private struct PageLayer: View {
             HStack(alignment: .top, spacing: 24) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, it in
                     VStack(spacing: 0) {
-                        Text(it.0).font(.system(size: 64, weight: .semibold, design: .rounded)).monospacedDigit()
+                        Text(it.0).font(.system(size: recordBig, weight: .semibold, design: .rounded)).monospacedDigit()
                             .foregroundStyle(Palette.ink).contentTransition(.numericText())
                             .animation(Motion.quick, value: it.0)
                         Text(it.1).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))

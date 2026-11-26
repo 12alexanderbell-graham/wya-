@@ -282,6 +282,9 @@ struct BadgeDisc: View {
 /// its name; a tap shows it alone (its level, what you have, what the next level needs, what it counts), the back
 /// arrow returns to all of them
 struct ProfileBadgesList: View {
+    /// the badge page's count and its next level: sized as the app's big numbers, growing with the phone's text size
+    @ScaledMetric(relativeTo: .largeTitle) private var haveBig: CGFloat = 44
+    @ScaledMetric(relativeTo: .title2) private var nextBig: CGFloat = 22
     let width: CGFloat
     let room: CGFloat
     @State private var numbers = ProfileNumbers.shared
@@ -384,9 +387,9 @@ struct ProfileBadgesList: View {
                 Text(Badges.levelName[min(b.level, 5)] + (BadgeMoment.day(b.id, b.level).map { " on " + $0.formatted(.dateTime.day().month(.abbreviated).year()) } ?? ""))
                     .font(.body).foregroundStyle(Palette.ink.opacity(0.5)).padding(.top, 4)
                 // what you have, and the next level's number at 50%
-                (Text(Self.value(b, b.have)).font(.system(size: 44, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
+                (Text(Self.value(b, b.have)).font(.system(size: haveBig, weight: .semibold, design: .rounded)).foregroundStyle(Palette.ink)
                  + Text(next.map { " of " + Self.value(b, $0) + " for " + Badges.levelName[min(5, b.level + 1)] } ?? "")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .font(.system(size: nextBig, weight: .semibold, design: .rounded))
                     .foregroundStyle(Palette.ink.opacity(0.5)))
                     .monospacedDigit()
                     .padding(.top, 20)

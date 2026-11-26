@@ -12,7 +12,9 @@ struct NextTripLine: View {
     var body: some View {
         Button(action: press) {
             Text(Self.words(trip, plan, today: PlanDates.key(local: Date())))
-                .font(.system(size: 17, weight: .semibold))
+                // (Apple's body size, so it follows the phone's text size, up to what its 44 pt drop holds on a line)
+                .font(.body.weight(.semibold))
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)
                 .padding(.horizontal, 16)
