@@ -332,6 +332,18 @@ struct ListsWater: View {
         }
         .sorted { $0.name < $1.name }
     }
+    /// A ROW'S PHOTO: its own (a set's place, Petra) and its sight's id (a known sight, by its key or its name in its
+    /// country); the row and the shelf's photos made ahead read it here, so they never differ
+    static func rowPhoto(_ t: ListsThing) -> (own: String, wd: String?) {
+        let key = PlaceKey(t.id).flatMap { $0.kind == .thing ? $0 : nil }
+        // (a set's place added by its name, Petra: its own photo, 20 Nov)
+        let set = key == nil ? t.cc.flatMap { ListSuggestions.setPlace(t.name, $0) } : nil
+        let own = key.flatMap { CollectionStore.shared.item($0)?.photo } ?? set?.item.photo ?? ""
+        let wd = key.map { $0.id.hasPrefix("wd:") ? String($0.id.dropFirst(3)) : $0.id }
+            ?? t.cc.flatMap { ListSuggestions.sight(t.name, $0) } ?? set?.item.id
+        return (own, wd)
+    }
+
     private func things(_ l: MyList) -> [ListsThing] {
         l.items.filter { $0.k != .section }.compactMap { it in
             if it.k == .mine, it.t == .list, let r = it.ref {
@@ -369,9 +381,22 @@ struct ListsWater: View {
         // THE OTHER KINDS' COVERS MADE AHEAD: the plans' map covers at the tiles' own size, so they are there when
         // the wheel turns to them (once the towns' and sights' indexes are in: a cover's key and its dots wait for
         // them, and a plan with no places yet finds its town by them)
-        .task(id: "\(Int(w))|\(TownIndex.shared.ready && ThingIndex.shared.ready)") {
+        .task(id: "\(Int(w))|\(TownIndex.shared.ready && ThingIndex.shared.ready)|\(ThingStore.shared.version)") {
             TownIndex.shared.load(); ThingIndex.shared.load()
+            // THE ROWS' PHOTOS MADE AHEAD too (a row shows its flag until its photo is in memory, then the photo: Seoul
+            // was Korea's flag for a frame on opening its list, 26 Nov): each list's countries' sights read, and each
+            // row's photo fetched (from the phone's own copy when it has one) into the pages' photo memory
+            let all = [wishThings] + store.book.lists.filter({ !$0.arch && !$0.hid }).map({ things($0) })
+            for th in all { for cc in Set(th.compactMap { $0.cc?.lowercased() }) where !cc.isEmpty { ThingStore.shared.load(cc) } }
             guard TownIndex.shared.ready && ThingIndex.shared.ready else { return }
+            for th in all {
+                for t in th where t.ref == nil && t.cc != nil {
+                    let (own, wd) = Self.rowPhoto(t)
+                    if let file = SetPlaceThumb.file(own: own, thing: wd ?? ""), let url = SetPlaceThumb.commons(file) {
+                        await PagePhoto.prefetch(url, focus: false)
+                    }
+                }
+            }
             let side = (w - 12) / 2
             for p in store.book.plans where !p.arch && !p.hid && !p.ai {
                 let (ccs, spots) = Self.planCover(p)
@@ -755,11 +780,7 @@ struct ListsWater: View {
                 ForEach(things) { t in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 12) {
-                            let key = PlaceKey(t.id).flatMap { $0.kind == .thing ? $0 : nil }
-                            let set = key == nil ? t.cc.flatMap { ListSuggestions.setPlace(t.name, $0) } : nil
-                            let own = key.flatMap { CollectionStore.shared.item($0)?.photo } ?? set?.item.photo ?? ""
-                            let wd = key.map { $0.id.hasPrefix("wd:") ? String($0.id.dropFirst(3)) : $0.id }
-                                ?? t.cc.flatMap { ListSuggestions.sight(t.name, $0) } ?? set?.item.id
+                            let (own, wd) = Self.rowPhoto(t)
                             if let r = t.ref {
                                 innerThumb(r)
                             } else if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
