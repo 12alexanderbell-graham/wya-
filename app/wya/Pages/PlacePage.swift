@@ -335,7 +335,9 @@ extension PlacePageState.OnePage {
             // listing with its notice moved to the end
             // (and one that opens on the way there from its guide's town, 25 Nov: Lake Baikal's "lies about an hour
             // away by train", from Irkutsk's guide; an airport's "About five minutes away by car")
-            if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) || PlacePageState.leadsAsTip(x) {
+            // (and a price list, Wikipedia's opening before it where there is one)
+            if let x = d, PlacePageState.leadsWithNotice(x) || PlacePageState.leadsFromElsewhere(x) || PlacePageState.leadsAsTip(x)
+                || PlacePageState.isPriceList(x) {
                 if let w = await PlacePageState.wikipediaIntro(wd: wd, name: name, lat: ll.lat, lon: ll.lon) { d = w; fromWikipedia = true }
                 else if PlacePageState.leadsWithNotice(x) { d = PlacePageState.noticeLast(x, name: name) }
             }
@@ -1758,6 +1760,12 @@ extension PlacePageState {
     static let tip = try! NSRegularExpression(pattern:
         "^(if you\\b|you\\b|you'll\\b|you're\\b|your\\b|visitors (can|may|should|must)\\b|don't\\b|do not\\b|make sure\\b|be sure\\b|try\\b|"
         + "take (the|a|bus)\\b|get there\\b)", options: [.caseInsensitive])
+    /// A PRICE LIST, not words about the place (a refuge's page read "Serves French fries (€5), ice cream (€5), dinner
+    /// (€20)..."): three prices or more
+    private static let price = try! NSRegularExpression(pattern: #"([€$£¥₹]\s?\d)|(\d\s?(€|EUR|USD|GBP|CHF|eur|euros?|dollars?)\b)|\b(EUR|USD|GBP|CHF)\s?\d"#)
+    static func isPriceList(_ t: String) -> Bool {
+        price.numberOfMatches(in: t, range: NSRange(t.startIndex..., in: t)) >= 3
+    }
     static func leadsAsTip(_ t: String) -> Bool {
         let s = t.trimmingCharacters(in: .whitespaces)
         return tip.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
