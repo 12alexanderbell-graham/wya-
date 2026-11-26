@@ -267,21 +267,29 @@ final class ThingIndex {
     /// THE BEST KNOWN SIGHTS IN A CITY (26 Nov: "paris" never listed the Eiffel Tower or the Louvre, their names don't
     /// hold the word): the best known (fame 3) sights within `km` of a point, in the data's own famous-first order,
     /// made once per point
-    func best(lat: Double, lon: Double, km: Double = 6, count: Int = 4) -> [Hit] {
+    func best(lat: Double, lon: Double, km: Double = 15, count: Int = 4) -> [Hit] {
         guard ready else { return [] }
         let key = "\(Int((lat * 100).rounded()))|\(Int((lon * 100).rounded()))"
         if let c = bestNear[key] { return c }
         let dLat = km / 111, dLon = km / (111 * max(0.2, cos(lat * .pi / 180)))
         var out: [Hit] = [], ids = Set<String>()
-        for r in rows where !r.alt && r.hit.fame >= 3 && (1 ... 6).contains(r.hit.kind)
-            && abs(r.hit.lat - lat) <= dLat && abs(r.hit.lon - lon) <= dLon && ids.insert(r.hit.id).inserted {
-            out.append(r.hit)
-            if out.count == count { break }
+        // (the best known first; a city with none of those, Dubai, takes the next best: the Burj Khalifa)
+        for fame in [3, 2] where out.isEmpty {
+            for r in rows where !r.alt && r.hit.fame >= fame && (1 ... 6).contains(r.hit.kind)
+                && abs(r.hit.lat - lat) <= dLat && abs(r.hit.lon - lon) <= dLon && !Self.school(r.folded) && ids.insert(r.hit.id).inserted {
+                out.append(r.hit)
+                if out.count == count { break }
+            }
         }
         bestNear[key] = out
         return out
     }
     @ObservationIgnored private var bestNear: [String: [Hit]] = [:]
+    /// a university or school (the data files them as landmarks: New York University and the London School of
+    /// Economics came up as New York's and London's sights)
+    nonisolated static func school(_ folded: String) -> Bool {
+        ["universit", "college", "school of", "institute of technology", "polytechn"].contains { folded.contains($0) }
+    }
     /// once per kind
     func kind(_ k: Int) -> [Hit] {
         guard ready else { return [] }

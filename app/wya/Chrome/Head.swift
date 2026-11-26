@@ -1206,17 +1206,22 @@ struct SearchResults: View {
             default: return false
             }
         }()
-        let shownThings = Set(mapKeys0.compactMap { k -> String? in if case .thing(let r) = k { return r } else { return nil } })
-        let shownNames = Set(thingHits0.filter { shownThings.contains($0.key) }.map { $0.name.townFolded })
-            .union(itemHits.map { $0.item.name.townFolded })
+        // (its own best two, moved up from further down when already listed: Sydney's Opera House and bridge had
+        // come below Sydney in Canada; a set's place of the same name stands for it)
+        let shownItems = Set(mapKeys0.compactMap { k -> String? in if case .item(let r) = k { return r } else { return nil } })
+        let setNames = Set(itemHits.filter { shownItems.contains($0.key) }.map { $0.item.name.townFolded })
         let citySights: [ThingIndex.Hit] = cityLeads ? leadCity.map { c in
             Array(ThingIndex.shared.best(lat: c.lat, lon: c.lon).filter { h in
-                !shownThings.contains(h.key) && !shownNames.contains(h.name.townFolded) && h.name.townFolded != c.name.townFolded
+                !setNames.contains(h.name.townFolded) && h.name.townFolded != c.name.townFolded
             }.prefix(2))
         } ?? [] : []
         let thingHits = thingHits0 + citySights.filter { h in !thingHits0.contains { $0.key == h.key } }
+        var keySeen = Set<ResultKey>()
         let mapKeys: [ResultKey] = citySights.isEmpty ? mapKeys0
-            : Array(([mapKeys0[0]] + citySights.map { ResultKey.thing($0.key) } + mapKeys0.dropFirst()).prefix(8))
+            : Array(([mapKeys0[0]] + citySights.map { ResultKey.thing($0.key) } + mapKeys0.dropFirst()).filter { keySeen.insert($0).inserted }.prefix(8))
+        #if DEBUG
+        let _ = NSLog("wya searchcity %@ leads %@ sights %@", leadCity?.name ?? "-", cityLeads ? "yes" : "no", citySights.map(\.name).joined(separator: ","))
+        #endif
         let _ = Self.logKeys(mapKeys, townHits)
         // PINS (8.2's head): your pins first (by their name or place, names starting with what was typed first), then
         // the countries, which Apple's map frames
