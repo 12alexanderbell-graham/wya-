@@ -328,6 +328,10 @@ extension PlacePageState.OnePage {
         // name), so a castle's page says what the castle is
         let id = key.id, name = self.name, wd = t.id
         let landsNow = lands
+        // (its Wikidata facts asked for at once, beside its words, not after them: the page waits for both)
+        let built = !["nature", "water", "mountain", "area"].contains(t.kindName)
+        let moreFacts = Task { await PlacePageState.wikidataFacts(wd, landmark: built) }
+        let began = CFAbsoluteTimeGetCurrent()
         Task { @MainActor in
             var d = await PlacePageState.listingText(cc, wd: wd, name: name)
             var fromWikipedia = false
@@ -400,10 +404,13 @@ extension PlacePageState.OnePage {
             }
             // ITS OWN FACTS (26 Nov walk: the Eiffel Tower's page had no facts at all, a country's and a town's have a
             // grid): Wikidata's height, year built, architect and visitors a year, the ones it has, none it already shows
-            if self.key.id == id, let more = await PlacePageState.wikidataFacts(wd, landmark: !["nature", "water", "mountain", "area"].contains(t.kindName)), self.key.id == id {
+            if self.key.id == id, let more = await moreFacts.value, self.key.id == id {
                 let have = Set((self.facts?.rows ?? []).map(\.0))
                 self.facts?.rows += more.filter { !have.contains($0.0) }
             }
+            #if DEBUG
+            NSLog("wya thing words and facts %@ in %.2f s", name, CFAbsoluteTimeGetCurrent() - began)
+            #endif
             // (its town still to come: the page waits for that answer too)
             if TownIndex.shared.ready { self.settled = true }
         }
