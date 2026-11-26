@@ -212,7 +212,19 @@ struct PlacesSheet: View {
         let id = capitals ? CollectionStore.capitals
             : map.placesSet == CollectionStore.towns ? CollectionStore.famousCities : map.placesSet
         guard let c = CollectionStore.shared.collection(id) else { return [] }
-        return Array(c.items.lazy.filter { capitals || kind == nil || $0.type == kind }.prefix(300))
+        let all = c.items.lazy.filter { capitals || kind == nil || $0.type == kind }
+        // (a country open: only its own, as the caption counts them, 26 Nov: France's Cities had listed Paris, London and
+        // Rome; Cities in a country with no city people know lists its capital)
+        if let i = map.placeOpen, let w = map.world, i < w.places.count {
+            let cc = w.places[i].id.lowercased()
+            let mine = { (it: CollectionStore.Item) in it.cc == cc || it.ccs.contains(cc) }
+            let own = Array(all.filter(mine).prefix(300))
+            if own.isEmpty, id == CollectionStore.famousCities, let caps = CollectionStore.shared.collection(CollectionStore.capitals) {
+                return caps.items.filter(mine)
+            }
+            return own
+        }
+        return Array(all.prefix(300))
     }
     /// its country, or the two it lies between; a sea or a range says none
     static func country(_ it: CollectionStore.Item, map: MapController) -> String {
