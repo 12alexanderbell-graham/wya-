@@ -8,6 +8,17 @@ struct WaterView: View {
     let map: MapController
     @Binding var tab: Int
 
+    /// TEST ONLY (-wyaFrostTrial): the water frosted while it holds a text list (Settings, Details, Verify, the Stamped
+    /// and Regions lists, Upload), to compare clear and frosted side by side; never in a phone build
+    static func frostTrial(_ w: Water) -> Bool {
+        #if DEBUG
+        guard ProcessInfo.processInfo.arguments.contains("-wyaFrostTrial") else { return false }
+        return w.settings || w.details || w.stampedList || w.regions || w.upload
+        #else
+        return false
+        #endif
+    }
+
     var body: some View {
         let f = water.form()
         let L = water.layout
@@ -35,7 +46,7 @@ struct WaterView: View {
                             // frost under it says how much of a sheet it is)
                             // (clear, 25 Nov evening: the frosted water read as a yellow-grey slab over the map)
                             // The page's own sheet takes the regular frost: its words lie over the page's words.
-                            .glassEffect(water.pageSheet ? PageGlass.surface : .clear, in: shape)
+                            .glassEffect(water.pageSheet || Self.frostTrial(water) ? PageGlass.surface : .clear, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)
