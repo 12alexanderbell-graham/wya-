@@ -397,6 +397,12 @@ extension PlacePageState.OnePage {
                let ph = await PlacePageState.wikipediaPhoto(wd: wd, name: name, lat: ll.lat, lon: ll.lon), self.key.id == id {
                 self.facts?.photo = ph
             }
+            // ITS OWN FACTS (26 Nov walk: the Eiffel Tower's page had no facts at all, a country's and a town's have a
+            // grid): Wikidata's height, year built, architect and visitors a year, the ones it has, none it already shows
+            if self.key.id == id, let more = await PlacePageState.wikidataFacts(wd, landmark: t.kindName == "landmark"), self.key.id == id {
+                let have = Set((self.facts?.rows ?? []).map(\.0))
+                self.facts?.rows += more.filter { !have.contains($0.0) }
+            }
             // (its town still to come: the page waits for that answer too)
             if TownIndex.shared.ready { self.settled = true }
         }
@@ -1731,6 +1737,50 @@ extension PlacePageState {
         return t
     }
 
+    /// A SIGHT'S FACTS FROM WIKIDATA: its height (P2048, in metres or feet), the year it was built (P571), its
+    /// architect (P84) and visitors a year (P1174), as rows; kept for the app's run; nil when there is nothing
+    static var wikidataKept: [String: [(String, String)]] = [:]
+    static func wikidataFacts(_ wd: String, landmark: Bool) async -> [(String, String)]? {
+        guard wd.hasPrefix("Q") else { return nil }
+        if let had = wikidataKept[wd] { return had.isEmpty ? nil : had }
+        func get(_ q: [URLQueryItem]) async -> [String: Any]? {
+            var c = URLComponents(string: "https://www.wikidata.org/w/api.php")!
+            c.queryItems = [.init(name: "action", value: "wbgetentities"), .init(name: "format", value: "json")] + q
+            guard let u = c.url else { return nil }
+            var r = URLRequest(url: u); r.timeoutInterval = 4
+            guard let (d, _) = try? await URLSession.shared.data(for: r),
+                  let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
+            return j["entities"] as? [String: Any]
+        }
+        guard let e = await get([.init(name: "ids", value: wd), .init(name: "props", value: "claims")])?[wd] as? [String: Any],
+              let claims = e["claims"] as? [String: Any] else { return nil }
+        // a property's preferred value, else its first
+        func value(_ p: String) -> Any? {
+            guard let all = claims[p] as? [[String: Any]], !all.isEmpty else { return nil }
+            let pick = all.first { ($0["rank"] as? String) == "preferred" } ?? all.first { ($0["rank"] as? String) != "deprecated" }
+            return ((pick?["mainsnak"] as? [String: Any])?["datavalue"] as? [String: Any])?["value"]
+        }
+        var out: [(String, String)] = []
+        if let h = value("P2048") as? [String: Any], let a = h["amount"] as? String, var m = Double(a.replacingOccurrences(of: "+", with: "")), m > 0 {
+            if (h["unit"] as? String)?.hasSuffix("/Q3710") == true { m *= 0.3048 }
+            out.append(("Height", Units.height(m: m)))
+        }
+        if let t = value("P571") as? [String: Any], let time = t["time"] as? String {
+            let bc = time.hasPrefix("-")
+            let year = time.dropFirst().prefix { $0 != "-" }.drop { $0 == "0" }
+            if !year.isEmpty { out.append((landmark ? "Built" : "Established", bc ? "\(year) BC" : String(year))) }
+        }
+        if let v = value("P1174") as? [String: Any], let a = v["amount"] as? String, let n = Double(a.replacingOccurrences(of: "+", with: "")), n >= 1000 {
+            out.append(("Visitors a year", PlacePageState.big(n)))
+        }
+        if let a = value("P84") as? [String: Any], let q = a["id"] as? String,
+           let l = ((await get([.init(name: "ids", value: q), .init(name: "props", value: "labels"), .init(name: "languages", value: "en")])?[q]
+                     as? [String: Any])?["labels"] as? [String: Any])?["en"] as? [String: Any], let n = l["value"] as? String {
+            out.append(("Architect", n))
+        }
+        wikidataKept[wd] = out
+        return out.isEmpty ? nil : out
+    }
     /// a thing's own words from the country's guide listings: the listing with its Wikidata id, else the first with
     /// its name (any case and accents); only a description of some length (a line of directions is not one) the
     /// guide's article that lists a thing (by its Wikidata id), or nil WIKIPEDIA'S OPENING: English Wikipedia's first
