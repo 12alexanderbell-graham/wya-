@@ -79,7 +79,8 @@ struct OnboardingView: View {
     let map: MapController
     @State private var ob = Onboarding.shared
     @State private var store = ProfileStore.shared
-    @State private var drag: CGFloat = 0
+    /// the way the last swipe went (the card's words roll up going on, down going back)
+    @State private var forward = true
     @State private var shake: CGFloat = 0
     @State private var name = ""
     @State private var bio = ""
@@ -96,32 +97,42 @@ struct OnboardingView: View {
     var body: some View {
         GeometryReader { g in
             let W = g.size.width, H = g.size.height
-            HStack(spacing: 0) {
-                hello(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 0)
-                // (the blank Profile's own ground: the field at the Profile's middle strength)
+            // ONE PAGE BECOMES THE NEXT (14 Oct: the swipe only sets it off): no page follows the finger and nothing
+            // pages sideways. Where you at to who are you: the
+            // Profile's ground rises from the foot over the loading screen, as the sheet rises; who are you to whose
+            // borders: that ground lowers away and the map is there, the glass card already in its place; from page to
+            // page on the card, the card stays and only its words roll, up out of its top and up in from below
+            ZStack(alignment: .topLeading) {
+                // where you at?!, over the loading screen (covered by the rising ground; gone once the screen has lifted)
+                if !ob.pastHello || ob.page == 0 {
+                    hello(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 0)
+                }
+                // the card over the map, under the ground until it lowers away
+                if ob.page >= 1 { cardLayer(W, H) }
+                // who are you?!, on the Profile's own ground
                 who(W, H).frame(width: W, height: H)
                     .background(LivingField(saturation: ProfileView.look.x, power: ProfileView.look.y).ignoresSafeArea())
+                    // (its top the screen's own curve, as the sheet's: rising or lowering it is a sheet of the app, never
+                    // a gradient cut off at a straight line; at rest the curve is the screen's corners)
+                    .clipShape(RoundedRectangle(cornerRadius: water.layout.screenCorner, style: .continuous))
+                    .offset(y: ob.page == 1 ? 0 : H + 60)
+                    .allowsHitTesting(ob.page == 1)
                     .accessibilityHidden(ob.page != 1)
-                borders(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 2)
-                whichMap(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 3)
-                location(W, H).frame(width: W, height: H).accessibilityHidden(ob.page != 4)
             }
-            .frame(width: W, alignment: .leading)
-            .offset(x: -CGFloat(ob.page) * W + drag)
-            .gesture(DragGesture(minimumDistance: 12)
-                .onChanged { v in
-                    guard abs(v.translation.width) > abs(v.translation.height) else { return }
-                    // (no page before the first or after the last: the edge gives a little, then holds)
-                    let edge = (ob.page == first && v.translation.width > 0) || (ob.page == Onboarding.pages - 1 && v.translation.width < 0)
-                    drag = edge ? v.translation.width * 0.25 : v.translation.width
-                }
+            .frame(width: W, height: H, alignment: .topLeading)
+            .contentShape(Rectangle())
+            // THE SWIPE ONLY TRIGGERS IT: a swipe to the left goes on, to the right back; past the first or the last
+            // page it refuses
+            .simultaneousGesture(DragGesture(minimumDistance: 20)
                 .onEnded { v in
-                    let go = v.translation.width < -W * 0.25 || v.predictedEndTranslation.width < -W * 0.5
-                    let back = v.translation.width > W * 0.25 || v.predictedEndTranslation.width > W * 0.5
-                    if go { next() } else if back, ob.page > first { previous(); return }
-                    withAnimation(Motion.chrome) { drag = 0 }
+                    guard abs(v.translation.width) > abs(v.translation.height) * 1.2 else { return }
+                    if v.translation.width < -40 || v.predictedEndTranslation.width < -140 {
+                        if ob.page < Onboarding.pages - 1 { next() } else { Feel.refuse() }
+                    } else if v.translation.width > 40 || v.predictedEndTranslation.width > 140 {
+                        if ob.page > first { previous() } else { Feel.refuse() }
+                    }
                 })
-            // (VoiceOver: the three-finger swipe turns the pages as the drag does; only the page on screen is read)
+            // (VoiceOver: the three-finger swipe turns the pages as the swipe does; only the page on screen is read)
             .accessibilityElement(children: .contain)
             .accessibilityScrollAction { edge in
                 if edge == .trailing { next() }
@@ -150,14 +161,14 @@ struct OnboardingView: View {
     private func previous() {
         typing = false; typingBio = false
         Feel.tick()
-        withAnimation(Motion.chrome) { ob.page -= 1; drag = 0 }
+        forward = false
+        withAnimation(Motion.chrome) { ob.page -= 1 }
     }
 
     /// on to the next page, unless this one needs something first (an empty name shakes, with a refusing feel)
     private func next() {
         if ob.page == 1, name.trimmingCharacters(in: .whitespaces).isEmpty {
             Feel.refuse()
-            withAnimation(Motion.chrome) { drag = 0 }
             withAnimation(.linear(duration: 0.07).repeatCount(5, autoreverses: true)) { shake = 1 } completion: { shake = 0 }
             typing = true
             return
@@ -170,9 +181,10 @@ struct OnboardingView: View {
             }
         }
         typing = false; typingBio = false
-        guard ob.page < Onboarding.pages - 1 else { withAnimation(Motion.chrome) { drag = 0 }; return }
+        guard ob.page < Onboarding.pages - 1 else { return }
         Feel.tick()
-        withAnimation(Motion.chrome) { ob.page += 1; drag = 0 }
+        forward = true
+        withAnimation(Motion.chrome) { ob.page += 1 }
     }
 
     /// the question big and close under the logo: the words in the app's black, the "?!" in its blue on the living
@@ -290,27 +302,50 @@ struct OnboardingView: View {
 
     // MARK: over the map: whose borders, which map, location
 
-    /// A PAGE OVER THE MAP: its question and choices on clear glass in the very shape and place of the map's sheet at
-    /// 25%, which takes its place when the first open is over; above it, the map itself, untouched
-    private func card<C: View>(_ W: CGFloat, _ H: CGFloat, _ words: String, level: SheetStop = .quarter,
-                               @ViewBuilder _ choices: () -> C) -> some View {
+    /// THE CARD OVER THE MAP: clear glass in the very shape and place of the map's sheet at 25% (half while a country
+    /// is being picked), which takes its place when the first open is over; inside it, the page's question and choices,
+    /// which roll from one page to the next inside the glass while the card itself holds still
+    private func cardLayer(_ W: CGFloat, _ H: CGFloat) -> some View {
         let L = water.layout
-        let top = L.top(level)
+        let top = L.top(ob.page == 2 && pickingCountry ? .half : .quarter)
+        let roll: AnyTransition = forward
+            ? .asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top))
+            : .asymmetric(insertion: .move(edge: .top), removal: .move(edge: .bottom))
         return ZStack(alignment: .topLeading) {
-            Color.clear.frame(width: W, height: H).contentShape(Rectangle())
             WaterShape(form: water.form(level: top))
                 .fill(Color.clear)
                 .glassEffect(.clear, in: WaterShape(form: water.form(level: top)))
                 .frame(width: W, height: H)
                 .allowsHitTesting(false)
-            VStack(spacing: 16) {
-                question(words, mark: Palette.lime)
-                choices()
+            ZStack(alignment: .top) {
+                Group {
+                    switch ob.page {
+                    case 2: borders(W, H)
+                    case 3: whichMap(W, H)
+                    case 4: location(W, H)
+                    default: Color.clear.frame(width: W, height: 1)
+                    }
+                }
+                .padding(.top, 24)
+                .frame(width: W, alignment: .top)
+                .id(ob.page)
+                .transition(roll)
             }
-            .frame(width: W)
-            .padding(.top, top + 24)
+            .frame(width: W, height: H - top, alignment: .top)
+            // (the words leave and arrive through the card's own edges, never over the map)
+            .clipShape(Rectangle())
+            .offset(y: top)
         }
         .frame(width: W, height: H, alignment: .topLeading)
+    }
+
+    /// a page's question and its choices, as the card holds them
+    private func card<C: View>(_ words: String, @ViewBuilder _ choices: () -> C) -> some View {
+        VStack(spacing: 16) {
+            question(words, mark: Palette.lime)
+            choices()
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// WHOSE BORDERS (14 Oct): the three, nothing chosen until one
@@ -321,7 +356,7 @@ struct OnboardingView: View {
         let shown = bordersPicked == nil ? nil : pick
         let half = (W - 64 - 12) / 2
         let country = shown.flatMap { $0 == "deFacto" || $0 == "un" ? nil : BordersNames.name($0, map) }
-        return card(W, H, "whose borders", level: pickingCountry ? .half : .quarter) {
+        return card("whose borders") {
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     choice("De facto", on: shown == "deFacto", width: half) { pickBorders("deFacto") }
@@ -382,7 +417,7 @@ struct OnboardingView: View {
     private func whichMap(_ W: CGFloat, _ H: CGFloat) -> some View {
         let s = MapSettingsStore.shared.value
         let rows = MapSettingsRows.all.filter { $0.id == "map" || $0.id == "style" }
-        return card(W, H, "which map") {
+        return card("which map") {
             VStack(spacing: 12) {
                 ForEach(rows) { row in
                     let cs = MapSettingsRows.choices(row, s)
@@ -409,7 +444,7 @@ struct OnboardingView: View {
 
     private func location(_ W: CGFloat, _ H: CGFloat) -> some View {
         let half = (W - 64 - 12) / 2
-        return card(W, H, "can we find you") {
+        return card("can we find you") {
             HStack(spacing: 12) {
                 choice("Not now", on: false, width: half) { Feel.tap(); ob.finish() }
                 choice("Allow", on: true, width: half) {
