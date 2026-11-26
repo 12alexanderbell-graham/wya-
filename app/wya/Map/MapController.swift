@@ -118,6 +118,8 @@ final class MapController {
     @ObservationIgnored var setMiddleNamed: Set<String> = []
     /// a thing found by search is framed: its card (ContentView)
     @ObservationIgnored var onThingFound: ((String) -> Void)?
+    /// a town found by search has been framed: its card (the open country's code, the town's index in its scene)
+    @ObservationIgnored var onTownFound: ((String, Int) -> Void)?
     /// whether a confirmed tap on a town's or thing's name may open its page now (the same guards a place's tap has:
     /// not sideways, not over the upload sheet, not the tap that closed search or the passport book)
     @ObservationIgnored var namePageAllowed: (() -> Bool)?

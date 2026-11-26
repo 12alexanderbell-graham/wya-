@@ -319,6 +319,13 @@ struct ContentView: View {
                 let line = t.line.isEmpty ? w.places[place].n : t.line.prefix(1).uppercased() + t.line.dropFirst()
                 RegionCardState.shared.open(t.key, name: t.name, parents: line, place: place, map: map)
             }
+            map.onTownFound = { [map] cc, i in
+                guard map.placesMode, let sc = map.townScenes[cc], i < sc.towns.count, let w = map.world,
+                      let place = w.placeIndex[cc] ?? w.placeIndex[cc.uppercased()] else { return }
+                let town = sc.towns[i], country = w.places[place].n
+                RegionCardState.shared.open(town.key, name: town.name, parents: town.region.isEmpty ? country : "\(town.region), \(country)",
+                                            place: place, map: map)
+            }
             map.onSeaTap = { [water, map] in
                 if water.upload { UploadState.shared.leaveReview(); return }
                 // (an area set's place, a sea, a range, is no country's: its tap comes here)

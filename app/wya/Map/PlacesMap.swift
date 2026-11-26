@@ -91,7 +91,17 @@ extension MapController {
             guard let self, self.placeOpen == i, let sc = self.townScenes[cc],
                   let t = sc.index[id] ?? Self.townByName(sc, hit: TownIndex.shared.hit(id)) else { Feel.refuse(); return }
             self.townPressed = (cc, t)
-            self.showBox(sc.box(t), place: i)
+            // (framed above where its card will stand on the 25% water, then its card, as a tap on the town gives and a
+            // sight found by search has: picked from search, a town only flashed and the sheet kept the set's list, 26 Nov)
+            var b = sc.box(t)
+            let room = self.layout.room(sheetTop: self.layout.top(.quarter))
+            let free = max(120, room.upperBound - room.lowerBound - 240)
+            b.w += (b.w - b.y) * Float((room.upperBound - room.lowerBound) / free - 1)
+            self.showBox(b, place: i)
+            try? await Task.sleep(for: .milliseconds(1100))
+            guard me == ShowJob.n, self.placeOpen == i else { return }
+            self.needsFrame = true
+            self.onTownFound?(cc, t)
         }
     }
 
