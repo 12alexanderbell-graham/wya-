@@ -92,11 +92,13 @@ final class ThingIndex {
             start.reserveCapacity(out.count + 1)
             for r in out { bytes.append(contentsOf: r.0.utf8); start.append(Int32(bytes.count)) }
             let coded = out.contains { !$0.1.isEmpty }
+            // (a long formal name with a much shorter name people know: the known one on the map, cards and pages;
+            // worked out here, off the main thread, where it took 10 ms of the first seconds after launch, 26 Nov)
+            let known = Self.shorter(out)
             await MainActor.run {
                 let me = ThingIndex.shared
                 me.rows = out; me.famous = nil
-                // (a long formal name with a much shorter name people know: the known one on the map, cards and pages)
-                ThingStore.shared.know(Self.shorter(out))
+                ThingStore.shared.know(known)
                 (me.nameBytes, me.nameStart, me.anyCodes) = (bytes, start, coded)
                 me.loading = false
                 me.ready = !out.isEmpty
