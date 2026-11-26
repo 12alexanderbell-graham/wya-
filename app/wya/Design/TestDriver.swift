@@ -379,6 +379,8 @@ final class TestDriver {
                             }
                         }
                     case "close": ls.close()
+                    // lists pics 1|2: a list's row pictures, rounded 44 or the 56 strip at the edge
+                    case "pics": ListsWater.picStyle = Int(p.count > 2 ? p[2] : "1") ?? 1; ls.kind = ls.kind
                     // lists put <cc> <name>: a place put in the open list (its country for the flag)
                     case "put":
                         if p.count > 3 {

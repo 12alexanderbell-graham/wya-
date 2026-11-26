@@ -342,6 +342,9 @@ struct SetPlaceThumb: View {
     let cc: String
     /// its country's flag where it has no photo (false: the space left empty, as a page's Activities)
     var flag = true
+    /// its side and its corner (a list's rows may ask a square at the row's full height)
+    var side: CGFloat = 44
+    var corner: CGFloat = 10
     @State private var things = ThingStore.shared
     @State private var photo: UIImage?
 
@@ -353,15 +356,15 @@ struct SetPlaceThumb: View {
         // (fetched and kept as the pages' photos are: AsyncImage keeps nothing, and a list scrolled back blinked)
         let shot = url.flatMap { photo ?? PagePhoto.cached($0) }
         ZStack {
-            if let shot { Image(uiImage: shot).resizable().scaledToFill().frame(width: 44, height: 44) }
-            else if flag, let f = Flags.square(cc) { f.resizable().interpolation(.high).scaledToFill().frame(width: 44, height: 44) }
+            if let shot { Image(uiImage: shot).resizable().scaledToFill().frame(width: side, height: side) }
+            else if flag, let f = Flags.square(cc) { f.resizable().interpolation(.high).scaledToFill().frame(width: side, height: side) }
         }
         .task(id: url) {
             guard let url, shot == nil else { return }
             await PagePhoto.prefetch(url, focus: false); photo = PagePhoto.cached(url)
         }
-        .frame(width: 44, height: 44)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         .onAppear { if !cc.isEmpty { things.load(cc) } }
         .accessibilityHidden(true)
     }

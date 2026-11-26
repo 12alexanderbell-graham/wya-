@@ -130,6 +130,8 @@ struct ListsWater: View {
     @State private var infoFor: String?
     /// how far a list's page is pulled down past its top: its cover grows up into it and springs back with the scroll
     @State private var pagePull: CGFloat = 0
+    /// a list page's scroll (the test driver's scrolltest moves it)
+    @State private var pagePos = ScrollPosition(edge: .top)
     #if DEBUG
     /// the test driver's `lists pull <pt>`: a pull held, as a finger would (the simulator's dragged touches don't scroll it)
     nonisolated(unsafe) static var testPull: CGFloat?
@@ -146,17 +148,12 @@ struct ListsWater: View {
         // (24 pt under the row of circles, as a place page's words start 24 under the head; it was 8, the shelf's tiles
         // and a list's map pressed up against the circles, 25 Nov)
         let gap: CGFloat = 24
-        let room = max(56, L.capsule.minY - 8 - (top + 44 + gap))
         ZStack(alignment: .topLeading) {
             // THE GROUND: the living gradient, the app's own (never the map: the Lists tab is not the map)
             LivingField()
                 .frame(width: L.W, height: L.H)
                 .allowsHitTesting(false)
-            VStack(spacing: gap) {
-                // (its circles where every tab's head has them, 16 pt in from the screen: in the shelf's own 24 pt they
-                // stood 8 pt in from where they are on the Map and Profile, and jumped as the tabs changed, 25 Nov)
-                topRow(w + 16)
-                    .padding(.horizontal, -8)
+            Group {
                 // A LIST OPENS AS A PAGE PUSHED IN: the list comes in from the right while the shelf goes out to the
                 // left, and back the other way
                 ZStack(alignment: .top) {
@@ -184,9 +181,24 @@ struct ListsWater: View {
                     }
                 }
                 .contentMargins(.top, trip == nil ? 0 : 48, for: .scrollContent)
-                .frame(width: w, height: room, alignment: .top)
+                // EVERY PAGE SCROLLS UP UNDER THE HEAD TO THE TOP OF THE SCREEN (26 Nov: cut off at a line under the
+                // circles, with no blur; floating buttons, words scrolling away under them with the soft edge): the room above where it starts is the scroll's own top edge, so it rests
+                // where it did and Apple's soft edge shows over the status bar and the circles once scrolled
+                .safeAreaPadding(.top, top + 44 + gap)
+                // AND DOWN UNDER THE TABS (26 Nov: the tabs are glass): it rests above the
+                // capsule as before, and scrolls on under its glass to the screen's foot
+                .safeAreaPadding(.bottom, L.H - (L.capsule.minY - 8))
+                // (the scroll as wide as the screen, its margins inside it: Apple's soft edge then runs side to side
+                // over the black bars, never a frosted box with hard sides the page's width)
+                .safeAreaPadding(.horizontal, L.sheetInset + 16)
+                .frame(width: L.W, height: L.H, alignment: .top)
             }
-            .offset(x: L.sheetInset + 16, y: top)
+            // (its circles where every tab's head has them, 16 pt in from the screen: in the shelf's own 24 pt they
+            // stood 8 pt in from where they are on the Map and Profile, and jumped as the tabs changed, 25 Nov)
+            topRow(w + 16)
+                .padding(.horizontal, -8)
+                .frame(width: w)
+                .offset(x: L.sheetInset + 16, y: top)
             // THE NEXT TRIP'S LINE, OVER THE PAGE, out of the square (NextTripLine)
             if let (t, p) = trip {
                 NextTripLine(trip: t, plan: p)
@@ -198,7 +210,7 @@ struct ListsWater: View {
     }
 
     /// a thing's note in the open list, typed in place under it
-    private func itemNote(_ t: ListsThing) -> some View {
+    private func itemNote(_ t: ListsThing, ink: Color = Palette.ink) -> some View {
         TextField("", text: Binding(get: { t.note }, set: { v in
             let n = String(v.prefix(500))
             ListsStore.shared.change { b in
@@ -206,18 +218,63 @@ struct ListsWater: View {
                       let ii = b.lists[li].items.firstIndex(where: { $0.id == t.id }) else { return }
                 b.lists[li].items[ii].note = n
             }
-        }), prompt: Text("Note").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
-            .font(.subheadline).foregroundStyle(Palette.ink)
+        }), prompt: Text("Note").foregroundStyle(ink.opacity(0.5)), axis: .vertical)
+            // (the name's second line: the same left edge, the smaller size, 50%; never a box or an indent of its own)
+            .font(.subheadline).foregroundStyle(ink.opacity(0.5))
             .lineLimit(1 ... 5)
-            .frame(minHeight: 36)
-            .padding(.leading, 56)
+            .submitLabel(.done)
     }
     /// A LIST INSIDE A LIST: its own cover, small, rounded as its tile
-    private func innerThumb(_ r: String) -> some View {
+    private func innerThumb(_ r: String, side: CGFloat = 44, corner: CGFloat = 10) -> some View {
         let inner = store.book.lists.first { $0.id == r }
-        return Color.clear.frame(width: 44, height: 44)
+        return Color.clear.frame(width: side, height: side)
             .overlay { if let inner { listCoverOrGlass(inner) } }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+    }
+
+    /// HOW A ROW'S PICTURE SITS (26 Nov: flag tiles read cheap): 1, a 44 pt rounded square; 2, a square
+    /// the row's full 56 pt height, square corners, against the screen's left edge, so the pictures of a list run down
+    /// its side as one strip (photos square unless inside rounded cards). The driver's `listpics` flips it.
+    nonisolated(unsafe) static var picStyle = 1
+    /// A COUNTRY'S PICTURE IN A LIST: its best known sight's photo (France the Eiffel Tower, Japan Mount Fuji), as the
+    /// country's page opens on it; its flag only where it has none
+    static func countrySight(_ cc: String) -> String? {
+        let skip = "border|between|universit|college|school|stadium|arena|airport|station|territory|concentration|camp\\b|memorial|genocide|cemetery|prison"
+        return (ThingStore.shared.things(cc) ?? []).enumerated().filter { _, o in
+            o.fame >= 3 && (2...6).contains(o.kind) && o.kind != 4 && !o.photo.isEmpty && PlacePageState.photo(o.photo) != nil
+                && !PlacePageState.isStudy(o.name) && !PlacePageState.isVenue(o.name, o.line)
+                && (o.name + " " + o.line).range(of: skip, options: [.regularExpression, .caseInsensitive]) == nil
+        }.min { a, b in a.element.fame != b.element.fame ? a.element.fame > b.element.fame : a.offset < b.offset }?.element.id
+    }
+
+    /// a row's picture, in the style above: a list inside its cover, a place its photo (a country its best known
+    /// sight's), else its flag; a thing with no place its first letter on clear glass
+    @ViewBuilder private func rowPicture(_ t: ListsThing, been: Bool) -> some View {
+        let side: CGFloat = Self.picStyle == 2 ? 56 : 44
+        let corner: CGFloat = Self.picStyle == 2 ? 0 : 10
+        let (own, wd0) = Self.rowPhoto(t)
+        let cc = (t.cc ?? "").lowercased()
+        let isCountry = !cc.isEmpty && CountryEntity(id: cc).name.townFolded == t.name.townFolded
+        let wd = wd0 ?? (isCountry ? Self.countrySight(cc) : nil)
+        if let r = t.ref {
+            innerThumb(r, side: side, corner: corner)
+        } else if !cc.isEmpty, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
+            SetPlaceThumb(own: own, thing: wd ?? "", cc: cc, side: side, corner: corner)
+        } else {
+            Group {
+                if !cc.isEmpty, let f = Flags.square(cc) {
+                    f.resizable().interpolation(.high).scaledToFill()
+                } else {
+                    Text(String(t.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                        .font(.body.weight(.semibold)).foregroundStyle((been ? Palette.white : Palette.ink).opacity(0.5))
+                        .frame(width: side, height: side)
+                        .glassEffect(.clear, in: .rect(cornerRadius: corner))
+                }
+            }
+            .frame(width: side, height: side)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .onAppear { if !cc.isEmpty { ThingStore.shared.load(cc); ThingIndex.shared.load() } }
+        }
     }
     /// its name, and "List" with how many things are in it
     private func innerLabel(_ r: String, name: String) -> some View {
@@ -707,6 +764,9 @@ struct ListsWater: View {
         let (ccs, spots) = Self.pageCover(title: title, things: things, naming: s.naming)
         let own = list.flatMap { listOwnCover($0) }
         let hasCover = own != nil || !ccs.isEmpty
+        // (its towns are counted and turned green from the towns' index: read here, the page is drawn again once it has
+        // loaded; opened right after launch, "3 of 5 been" was missing and Seattle's row stayed plain)
+        let _ = TownIndex.shared.ready
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Group {
@@ -778,77 +838,51 @@ struct ListsWater: View {
                     .onTapGesture { Feel.tap(); withAnimation(Motion.quick) { infoFor = list.id } }
                 }
                 ForEach(things) { t in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 12) {
-                            let (own, wd) = Self.rowPhoto(t)
-                            if let r = t.ref {
-                                innerThumb(r)
-                            } else if let cc = t.cc, (wd != nil || !own.isEmpty), SetPlaceThumb.file(own: own, thing: wd ?? "") != nil {
-                                SetPlaceThumb(own: own, thing: wd ?? "", cc: cc)
-                            } else {
-                                // (one picture shape in every row, 25 Nov: a flag is its square crop in the same 44 pt
-                                // rounded square as a photo, never a hard 4:3 strip beside them; a thing with no place
-                                // has its first letter on clear glass, never an empty gap before its name)
-                                Group {
-                                    if let cc = t.cc, let f = Flags.square(cc.lowercased()) {
-                                        f.resizable().interpolation(.high).scaledToFill()
-                                    } else {
-                                        Text(String(t.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
-                                            .font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
-                                            .frame(width: 44, height: 44)
-                                            .glassEffect(.clear, in: .rect(cornerRadius: 10))
-                                    }
-                                }
-                                .frame(width: 44, height: 44)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .onAppear { if let cc = t.cc, !cc.isEmpty { ThingStore.shared.load(cc.lowercased()); ThingIndex.shared.load() } }
-                            }
+                    let been = t.ref == nil && ListTicks.been(name: t.name, cc: t.cc) == true
+                    let ink = been ? Palette.white : Palette.ink
+                    HStack(alignment: .center, spacing: Self.picStyle == 2 ? 16 : 12) {
+                        rowPicture(t, been: been)
+                            // (the strip: against the screen's left edge, past the page's margin)
+                            .padding(.leading, Self.picStyle == 2 ? -(Screen.width - w) / 2 : 0)
+                        VStack(alignment: .leading, spacing: 2) {
                             if let r = t.ref {
                                 innerLabel(r, name: t.name)
                             } else {
-                                Text(t.name).font(.body).foregroundStyle(Palette.ink).lineLimit(2)
+                                Text(t.name).font(.body).foregroundStyle(ink).lineLimit(2)
                             }
-                            Spacer(minLength: 0)
-                            // (a place you have been to: ticked)
-                            if t.ref == nil, ListTicks.been(name: t.name, cc: t.cc) == true {
-                                Icon5(key: "tick", ink: Palette.ink, size: 18).frame(width: 44, height: 44)
-                                    .accessibilityLabel("Been")
-                            }
-                        }
-                        // OPENED: its note, and for a place, Open, which takes it to the map (morning Q12)
-                        if s.noted == t.id {
-                            // ITS NOTE, written here in your own lists; read
-                            // only in the wishlist
-                            if editable {
-                                itemNote(t)
-                            } else if !t.note.isEmpty {
-                                Text(t.note).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
-                                    .padding(.leading, 56)
-                            }
-                            if let cc = t.cc, !cc.isEmpty {
-                                Button { PlanPlaces.open(t.name, cc: cc) } label: {
-                                    Text("Open").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
-                                        .padding(.horizontal, 16).frame(height: 44)
-                                        .glassEffect(PageGlass.control.interactive(), in: .capsule)
+                            // ITS NOTE, opened by a swipe to the right (a tap opens the place itself): a second line
+                            // under the name, in the row, never a box of its own (16 Oct: hidden until extended; 26 Nov)
+                            if s.noted == t.id {
+                                if editable {
+                                    itemNote(t, ink: ink)
+                                } else if !t.note.isEmpty {
+                                    Text(t.note).font(.subheadline).foregroundStyle(ink.opacity(0.5))
                                 }
-                                .buttonStyle(.plain)
-                                .padding(.leading, 56).padding(.bottom, 8)
-                                .accessibilityHint("Opens it on the map")
                             }
                         }
+                        .padding(.vertical, s.noted == t.id ? 8 : 0)
+                        Spacer(minLength: 0)
                     }
+                    // A PLACE YOU HAVE BEEN TO: its row a black bar, side to side across the screen, joined to the
+                    // next one's, white words; never a tick, never green (26 Nov; the app's other black bars)
                     .frame(minHeight: 56, alignment: .leading)
+                    .screenWide(been ? Palette.ink : .clear)
+                    .accessibilityValue(t.ref == nil && ListTicks.been(name: t.name, cc: t.cc) == true ? "Been" : "")
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // (a list inside opens, pushed in as any list)
                         if let r = t.ref { Feel.tap(); withAnimation(Motion.quick) { s.openInner(r) }; return }
-                        guard editable || !t.note.isEmpty || !(t.cc ?? "").isEmpty else { return }
+                        // A PLACE TAPPED OPENS IT (26 Nov: no Open button)
+                        if let cc = t.cc, !cc.isEmpty { Feel.tap(); PlanPlaces.open(t.name, cc: cc); return }
+                        // (a thing that is not a place: its note)
+                        guard editable || !t.note.isEmpty else { return }
                         Feel.tap()
                         withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id }
                     }
                     // out of the list (yours only: the wishlist is the map's own, changed on the map) SWIPED LEFT, it
                     // comes out (Undo brings it back); the words show behind it as it goes
-                    .offset(x: swiping?.id == t.id ? min(0, swiping!.x) : 0)
+                    // SWIPED RIGHT, its note opens under its name (or closes); "Note" shows behind it as it goes
+                    .offset(x: swiping?.id == t.id ? (editable ? min(110, swiping!.x) : min(110, max(0, swiping!.x))) : 0)
                     .background(alignment: .trailing) {
                         if editable, swiping?.id == t.id, (swiping?.x ?? 0) < -12 {
                             Text("Remove").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.white)
@@ -856,13 +890,20 @@ struct ListsWater: View {
                                 .background(Palette.ink, in: .capsule)
                         }
                     }
-                    .simultaneousGesture(editable ? DragGesture(minimumDistance: 18)
+                    .background(alignment: .leading) {
+                        if swiping?.id == t.id, (swiping?.x ?? 0) > 12 {
+                            Text(s.noted == t.id ? "Close" : "Note").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
+                                .frame(maxHeight: .infinity)
+                        }
+                    }
+                    .simultaneousGesture(editable || !t.note.isEmpty ? DragGesture(minimumDistance: 18)
                         .onChanged { g in
                             guard abs(g.translation.width) > abs(g.translation.height) * 1.5 else { return }
                             swiping = (t.id, g.translation.width)
                         }
                         .onEnded { g in
-                            if g.translation.width < -110 { removeThing(t.id) }
+                            if editable, g.translation.width < -110 { removeThing(t.id) }
+                            if g.translation.width > 80 { Feel.tap(); withAnimation(Motion.quick) { s.noted = s.noted == t.id ? nil : t.id } }
                             withAnimation(Motion.quick) { swiping = nil }
                         } : nil)
                     // HELD, it lifts and moves: dropped on another row, it goes in that row's place
@@ -892,6 +933,11 @@ struct ListsWater: View {
         }
         .scrollBlur()
         .scrollIndicators(.hidden)
+        .onAppear { TownIndex.shared.load() }
+        .scrollPosition($pagePos)
+        #if DEBUG
+        .onChange(of: ScrollTest.shared.y) { _, y in pagePos.scrollTo(y: y) }
+        #endif
         .onScrollGeometryChange(for: CGFloat.self, of: { max(0, -($0.contentOffset.y + $0.contentInsets.top)) }) { _, v in
             if abs(v - pagePull) > 0.5 || v == 0 { pagePull = v }
         }

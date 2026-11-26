@@ -590,6 +590,9 @@ struct BookOpenView: View {
                 if water.mini != want { withAnimation(Motion.chrome) { water.mini = want } }
             }
             .onDisappear { if water.mini != 0 { withAnimation(Motion.chrome) { water.mini = 0 } } }
+            // A BOOK OPENS WHERE YOU LEFT IT (as Apple's Books does): the page you were on, kept on the phone
+            .onAppear { at = max(0, min(UserDefaults.standard.integer(forKey: "wya.bookAt." + id), b.pages.count - 1)) }
+            .onChange(of: at) { _, v in UserDefaults.standard.set(v, forKey: "wya.bookAt." + id) }
             .fullScreenCover(isPresented: $reading) {
                 BookFullView(id: id, at: $at) { reading = false }
                     .navigationTransition(.zoom(sourceID: id, in: zoom))
