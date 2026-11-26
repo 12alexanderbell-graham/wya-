@@ -88,6 +88,10 @@ struct OnboardingView: View {
     @State private var asking = false
     @State private var choosingPhoto = false
     @State private var photo: PhotosPickerItem?
+    /// whose borders picked here (nothing shows chosen until one is tapped: no default), and the
+    /// countries' list up
+    @State private var bordersPicked: String?
+    @State private var pickingCountry = false
 
     var body: some View {
         GeometryReader { g in
@@ -175,11 +179,13 @@ struct OnboardingView: View {
     /// field; on the map's glass, over the sea, the blue was lost, so there it is the logo's other colour, its lime
     private func question(_ words: String, mark: Color = Palette.blue) -> some View {
         (Text(words).foregroundStyle(Palette.ink) + Text("?!").foregroundStyle(mark))
-            .font(Typeface.nature(44, relativeTo: .largeTitle))
+            // (one size on every page and phone, chosen so the longest question stands on one line on the narrowest
+            // phone; never shrunk to fit; at the largest type it takes a second line)
+            .font(Typeface.nature(38, relativeTo: .largeTitle))
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            // (one line on every phone: the longest question all but fills the Pro Max)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 16)
     }
 
@@ -193,19 +199,27 @@ struct OnboardingView: View {
                 .padding(.top, H / 2 + planet / 2 + 28)
             VStack(spacing: 16) {
                 Spacer()
-                SignInWithAppleButton(.continue) { r in
-                    r.requestedScopes = [.fullName]
-                } onCompletion: { result in
-                    // (no account server yet: signed in on the phone; the name Apple gives becomes your name)
-                    if case .success(let a) = result, let c = a.credential as? ASAuthorizationAppleIDCredential,
-                       let given = c.fullName?.givenName, !given.isEmpty {
-                        name = [given, c.fullName?.familyName ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+                // CONTINUE WITH APPLE IN CLEAR GLASS (14 Oct: glass, not a solid button): Apple's own
+                // sign-in behind a glass pill of the app's, its logo (the one symbol Apple asks for here) and its words
+                Button {
+                    Feel.tap()
+                    Task {
+                        // (no account server yet: signed in on the phone; the name Apple gives becomes your name)
+                        if let n = await AppleSignIn.run(), !n.isEmpty { name = n }
+                        next()
                     }
-                    next()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "apple.logo").font(.body.weight(.semibold))
+                        Text("Continue with Apple").font(.body.weight(.semibold))
+                    }
+                    .foregroundStyle(Palette.ink)
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                    .frame(width: W * 2 / 3, height: 44)
+                    .glassEffect(Glass.clear.interactive(), in: .capsule)
                 }
-                .signInWithAppleButtonStyle(.black)
-                .frame(width: W * 2 / 3, height: 44)
-                .clipShape(Capsule())
+                .buttonStyle(.press)
+                .accessibilityLabel("Continue with Apple")
                 Text("Everything stays on your phone.")
                     .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                     .padding(.bottom, 44)
@@ -278,9 +292,10 @@ struct OnboardingView: View {
 
     /// A PAGE OVER THE MAP: its question and choices on clear glass in the very shape and place of the map's sheet at
     /// 25%, which takes its place when the first open is over; above it, the map itself, untouched
-    private func card<C: View>(_ W: CGFloat, _ H: CGFloat, _ words: String, @ViewBuilder _ choices: () -> C) -> some View {
+    private func card<C: View>(_ W: CGFloat, _ H: CGFloat, _ words: String, level: SheetStop = .quarter,
+                               @ViewBuilder _ choices: () -> C) -> some View {
         let L = water.layout
-        let top = L.top(.quarter)
+        let top = L.top(level)
         return ZStack(alignment: .topLeading) {
             Color.clear.frame(width: W, height: H).contentShape(Rectangle())
             WaterShape(form: water.form(level: top))
@@ -298,15 +313,69 @@ struct OnboardingView: View {
         .frame(width: W, height: H, alignment: .topLeading)
     }
 
+    /// WHOSE BORDERS (14 Oct): the three, nothing chosen until one
+    /// is tapped (a swipe on with none keeps de facto, the map's own); Pick a country raises the card to half the
+    /// screen with every country that has a view of its own, as Map settings > Borders lists them
     private func borders(_ W: CGFloat, _ H: CGFloat) -> some View {
         let pick = MapSettingsStore.shared.value.borders ?? "deFacto"
+        let shown = bordersPicked == nil ? nil : pick
         let half = (W - 64 - 12) / 2
-        return card(W, H, "whose borders") {
-            HStack(spacing: 12) {
-                choice("De facto", on: pick == "deFacto", width: half) { set("borders", "deFacto", now: pick == "deFacto") }
-                choice("United Nations", on: pick == "un", width: half) { set("borders", "un", now: pick == "un") }
+        let country = shown.flatMap { $0 == "deFacto" || $0 == "un" ? nil : BordersNames.name($0, map) }
+        return card(W, H, "whose borders", level: pickingCountry ? .half : .quarter) {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    choice("De facto", on: shown == "deFacto", width: half) { pickBorders("deFacto") }
+                    choice("United Nations", on: shown == "un", width: half) { pickBorders("un") }
+                }
+                choice(country ?? "Pick a country", on: country != nil || pickingCountry, width: W - 64) {
+                    Feel.tap()
+                    withAnimation(Motion.chrome) { pickingCountry.toggle() }
+                }
+                if pickingCountry {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Self.viewCountries(map), id: \.key) { c in
+                                let on = shown == c.key
+                                HStack(spacing: 12) {
+                                    if let f = Flags.row(BordersNames.placeId(c.key)) {
+                                        f.resizable().interpolation(.high).frame(width: 28, height: 21)
+                                    }
+                                    Text(c.name).font(.body).foregroundStyle(on ? Palette.white : Palette.ink).lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 32)
+                                .frame(width: W, height: 48)
+                                // (the one picked a black bar side to side, as every chosen row)
+                                .background { if on { Rectangle().fill(Palette.ink) } }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    pickBorders(c.key)
+                                    withAnimation(Motion.chrome) { pickingCountry = false }
+                                }
+                                .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                            }
+                        }
+                    }
+                    .scrollBlur()
+                    .scrollIndicators(.hidden)
+                    // (down to the screen's foot: the card's top at half, its question, two rows of choices and their gaps above)
+                    .frame(width: W, height: max(96, H - water.layout.top(.half) - 232))
+                }
             }
         }
+    }
+
+    private func pickBorders(_ v: String) {
+        bordersPicked = v
+        set("borders", v, now: MapSettingsStore.shared.value.borders == v)
+    }
+
+    /// the countries with a view of their own (disputes.json), by name
+    static func viewCountries(_ map: MapController) -> [(key: String, name: String)] {
+        (Bundle.main.url(forResource: "disputes", withExtension: "json").flatMap { try? Data(contentsOf: $0) }
+            .flatMap { try? JSONDecoder().decode(DisputeFile.self, from: $0) }?.views ?? [])
+            .map { ($0, BordersNames.name($0, map)) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     /// which map: Map settings' first two rows, Map and Style, their choices as they are there
@@ -359,12 +428,47 @@ struct OnboardingView: View {
         Button(action: act) {
             Text(t).font(.body.weight(.semibold)).foregroundStyle(on ? Palette.white : Palette.ink)
                 .lineLimit(1)
-                // (at the largest sizes a long one shrinks a little rather than cut: "Detail..." at AX5)
-                .minimumScaleFactor(0.75)
+                // (never shrunk: the words stop growing at the size the half-width pill holds whole)
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 .frame(width: width, height: 44)
                 .background { if on { Capsule().fill(Palette.ink) } }
                 .glassEffect(on ? .clear : Glass.clear.interactive(), in: .capsule)
         }
         .buttonStyle(.press)
+    }
+}
+
+/// APPLE'S SIGN-IN, asked from the app's own button: the name Apple gives (given and family), or nil when it gives
+/// none or the sign-in is put away
+@MainActor
+final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var done: ((String?) -> Void)?
+    private static var current: AppleSignIn?
+
+    static func run() async -> String? {
+        await withCheckedContinuation { c in
+            let me = AppleSignIn()
+            current = me
+            me.done = { n in c.resume(returning: n); current = nil }
+            let r = ASAuthorizationAppleIDProvider().createRequest()
+            r.requestedScopes = [.fullName]
+            let ctl = ASAuthorizationController(authorizationRequests: [r])
+            ctl.delegate = me
+            ctl.presentationContextProvider = me
+            ctl.performRequests()
+        }
+    }
+    nonisolated func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization a: ASAuthorization) {
+        let n = (a.credential as? ASAuthorizationAppleIDCredential)?.fullName
+        let words = [n?.givenName ?? "", n?.familyName ?? ""].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        MainActor.assumeIsolated { done?(words.isEmpty ? nil : words) }
+    }
+    nonisolated func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        MainActor.assumeIsolated { done?(nil) }
+    }
+    nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        MainActor.assumeIsolated {
+            UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor()
+        }
     }
 }
