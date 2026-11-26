@@ -582,6 +582,18 @@ extension PlacePageState.OnePage {
                               at: ll.flatMap { $0.count == 2 ? EqualEarth.project(lon: $0[1].doubleValue, lat: $0[0].doubleValue) : nil },
                               photo: PlacePageState.photo(t["img"]) ?? "")
             }
+            // THE CITIES PEOPLE KNOW FIRST (26 Nov: Japan's five above Show more were Tokyo, Yokohama, Osaka, Nagoya and
+            // Sapporo, never Kyoto): in the famous cities set's own order, as search lists a country's; the rest by people
+            let fk = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
+            let known = (CollectionStore.shared.collection(CollectionStore.famousCities)?.items ?? [])
+                .filter { $0.cc.lowercased() == cc.lowercased() }.map { fk($0.name) }
+            if !known.isEmpty {
+                let rank = { (c: PlacePageState.Inside) in known.firstIndex(of: fk(c.name)) ?? Int.max }
+                out.cities = out.cities.enumerated().sorted { a, b in
+                    let x = rank(a.element), y = rank(b.element)
+                    return x != y ? x < y : a.offset < b.offset
+                }.map(\.element)
+            }
             let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
             let raw = all.compactMap { t -> (String, String, String)? in
                 guard let n = t["n"] as? String, let f = PlacePageState.photo(t["img"]) else { return nil }
