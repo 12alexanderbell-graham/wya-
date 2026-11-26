@@ -314,7 +314,7 @@ nonisolated enum Stats {
                     "Regions", "Territories", "Lived in", "Wishlist", "Most stamped", "First stamp",
                     "Latest stamp", "Northernmost", "Southernmost"]),
         ("Time", ["Years travelling", "Weeks in a row", "Months in a row"]),
-        ("Things", ["Lists", "Plans", "Planned with the AI", "Tier lists", "Photo books", "Notes", "Badge levels"]),
+        ("Things", ["Lists", "Plans"] + (FirstRelease.ai ? ["Planned with the AI"] : []) + ["Tier lists", "Photo books", "Notes", "Badge levels"]),
     ]
 
     static func mine(counted: [String: String?]) -> [StatGroup] {

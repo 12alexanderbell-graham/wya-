@@ -76,14 +76,14 @@ enum MapSettingsRows {
               shows: { _ in true }, get: { $0.pinsTrack }, set: { s, v in s.pinsTrack = v }),
         // THE AI: off, no AI section shows anywhere and Siri's wya questions say it is off
         .init(id: "ai", name: "AI", group: 2, choices: c([("on", "On"), ("off", "Off")]), page: nil, defaultValue: "on",
-              shows: { _ in true }, get: { $0.ai ? "on" : "off" }, set: { s, v in s.ai = v == "on" }),
+              shows: { _ in FirstRelease.ai }, get: { $0.ai ? "on" : "off" }, set: { s, v in s.ai = v == "on" }),
         // how long its answers are: the same answer, at the length you like (shown only while the AI is on)
         .init(id: "aiLength", name: "Answers", group: 2,
               choices: c([("0", "Shortest"), ("1", "Short"), ("2", "Normal"), ("3", "Long")]), page: nil, defaultValue: "2",
-              shows: { $0.ai }, get: { String($0.aiLength) }, set: { s, v in s.aiLength = Int(v) ?? 2 }),
+              shows: { FirstRelease.ai && $0.ai }, get: { String($0.aiLength) }, set: { s, v in s.aiLength = Int(v) ?? 2 }),
         // what it remembers about you (AINotes): its own page, each note taken out by its hold menu, new ones typed
         .init(id: "aiNotes", name: "What it knows", group: 2, choices: nil, page: "aiNotes", defaultValue: nil,
-              shows: { $0.ai }, get: { _ in "" }, set: { _, _ in }),
+              shows: { FirstRelease.ai && $0.ai }, get: { _ in "" }, set: { _, _ in }),
         // group 4: more where the app's maps, words and pictures come from, each with its licence
         .init(id: "sources", name: "Sources", group: 3, choices: nil, page: "sources", defaultValue: nil,
               shows: { _ in true }, get: { _ in "" }, set: { _, _ in }),

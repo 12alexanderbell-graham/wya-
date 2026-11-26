@@ -32,7 +32,7 @@ nonisolated struct MapSettings: Codable, Equatable, Sendable {
     /// Pins' tracking: off | exact | city | region (about 100 km); where you go drawn as pins
     var pinsTrack = "off"
     var afghanistanFlag = "tricolour" // tricolour | taliban
-    /// THE AI: on unless you turn it off
+    /// THE AI: on unless you turn it off; always off while the app ships with no AI (FirstRelease.ai)
     var ai = true
     /// how long the AI's answers are: 0 the heart of it, 1 a sentence, 2 its normal answer, 3 the fuller one.
     /// Directness is never a setting (audit D366, D491)
@@ -88,12 +88,17 @@ final class MapSettingsStore {
         return dir.appendingPathComponent("map-settings.json")
     }
 
+    /// the AI's own choice as saved (kept as it was while the first release holds the AI off, so the update that
+    /// brings it finds what you had)
+    private var savedAI = true
     private init() {
         if let u = Self.url, let d = try? Data(contentsOf: u), let s = try? JSONDecoder().decode(MapSettings.self, from: d) {
             value = s
         } else {
             value = MapSettings()
         }
+        savedAI = value.ai
+        if !FirstRelease.ai { value.ai = false }
         Self.mirror(value)
         Borders.view = value.bordersView
         Borders.picks = value.disputes
@@ -104,12 +109,22 @@ final class MapSettingsStore {
     func change(_ f: (inout MapSettings) -> Void) {
         var s = value
         f(&s)
+        if !FirstRelease.ai { s.ai = false } else { savedAI = s.ai }
         guard s != value else { return }
         value = s
         Self.mirror(s)
-        if let u = Self.url, let d = try? JSONEncoder().encode(s) { try? d.write(to: u, options: .atomic) }
+        var kept = s
+        kept.ai = savedAI
+        if let u = Self.url, let d = try? JSONEncoder().encode(kept) { try? d.write(to: u, options: .atomic) }
     }
 
     /// what code off the main thread reads (the Count service)
     private static func mirror(_ s: MapSettings) { UserDefaults.standard.set(s.count, forKey: "mapCount") }
+}
+
+/// WHAT THE FIRST RELEASE HAS (26 Nov: it ships with no AI at all; the AI comes in an update after launch). Off, no AI
+/// shows anywhere: its settings, Suggestions under lists, plans and pages, the AI's Siri questions, its badges and
+/// stats. Its code stays, switched off here, for the update that brings it.
+nonisolated enum FirstRelease {
+    static let ai = false
 }

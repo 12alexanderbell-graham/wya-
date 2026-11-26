@@ -64,6 +64,8 @@ struct CountryQuery: EntityStringQuery {
 // MARK: ask wya
 
 struct AskWyaIntent: AppIntent {
+    /// (the first release has no AI, FirstRelease.ai: not offered in Siri or Shortcuts until it does)
+    static let isDiscoverable: Bool = false
     static let title: LocalizedStringResource = "Ask wya"
     static let description = IntentDescription("Ask wya's AI anything. It knows what you stamped.")
     static let openAppWhenRun = false
@@ -197,6 +199,8 @@ struct ShowCountryIntent: AppIntent {
 }
 
 struct PlanTripIntent: AppIntent {
+    /// (the first release has no AI, FirstRelease.ai: not offered in Siri or Shortcuts until it does)
+    static let isDiscoverable: Bool = false
     static let title: LocalizedStringResource = "Plan a trip"
     static let description = IntentDescription("wya's AI makes a day-by-day plan, in front of you, in Plans.")
     static let openAppWhenRun = true
@@ -302,6 +306,8 @@ struct AddToListIntent: AppIntent {
 // MARK: what it remembers about you
 
 struct RememberIntent: AppIntent {
+    /// (the first release has no AI, FirstRelease.ai: not offered in Siri or Shortcuts until it does)
+    static let isDiscoverable: Bool = false
     static let title: LocalizedStringResource = "Remember something"
     static let description = IntentDescription("Tell wya's AI something about you to keep in mind.")
     static let openAppWhenRun = false
@@ -318,6 +324,8 @@ struct RememberIntent: AppIntent {
 }
 
 struct WhatYouKnowIntent: AppIntent {
+    /// (the first release has no AI, FirstRelease.ai: not offered in Siri or Shortcuts until it does)
+    static let isDiscoverable: Bool = false
     static let title: LocalizedStringResource = "What do you know about me"
     static let description = IntentDescription("What you've told wya's AI to remember.")
     static let openAppWhenRun = false
@@ -331,6 +339,8 @@ struct WhatYouKnowIntent: AppIntent {
 }
 
 struct ForgetIntent: AppIntent {
+    /// (the first release has no AI, FirstRelease.ai: not offered in Siri or Shortcuts until it does)
+    static let isDiscoverable: Bool = false
     static let title: LocalizedStringResource = "Forget something"
     static let description = IntentDescription("Take something out of what wya's AI remembers.")
     static let openAppWhenRun = false
@@ -345,8 +355,9 @@ struct ForgetIntent: AppIntent {
 
 struct WyaShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        AppShortcut(intent: AskWyaIntent(), phrases: ["Ask \(.applicationName)", "Ask \(.applicationName) something"],
-                    shortTitle: "Ask", systemImageName: "location.north.line")
+        // (the AI's three, Ask, Plan a trip and Remember, come back with the AI after launch, FirstRelease.ai; kept here:
+        // AppShortcut(intent: AskWyaIntent(), phrases: ["Ask \(.applicationName)", "Ask \(.applicationName) something"],
+        //             shortTitle: "Ask", systemImageName: "location.north.line"))
         AppShortcut(intent: StampCountryIntent(), phrases: ["Stamp \(\.$country) in \(.applicationName)",
                                                            "Add \(\.$country) to my \(.applicationName) passport"],
                     shortTitle: "Stamp a country", systemImageName: "checkmark.seal")
@@ -362,18 +373,18 @@ struct WyaShortcuts: AppShortcutsProvider {
         AppShortcut(intent: ShowCountryIntent(), phrases: ["Show \(\.$country) in \(.applicationName)",
                                                           "Open \(\.$country) in \(.applicationName)"],
                     shortTitle: "Show a country", systemImageName: "map")
-        AppShortcut(intent: PlanTripIntent(), phrases: ["Plan a trip to \(\.$country) with \(.applicationName)",
-                                                       "Plan \(\.$country) in \(.applicationName)"],
-                    shortTitle: "Plan a trip", systemImageName: "airplane")
+        // AppShortcut(intent: PlanTripIntent(), phrases: ["Plan a trip to \(\.$country) with \(.applicationName)",
+        //                                                "Plan \(\.$country) in \(.applicationName)"],
+        //             shortTitle: "Plan a trip", systemImageName: "airplane")
         AppShortcut(intent: NextTripIntent(), phrases: ["What's my next trip in \(.applicationName)",
                                                        "When is my trip in \(.applicationName)"],
                     shortTitle: "My next trip", systemImageName: "calendar")
         AppShortcut(intent: AddToListIntent(), phrases: ["Add to my \(\.$list) list in \(.applicationName)",
                                                         "Add something to a \(.applicationName) list"],
                     shortTitle: "Add to a list", systemImageName: "list.bullet")
-        AppShortcut(intent: RememberIntent(), phrases: ["Remember something in \(.applicationName)",
-                                                       "Tell \(.applicationName) something about me"],
-                    shortTitle: "Remember", systemImageName: "brain")
+        // AppShortcut(intent: RememberIntent(), phrases: ["Remember something in \(.applicationName)",
+        //                                                "Tell \(.applicationName) something about me"],
+        //             shortTitle: "Remember", systemImageName: "brain")
         // (Apple allows ten App Shortcuts: and are actions in Shortcuts, without a phrase)
     }
 }

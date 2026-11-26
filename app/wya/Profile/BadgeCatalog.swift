@@ -355,9 +355,12 @@ nonisolated extension Badges {
         add("book-videos", "Videos", [1, 5, 20, 50, 150], "Video pages in your books.", family: "things")
         add("sketches", "Sketches", [1, 5, 20, 50, 150], "Drawn pages in your books.", family: "things")
 
-        keep("aiplans", family: "ai")
-        add("made-with-the-ai", "Made with the AI", [1, 5, 15, 40, 100], "Lists and tier lists the AI made with you.", family: "ai")
-        add("ai-maps", "AI maps", [1, 5, 15, 40, 100], "Maps the AI drew for you.", family: "ai")
+        // (the AI's badges only once the app has an AI: FirstRelease.ai)
+        if FirstRelease.ai {
+            keep("aiplans", family: "ai")
+            add("made-with-the-ai", "Made with the AI", [1, 5, 15, 40, 100], "Lists and tier lists the AI made with you.", family: "ai")
+            add("ai-maps", "AI maps", [1, 5, 15, 40, 100], "Maps the AI drew for you.", family: "ai")
+        }
 
         // (no seasons: a challenge has no season and no target, the first one to it, 22 Oct; 25 Nov the "Seasons" badge
         // and the season in Challenge's line taken out)
