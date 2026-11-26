@@ -62,7 +62,8 @@ struct ListAddRow: View {
     }
 
     /// what is typed, found: countries first (the start of their name), then regions, then towns
-    private var found: [Found] {
+    private var found: [Found] { Self.find(text, listID: listID) }
+    static func find(_ text: String, listID: String) -> [Found] {
         let q = text.trimmingCharacters(in: .whitespaces)
         guard q.count >= 2 else { return [] }
         let fold = { (s: String) in s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
@@ -102,10 +103,23 @@ struct ListAddRow: View {
         _ = TownIndex.shared.ready
         let towns = TownIndex.shared.hits(q, open: nil, limit: 4)
         // (only by size: a village named as typed stood before the city)
-        let big = towns.filter { $0.people >= 100_000 }.sorted { $0.people > $1.people }
+        // (a city people know counts as big whatever its own count, and goes first, 26 Nov: Venice counts 51,000)
+        let known = SearchResults.famousCityNames()
+        let isKnown = { (t: TownIndex.Hit) in known.contains(t.name.townFolded + "|" + t.file.lowercased()) }
+        let big = towns.filter { $0.people >= 100_000 || isKnown($0) }
+            .sorted { isKnown($0) != isKnown($1) ? isKnown($0) : $0.people > $1.people }
         for t in big.prefix(2) {
             let cc = t.file.lowercased()
             out.append(Found(name: t.name, cc: cc, line: PlacePageState.countryName(cc)))
+        }
+        // A CITY PEOPLE KNOW, TYPED WHOLE: its two best known sights straight after it (as the map's search has them):
+        // Paris adds the Eiffel Tower and the Louvre, whose names don't hold the word
+        let fq0 = q.townFolded
+        if let c = big.first, isKnown(c), c.name.townFolded == fq0 || c.name.townFolded == fq0 + " city" {
+            for h in ThingIndex.shared.best(lat: c.lat, lon: c.lon).filter({ $0.name.townFolded != c.name.townFolded }).prefix(2) {
+                let cc = h.file.lowercased()
+                out.append(Found(name: h.name, cc: cc, line: PlacePageState.countryName(cc)))
+            }
         }
         _ = ThingIndex.shared.ready
         let fs = q.townFolded

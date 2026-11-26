@@ -1573,7 +1573,7 @@ struct SearchResults: View {
         NSLog("wya searchnames %@", names.joined(separator: " ; "))
         #endif
     }
-    private static func famousCityNames() -> Set<String> {
+    static func famousCityNames() -> Set<String> {
         guard let c = CollectionStore.shared.collection(CollectionStore.famousCities) else { return [] }
         if famousCache.count == c.items.count { return famousCache.names }
         let names = Set(c.items.map { $0.name.townFolded + "|" + $0.cc.lowercased() })
