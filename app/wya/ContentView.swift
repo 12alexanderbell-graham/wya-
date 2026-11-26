@@ -470,6 +470,11 @@ struct ContentView: View {
             await map.load()
             // finds left waiting at the last review are darkened again (9.6)
             UploadState.shared.restoreWaiting(map: map)
+            // the stamp's and the page's sounds made ready in the background once the map is up, not as the first card opens
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                Sound.prepare()
+            }
             // the Profile's numbers counted once your marks are read, so they are there when its tab opens
             Task {
                 for _ in 0 ..< 100 where !MarkStore.shared.loaded { try? await Task.sleep(for: .milliseconds(100)) }
