@@ -275,7 +275,9 @@ extension PlacePageState.OnePage {
         // NEARBY: the best known sights with a photo within 2 km, as cards like a country's highlights, each how far
         // it is
         let size = Double(setArea())
-        let reach = size > 0 ? min(90, max(2, size.squareRoot() / 2)) : kind == "mountain" ? 10 : 2
+        // (a mountain's 25 km round its summit, 26 Nov: Mount Fuji's had none at 10, its lakes and the Chureito pagoda
+        // 15 to 25 km off)
+        let reach = size > 0 ? min(90, max(2, size.squareRoot() / 2)) : kind == "mountain" ? 25 : 2
         var lands = [cc.lowercased()]
         for c in CollectionStore.shared.all { if let i = c.items.first(where: { $0.key == key }) { lands += i.ccs } }
         if let f = TownIndex.shared.nearest(lat: ll.lat, lon: ll.lon, km: max(40, reach))?.file { lands.append(f.lowercased()) }
