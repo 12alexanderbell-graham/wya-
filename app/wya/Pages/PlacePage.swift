@@ -814,6 +814,10 @@ extension PlacePageState.OnePage {
             let reach = people >= 1_000_000 ? 15.0 : people >= 250_000 ? 8.0 : 5.0
             out.highlights = await nearHighlights(cc, lat: ll[0].doubleValue, lon: ll[1].doubleValue, reach: reach)
         }
+        if out.photo == nil, let n = t["n"] as? String, let ll = t["ll"] as? [NSNumber], ll.count == 2 {
+            out.photo = await PlacePageState.wikipediaPhoto(wd: nil, name: n, lat: ll[0].doubleValue, lon: ll[1].doubleValue,
+                                                            within: [t["r"] as? String ?? "", PlacePageState.countryName(cc)])
+        }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id else { return }
         facts = out
@@ -905,6 +909,7 @@ extension PlacePageState.OnePage {
         }
         // (its highlights, 5 km round it as a smaller city's, and its photo the first of them's: Hallstatt, Positano and Zermatt opened bare)
         out.highlights = await nearHighlights(cc, lat: t.lat, lon: t.lon, reach: 5)
+        if out.photo == nil { out.photo = await PlacePageState.wikipediaPhoto(wd: nil, name: t.name, lat: t.lat, lon: t.lon, within: [t.region, PlacePageState.countryName(cc)]) }
         if out.photo == nil { out.photo = out.highlights.lazy.compactMap { $0.photo }.first }
         guard key.id == id, !out.rows.isEmpty || !out.prose.isEmpty else { return }
         facts = out
@@ -1617,6 +1622,14 @@ extension PlacePageState {
                   let (sd, _) = try? await URLSession.shared.data(from: su),
                   let sj = try? JSONSerialization.jsonObject(with: sd) as? [String: Any],
                   (sj["type"] as? String) == "standard", var x = sj["extract"] as? String, x.count > 60 else { continue }
+            // (its lead image's file, for a page with no photo of its own: wikipediaPhoto)
+            // (a large one comes as a resized copy, ".../thumb/a/ab/File.jpg/3840px-File.jpg": its file is the part
+            // before the size)
+            let img = ((sj["originalimage"] as? [String: Any])?["source"] as? String).flatMap { u -> String? in
+                guard let parts = URL(string: u)?.pathComponents, let last = parts.last else { return nil }
+                let file = parts.contains("thumb") && parts.count >= 2 ? parts[parts.count - 2] : last
+                return file.removingPercentEncoding?.replacingOccurrences(of: "_", with: " ")
+            }
             if check {
                 guard let co = sj["coordinates"] as? [String: Any], let la = (co["lat"] as? NSNumber)?.doubleValue,
                       let lo = (co["lon"] as? NSNumber)?.doubleValue else { continue }
@@ -1630,10 +1643,21 @@ extension PlacePageState {
                 x = head + x[dot.lowerBound...]
             }
             wikipedia[key] = x
+            // (only an article that passed the place's own check above: a town's, never a namesake's)
+            wikipediaImage[key] = img ?? ""
             return x
         }
         wikipedia[key] = ""
         return nil
+    }
+    static var wikipediaImage: [String: String] = [:]
+    /// A PLACE'S PHOTO FROM ITS WIKIPEDIA ARTICLE (26 Nov: Hallstatt, which the data has no photo of, opened on its
+    /// museum's): the article's lead image, through the pages' own photo rule; the article found as wikipediaIntro finds it
+    static func wikipediaPhoto(wd: String?, name: String, lat: Double, lon: Double, within: [String] = []) async -> String? {
+        _ = await wikipediaIntro(wd: wd, name: name, lat: lat, lon: lon, within: within)
+        let key = (wd ?? "") + "|" + name + "|" + within.joined(separator: "|")
+        guard let f = wikipediaImage[key], !f.isEmpty else { return nil }
+        return photo(f)
     }
     static func listingArticle(_ cc: String, wd: String?) async -> String? {
         guard let wd, case .ok(let d) = await Servers.data.file("listings/\(cc).json"),
