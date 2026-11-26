@@ -1190,7 +1190,8 @@ extension PlacePageState {
         }.map(\.element)
     }
     nonisolated static func push(_ a: Activity) -> Int {
-        if isStudy(a.name) { return 20 }
+        // (a border marker too, 26 Nov: Brazil's seventh thing to do was its Triple Point)
+        if isStudy(a.name) || a.name.range(of: #"\b(triple point|tripoint|border marker|boundary marker)\b"#, options: [.regularExpression, .caseInsensitive]) != nil { return 20 }
         return isVenue(a.name, a.line) ? 6 : 0
     }
     /// a place of study or a visitors' office: not what a traveller comes for
