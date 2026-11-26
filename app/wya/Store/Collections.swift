@@ -30,11 +30,13 @@ final class CollectionStore {
         var area = 0
         /// its name on the map: a list's long official name up to its first comma, colon or bracket; its card and
         /// page say it whole
-        var short: String {
+        var short: String { Self.short(name) }
+        /// a long official name down to its first part, before a comma or colon; a first part under 5 letters keeps the whole
+        nonisolated static func short(_ name: String) -> String {
             guard name.count > 30 else { return name }
             let cut = name.firstIndex { ",:(–".contains($0) } ?? name.endIndex
             let head = name[..<cut].trimmingCharacters(in: .whitespaces)
-            return head.count >= 8 ? head : name
+            return head.count >= 5 ? head : name
         }
         var key: PlaceKey { own.flatMap { PlaceKey($0) } ?? PlaceKey(.thing, "wd:" + id) }
     }

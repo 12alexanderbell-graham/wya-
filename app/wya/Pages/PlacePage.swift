@@ -649,7 +649,9 @@ extension PlacePageState.OnePage {
                 // (not a whole prefecture, province or state the list took in by mistake: Japan's had)
                 if ((h["kind"] as? [String]) ?? []).contains(where: { $0.hasPrefix("prefecture") || $0.hasPrefix("province of") || $0.hasPrefix("state of") }) { return nil }
                 let year = h["year"] as? String
-                return PlacePageState.Highlight(id: q, name: n.prefix(1).uppercased() + n.dropFirst(), line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
+                // (the short of a long official name, as Places' lists have it)
+                let sn = CollectionStore.Item.short(n)
+                return PlacePageState.Highlight(id: q, name: sn.prefix(1).uppercased() + sn.dropFirst(), line: year.map { "World Heritage since \($0)" } ?? "World Heritage",
                                  photo: PlacePageState.photo(h["img"]) ?? (h["img"] as? [String])?.first, shared: ((h["cc"] as? [String])?.count ?? 1) > 1)
             }
         }
