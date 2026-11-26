@@ -1218,7 +1218,11 @@ final class UploadState {
                                dropped: Array(roundDropped).sorted())
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let d = try? JSONEncoder().encode(out) { try? d.write(to: url, options: .atomic) }
+        roundKept = .some(out)
     }
+    /// the waiting round as last read or written, kept in memory: nil not read yet, .some(nil) none waiting (the head
+    /// asks on every redraw whether a round waits, and it read and decoded the file each time, 26 Nov)
+    @ObservationIgnored private var roundKept: WaitingRound?? = nil
     private static func encode(_ r: [RegionFind]) -> [WaitingRound.Region] {
         r.map { .init(id: $0.id, name: $0.name, cc: $0.cc, country: $0.country, row: $0.row,
                       visits: $0.visits.map { [$0.from.description, $0.to.description] }) }
@@ -1256,11 +1260,15 @@ final class UploadState {
     }
     private func forgetRound() {
         if let url = Self.roundURL { try? FileManager.default.removeItem(at: url) }
+        roundKept = .some(nil)
     }
     /// the regions left waiting by a round, or nil (a region stamped since is left out)
     private func waitingRound() -> (MarkSource, [RegionFind], Set<String>)? {
-        guard let url = Self.roundURL, let d = try? Data(contentsOf: url), let x = try? JSONDecoder().decode(WaitingRound.self, from: d)
-        else { return nil }
+        if roundKept == nil {
+            roundKept = .some(Self.roundURL.flatMap { try? Data(contentsOf: $0) }
+                .flatMap { try? JSONDecoder().decode(WaitingRound.self, from: $0) })
+        }
+        guard let kept = roundKept, let x = kept else { return nil }
         let regions = Self.decode(x.regions).filter { !MarkStore.shared.state(PlaceKey(.region, $0.id)).stamped }
         if regions.isEmpty { forgetRound(); return nil }
         return (MarkSource(rawValue: x.source) ?? .history, regions, Set(x.dropped).intersection(regions.map(\.id)))
