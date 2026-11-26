@@ -744,8 +744,9 @@ extension PlacePageState.OnePage {
         // cards never read them above)
         ThingStore.shared.load(cc)
         for _ in 0 ..< 60 where ThingStore.shared.things(cc) == nil { try? await Task.sleep(for: .milliseconds(100)) }
-        out.activities = PlacePageState.knownFirst(await PlacePageState.activities(cc, town: nil, first: mainCities),
-                                                   things: ThingStore.shared.things(cc) ?? [])
+        out.activities = PlacePageState.oneEach(PlacePageState.knownFirst(await PlacePageState.activities(cc, town: nil, first: mainCities),
+                                                                          things: ThingStore.shared.things(cc) ?? []),
+                                                things: ThingStore.shared.things(cc) ?? [])
         // a country whose own picture is a map (most are): its first sight's photo at the top instead
         if out.photo == nil { out.photo = await PlacePageState.bestSightPhoto(cc) }
         if out.photo == nil { out.photo = out.highlights.lazy.filter { !$0.shared }.compactMap { PlacePageState.photo($0.photo) }.first }
@@ -1207,6 +1208,50 @@ extension PlacePageState {
     }
     #endif
 
+    /// ONE ROW FOR ONE PLACE (26 Nov: France listed "Monsoreau Chateau" and "Château de Montsoreau-Musée d'art
+    /// contemporain", one castle under two Wikidata ids and a misspelling): a row whose thing stands within 120 m of an
+    /// earlier row's and shares a distinctive word with it (its name or its thing's; a letter's slip allowed in a long
+    /// word) is that place again, and goes (120 m: St Peter's Basilica and its square, 250 m apart, both stay)
+    static func oneEach(_ acts: [Activity], things: [ThingStore.Thing]) -> [Activity] {
+        let generic: Set<String> = ["chateau", "castle", "museum", "musee", "museo", "church", "eglise", "iglesia", "chiesa",
+                                    "cathedral", "cathedrale", "basilica", "basilique", "palace", "palais", "palazzo", "abbey",
+                                    "abbaye", "saint", "sainte", "notre", "national", "garden", "jardin", "tower", "bridge",
+                                    "square", "place", "street", "river", "temple", "mosque", "monastery", "house", "maison",
+                                    "contemporain", "contemporary", "modern", "moderne", "historic", "royal", "grand", "great"]
+        let byID = Dictionary(things.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        func words(_ s: String) -> Set<String> {
+            Set(s.townFolded.split(whereSeparator: { !$0.isLetter }).map(String.init).filter { $0.count >= 5 && !generic.contains($0) })
+        }
+        func alike(_ a: String, _ b: String) -> Bool {
+            if a == b { return true }
+            guard min(a.count, b.count) >= 7, abs(a.count - b.count) <= 1 else { return false }
+            // one letter added, dropped or changed
+            let x = Array(a), y = Array(b)
+            var i = 0, j = 0, slips = 0
+            while i < x.count && j < y.count {
+                if x[i] == y[j] { i += 1; j += 1; continue }
+                slips += 1
+                if slips > 1 { return false }
+                if x.count > y.count { i += 1 } else if y.count > x.count { j += 1 } else { i += 1; j += 1 }
+            }
+            return slips + (x.count - i) + (y.count - j) <= 1
+        }
+        var kept: [(lat: Double, lon: Double, words: Set<String>)] = []
+        var out: [Activity] = []
+        for a in acts {
+            guard let q = a.wd, let t = byID[q] else { out.append(a); continue }
+            let p = EqualEarth.unproject(SIMD2(Double(t.at.x), Double(t.at.y)))
+            let w = words(a.name).union(words(t.name))
+            let again = kept.contains { k in
+                let dy = (k.lat - p.lat) * 111.2, dx = (k.lon - p.lon) * 111.2 * cos(p.lat * .pi / 180)
+                return dx * dx + dy * dy < 0.12 * 0.12 && k.words.contains { kw in w.contains { alike(kw, $0) } }
+            }
+            if again { continue }
+            kept.append((p.lat, p.lon, w))
+            out.append(a)
+        }
+        return out
+    }
     /// a country's best known sights first, in the order they are known: the rows of the best known sights (fame 3)
     /// by their place in the things file, no more than two from one town before every other town's; the rest as they were
     static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing]) -> [Activity] {
