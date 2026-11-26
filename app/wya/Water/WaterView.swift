@@ -88,7 +88,9 @@ struct WaterView: View {
             // on that same glass ON LISTS the water is the whole screen, so the tabs get the capsule's own glass
             // under them (on the Map and the Profile the water itself draws in to that capsule, or holds them at its
             // foot): one tab bar shape
-            if water.lists {
+            // (only while the water is more than the capsule: drawn in to it, under a page opened from Lists, the water's
+            // own glass is the capsule, and this one on it made glass on glass, a dark chrome ball, 26 Nov)
+            if water.lists, f.sheet > 0.001 {
                 let c = L.capsule(mini: water.mini)
                 Color.clear
                     .frame(width: c.width, height: c.height)
