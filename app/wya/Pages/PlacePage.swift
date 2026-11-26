@@ -2288,7 +2288,9 @@ private struct PageLayer: View {
                     }
                 }
             if !page.what.isEmpty {
+                // (centred under the centred name: a long line wrapped left-aligned under it, 26 Nov)
                 Text(page.what).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
+                    .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     .risesIn(key.description + "|" + page.what, delay: 0.08)
             }
         }

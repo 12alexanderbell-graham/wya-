@@ -1207,10 +1207,16 @@ struct ListsWater: View {
                 // a second line (25 Nov: an undated plan had Import alone under First day and Last day)
                 // (set widths, half the row each, 25 Nov: buttons are never sized by their words; the four were each as
                 // wide as their words)
-                let half = (w - 12) / 2
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 12) { datePills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
-                    HStack(spacing: 12) { calendarPills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
+                // (an undated plan has no Add to Calendar: its Import went alone on a second row at half width, 26 Nov;
+                // then the three share one row, a third each)
+                let half = (w - 12) / 2, third = (w - 24) / 3
+                if !p.start.isEmpty, p.count > 0 {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 12) { datePills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
+                        HStack(spacing: 12) { calendarPills(p, half: half); Spacer(minLength: 0) }.frame(minHeight: 56)
+                    }
+                } else {
+                    HStack(spacing: 12) { datePills(p, half: third); calendarPills(p, half: third) }.frame(minHeight: 56)
                 }
                 if let w = icsWords {
                     Text(w).font(.body).foregroundStyle(Palette.ink.opacity(0.5)).frame(minHeight: 28)
