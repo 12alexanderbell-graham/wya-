@@ -241,7 +241,9 @@ extension PlacePageState.OnePage {
         }
         if let town = whereTown {
             let land = PlacePageState.countryName(town.file)
-            let big = setArea() >= 100 || town.name.townFolded == self.name.townFolded
+            // (and an island or a lake by its region whatever its size, 26 Nov: Corfu had named Kompitsion, a
+            // village on it, and Hvar "Jelsa")
+            let big = setArea() >= 100 || town.name.townFolded == self.name.townFolded || ["island", "lake"].contains(kind.lowercased())
             // (the town's first-level division as its record names it, its first name where it gives two,)
             let region = town.region.split(separator: "/").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
             let name = big ? (region.isEmpty || self.name.townFolded.contains(region.townFolded) ? "" : region) : town.name
