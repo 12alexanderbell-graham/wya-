@@ -67,8 +67,20 @@ nonisolated enum StatsBook {
         if let t = total(of: b, world: w), b.unit == .count {
             return StatRow(label: b.name, value: of(format(b.have), format(t)))
         }
+        // (a time's count says what it counts: "Streak 3" read as nothing, 26 Nov walk)
+        if let u = timeUnit[b.id] {
+            return StatRow(label: b.name, value: format(b.have) + " " + (b.have == 1 ? u.0 : u.1))
+        }
+        // (the furthest you are sure you were, north or south, as a latitude is written: "22.1° S")
+        if b.id == "furthest-north" || b.id == "furthest-south" {
+            return StatRow(label: b.name, value: Badges.say(b.have, b.unit, format: format) + (b.id == "furthest-north" ? " N" : " S"))
+        }
         return StatRow(label: b.name, value: Badges.say(b.have, b.unit, format: format))
     }
+    /// the time badges' units, one and many
+    private static let timeUnit: [String: (String, String)] = [
+        "streak": ("week", "weeks"), "months": ("month", "months"), "years": ("year", "years"), "early": ("day", "days"),
+    ]
 
     static func page(badges: [Badge], world w: BadgeWorld?, head: [String: [StatRow]] = [:],
                             foot: [String: [StatRow]] = [:], format: (Int) -> String = Badges.grouped,
