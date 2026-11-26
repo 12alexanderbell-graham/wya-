@@ -1152,7 +1152,7 @@ struct SearchResults: View {
         let countryStarts = hits.filter { i in w0.map { $0.places[i].n.townFolded.hasPrefix(typedFold) || $0.aliases[typedFold] != nil } ?? false }
         let countryOthers = hits.filter { !countryStarts.contains($0) }
         let wholeCountry = countryStarts.first { i in w0.map { $0.places[i].n.townFolded == typedFold || $0.aliases[typedFold] == $0.places[i].id } ?? false }
-        let countryCities = Self.timed("cities") { countriesSearch && typed ? wholeCountry.flatMap { i in w0.map { TownIndex.shared.biggest(in: $0.places[i].id, count: 3) } } ?? [] : [] }
+        let countryCities = Self.timed("cities") { countriesSearch && typed ? wholeCountry.flatMap { i in w0.map { Self.citiesOf($0.places[i].id) } } ?? [] : [] }
         let exactRegions = namedRegions.filter { $0.name.townFolded == typedFold }
         // (a small region that only starts with it comes after a country found by a near spelling: "rome" listed
         // Romelândia and Romeas Haek before Romania)
@@ -1538,6 +1538,20 @@ struct SearchResults: View {
         let names = Set(c.items.map { $0.name.townFolded + "|" + $0.cc.lowercased() })
         famousCache = (c.items.count, names)
         return names
+    }
+    /// A COUNTRY'S CITIES, typed whole (26 Nov: the three biggest left out Kyoto): the cities people know in it first, in the famous cities set's own order (Tokyo, Kyoto, Osaka; Rome,
+    /// Venice, Milan), then its biggest towns to make three
+    static func citiesOf(_ cc: String) -> [TownIndex.Hit] {
+        let c = cc.lowercased()
+        let known = (CollectionStore.shared.collection(CollectionStore.famousCities)?.items ?? [])
+            .filter { $0.cc.lowercased() == c }
+            .compactMap { it -> TownIndex.Hit? in
+                guard let k = it.own ?? (it.id.hasPrefix("t:") ? it.id : nil), k.hasPrefix("t:") else { return nil }
+                return TownIndex.shared.hit(String(k.dropFirst(2)))
+            }
+        var out = Array(known.prefix(3))
+        for b in TownIndex.shared.biggest(in: c, count: 3) where out.count < 3 && !out.contains(where: { $0.id == b.id }) { out.append(b) }
+        return out
     }
     private static func countryKeys(typed: String, starts: [Int], cities: [TownIndex.Hit], towns: [TownIndex.Hit], exact: [RegionIndex.Hit],
                                     named: [RegionIndex.Hit], sights: [ResultKey], otherTowns: [TownIndex.Hit], others: [Int],
