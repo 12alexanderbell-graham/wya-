@@ -70,8 +70,19 @@ enum ListColours {
         UIColor(colour(n)).getRed(&r, green: &g, blue: &b, alpha: &a)
         return SIMD4(Float(r), Float(g), Float(b), 1)
     }
+    /// A COLOUR OF YOUR OWN, from the colour wheel (26 Nov: any colour, never a fixed row of eight): kept in the list as
+    /// "pick:hue,light,strength"
+    static func pick(_ n: String) -> ColourPick? {
+        guard n.hasPrefix("pick:") else { return nil }
+        let v = n.dropFirst(5).split(separator: ",").compactMap { Double($0) }
+        return v.count == 3 ? ColourPick(hue: v[0], light: v[1], strength: v[2]) : nil
+    }
+    static func name(_ c: ColourPick) -> String {
+        String(format: "pick:%.1f,%.3f,%.3f", c.hue, c.light, c.strength)
+    }
     static func colour(_ n: String) -> Color {
-        switch n {
+        if let c = pick(n) { return c.color }
+        return switch n {
         case "teal": Palette.teal
         case "blue": Palette.blue
         case "yellow": Palette.yellow
@@ -156,6 +167,8 @@ struct ListInfoSheet: View {
     @State private var picked: PhotosPickerItem?
     /// which of the icon's pieces is being coloured
     @State private var piece = 2
+    /// the colour under the finger on the wheel, before it lifts
+    @State private var livePick: ColourPick?
     @State private var confirmDelete = false
     @FocusState private var naming: Bool
     /// the page's width, given by the shelf: its pills are a third of it each, never as wide as their words (14 Sep
@@ -290,12 +303,12 @@ struct ListInfoSheet: View {
             }
             if icon != nil {
                 // ITS THREE PIECES: each tapped, then given its colour: the piece chosen,
-                // then its colour from the app's eight; the front piece marked white, the middle grey, so you know
+                // then its colour on the colour wheel; the front piece marked white, the middle grey, so you know
                 // which goes where
                 HStack(spacing: 12) {
                     ForEach([2, 1, 0], id: \.self) { i in
                         let c = i < l.cols.count ? l.cols[i] : "lime"
-                        Circle().fill(ListColours.colour(c))
+                        Circle().fill(i == piece ? (livePick?.color ?? ListColours.colour(c)) : ListColours.colour(c))
                             .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
                             .frame(width: 36, height: 36)
                             .overlay { Circle().fill(i == 2 ? Palette.white : i == 1 ? Palette.grey : .clear).frame(width: 10, height: 10) }
@@ -307,25 +320,19 @@ struct ListInfoSheet: View {
                     }
                     Spacer(minLength: 0)
                 }
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 8), spacing: 8) {
-                    ForEach(ListColours.names, id: \.self) { n in
-                        let on = piece < l.cols.count && l.cols[piece] == n
-                        Circle().fill(ListColours.colour(n))
-                            .overlay { Circle().strokeBorder(Palette.ink.opacity(0.12), lineWidth: 0.5) }
-                            .frame(width: 30, height: 30)
-                            .overlay { if on { Circle().strokeBorder(Palette.ink, lineWidth: 2).frame(width: 38, height: 38) } }
-                            .frame(width: 40, height: 40)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                Feel.tap()
-                                change { m in
-                                    while m.cols.count < 3 { m.cols.append("lime") }
-                                    m.cols[piece] = n
-                                }
-                            }
-                            .accessibilityLabel(n)
+                // ITS COLOUR ON THE APP'S OWN COLOUR WHEEL (the one your picture and your background take): any colour,
+                // the piece showing it as the finger moves, kept when it lifts
+                ColourPicker(colour: Binding(get: {
+                    let c = piece < l.cols.count ? l.cols[piece] : "lime"
+                    return livePick ?? ListColours.pick(c) ?? ColourPick.from(srgb: Palette.named[c] ?? Palette.hex3(0xd4e249))
+                }, set: { livePick = $0 }), suggested: nil, width: max(200, rowW)) { c in
+                    livePick = nil
+                    change { m in
+                        while m.cols.count < 3 { m.cols.append("lime") }
+                        m.cols[piece] = ListColours.name(c)
                     }
                 }
+                .id(piece)
             }
         }
     }
