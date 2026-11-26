@@ -45,10 +45,12 @@ struct VisitCalendar: View {
                     HStack(spacing: 0) {
                         ForEach(0 ..< 7, id: \.self) { c in day(cells[r * 7 + c]) }
                     }
-                    .background { band(Array(cells[r * 7 ..< r * 7 + 7])) }
                     .edgeRow()
                 }
             }
+            // THE VISIT'S DAYS ARE ONE SHAPE (as the plan's and the upload's calendars since 25 Nov): its weeks melt
+            // into each other where they meet, one lime form for the whole stay, not a band a week
+            .background(alignment: .topLeading) { band(cells) }
         }
         .gesture(DragGesture(minimumDistance: 24).onEnded { g in
             // a swipe across the days turns the month, as Apple's calendars do
@@ -84,27 +86,27 @@ struct VisitCalendar: View {
         }
     }
 
-    /// the lime band of a week's days inside the visit: one rounded piece from the first such day's middle to the
-    /// last's (the ends' circles sit on its round ends; a week that only passes through runs edge to edge, round)
-    @ViewBuilder private func band(_ week: [LocalDay?]) -> some View {
+    /// the lime of the visit's days: in each week, one rounded piece from the first such day's middle to the last's
+    /// (the ends' circles sit on its round ends); a week the visit runs on past (or came in from) at a month's edge
+    /// runs off the screen's edge; the weeks joined where they share columns (DayGoo)
+    @ViewBuilder private func band(_ cells: [LocalDay?]) -> some View {
         if let lo = a, let hi = b, lo != hi {
-            let cols = week.indices.filter { i in week[i].map { $0 >= lo && $0 <= hi } ?? false }
-            if let f = cols.first, let l = cols.last {
-                GeometryReader { g in
-                    let w = g.size.width / 7, gx = g.frame(in: .global).minX
-                    // a week the visit runs on past (or came in from) runs to the screen's edge, square there, over
-                    // the blank cells of a month's first or last week too (the visit goes on in the next month); its
-                    // own ends are round under the day's circle
+            GeometryReader { g in
+                let w = g.size.width / 7, gx = g.frame(in: .global).minX
+                let rects: [CGRect] = (0 ..< cells.count / 7).compactMap { r in
+                    let week = Array(cells[r * 7 ..< r * 7 + 7])
+                    let cols = week.indices.filter { i in week[i].map { $0 >= lo && $0 <= hi } ?? false }
+                    guard let f = cols.first, let l = cols.last else { return nil }
                     let openL = week[..<f].allSatisfy { $0 == nil } && week[f]! > lo
                     let openR = week[(l + 1)...].allSatisfy { $0 == nil } && week[l]! < hi
-                    let x0 = openL ? -gx : w * (CGFloat(f) + 0.5) - 20
-                    let x1 = openR ? Screen.width - gx : w * (CGFloat(l) + 0.5) + 20
-                    UnevenRoundedRectangle(topLeadingRadius: openL ? 0 : 20, bottomLeadingRadius: openL ? 0 : 20,
-                                           bottomTrailingRadius: openR ? 0 : 20, topTrailingRadius: openR ? 0 : 20)
-                        .fill(Palette.lime)
-                        .frame(width: x1 - x0, height: 40)
-                        .position(x: (x0 + x1) / 2, y: g.size.height / 2)
+                    // (in the screen's own x: an open end reaches past the screen's edge, so it is never seen rounding)
+                    let x0 = openL ? -40 : gx + w * (CGFloat(f) + 0.5) - 20
+                    let x1 = openR ? Screen.width + 40 : gx + w * (CGFloat(l) + 0.5) + 20
+                    return CGRect(x: x0, y: CGFloat(r) * 46 + 2, width: x1 - x0, height: 40)
                 }
+                DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.lime)
+                    .frame(width: Screen.width, height: g.size.height)
+                    .offset(x: -gx)
             }
         }
     }

@@ -948,6 +948,9 @@ struct DetailsSheet: View {
                     if d < lo { s.d[keyPath: f] = d.description; s.d[keyPath: t] = lo.description } else { s.d[keyPath: t] = d.description }
                 } else { s.d[keyPath: f] = d.description; s.d[keyPath: t] = nil }
             }
+        // calclear i: visit i's dates taken away again (a test's own dates)
+        case "calclear":
+            if let i = Int(p.count > 1 ? p[1] : "0") { s.d[keyPath: tk(i, \.from)] = nil; s.d[keyPath: tk(i, \.to)] = nil }
         case "removevisit": tripIDs = Self.synced(tripIDs, 1 + (s.d.trips?.count ?? 0)); if let i = Int(p.count > 1 ? p[1] : "1"), i < tripIDs.count { removeTrip(tripIDs[i]) }
         // photo test: a made-up picture added as if picked (the picker can't be driven); photo remove N
         case "photo":
