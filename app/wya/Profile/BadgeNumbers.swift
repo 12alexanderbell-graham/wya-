@@ -131,7 +131,7 @@ nonisolated enum Badges {
         Badge("far", "Far from home", [100, 1000, 5000, 10000, 20000], "The furthest you went from your home base, in kilometres."),
         Badge("nights", "Nights away", [7, 30, 100, 365, 1000], "Nights spent outside your home base."),
         Badge("streak", "Streak", [2, 4, 8, 26, 52], "Weeks in a row you stamped, wishlisted, posted or made something.", live: "streak"),
-        Badge("months", "Months in a row", [2, 4, 8, 12, 24], "Months in a row with a new stamp.", live: "months"),
+        Badge("months", "Months", [2, 4, 8, 12, 24], "Months in a row with a new stamp.", live: "months"),
         Badge("trips", "Trips", [1, 5, 15, 40, 100], "Trips you have taken."),
         Badge("longest", "Longest trip", [7, 14, 30, 60, 120], "Your longest trip, in days."),
         Badge("weekends", "Weekends away", [1, 5, 15, 40, 100], "Weekends spent away from home."),
@@ -313,7 +313,7 @@ nonisolated enum Stats {
         ("Places", ["Stamps", "Continents", "Countries in Europe", "Share of the world", "Capitals", "Cities and towns",
                     "Regions", "Territories", "Lived in", "Wishlist", "Most stamped", "First stamp",
                     "Latest stamp", "Northernmost", "Southernmost"]),
-        ("Time", ["Years travelling", "Weeks in a row", "Months in a row"]),
+        ("Time", ["Years travelling", "Weeks", "Months"]),
         ("Things", ["Lists", "Plans"] + (FirstRelease.ai ? ["Planned with the AI"] : []) + ["Tier lists", "Photo books", "Notes", "Badge levels"]),
     ]
 

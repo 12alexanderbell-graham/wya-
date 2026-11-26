@@ -132,8 +132,7 @@ struct BadgeMomentView: View {
                 BadgeLiveView(badge: b, size: size, intro: true, hug: true)
                 Text(b.name).font(.title.weight(.semibold)).foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.center).padding(.top, 16)
-                Text(Badges.levelName[min(b.level, 5)]).font(.body.weight(.semibold)).foregroundStyle(Palette.ink.opacity(0.5))
-                    .padding(.top, 2)
+                // (no level word under it: the badge's own look says its level, 10 Oct)
             }
             .frame(width: w)
             .scaleEffect(leaving ? 0.06 : 1)

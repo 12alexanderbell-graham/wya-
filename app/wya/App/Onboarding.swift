@@ -167,7 +167,9 @@ struct OnboardingView: View {
 
     /// on to the next page, unless this one needs something first (an empty name shakes, with a refusing feel)
     private func next() {
-        if ob.page == 1, name.trimmingCharacters(in: .whitespaces).isEmpty {
+        // (a name left empty, or a name or bio past its limit: the line shakes and the count stays red, never cut short)
+        if ob.page == 1, name.trimmingCharacters(in: .whitespaces).isEmpty || name.count > ProfileStore.nameMax
+            || bio.count > ProfileStore.bioMax {
             Feel.refuse()
             withAnimation(.linear(duration: 0.07).repeatCount(5, autoreverses: true)) { shake = 1 } completion: { shake = 0 }
             typing = true
@@ -282,9 +284,13 @@ struct OnboardingView: View {
                     .submitLabel(.next)
                     .focused($typing)
                     .onSubmit { typingBio = true }
-                    .onChange(of: name) { o, n in if n.count > ProfileStore.nameMax { name = o; Feel.refuse() } }
+                    // (typing never stops at the limit, 24 Sep: past it, a feel once and the count in red)
+                    .onChange(of: name) { o, n in if n.count > ProfileStore.nameMax, o.count <= ProfileStore.nameMax { Feel.refuse() } }
                     .frame(width: W - 64, height: 52)
                     .offset(x: sin(shake * .pi * 2) * 10)
+                if name.count > ProfileStore.nameMax {
+                    Text("\(name.count)/\(ProfileStore.nameMax)").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
+                }
                 TextField("", text: $bio, prompt: Text("Bio").foregroundStyle(Palette.ink.opacity(0.5)), axis: .vertical)
                     .font(.body)
                     .foregroundStyle(Palette.ink)
@@ -295,10 +301,13 @@ struct OnboardingView: View {
                     .onChange(of: bio) { o, n in
                         // (one paragraph: Return is Done)
                         if n.contains("\n") { bio = o; typingBio = false; return }
-                        if n.count > ProfileStore.bioMax { bio = o; Feel.refuse() }
+                        if n.count > ProfileStore.bioMax, o.count <= ProfileStore.bioMax { Feel.refuse() }
                     }
                     .frame(maxWidth: 300)
                     .frame(minHeight: 44)
+                if bio.count > ProfileStore.bioMax {
+                    Text("\(bio.count)/\(ProfileStore.bioMax)").font(.subheadline.monospacedDigit()).foregroundStyle(Palette.red)
+                }
             }
         }
         .frame(width: W, height: H)

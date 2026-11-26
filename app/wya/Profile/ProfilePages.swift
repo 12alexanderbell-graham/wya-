@@ -18,18 +18,20 @@ struct ProfilePushedPage: View {
         let me = store.me
         let s = me.groundStrength ?? 0.5
         let w = L.W - 2 * L.side
-        let titleTop = L.headBottom + 12
-        let listTop = titleTop + 52
+        // (the page's name in the top row, in the middle, between the back circle and the far side, 19 Oct; it stood
+        // large under the back circle)
+        let listTop = L.headBottom + 12
         ZStack(alignment: .topLeading) {
             // the Profile's own ground, as it is behind the page
             LivingField(custom: me.ground.map { g in (0 ..< 4).map { g[$0 % max(1, g.count)].srgb } },
                         saturation: ProfileView.look.x * (0.7 + 0.6 * s), power: ProfileView.look.y * (0.62 + 0.76 * s))
                 .frame(width: L.W, height: L.H)
             Text(kind == .stats ? "Stats" : "Badges")
-                .font(.largeTitle.weight(.semibold)).foregroundStyle(Palette.ink)
+                .font(.title2.weight(.semibold)).foregroundStyle(Palette.ink)
                 .lineLimit(1)
-                .frame(width: w, height: 44, alignment: .leading)
-                .position(x: L.side + w / 2, y: titleTop + 22)
+                .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+                .frame(width: w - 2 * 52, height: 44)
+                .position(x: L.W / 2, y: L.headY)
                 .frame(width: L.W, height: L.H, alignment: .topLeading)
                 .accessibilityAddTraits(.isHeader)
             Group {

@@ -229,7 +229,7 @@ struct ListInfoSheet: View {
                         }
                     }
                     section("When") {
-                        TextField("", text: text(\.when, limit: 60), prompt: Text("Any time, summer, 25 Oct 2027").foregroundStyle(Palette.ink.opacity(0.5)))
+                        TextField("", text: text(\.when, limit: 60), prompt: Text("When").foregroundStyle(Palette.ink.opacity(0.5)))
                             .font(.body).foregroundStyle(Palette.ink)
                             .frame(minHeight: 44)
                     }
