@@ -142,7 +142,7 @@ nonisolated enum Badges {
         Badge("currencies", "Currencies", [2, 5, 10, 20, 40], "Currencies of the places you have stamped."),
         Badge("scripts", "Alphabets", [1, 2, 4, 6, 10], "Writing systems in the places you have stamped."),
         Badge("rated", "Places rated", [1, 10, 50, 200, 1000], "Places you have given stars."),
-        Badge("lists", "Lists", [1, 3, 10, 25, 50], "Lists you have made and published.", live: "mylists"),
+        Badge("lists", "Lists", [1, 3, 10, 25, 50], "Lists you have made.", live: "mylists"),
         Badge("tierlists", "Tier lists", [1, 3, 10, 25, 50], "Tier lists you have made.", live: "tiers"),
         Badge("plans", "Plans", [1, 3, 10, 25, 50], "Plans you have made.", live: "plans"),
         Badge("aiplans", "Planned with the AI", [1, 5, 15, 40, 100], "Plans the AI made with you.", live: "aiplans"),

@@ -220,10 +220,7 @@ struct ListInfoSheet: View {
                             .font(.body).foregroundStyle(Palette.ink)
                             .frame(minHeight: 44)
                     }
-                    section("Who can see it") {
-                        choices(["me": "Only me", "friends": "Friends", "all": "Everyone"], order: ["me", "friends", "all"],
-                                on: l.vis) { v in change { $0.vis = v } }
-                    }
+                    // (no "who can see it": nothing is public at launch; it comes with friends)
                     VStack(alignment: .leading, spacing: 0) {
                         // (no share picture: share cards are not to be built, 15 Nov)
                         rowButton(l.arch ? "Take out of the archive" : "Archive") {
@@ -376,27 +373,30 @@ struct ListArchiveSheet: View {
     var open: (String) -> Void
     @State private var store = ListsStore.shared
     var body: some View {
-        let away = store.book.lists.filter { $0.arch || $0.hid }
+        // (every kind, 26 Nov: plans, tier lists and books are archived and hidden too)
+        let away = store.book.away
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if away.isEmpty {
                     Text("Nothing archived or hidden").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
                         .frame(maxWidth: .infinity, minHeight: 88)
                 }
-                ForEach(away) { l in
+                ForEach(away, id: \.id) { a in
                     HStack(spacing: 14) {
                         Color.clear.frame(width: 56, height: 56)
-                            .overlay { listOwnCover(l) ?? listCoverOrGlass(l) }
+                            .overlay { cover(a.id, kind: a.kind) }
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            // (clear glass under it: a plan with no days yet has no cover, and left a hole)
+                            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(l.name.isEmpty ? "New list" : l.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                            Text(l.hid && l.arch ? "Archived, hidden" : l.hid ? "Hidden" : "Archived")
+                            Text(a.name).font(.body.weight(.semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                            Text(a.hid && a.arch ? "Archived, hidden" : a.hid ? "Hidden" : "Archived")
                                 .font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5))
                         }
                         Spacer(minLength: 0)
                         Button {
                             Feel.tap()
-                            ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == l.id }) { b.lists[i].arch = false; b.lists[i].hid = false } }
+                            withAnimation(Motion.quick) { ListsStore.shared.change { $0.setAway(a.id, arch: false, hid: false) } }
                         } label: {
                             Text("Back on the shelf").font(.subheadline.weight(.semibold)).foregroundStyle(Palette.ink)
                                 .padding(.horizontal, 16).frame(height: 44)
@@ -406,12 +406,22 @@ struct ListArchiveSheet: View {
                     }
                     .frame(minHeight: 64)
                     .contentShape(Rectangle())
-                    .onTapGesture { Feel.tap(); open(l.id) }
+                    .onTapGesture { Feel.tap(); open(a.id) }
                 }
             }
             .padding(.top, 8)
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// its cover as its shelf shows it: a list's own, a plan's days, a tier list's bands, a book's first photo
+    @ViewBuilder private func cover(_ id: String, kind: Int) -> some View {
+        switch kind {
+        case 0: if let l = store.book.lists.first(where: { $0.id == id }) { listOwnCover(l) ?? listCoverOrGlass(l) }
+        case 1: if let p = store.book.plans.first(where: { $0.id == id }) { PlanCalendarCover(plan: p) }
+        case 2: if let t = store.book.tiers.first(where: { $0.id == id }) { TierBandsCover(tiers: t) }
+        default: if let b = store.book.books.first(where: { $0.id == id }) { BookCover(book: b) }
+        }
     }
 }
 

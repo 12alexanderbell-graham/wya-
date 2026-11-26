@@ -806,3 +806,37 @@ nonisolated struct ListsBook: Codable, Equatable, Sendable {
         for i in lists.indices { lists[i].items.removeAll { $0.k == .mine && $0.t == k && $0.ref == id } }
     }
 }
+
+/// ARCHIVE, HIDE AND DELETE FOR EVERY KIND (1 Oct; 26 Nov: plans, tier lists and books
+/// had the switches stored and no way to set them): one place each, whichever kind the id is
+extension ListsBook {
+    /// what is away from the shelves, every kind: (id, name, kind 0 list 1 plan 2 tier list 3 book, archived, hidden)
+    var away: [(id: String, name: String, kind: Int, arch: Bool, hid: Bool)] {
+        lists.filter { ($0.arch || $0.hid) && !$0.wish }.map { ($0.id, $0.name.isEmpty ? "New list" : $0.name, 0, $0.arch, $0.hid) }
+            + plans.filter { $0.arch || $0.hid }.map { ($0.id, $0.name.isEmpty ? "New plan" : $0.name, 1, $0.arch, $0.hid) }
+            + tiers.filter { $0.arch || $0.hid }.map { ($0.id, $0.name.isEmpty ? "New tier list" : $0.name, 2, $0.arch, $0.hid) }
+            + books.filter { $0.arch || $0.hid }.map { ($0.id, $0.name.isEmpty ? "New book" : $0.name, 3, $0.arch, $0.hid) }
+    }
+    /// the archived and hidden switches of whichever kind the id is (nil leaves one as it is)
+    mutating func setAway(_ id: String, arch: Bool? = nil, hid: Bool? = nil) {
+        if let i = lists.firstIndex(where: { $0.id == id }) { if let arch { lists[i].arch = arch }; if let hid { lists[i].hid = hid } }
+        if let i = plans.firstIndex(where: { $0.id == id }) { if let arch { plans[i].arch = arch }; if let hid { plans[i].hid = hid } }
+        if let i = tiers.firstIndex(where: { $0.id == id }) { if let arch { tiers[i].arch = arch }; if let hid { tiers[i].hid = hid } }
+        if let i = books.firstIndex(where: { $0.id == id }) { if let arch { books[i].arch = arch }; if let hid { books[i].hid = hid } }
+    }
+    /// archived and hidden, whichever kind it is (nil: not one of yours)
+    func awayState(_ id: String) -> (arch: Bool, hid: Bool)? {
+        if let l = lists.first(where: { $0.id == id }) { return (l.arch, l.hid) }
+        if let p = plans.first(where: { $0.id == id }) { return (p.arch, p.hid) }
+        if let t = tiers.first(where: { $0.id == id }) { return (t.arch, t.hid) }
+        if let b = books.first(where: { $0.id == id }) { return (b.arch, b.hid) }
+        return nil
+    }
+    /// gone for good, whichever kind (never the wishlist)
+    mutating func delete(_ id: String) {
+        lists.removeAll { $0.id == id && !$0.wish }
+        plans.removeAll { $0.id == id }
+        tiers.removeAll { $0.id == id }
+        books.removeAll { $0.id == id }
+    }
+}

@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 import UniformTypeIdentifiers
 
 /// THE LISTS TAB (the square): the living gradient, with its own top row: search on the left, the four kinds (Lists,
@@ -101,6 +102,8 @@ struct ListsThing: Identifiable {
     let name: String
     let cc: String?
     let note: String
+    /// a link it holds (a web page put in the list): a tap opens it
+    var link: String = ""
     /// a list inside this list: the inner list's id (it sits like a country and opens as a list, any depth)
     var ref: String? = nil
 }
@@ -138,6 +141,8 @@ struct ListsWater: View {
     #endif
     /// the archive sheet is up (archived and hidden lists)
     @State private var archiveOpen = false
+    /// the tile whose Delete was picked in its hold menu: asked once before it goes
+    @State private var deleting: String?
 
     var body: some View {
         let L = water.layout
@@ -207,6 +212,31 @@ struct ListsWater: View {
             }
         }
         .frame(width: L.W, height: L.H, alignment: .topLeading)
+        // DELETE, ASKED ONCE (its name, and that it can't be undone): the thing and its own files go
+        .confirmationDialog(deletingName.map { "Delete \u{201C}\($0)\u{201D}?" } ?? "", isPresented: Binding(get: { deleting != nil },
+                                                                     set: { if !$0 { deleting = nil } }),
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                guard let id = deleting else { return }
+                Feel.lift()
+                let files = store.book.books.first { $0.id == id }?.files ?? []
+                withAnimation(Motion.quick) { ListsStore.shared.change { $0.delete(id) } }
+                if let u = ListCoverPhotos.url(id) { try? FileManager.default.removeItem(at: u) }
+                for f in files { if let u = BookPhotos.url(f) { try? FileManager.default.removeItem(at: u) } }
+                if s.open == id { s.open = nil }
+                deleting = nil
+            }
+        } message: { Text("This can't be undone.") }
+    }
+
+    /// the name of what is being deleted
+    private var deletingName: String? {
+        guard let id = deleting else { return nil }
+        return store.book.away.first { $0.id == id }?.name
+            ?? store.book.lists.first { $0.id == id }.map { $0.name.isEmpty ? "New list" : $0.name }
+            ?? store.book.plans.first { $0.id == id }.map { $0.name.isEmpty ? "New plan" : $0.name }
+            ?? store.book.tiers.first { $0.id == id }.map { $0.name.isEmpty ? "New tier list" : $0.name }
+            ?? store.book.books.first { $0.id == id }.map { $0.name.isEmpty ? "New book" : $0.name }
     }
 
     /// a thing's note in the open list, typed in place under it
@@ -265,7 +295,8 @@ struct ListsWater: View {
                 if !cc.isEmpty, let f = Flags.square(cc) {
                     f.resizable().interpolation(.high).scaledToFill()
                 } else {
-                    Text(String(t.name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                    // (a link: its site's first letter, never the "h" of https)
+                    Text(String((t.link.isEmpty ? t.name : Self.linkName(t.link)).trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
                         .font(.body.weight(.semibold)).foregroundStyle((been ? Palette.white : Palette.ink).opacity(0.5))
                         .frame(width: side, height: side)
                         .glassEffect(.clear, in: .rect(cornerRadius: corner))
@@ -408,8 +439,24 @@ struct ListsWater: View {
                 guard let inner = store.book.lists.first(where: { $0.id == r }) else { return nil }
                 return ListsThing(id: it.id, name: inner.name.isEmpty ? "New list" : inner.name, cc: nil, note: it.note, ref: r)
             }
-            return ListsThing(id: it.id, name: it.n, cc: it.cc, note: it.note)
+            return ListsThing(id: it.id, name: it.n, cc: it.cc, note: it.note, link: it.link)
         }
+    }
+
+    /// A LINK AS IT READS IN A ROW: its site and page, no "https://" or "www." ("tiktok.com/@someone/video/…")
+    static func linkName(_ s: String) -> String {
+        guard let u = URL(string: s.trimmingCharacters(in: .whitespaces)), let h = u.host() else { return s }
+        let host = h.hasPrefix("www.") ? String(h.dropFirst(4)) : h
+        let path = u.path() == "/" ? "" : u.path()
+        return path.isEmpty ? host : host + (path.count > 28 ? String(path.prefix(28)) + "…" : path)
+    }
+    /// a link opened in the phone's browser (or the app it belongs to)
+    static func openLink(_ s: String) {
+        var t = s.trimmingCharacters(in: .whitespaces)
+        if !t.lowercased().hasPrefix("http") { t = "https://" + t }
+        guard let u = URL(string: t) else { Feel.refuse(); return }
+        Feel.tap()
+        UIApplication.shared.open(u)
     }
 
     @ViewBuilder private func rows(_ w: CGFloat) -> some View {
@@ -491,17 +538,8 @@ struct ListsWater: View {
                 .padding(.top, 4)
             }
             // THE ARCHIVE (25 Nov): archived or hidden lists left the shelf and could never be seen again; one quiet line
-            // at the shelf's foot when there are any
-            let away = store.book.lists.filter { $0.arch || $0.hid }.count
-            if q.isEmpty, away > 0 {
-                Button { Feel.tap(); withAnimation(Motion.quick) { archiveOpen = true } } label: {
-                    Text("Archived and hidden · \(away)").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 12)
-            }
+            // at the shelf's foot when there are any (every kind's, 26 Nov)
+            archiveLine(q)
         // PLANS AND TIER LISTS AS TILES, the same shape as Lists': a plan's cover the map of where it goes, or its
         // days as a little calendar while it has no places; a tier list's its tiers in full colour
         case 1:
@@ -518,6 +556,7 @@ struct ListsWater: View {
                 }
                 .padding(.top, 4)
             }
+            archiveLine(q)
         case 2:
             let tiers = store.book.tiers.filter { !$0.arch && !$0.hid && match($0.name) }
             if tiers.isEmpty { if q.isEmpty { none("No tier lists yet") } else { noResults } }
@@ -532,6 +571,7 @@ struct ListsWater: View {
                 }
                 .padding(.top, 4)
             }
+            archiveLine(q)
         default:
             // BOOKS AS TILES, as every kind: its cover (its first photo), its name, how many pages
             let books = store.book.books.filter { !$0.arch && !$0.hid && match($0.name) }
@@ -562,8 +602,23 @@ struct ListsWater: View {
                 }
                 .padding(.top, 4)
             }
+            archiveLine(q)
         }
     }
+    /// the archive's line at a shelf's foot: how many things of every kind are archived or hidden; tapped, the archive
+    @ViewBuilder private func archiveLine(_ q: String) -> some View {
+        let away = store.book.away.count
+        if q.isEmpty, away > 0 {
+            Button { Feel.tap(); withAnimation(Motion.quick) { archiveOpen = true } } label: {
+                Text("Archived and hidden · \(away)").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+        }
+    }
+
     /// a search that found nothing says so, as the map's search does
     private var noResults: some View {
         Text("No results").font(.body).foregroundStyle(Palette.ink.opacity(0.5))
@@ -585,7 +640,8 @@ struct ListsWater: View {
         return tile(l.id, name: l.name.isEmpty ? "New list" : l.name, dim: l.name.isEmpty, count: things(l).count,
              ccs: ccs, ticks: ListTicks.count(l.items.filter { $0.k != .section }), cover: listOwnCover(l),
              spots: named.map { [$0.name + "|" + $0.file.lowercased()] } ?? spots,
-             places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place }, names: things(l).map(\.name))
+             places: l.items.filter { $0.k != .section }.allSatisfy { $0.k == .place },
+             names: things(l).map { $0.link.isEmpty || $0.name != $0.link ? $0.name : Self.linkName($0.link) })
     }
     /// what a list holds, in words: its first two and how many more ("Ramen, Seoul and 2 more"), as Pins' maps say
     /// their countries
@@ -685,16 +741,21 @@ struct ListsWater: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { Feel.tap(); if let tap { tap(); return }; s.parents = []; withAnimation(Motion.quick) { s.open = id } }
-        // A LIST'S HOLD MENU (25 Nov): its own sheet, and archive / hide straight from the shelf
+        // EVERY TILE'S HOLD MENU (25 Nov lists; 26 Nov plans, tier lists and books too): a list's own sheet, and archive,
+        // hide and delete straight from the shelf (delete asks first; never the wishlist or the passport)
         .contextMenu {
-            if let l = store.book.lists.first(where: { $0.id == id }) {
+            if store.book.lists.contains(where: { $0.id == id }) {
                 Button("Edit") { withAnimation(Motion.quick) { infoFor = id } }
-                Button(l.arch ? "Take out of the archive" : "Archive") {
-                    ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].arch.toggle() } }
+            }
+            // (never the wishlist: it is the map's own)
+            if id != "wish", !(store.book.lists.first(where: { $0.id == id })?.wish ?? false), let a = store.book.awayState(id) {
+                Button(a.arch ? "Take out of the archive" : "Archive") {
+                    Feel.tap(); withAnimation(Motion.quick) { ListsStore.shared.change { $0.setAway(id, arch: !a.arch) } }
                 }
-                Button(l.hid ? "Show again" : "Hide") {
-                    ListsStore.shared.change { b in if let i = b.lists.firstIndex(where: { $0.id == id }) { b.lists[i].hid.toggle() } }
+                Button(a.hid ? "Show again" : "Hide") {
+                    Feel.tap(); withAnimation(Motion.quick) { ListsStore.shared.change { $0.setAway(id, hid: !a.hid) } }
                 }
+                Button("Delete", role: .destructive) { deleting = id }
             }
             // (no share pictures for plans or tier lists: share cards are not to be built, 15 Nov)
             // A BOOK'S: shared as a book, a PDF of its pages (BookPDF)
@@ -788,7 +849,7 @@ struct ListsWater: View {
                             .lineLimit(2)
                             // (its name tapped: the list's own sheet, everything that makes it yours, 25 Nov)
                             .onTapGesture { if let list { Feel.tap(); withAnimation(Motion.quick) { infoFor = list.id } } }
-                            .accessibilityHint(list == nil ? "" : "Name, cover, who can see it")
+                            .accessibilityHint(list == nil ? "" : "Name, cover, archive")
                     }
                 }
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .bottomLeading)
@@ -848,7 +909,7 @@ struct ListsWater: View {
                             if let r = t.ref {
                                 innerLabel(r, name: t.name)
                             } else {
-                                Text(t.name).font(.body).foregroundStyle(ink).lineLimit(2)
+                                Text(t.link.isEmpty || t.name != t.link ? t.name : Self.linkName(t.link)).font(.body).foregroundStyle(ink).lineLimit(2)
                             }
                             // ITS NOTE, opened by a swipe to the right (a tap opens the place itself): a second line
                             // under the name, in the row, never a box of its own (16 Oct: hidden until extended; 26 Nov)
@@ -872,8 +933,9 @@ struct ListsWater: View {
                     .onTapGesture {
                         // (a list inside opens, pushed in as any list)
                         if let r = t.ref { Feel.tap(); withAnimation(Motion.quick) { s.openInner(r) }; return }
-                        // A PLACE TAPPED OPENS IT (26 Nov: no Open button)
+                        // A PLACE TAPPED OPENS IT (26 Nov: no Open button); a link, its page
                         if let cc = t.cc, !cc.isEmpty { Feel.tap(); PlanPlaces.open(t.name, cc: cc); return }
+                        if !t.link.isEmpty { Self.openLink(t.link); return }
                         // (a thing that is not a place: its note)
                         guard editable || !t.note.isEmpty else { return }
                         Feel.tap()
@@ -1237,6 +1299,13 @@ struct ListsWater: View {
                                         .onTapGesture { PlanPlaces.open(it.place, cc: it.cc) }
                                         .accessibilityAddTraits(.isButton)
                                         .accessibilityHint("Opens it on the map")
+                                }
+                                // its link, at 50%, its site and page: a tap opens it
+                                if !it.link.isEmpty {
+                                    Text(Self.linkName(it.link)).font(.subheadline).foregroundStyle(Palette.ink.opacity(0.5)).lineLimit(1)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture { Self.openLink(it.link) }
+                                        .accessibilityAddTraits(.isLink)
                                 }
                             }
                             Spacer(minLength: 0)
