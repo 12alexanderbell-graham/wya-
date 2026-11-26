@@ -34,7 +34,8 @@ struct WaterView: View {
                             // (clear Liquid Glass always: in the capsule it is the system's minimized tab bar; the
                             // frost under it says how much of a sheet it is)
                             // (clear, 25 Nov evening: the frosted water read as a yellow-grey slab over the map)
-                            .glassEffect(.clear, in: shape)
+                            // The page's own sheet takes the regular frost: its words lie over the page's words.
+                            .glassEffect(water.pageSheet ? PageGlass.surface : .clear, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)
