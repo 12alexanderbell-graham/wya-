@@ -1998,7 +1998,12 @@ private struct PageLayer: View {
                     if MapSettingsStore.shared.value.ai { suggestions() }
                     VStack(alignment: .leading, spacing: 32) {
                         if MarkStore.shared.state(key).stamped { record(key) }
-                        if page.facts != nil { SourcesRow(facts: page.facts!, kind: key.kind) }
+                        // (only when the page drew on something: a page whose facts came back empty, offline or
+                        // unknown to the server, showed a lone "Sources" over nothing)
+                        if let f = page.facts, !f.prose.isEmpty || f.photo != nil || !f.rows.isEmpty || !f.activities.isEmpty
+                            || !f.highlights.isEmpty || !f.regions.isEmpty || !f.cities.isEmpty || !f.visa.isEmpty || !f.advice.isEmpty {
+                            SourcesRow(facts: f, kind: key.kind)
+                        }
                     }
                 }
                 Color.clear.frame(height: 140).id("end")
