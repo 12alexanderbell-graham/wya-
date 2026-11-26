@@ -8,6 +8,11 @@ struct WaterView: View {
     let map: MapController
     @Binding var tab: Int
 
+    /// one of the Profile's own sheets is up in the water (not Stats, Badges or Settings: those are pages over it)
+    static func profileSheet(_ w: Water) -> Bool {
+        guard w.profile, let s = ProfileEdit.shared.sheet, !s.page else { return false }
+        return w.stop == .half || w.stop == .full
+    }
     /// TEST ONLY (-wyaFrostTrial): the water frosted while it holds a text list (Settings, Details, Verify, the Stamped
     /// and Regions lists, Upload), to compare clear and frosted side by side; never in a phone build
     static func frostTrial(_ w: Water) -> Bool {
@@ -46,7 +51,10 @@ struct WaterView: View {
                             // frost under it says how much of a sheet it is)
                             // (clear, 25 Nov evening: the frosted water read as a yellow-grey slab over the map)
                             // The page's own sheet takes the regular frost: its words lie over the page's words.
-                            .glassEffect(water.pageSheet || Self.frostTrial(water) ? PageGlass.surface : .clear, in: shape)
+                            // (the Profile's picture, passport, home and background sheets too: their rows lay over
+                            // the Profile's own lines, "Passport" and "Home" read through "Add a passport", and the
+                            // lens turned "Passport" upside down under "Letter", 26 Nov critic)
+                            .glassEffect(water.pageSheet || Self.profileSheet(water) || Self.frostTrial(water) ? PageGlass.surface : .clear, in: shape)
                             .allowsHitTesting(false)
                     }
                     UndoDrop(water: water, form: f)

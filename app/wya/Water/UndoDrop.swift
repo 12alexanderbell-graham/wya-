@@ -50,7 +50,7 @@ struct UndoDrop: View {
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             // the water's own kind of glass, so inside the water it merges away
             // (the water's own glass, whichever it is: clear drop in the page sheet's frost showed as a pale capsule)
-            .glassEffect(water.pageSheet || WaterView.frostTrial(water) ? PageGlass.surface : .clear, in: .capsule)
+            .glassEffect(water.pageSheet || WaterView.profileSheet(water) || WaterView.frostTrial(water) ? PageGlass.surface : .clear, in: .capsule)
             // touched over 44 pt (the pill is drawn 36 pt high)
             .frame(minHeight: 44)
             .contentShape(Capsule())
