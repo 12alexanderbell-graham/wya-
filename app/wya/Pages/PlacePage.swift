@@ -1625,7 +1625,7 @@ extension PlacePageState {
         "^(strictly limited|limited numbers? of|tickets?\\b|ticket prices|admission\\b|entry (is|fee|costs|to)\\b|entrance (is|fee|costs)\\b|"
         + "(advance )?booking\\b|book (online|ahead|in advance|tickets)|reservations?\\b|opening hours|"
         + "open (daily|every|from|year|mon|tue|wed|thu|fri|sat|sun)|closed (on|for|until|since|due|mon|tue|wed|thu|fri|sat|sun)|"
-        + "(currently|temporarily) closed|note:|visits? (are|is|must|by)\\b|guided tours? (only|are|is|must|run|leave)\\b|"
+        + "(currently|temporarily) closed|note:|visits? (are|is|must|by)\\b|(guided )?tours? (only|are|is|must|run|leave)\\b|"
         + "you (must|need|have to|can only|will need) (book|buy|reserve|pay|register))", options: [.caseInsensitive])
     static func isNotice(_ t: String) -> Bool {
         let s = t.trimmingCharacters(in: .whitespaces)
