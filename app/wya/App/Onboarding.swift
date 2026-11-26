@@ -320,7 +320,10 @@ struct OnboardingView: View {
                     let w = (W - 64 - 12 * CGFloat(cs.count - 1)) / CGFloat(cs.count)
                     HStack(spacing: 12) {
                         ForEach(cs) { c in
-                            choice(c.name, on: row.get(s) == c.id, width: w) { set(row.id, c.id, now: row.get(s) == c.id) }
+                            // The Map row's pair names itself as maps so the grid reads as two questions.
+                            choice(row.id == "map" ? c.name + " map" : c.name, on: row.get(s) == c.id, width: w) {
+                                set(row.id, c.id, now: row.get(s) == c.id)
+                            }
                         }
                     }
                 }
