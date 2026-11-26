@@ -402,6 +402,9 @@ final class HistoryLineView: UIView {
     static func drive(_ p: [String], map: MapController?, water: Water?, head: HeadState?) async {
         let a = p.count > 1 ? p[1] : ""
         switch a {
+        // history on|off: the History tool turned on or off, as its tap in the tools capsule
+        case "on", "off":
+            head?.history = a == "on"
         case "tap":
             guard p.count > 3, let m = map, let v = current else { return }
             let pt = CGPoint(x: Double(p[2]) ?? 0, y: Double(p[3]) ?? 0)
