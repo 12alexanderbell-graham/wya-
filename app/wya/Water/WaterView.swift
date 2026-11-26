@@ -851,6 +851,9 @@ struct StartCredit: View {
             .allowsHitTesting(false)
             .accessibilityHidden(!shown)
             .accessibilityLabel("Map data from OpenStreetMap")
-            .onChange(of: water.credit && fits) { _, on in withAnimation(on ? Motion.quick : .smooth(duration: 0.15)) { shown = on } }
+            // (and away while a card is up: opened in its first seconds, the words sat on the card's Details button)
+            .onChange(of: water.credit && fits && !CardState.shared.shown && !RegionCardState.shared.shown) { _, on in
+                withAnimation(on ? Motion.quick : .smooth(duration: 0.15)) { shown = on }
+            }
     }
 }
