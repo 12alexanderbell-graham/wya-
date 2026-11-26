@@ -1216,8 +1216,11 @@ struct SearchResults: View {
             }.prefix(2))
         } ?? [] : []
         let thingHits = thingHits0 + citySights.filter { h in !thingHits0.contains { $0.key == h.key } }
+        // (a kind of place typed whole leads, as Places' search has it: its row opens those places on the map)
+        let kindLead: [ResultKey] = countriesSearch && typed && wholeCountry == nil ? Self.typeWhole(head.query).map { [ResultKey.set(.collection($0))] } ?? [] : []
         var keySeen = Set<ResultKey>()
-        let mapKeys: [ResultKey] = citySights.isEmpty ? mapKeys0
+        let mapKeys: [ResultKey] = !kindLead.isEmpty ? Array((kindLead + mapKeys0).prefix(8))
+            : citySights.isEmpty ? mapKeys0
             : Array(([mapKeys0[0]] + citySights.map { ResultKey.thing($0.key) } + mapKeys0.dropFirst()).filter { keySeen.insert($0).inserted }.prefix(8))
         #if DEBUG
         let _ = NSLog("wya searchcity %@ leads %@ sights %@", leadCity?.name ?? "-", cityLeads ? "yes" : "no", citySights.map(\.name).joined(separator: ","))
@@ -1847,6 +1850,14 @@ struct SearchResults: View {
         head.searching = false
         PlacePageState.shared.closeAll()
         CardState.shared.close(map: map); RegionCardState.shared.close(map: map)
+        // (from the Countries map's search: to Places first, the set shown there once it is the mode)
+        if case .collection(let id) = p, !map.placesMode, !map.pinsMode {
+            ContentView.directSet = id
+            head.quickStamp = false
+            head.mode = .places
+            Feel.notch()
+            return
+        }
         if case .collection(let id) = p {
             // (a kind of a set,: the set, cut down to it)
             let parts = id.split(separator: "|").map(String.init)
@@ -1893,6 +1904,26 @@ struct SearchResults: View {
         "world-heritage": ["unesco", "heritage", "world heritage site", "whs"],
         "f1-2026": ["f1", "grand prix", "formula one", "circuit", "race"],
     ]
+    /// THE KIND OF PLACE TYPED WHOLE, on the countries' map (26 Nov: "museum" led with a region in Singapore,
+    /// "beach" with a town called Beach): a set or a set's kind whose own word is exactly what was typed (or its
+    /// singular), never a word only started ("par", "bal")
+    static func typeWhole(_ query: String) -> String? {
+        let q = fold(query.trimmingCharacters(in: .whitespaces))
+        guard q.count >= 3 else { return nil }
+        let stem = q.hasSuffix("es") && q.count > 4 && !q.hasSuffix("ies") ? [String(q.dropLast()), String(q.dropLast(2))]
+            : q.hasSuffix("s") && q.count > 3 ? [String(q.dropLast())] : []
+        let is_ = { (w: String) in w == q || stem.contains(w) || w + "s" == q }
+        return typeMatches(query).first { id in
+            let parts = id.split(separator: "|").map(String.init)
+            let store = CollectionStore.shared
+            if parts.count > 1 {
+                let name = store.types(parts[0]).first { $0.count == 2 && $0[0] == parts[1] }.map { fold($0[1]) } ?? ""
+                return is_(name) || is_(parts[1]) || words(name).count == 1 && is_(String(words(name)[0]))
+            }
+            let t = fold(store.title(parts[0]))
+            return is_(t) || (setWords[parts[0]] ?? []).contains(where: is_)
+        }
+    }
     static func typeMatches(_ query: String) -> [String] {
         let q = fold(query.trimmingCharacters(in: .whitespaces))
         guard q.count >= 2 else { return [] }

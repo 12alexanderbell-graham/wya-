@@ -698,6 +698,14 @@ struct ContentView: View {
             water.go(.quarter)
             map.showThing(file: t.file, id: t.id)
         }
+        // a kind of place picked in the Countries map's search: that set in Places, at 50% as Places' menu has every set
+        if new == .places, let id = Self.directSet {
+            Self.directSet = nil
+            let parts = id.split(separator: "|").map(String.init)
+            map.showPlacesSet(parts[0])
+            if parts.count > 1 { map.showPlacesType(parts[1]) }
+            water.go(.half)
+        }
         // a town picked in the Countries map's search: shown in Places too
         if new == .places, let t = Self.directTown {
             Self.directTown = nil
@@ -885,6 +893,8 @@ struct ContentView: View {
 
     /// A SIGHT FROM THE COUNTRIES MAP'S SEARCH: Places, with the sight shown, straight from the mode change
     @MainActor static var directThing: (file: String, id: String)?
+    /// a kind of place picked in the Countries map's search, shown once the mode is Places
+    @MainActor static var directSet: String?
     @MainActor static var directTown: (file: String, id: String)?
     @MainActor static func openTown(file: String, id: String, head: HeadState, map: MapController) {
         if head.mode == .places { map.showTown(file: file, id: id); return }
