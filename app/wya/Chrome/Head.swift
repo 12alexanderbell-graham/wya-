@@ -1260,8 +1260,13 @@ struct SearchResults: View {
                 let known = thingHits.filter { $0.fame >= 3 && !inSets.contains($0.id) }.prefix(2).map { ResultKey.thing($0.key) }
                 // the types of place it names first ("lakes",, "f1"), then the places themselves
                 let sets = map.pinsMode ? [] : Self.typeMatches(head.query).prefix(2).map { ResultKey.set(.collection($0)) }
-                let named = cut.filter { $0.name.townFolded == folded }
-                    + cut.filter { $0.name.townFolded != folded && TownIndex.shared.otherNames($0.id).contains(folded) }
+                // (but a big one known so goes before small towns of the name, when nothing is named so itself, 26 Nov:
+                // three American villages had come before Luzern; Bali keeps the island before Bari)
+                let ownNamed = cut.filter { $0.name.townFolded == folded }
+                let otherNamed = cut.filter { $0.name.townFolded != folded && TownIndex.shared.otherNames($0.id).contains(folded) }
+                let otherFirst = ownNamed.allSatisfy { $0.people < 50_000 } && !itemHits.prefix(3).contains { $0.item.name.townFolded == folded }
+                let named = otherFirst ? otherNamed.filter { $0.people >= 50_000 } + ownNamed + otherNamed.filter { $0.people < 50_000 }
+                    : ownNamed + otherNamed
                 let knownLeads = thingHits.contains { $0.fame >= 3 && !inSets.contains($0.id) && starts($0.name.townFolded) }
                 let smallLater = knownLeads ? named.filter { $0.people < 50_000 } : []
                 let whole = named.filter { $0.people >= 500_000 }.map { ResultKey.town($0.key) }
@@ -1279,7 +1284,21 @@ struct SearchResults: View {
                 // (each once before the eight are counted: 's three towns of that name, listed twice, took the eight
                 // rows' room and Luzern itself was cut)
                 var once = Set<ResultKey>()
-                let each = k.filter { once.insert($0).inserted }
+                var each = k.filter { once.insert($0).inserted }
+                // (a city people know, leading: its own two best sights under it, as on the map, 26 Nov: New York had
+                // a university and a marathon first, Dubai its business parks and no Burj Khalifa)
+                if let first = each.first, case .town(let r) = first, let c = TownIndex.shared.hit(String(r.dropFirst(2))),
+                   c.name.townFolded == folded || c.name.townFolded == folded + " city",
+                   Self.famousCityNames().contains(c.name.townFolded + "|" + c.file.lowercased()) {
+                    // (one listed as a set's place, Sydney's Opera House, is that row, moved up)
+                    let listed = Dictionary(itemHits.filter { each.contains(.item($0.key)) }.map { ($0.item.name.townFolded, ResultKey.item($0.key)) },
+                                            uniquingKeysWith: { a, _ in a })
+                    let best = ThingIndex.shared.best(lat: c.lat, lon: c.lon)
+                        .filter { $0.name.townFolded != c.name.townFolded }.prefix(2)
+                        .map { listed[$0.name.townFolded] ?? ResultKey.thing($0.key) }
+                    var again = Set<ResultKey>()
+                    each = ([first] + best + each.dropFirst()).filter { again.insert($0).inserted }
+                }
                 return each.isEmpty ? [guess.map { .place($0) } ?? .miss] : Array(each.prefix(8))
         }
         let found: [ResultKey] = pinsSearch && typed
@@ -1296,6 +1315,8 @@ struct SearchResults: View {
         // drew one of them blank
         var seen = Set<ResultKey>()
         let keys = found.filter { seen.insert($0).inserted }
+        // (Places' and Pins' lists logged too, as the map's are, in test builds)
+        let _ = placesSearch && typed ? Self.logKeys(keys, townHits) : ()
         let w = width > 0 ? width : fullWidth
         // a stack that is always there (an empty Group is no view, so its onChange never ran and the first list never
         // came)
@@ -1311,7 +1332,7 @@ struct SearchResults: View {
                         case .place, .miss: return true
                         case .setting(let id): return settingHits.contains { $0.id == id }
                         case .region(let r): return regionHits.contains { $0.key == r }
-                        case .thing(let r): return thingHits.contains { $0.key == r }
+                        case .thing(let r): return thingHits.contains { $0.key == r } || ThingIndex.shared.hit(String(r.dropFirst(5))) != nil
                         case .item(let r): return itemHits.contains { $0.key == r }
                         case .town(let r): return townHits.contains { $0.key == r } || townGuess?.key == r || countryCities.contains { $0.key == r }
                         case .anyRegion(let r): return anyRegionHits.contains { $0.key == r }
@@ -1333,7 +1354,7 @@ struct SearchResults: View {
                                 case .miss: missRow()
                                 case .setting(let id): settingRow(settingHits.first { $0.id == id })
                                 case .region(let k): regionRow(regionHits.first { $0.key == k })
-                                case .thing(let k): thingRow(thingHits.first { $0.key == k }, twin: Self.twin(thing: k, in: thingHits))
+                                case .thing(let k): thingRow(thingHits.first { $0.key == k } ?? ThingIndex.shared.hit(String(k.dropFirst(5))), twin: Self.twin(thing: k, in: thingHits))
                                 case .item(let k): itemRow(itemHits.first { $0.key == k })
                                 case .town(let k): townRow(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil)
                                                            ?? countryCities.first { $0.key == k },
@@ -1372,7 +1393,7 @@ struct SearchResults: View {
             case .place(let i): pick(i)
             case .setting(let id): settingAct(settingHits.first { $0.id == id })
             case .region(let k): regionAct(regionHits.first { $0.key == k })
-            case .thing(let k): thingAct(thingHits.first { $0.key == k })
+            case .thing(let k): thingAct(thingHits.first { $0.key == k } ?? ThingIndex.shared.hit(String(k.dropFirst(5))))
             case .item(let k): itemAct(itemHits.first { $0.key == k })
             case .town(let k): townAct(townHits.first { $0.key == k } ?? (townGuess?.key == k ? townGuess : nil) ?? countryCities.first { $0.key == k })
             case .anyRegion(let k): anyRegionAct(anyRegionHits.first { $0.key == k })
