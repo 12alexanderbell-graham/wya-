@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 import CoreLocation
 
 /// WHICH STAMP'S VERIFY IS OPEN in the water (Part 4.5), and where it stands
@@ -56,6 +57,11 @@ struct VerifySheet: View {
     let form: Water.Form
     @State private var s = VerifyState.shared
     @State private var locator = Locator()
+    /// PHOTO (26 Nov, a way that was only a word): a photo of yours, picked in Apple's picker (no Photos access needed),
+    /// whose own place is inside the stamp's place
+    @State private var photoPicking = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var photoWord: String?
 
     static let ways: [(id: String, name: String)] = [
         ("here", "Location"), ("history", "History"), ("library", "Photo"),
@@ -100,6 +106,8 @@ struct VerifySheet: View {
         .scrollDisabled(water.stop != .full)
         .frame(width: L.W - 2 * L.sheetInset, height: h)
         .position(x: L.W / 2, y: top + h / 2)
+        .photosPicker(isPresented: $photoPicking, selection: $photoItem, matching: .images, photoLibrary: .shared())
+        .onChange(of: photoItem) { _, it in if let it { photo(it) } }
     }
 
     static func wayName(_ id: String) -> String { ways.first { $0.id == id }?.name ?? "Another way" }
@@ -122,17 +130,18 @@ struct VerifySheet: View {
             }
             .frame(minHeight: 52)
         } else {
-            let live = id == "here"
-            Text(id == "here" ? (s.hereWord ?? name) : name)
+            let live = id == "here" || id == "library"
+            Text(id == "here" ? (s.hereWord ?? name) : id == "library" ? (photoWord ?? name) : name)
                 .font(.body)
                 .foregroundStyle(Palette.ink.opacity(live ? 1 : 0.5))
                 .contentTransition(.identity)
                 .animation(Motion.quick, value: s.hereWord)
+                .animation(Motion.quick, value: photoWord)
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     s.consent = nil
-                    if live { here() } else { Feel.refuse() }
+                    if id == "here" { here() } else if id == "library" { Feel.tap(); photoItem = nil; photoPicking = true } else { Feel.refuse() }
                 }
                 .accessibilityAddTraits(.isButton)
         }
@@ -220,6 +229,45 @@ struct VerifySheet: View {
                 }
             }
         }
+    }
+
+    /// A PHOTO'S PLACE: read from the photo's own file (its GPS), tested as Location's is; inside, the consent line; a
+    /// photo with no place, or one taken elsewhere, says so in the row for 2.5 s
+    private func photo(_ it: PhotosPickerItem) {
+        photoWord = "Reading the photo"
+        Task {
+            let d = try? await it.loadTransferable(type: Data.self)
+            let sample = d.flatMap { PhotosReader.sample(imageData: $0) }
+            guard let sample else { await say("No place in this photo"); return }
+            switch inside(EqualEarth.project(lon: sample.lon, lat: sample.lat)) {
+            case .yes:
+                photoWord = nil
+                s.consent = "library"
+                Feel.land(speed: 0)
+            case .no(let elsewhere):
+                Feel.refuse()
+                await say("Taken in \(elsewhere)")
+            case .unknown:
+                photoWord = nil
+            }
+        }
+    }
+    private func say(_ w: String) async {
+        photoWord = w
+        try? await Task.sleep(for: .seconds(2.5))
+        if photoWord == w { photoWord = nil }
+    }
+    private enum Inside { case yes, no(String), unknown }
+    /// a point inside the stamp's place: a region by its own shape on its region map (4.5), else the country
+    private func inside(_ p: SIMD2<Float>) -> Inside {
+        guard let w = map.world, let i = s.place else { return .unknown }
+        if let key = s.key, key.kind == .region, let sc = map.regionScene {
+            let u = sc.unit(at: p)
+            if let u, sc.unitIDs[u] == key.id { return .yes }
+            return .no(u.map { sc.unitNames[$0] } ?? w.place(at: p).map { w.places[$0].n } ?? "the sea")
+        }
+        let at = w.place(at: p)
+        return at == i ? .yes : .no(at.map { w.places[$0].n } ?? "the sea")
     }
 
     /// sent: kept as Waiting to send until there is a server to send it to (one undo step)
