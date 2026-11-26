@@ -913,7 +913,14 @@ final class TestDriver {
                     }
                 case "upload":
                     switch a {
-                    case "open": if let water, let map { UploadState.shared.open(water: water, map: map) }
+                    // upload open: as the Upload tool's menu (Apple's menu since 25 Nov, no choosing sheet): the waiting
+                    // finds' review where there are any, else Photos, Apple's picker (the old two-choice sheet is no
+                    // screen of the app's any more, so a check never photographs it); upload photos | history: those rows
+                    case "open":
+                        if UploadState.shared.hasWaiting, let water, let map { UploadState.shared.open(water: water, map: map) }
+                        else { NSLog("wya upload open: the tool is Apple's menu; Photos picked"); UploadState.shared.pickerUp = true }
+                    case "photos": UploadState.shared.pickerUp = true
+                    case "history": UploadState.shared.importerUp = true
                     case "close": UploadState.shared.close()
                     case "back": UploadState.shared.back()
                     case "choose": UploadState.shared.choose(Int(p.count > 2 ? p[2] : "0") ?? 0)
