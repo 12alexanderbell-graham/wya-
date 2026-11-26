@@ -1671,7 +1671,10 @@ extension PlacePageState {
             for l in all[k] ?? [] {
                 guard let t = l["d"] as? String, t.count > 60 else { continue }
                 if let wd, (l["wd"] as? String) == wd { byID.append(t) }
-                else if let n = l["n"] as? String, n.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame { byName.append(t) }
+                // (by name only a sight or a thing to do, never a restaurant, a bar, a hotel or a shop of that name, 26 Nov:
+                // the Alhambra had read as a restaurant in Pamplona)
+                else if let n = l["n"] as? String, n.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame,
+                        ["see", "do", nil].contains(l["k"] as? String) { byName.append(t) }
             }
         }
         let short = name.replacingOccurrences(of: "^(Mount|Mt\\.?|Lake|The) ", with: "", options: .regularExpression)
