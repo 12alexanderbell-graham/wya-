@@ -1156,10 +1156,17 @@ extension PlacePageState {
     /// a country's best known sights first, in the order they are known: the rows of the best known sights (fame 3)
     /// by their place in the things file, no more than two from one town before every other town's; the rest as they were
     static func knownFirst(_ acts: [Activity], things: [ThingStore.Thing]) -> [Activity] {
-        var at: [String: Int] = [:]
-        for (i, t) in things.enumerated() where t.fame >= 3 && at[t.id] == nil { at[t.id] = i }
+        var at: [String: Int] = [:], what: [String: String] = [:]
+        for (i, t) in things.enumerated() where t.fame >= 3 && at[t.id] == nil { at[t.id] = i; what[t.id] = t.line }
+        // (never a place of study, a ground or a border marker lifted to the top for being well known, 26 Nov:
+        // Thailand's opened on Chulalongkorn University again, Italy's second was a match at San Siro, Brazil's had its
+        // Triple Point; they keep the later places the traveller's order gave them)
         let top = acts.enumerated().compactMap { e -> (i: Int, at: Int, a: Activity)? in
-            guard let wd = e.element.wd, let a = at[wd] else { return nil }
+            // (by what the sight is too: Borussia Dortmund and Schalke 04 are "German football club")
+            guard let wd = e.element.wd, let a = at[wd], push(e.element) == 0, !isVenue(e.element.name, what[wd] ?? ""),
+                  (what[wd] ?? "").range(of: #"\b(football club|sports club|association football|university|basketball|hockey team|film festival)\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
+                  e.element.name.range(of: #"\b(triple point|tripoint|border|boundary)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+            else { return nil }
             return (e.offset, a, e.element)
         }.sorted { $0.at != $1.at ? $0.at < $1.at : $0.i < $1.i }
         guard top.count > 1 else { return acts }
@@ -1188,12 +1195,13 @@ extension PlacePageState {
     }
     /// a place of study or a visitors' office: not what a traveller comes for
     nonisolated static func isStudy(_ name: String) -> Bool {
-        name.range(of: #"\b(university|universit[äéà]|universidad|universidade|college|school|academy|institute of technology|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
+        name.range(of: #"\b(university|universit[äéàa]\w*|universidad|universidade|college|school|academy|institute of technology|campus|welcome cent(er|re)|visitor cent(er|re)|visitors' cent(er|re))\b"#,
                    options: [.regularExpression, .caseInsensitive]) != nil
     }
     nonisolated static func isVenue(_ name: String, _ line: String) -> Bool {
         if (name + " " + line).range(of: #"amphithea|roman|ancient|antique|historic"#, options: [.regularExpression, .caseInsensitive]) != nil { return false }
-        return (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark)\b"#,
+        // (and a club or its ground by name)
+        return (name + " " + line).range(of: #"\b(stadium|stadio|estadio|estádio|stade|stadion|arena|sports venue|multisports venue|racecourse|race track|racetrack|circuit|aut[oó]dromo|speedway|ballpark|football club|soccer club|football ground|f\.?c\.?|villa park|anfield|old trafford)\b"#,
                                   options: [.regularExpression, .caseInsensitive]) != nil
     }
     /// a pass or a city card (,,): a ticket, not a thing to see or do
