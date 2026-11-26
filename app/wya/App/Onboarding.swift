@@ -207,8 +207,14 @@ struct OnboardingView: View {
         let planet = Launch.planet(W)
         return ZStack(alignment: .top) {
             // (the loading screen's logo is behind this page, in the middle; the question 28 pt under it)
-            question("where you at")
-                .padding(.top, H / 2 + planet / 2 + 28)
+            // the question, and right under it its answer's ask, with its full stop, close to the logo (14 Oct)
+            VStack(spacing: 4) {
+                question("where you at")
+                Text("Answer the question.")
+                    .font(.body).foregroundStyle(Palette.ink.opacity(0.5))
+                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            }
+            .padding(.top, H / 2 + planet / 2 + 28)
             VStack(spacing: 16) {
                 Spacer()
                 // CONTINUE WITH APPLE IN CLEAR GLASS (14 Oct: glass, not a solid button): Apple's own
