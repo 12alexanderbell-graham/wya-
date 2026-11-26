@@ -970,7 +970,9 @@ struct ContentView: View {
     /// the zoom column away while a card is actually there: from the frame the stamping card starts to grow (it waits
     /// for the water first), not from the moment it is asked for; back once it has gone
     private var columnOff: Bool {
-        CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown
+        // (and while searching: the results' panel reached the column, its minus and reset left half under the panel
+        // and nothing for the column to do until a place is picked)
+        CardState.shared.shown || RegionCardState.shared.shown || BookState.shared.shown || head.searching
     }
 
     private func closeCard(instant: Bool = false) {
