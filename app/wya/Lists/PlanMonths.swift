@@ -70,6 +70,10 @@ struct PlanMonths: View {
             .buttonStyle(.plain)
             .allowsHitTesting(outside)
             .accessibilityHint(outside ? (shown ? "Folds the month" : "Opens the month to reach a day in it") : "")
+            // A FOLDED MONTH OPENS AS A DRAWER (26 Nov: nothing fades): its days slide down out from under its name, cut at
+            // the name's foot, and back up under it; the cut is only top and bottom, so a trip's band still runs off the
+            // screen's sides
+            VStack(spacing: 0) {
             if shown {
                 VStack(spacing: 6) {
                     ForEach(weeks.indices, id: \.self) { w in week(weeks[w], first: first) }
@@ -96,8 +100,10 @@ struct PlanMonths: View {
                         DayGoo(rects: DayGoo.meet(rects, gap: 6), soft: 5, corner: 20, ink: Palette.ink)
                     }
                 }
-                .transition(.blurReplace)
+                .transition(.move(edge: .top))
             }
+            }
+            .mask { Rectangle().padding(.horizontal, -400) }
         }
     }
 

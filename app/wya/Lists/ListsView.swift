@@ -342,26 +342,34 @@ struct ListsWater: View {
                 else if infoFor != nil { withAnimation(Motion.quick) { infoFor = nil } }
                 else if archiveOpen { withAnimation(Motion.quick) { archiveOpen = false } }
                 else if open != nil { withAnimation(Motion.quick) { s.close() } }
-                else { s.searching.toggle(); if !s.searching { s.query = "" } }
+                else { withAnimation(Motion.quick) { s.searching.toggle() }; if !s.searching { s.query = "" } }
             }
             .accessibilityLabel(open != nil || inner ? "Back" : s.searching ? "Close search" : "Search")
             Spacer(minLength: 8)
-            if open == nil && !inner {
-                if s.searching {
-                    TextField("", text: $s.query, prompt: Text("Search").foregroundStyle(Palette.ink.opacity(0.5)))
-                        .font(.body).foregroundStyle(Palette.ink)
-                        .autocorrectionDisabled()
-                        .focused($typing)
-                        .submitLabel(.done)
-                        .onAppear { typing = true }
-                        .frame(height: 44)
-                } else {
-                    ListsWheel(s: s)
-                        // (never from a point: it shrank to 1% and grew back from it; now Apple's blur
-                        // replace, from 93%, as Pins' choices come and go, 25 Nov)
-                        .transition(.blurReplace)
+            // THE ROW'S MIDDLE ROLLS (26 Nov: nothing fades one thing into another, nothing grows from a point): the wheel and
+            // the search field come and go up through the row, the one leaving out of its top edge and the one coming in
+            // from below, clipped to the row, as the first open's card words do
+            ZStack {
+                if open == nil && !inner {
+                    if s.searching {
+                        TextField("", text: $s.query, prompt: Text("Search").foregroundStyle(Palette.ink.opacity(0.5)))
+                            .font(.body).foregroundStyle(Palette.ink)
+                            .autocorrectionDisabled()
+                            .focused($typing)
+                            .submitLabel(.done)
+                            .onAppear { typing = true }
+                            .frame(height: 44)
+                            .transition(.asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top)))
+                    } else {
+                        ListsWheel(s: s)
+                            .transition(.asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top)))
+                    }
                 }
             }
+            // (the slot the whole room between the circles, so it never widens as the field comes: the field wiped in
+            // from the left when the slot grew from the wheel's width to its own)
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+            .clipped()
             Spacer(minLength: 8)
             // the plus makes one of the kind the wheel is on (books' making comes with their page); a list open with
             // places: SEE IT ON THE MAP, on the Map tab's own mark
